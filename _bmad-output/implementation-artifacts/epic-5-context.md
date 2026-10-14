@@ -14,6 +14,7 @@ A developer can view a live, filterable, aggregated log stream across multiple s
 - Story 5.4: Filter History Recall
 - Story 5.5: Bound List & Filter-Editor Height to the Terminal Window
 - Story 5.6: Command History Recall & Shared Input-History Primitive
+- Story 5.7: Logs — Restart Mode Setting & Open-IDE Shortcut
 
 ## Requirements & Constraints
 
@@ -49,3 +50,4 @@ A developer can view a live, filterable, aggregated log stream across multiple s
 - Depends on Epic 1 (hexagonal core, CLI parity, manifest) and Epic 2 (active EDT + member-service list) for the scope of the stream and per-service health.
 - Story 5.2 builds on 5.1's stream and pane scoping; 5.3 is independent of 5.2/5.4 mechanics but shares 5.1's stream and scoping; 5.4 builds on 5.2's editor plus Story 2.17 grid primitives and Story 2.19 settings-tab precedent without reopening 5.2; 5.5 fixes a rendering defect found during 5.4 review and reuses its hint-panel fix; 5.6 extracts 5.4's history logic behavior-preservingly (5.4 tests must pass unchanged) and coordinates with Story 2.32 (TextInputLine in the command bar: cursor at end-of-value on recall).
 - Epic 6 will later depend on Epic 5's buffer for request-log correlation; buffer sizing already anticipates this.
+- Story 5.7 builds on 5.3 (restart control) and Epic 7's Story 7.12 shared service-actions registry (`core/service-actions`: `openInIde`, simple/clean restart); adds `logs.restartMode` (simple|clean, default simple) on the Logs settings tab, applied live; the IDE key must respect UX-DR36 and not collide with filter/scroll/fullscreen keys.

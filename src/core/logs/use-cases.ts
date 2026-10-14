@@ -58,14 +58,3 @@ export interface GetServiceHealthParams {
 export function getServiceHealth(params: GetServiceHealthParams): Promise<Result<HealthState>> {
   return params.docker.getContainerHealth(params.container);
 }
-
-export interface RestartServiceParams {
-  docker: DockerPort;
-  container: string;
-}
-
-// Thin Result<T> wrapper over DockerPort.restartContainer — developer-triggered only, never
-// called automatically.
-export function restartService(params: RestartServiceParams): Promise<Result<void>> {
-  return params.docker.restartContainer(params.container);
-}

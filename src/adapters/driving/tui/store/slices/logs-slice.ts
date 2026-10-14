@@ -5,8 +5,10 @@
 // Also owns the persisted filter-history lists.
 import type { StateCreator } from 'zustand';
 import { createLogsManager, type LogsManager } from '../../../../../core/logs/index.js';
-import { clearLogs, getServiceHealth, loadOlderLogs, restartService, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
+import { clearLogs, getServiceHealth, loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
+import { createServiceActions, openInIde, type ServiceActions } from '../../../../../core/service-actions/index.js';
+import { err, type Result } from '../../../../../core/result.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 import { createPersistedHistoryStore, pushHistoryEntry } from '../../shared/input-history/index.js';
 import {
@@ -34,6 +36,10 @@ export type LogsPaneData = {
   // ever touching Docker, and such a pane never subscribes, polls, or restarts.
   health: HealthState | 'no-container';
   restarting: boolean;
+  // A one-line, non-error annotation of the last restart or open-in-IDE attempt (the registry's
+  // clean-restart fallback notice, or an IDE launch failure) — shown dim, distinct from
+  // `streamError`. Cleared when the next restart or IDE launch starts.
+  notice?: string | null;
   // How many lines back from the tail this pane is currently scrolled — 0 means "pinned to
   // the live tail". Purely local UI state (never mirrored from LogsManager); bumped by
   // loadOlderLogsPane's own successful prepend so the viewport doesn't visually jump.
@@ -55,7 +61,7 @@ function withoutPaneSettings(state: AppState, repoPaths: readonly string[]): Par
 }
 
 function emptyPane(repoPath: string, service: string): LogsPaneData {
-  return { repoPath, service, lines: [], streamError: null, noMoreHistory: false, scrollOffset: 0, health: 'down', restarting: false };
+  return { repoPath, service, lines: [], streamError: null, noMoreHistory: false, scrollOffset: 0, health: 'down', restarting: false, notice: null };
 }
 
 // Per-pane health poll cadence — on subscribe plus an interval, cleared on unsubscribe. Never
@@ -132,6 +138,9 @@ export type LogsSlice = {
   // never a second concurrent `docker restart`. After the call resolves, health is re-polled
   // immediately; a failure surfaces inline on the pane while the badge keeps last-known.
   restartLogsPane: (repoPath: string) => Promise<void>;
+  // Opens the pane's service repo in the configured editor (O on a grid pane or fullscreen) —
+  // works for container-less services too. A failure surfaces as a one-line pane notice.
+  openLogsPaneInIde: (repoPath: string) => void;
   loadOlderLogsPane: (repoPath: string) => Promise<void>;
   // Wipes a pane's buffered/displayed lines (a display "clear", like a shell's `clear`) —
   // the stream itself keeps running, so a new line still appears immediately afterward.
@@ -180,6 +189,13 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   const filterHistoryStore = createPersistedHistoryStore<Record<string, string[]>>(
     deps ? { read: () => deps.state.readFilterHistory(), write: (history) => deps.state.writeFilterHistory(history) } : null,
   );
+
+  // The shared service-actions registry (restart + open-in-IDE), built once from the injected
+  // ports. Absent when the restart ports are not wired — open-in-IDE then uses the editor alone.
+  const serviceActions: ServiceActions | null =
+    deps?.container && deps.restart && deps.editor
+      ? createServiceActions({ manifest: deps.manifest, container: deps.container, restart: deps.restart, editor: deps.editor, lock: deps.lock })
+      : null;
 
   // One poll timer per subscribed pane (keyed by repoPath) — started on subscribe,
   // cleared on unsubscribe/stopAll. Never resubscribes the log stream itself.
@@ -604,94 +620,61 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       },
 
       restartLogsPane: async (repoPath) => {
-        if (!deps || !logsManager) {
+        if (!logsManager) {
           return;
         }
         const pane = get().logsPanes[repoPath];
         if (!pane) {
           return;
         }
-        // A call while that pane is already restarting is a no-op — never a second
-        // concurrent `docker restart`.
-        if (pane.restarting) {
+        // A call while that pane is already restarting is a no-op — never a second concurrent
+        // restart. A container-less pane has nothing to restart.
+        if (pane.restarting || pane.health === 'no-container') {
           return;
         }
-        set((state) => {
-          const current = state.logsPanes[repoPath];
-          if (!current || current.restarting) {
-            return {};
-          }
-          return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, restarting: true } } };
-        });
-        const manifestResult = await deps.manifest.load(repoPath);
-        if (!manifestResult.ok) {
+        const patchPane = (patch: Partial<LogsPaneData>) =>
           set((state) => {
             const current = state.logsPanes[repoPath];
-            if (!current) {
-              return {};
-            }
-            return {
-              logsPanes: {
-                ...state.logsPanes,
-                [repoPath]: {
-                  ...current,
-                  restarting: false,
-                  streamError: { code: manifestResult.error.code, message: manifestResult.error.message },
-                },
-              },
-            };
+            return current ? { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, ...patch } } } : {};
+          });
+        patchPane({ restarting: true, notice: null, streamError: null });
+        const mode = get().settings.logs.restartMode === 'clean' ? 'clean' : 'simple';
+        const restarted: Result<{ notice?: string }> = serviceActions
+          ? await serviceActions.restart(repoPath, mode)
+          : err('restart-unavailable', 'No restart ports are wired — cannot restart the service.');
+        if (!restarted.ok) {
+          // Failure surfaces inline on the pane; the badge keeps last-known health, except a
+          // manifest that turned out to declare no container.
+          patchPane({
+            restarting: false,
+            notice: null,
+            ...(restarted.error.code === 'no-container' ? { health: 'no-container' as const } : {}),
+            streamError: { code: restarted.error.code, message: restarted.error.message },
           });
           return;
         }
-        if (manifestResult.data.container === undefined || manifestResult.data.container.trim() === '') {
-          // The zone hides the restart control for such panes — this is the second line of
-          // defense, never a second docker call.
-          set((state) => {
-            const current = state.logsPanes[repoPath];
-            if (!current) {
-              return {};
-            }
-            return {
-              logsPanes: {
-                ...state.logsPanes,
-                [repoPath]: {
-                  ...current,
-                  restarting: false,
-                  health: 'no-container' as const,
-                  streamError: { code: 'no-container', message: 'No container — nothing to restart' },
-                },
-              },
-            };
-          });
-          return;
-        }
-        const restartResult = await restartService({ docker: deps.docker, container: manifestResult.data.container });
-        if (!restartResult.ok) {
-          // Failure surfaces inline on the pane; the badge keeps last-known health.
-          set((state) => {
-            const current = state.logsPanes[repoPath];
-            if (!current) {
-              return {};
-            }
-            return {
-              logsPanes: {
-                ...state.logsPanes,
-                [repoPath]: { ...current, restarting: false, streamError: restartResult.error },
-              },
-            };
-          });
-          return;
-        }
-        set((state) => {
-          const current = state.logsPanes[repoPath];
-          if (!current) {
-            return {};
-          }
-          return { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, restarting: false } } };
-        });
+        patchPane({ restarting: false, streamError: null, notice: restarted.data.notice ?? null });
         // After the restart call resolves, health is re-polled immediately so the badge
         // reflects the new state.
         await pollPaneHealth(repoPath);
+      },
+
+      openLogsPaneInIde: (repoPath) => {
+        const patchNotice = (notice: string | null) =>
+          set((state) => {
+            const current = state.logsPanes[repoPath];
+            return current ? { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, notice } } } : {};
+          });
+        patchNotice(null);
+        const ctx = { editorCommand: get().settings.general.editorCommand };
+        const opened: Result<void> = serviceActions
+          ? serviceActions.openInIde(repoPath, ctx)
+          : deps?.editor
+            ? openInIde(deps.editor, repoPath, ctx)
+            : err('editor-unavailable', 'No editor port is wired — cannot open the repo in an editor.');
+        if (!opened.ok) {
+          patchNotice(opened.error.message.split('\n')[0] ?? opened.error.message);
+        }
       },
 
       unsubscribeLogsPane: (repoPath) => {

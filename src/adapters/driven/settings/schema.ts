@@ -112,6 +112,8 @@ export const settingsSchema: z.ZodType<Settings> = z
           .optional()
           .default(DEFAULT_SETTINGS.logs.filterHistoryGridMaxRows),
         filterHistoryDedup: z.boolean().optional().default(DEFAULT_SETTINGS.logs.filterHistoryDedup),
+        // An unknown value falls back to `simple` on its own rather than invalidating the file.
+        restartMode: z.enum(['simple', 'clean']).catch('simple').optional().default(DEFAULT_SETTINGS.logs.restartMode),
       })
       .strict()
       .optional()

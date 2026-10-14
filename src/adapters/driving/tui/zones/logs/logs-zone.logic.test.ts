@@ -841,6 +841,23 @@ describe('computeLogsLayout list ratio', () => {
   });
 });
 
+describe('logsFooterContext restart mode and O hint', () => {
+  it('picks the clean fullscreen context only for a restartable pane in clean mode', () => {
+    const full = { open: true, restartable: true };
+    expect(logsFooterContext(false, false, full, 'clean')).toBe('logs-fullscreen-clean');
+    expect(logsFooterContext(false, false, full, 'simple')).toBe('logs-fullscreen');
+    const noContainer = { open: true, restartable: false };
+    expect(logsFooterContext(false, false, noContainer, 'clean')).toBe('logs-fullscreen-no-container');
+    expect(logsFooterContext(false, false, noContainer, 'simple')).toBe('logs-fullscreen-no-container');
+  });
+
+  it('lists the O hint in all three fullscreen footer contexts', () => {
+    for (const id of ['logs-fullscreen', 'logs-fullscreen-clean', 'logs-fullscreen-no-container'] as const) {
+      expect(FOOTER_CONTEXTS[id].hints).toContainEqual(['O', 'open in IDE']);
+    }
+  });
+});
+
 describe('logsFooterContext', () => {
   const closed = { open: false, restartable: true };
   const full = { open: true, restartable: true };

@@ -1164,6 +1164,96 @@ describe('LogsZone real-keypress interactions', () => {
     });
   });
 
+  describe('open-in-IDE key and restart mode hint', () => {
+    function pane(path: string, overrides: Record<string, unknown> = {}) {
+      return {
+        repoPath: path,
+        service: path.split('/').pop() ?? path,
+        lines: [],
+        streamError: null,
+        noMoreHistory: false,
+        scrollOffset: 0,
+        health: 'up',
+        restarting: false,
+        ...overrides,
+      };
+    }
+
+    it('"O" on a sub-focused grid pane opens that pane in the IDE, including a container-less one', async () => {
+      const openLogsPaneInIde = vi.fn();
+      const store = seedStore({
+        subscribeLogsPane: vi.fn(async () => {}),
+        unsubscribeLogsPane: vi.fn(),
+        openLogsPaneInIde,
+        logsOtherSelected: ['/repos/api-gateway'],
+        logsPanes: { '/repos/api-gateway': pane('/repos/api-gateway', { health: 'no-container' }) },
+      });
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.tab);
+        await press(instance, stdin, KEYS.tab);
+
+        await press(instance, stdin, 'O');
+
+        expect(openLogsPaneInIde).toHaveBeenCalledWith('/repos/api-gateway');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('"O" in fullscreen opens the IDE while lowercase "o" still only toggles stdout', async () => {
+      const openLogsPaneInIde = vi.fn();
+      const store = seedStore({
+        subscribeLogsPane: vi.fn(async () => {}),
+        unsubscribeLogsPane: vi.fn(),
+        openLogsPaneInIde,
+        logsPanes: { '/repos/api-gateway': pane('/repos/api-gateway') },
+      });
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.tab);
+        await press(instance, stdin, KEYS.enter);
+        expect(store.getState().logsFullscreenTarget).toBe('/repos/api-gateway');
+
+        await press(instance, stdin, 'o');
+        expect(openLogsPaneInIde).not.toHaveBeenCalled();
+        await press(instance, stdin, 'O');
+        expect(openLogsPaneInIde).toHaveBeenCalledWith('/repos/api-gateway');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('the pane hint names the active restart mode and the pane shows its notice dim', async () => {
+      const store = seedStore({
+        subscribeLogsPane: vi.fn(async () => {}),
+        unsubscribeLogsPane: vi.fn(),
+        logsOtherSelected: ['/repos/api-gateway'],
+        logsPanes: {
+          '/repos/api-gateway': pane('/repos/api-gateway', { notice: 'no clean-restart recipe — simple restart' }),
+        },
+      });
+      const { instance, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        expect(stdout.output).toContain('restart');
+        expect(stdout.output).not.toContain('restart (clean)');
+        expect(stdout.output).toContain('no clean-restart recipe — simple restart');
+
+        store.setState((state) => ({ settings: { ...state.settings, logs: { ...state.settings.logs, restartMode: 'clean' } } }));
+        await instance.waitUntilRenderFlush();
+        expect(stdout.output).toContain('restart (clean)');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+  });
+
   it('Ctrl+A selects every row currently in the EDT-members list, then a second press deselects all', async () => {
     // A `Ctrl+letter` combo is a single control byte at the wire level — it never carries shift
     // information (Ink's parser), so Ctrl+A and Ctrl+Shift+A are indistinguishable on virtually

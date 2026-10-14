@@ -46,7 +46,7 @@ export interface ServiceActions {
   restart(repoPath: string, mode: RestartMode): Promise<Result<RestartOutcome>>;
 }
 
-export const NO_CLEAN_RECIPE_NOTICE = 'no clean-restart recipe — restarted simply';
+export const NO_CLEAN_RECIPE_NOTICE = 'no clean-restart recipe — simple restart';
 
 // A blank repoPath would resolve to the process cwd and target the wrong directory.
 function rejectBlankRepoPath(repoPath: string): Result<never> | null {

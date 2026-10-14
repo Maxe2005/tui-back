@@ -182,6 +182,10 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'Logs: restart the focused pane\'s service',
   },
   {
+    keys: 'O (Logs)',
+    description: 'Logs: open the focused pane\'s service repo in your editor (also for services without a container)',
+  },
+  {
     keys: 'm / a / p (Update)',
     description: 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service',
     footer: { key: 'm/a/p', verb: 'configure', zones: ['update'] },

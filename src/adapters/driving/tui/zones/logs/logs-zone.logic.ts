@@ -5,6 +5,7 @@
 import wrapAnsi from 'wrap-ansi';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
+import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
 import type { Hint } from '../../shared/components/hints.js';
 import type { FooterContextId } from '../../keybindings/index.js';
@@ -419,6 +420,7 @@ export function logsFooterContext(
   filterEditorOpen: boolean,
   historyGridOpen: boolean,
   fullscreen: { open: boolean; restartable: boolean },
+  restartMode: RestartMode = 'simple',
 ): FooterContextId | null {
   if (filterEditorOpen) {
     return historyGridOpen ? 'logs-filter-history' : 'logs-filter-edit';
@@ -426,7 +428,15 @@ export function logsFooterContext(
   if (!fullscreen.open) {
     return null;
   }
-  return fullscreen.restartable ? 'logs-fullscreen' : 'logs-fullscreen-no-container';
+  if (!fullscreen.restartable) {
+    return 'logs-fullscreen-no-container';
+  }
+  return restartMode === 'clean' ? 'logs-fullscreen-clean' : 'logs-fullscreen';
+}
+
+// The restart control's hint verb, naming the active mode so the developer sees what `R` will run.
+export function restartHintVerb(mode: RestartMode): string {
+  return mode === 'clean' ? 'restart (clean)' : 'restart';
 }
 
 // The key legend under the service list; the stream toggles show their live state.
