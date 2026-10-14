@@ -156,11 +156,11 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     quitConfirm
       ? 'confirm'
       : historyOpen
-        ? historyUi.searching
-          ? 'shared-types-history-running'
-          : historyUi.editing
-            ? 'shared-types-history-input'
-            : 'shared-types-history-results'
+        ? historyUi.editing
+          ? historyUi.searching
+            ? 'shared-types-history-running'
+            : 'shared-types-history-input'
+          : 'shared-types-history-results'
         : run.status === 'running' || publish.status === 'running'
         ? 'busy'
         : publish.status === 'blocked'

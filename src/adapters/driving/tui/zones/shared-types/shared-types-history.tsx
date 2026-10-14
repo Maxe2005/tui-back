@@ -90,6 +90,7 @@ export function SharedTypesHistory({
   const title = mode === 'branch' ? 'HISTORY by branch (Tab: by version)' : 'HISTORY by version (Tab: by branch)';
   const status = !resultsMode ? null : mode === 'branch' ? branchStatusLine(history) : versionStatusLine(history);
   const rows = !resultsMode ? 0 : mode === 'branch' ? history.entries.length : history.hits.length;
+  const row = Math.max(0, Math.min(view.row, rows - 1));
   return (
     <Box flexDirection="column">
       <Box>
@@ -122,11 +123,11 @@ export function SharedTypesHistory({
         <BoundedList
           items={resultsMode ? history.entries : []}
           chromeRows={HISTORY_CHROME_ROWS + (view.editing ? dropdownRows + 2 : 0)}
-          cursorIndex={view.editing ? undefined : view.row}
+          cursorIndex={view.editing ? undefined : row}
           renderItem={(entry, index) => (
             <Box key={`${entry.commit}:${String(index)}`}>
-              <Text color={!view.editing && index === view.row ? colors.accent : colors.text} wrap="truncate-end">{!view.editing && index === view.row ? '> ' : '  '}</Text>
-              <TruncatedText color={!view.editing && index === view.row ? colors.accent : colors.text}>{entryRow(entry)}</TruncatedText>
+              <Text color={!view.editing && index === row ? colors.accent : colors.text} wrap="truncate-end">{!view.editing && index === row ? '> ' : '  '}</Text>
+              <TruncatedText color={!view.editing && index === row ? colors.accent : colors.text}>{entryRow(entry)}</TruncatedText>
             </Box>
           )}
         />
@@ -134,11 +135,11 @@ export function SharedTypesHistory({
         <BoundedList
           items={resultsMode ? history.hits : []}
           chromeRows={HISTORY_CHROME_ROWS}
-          cursorIndex={view.editing ? undefined : view.row}
+          cursorIndex={view.editing ? undefined : row}
           renderItem={(hit, index) => (
             <Box key={`${hit.commit}:${String(index)}`}>
-              <Text color={!view.editing && index === view.row ? colors.accent : colors.text} wrap="truncate-end">{!view.editing && index === view.row ? '> ' : '  '}</Text>
-              <TruncatedText color={!view.editing && index === view.row ? colors.accent : colors.text}>{hitRow(hit)}</TruncatedText>
+              <Text color={!view.editing && index === row ? colors.accent : colors.text} wrap="truncate-end">{!view.editing && index === row ? '> ' : '  '}</Text>
+              <TruncatedText color={!view.editing && index === row ? colors.accent : colors.text}>{hitRow(hit)}</TruncatedText>
             </Box>
           )}
         />

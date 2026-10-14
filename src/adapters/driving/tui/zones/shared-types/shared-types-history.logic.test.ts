@@ -75,7 +75,7 @@ describe('reduceHistoryKey', () => {
 });
 
 const BASE: SharedTypesHistory = {
-  mode: 'branch', status: 'done', query: 'b', entries: [], hits: [], found: null, earliestBranch: null, endedBy: 'depth', scanned: 0, error: null, depth: 20, maxScanned: 1000,
+  mode: 'branch', status: 'done', query: 'b', entries: [], hits: [], found: null, truncated: false, earliestBranch: null, endedBy: 'depth', scanned: 0, error: null, depth: 20, maxScanned: 1000,
 };
 
 describe('status lines', () => {
@@ -87,8 +87,18 @@ describe('status lines', () => {
     expect(branchStatusLine({ ...BASE, status: 'idle' })).toBeNull();
   });
 
+  it('does not call a truncated miss "not found"', () => {
+    expect(versionStatusLine({ ...BASE, mode: 'version', query: '9.9.9', found: false, truncated: true, endedBy: null })).toContain('not found so far');
+  });
+
+  it('clamps the row to the result length', () => {
+    const view = { ...initialHistoryView(), editing: false, row: 5 };
+    const step = reduceHistoryKey(view, ctx({ rowVersions: ['0.1.1', '0.1.0'] }), '', { return: true });
+    expect(step.action).toEqual({ type: 'select', version: '0.1.0' });
+  });
+
   it('answers a by-version search explicitly', () => {
-    expect(versionStatusLine({ ...BASE, mode: 'version', query: '9.9.9', found: false, endedBy: null })).toBe('9.9.9 was not found on any branch');
+    expect(versionStatusLine({ ...BASE, mode: 'version', query: '9.9.9', found: false, endedBy: null })).toBe('9.9.9 was not found on any local or already-fetched branch (nothing is fetched)');
     expect(versionStatusLine({ ...BASE, mode: 'version', found: true, earliestBranch: 'main', endedBy: null })).toContain('main');
   });
 });

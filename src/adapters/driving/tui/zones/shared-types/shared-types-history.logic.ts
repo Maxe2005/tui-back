@@ -47,6 +47,7 @@ export type HistoryContext = {
 };
 
 export function reduceHistoryKey(view: HistoryView, ctx: HistoryContext, input: string, key: HistoryKey): { view: HistoryView; action: HistoryAction } {
+  view = { ...view, row: Math.max(0, Math.min(view.row, ctx.rowVersions.length - 1)) };
   const idle = (next: HistoryView = view): { view: HistoryView; action: HistoryAction } => ({ view: next, action: { type: 'none' } });
   if (key.escape === true) {
     if (ctx.searching) {
@@ -151,8 +152,14 @@ export function versionStatusLine(history: SharedTypesHistory): string | null {
   if (history.endedBy === 'aborted') {
     return 'cancelled';
   }
-  if (history.found === false) {
-    return `${history.query} was not found on any branch`;
+  if (history.found === false && history.truncated) {
+    return `${history.query} not found so far: the search stopped before the whole history was scanned`;
   }
-  return history.earliestBranch !== null ? `earliest introduced on ${history.earliestBranch} (marked *)` : null;
+  if (history.found === false) {
+    return `${history.query} was not found on any local or already-fetched branch (nothing is fetched)`;
+  }
+  if (history.earliestBranch === null) {
+    return history.truncated ? 'partial result: the search stopped before the whole history was scanned' : null;
+  }
+  return `earliest introduced on ${history.earliestBranch} (marked *)${history.truncated ? ', partial result' : ''}`;
 }

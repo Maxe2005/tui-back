@@ -287,7 +287,7 @@ export const FOOTER_CONTEXTS = {
   },
   'shared-types-history-results': {
     label: 'Shared types history results',
-    hints: [MOVE, ['Enter', 'use version'], ['Tab', 'mode'], ['/', 'search'], ['Esc', 'close']],
+    hints: [MOVE, ['Enter', 'use version'], ['Tab', 'mode'], ['/', 'search'], ['Esc', 'cancel/close']],
   },
   'shared-types-history-running': {
     label: 'Shared types history search running',

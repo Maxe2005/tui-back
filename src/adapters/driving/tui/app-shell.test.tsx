@@ -610,7 +610,7 @@ it('shouldQuit returns true for q', () => {
         runSharedTypesPublish: async () => {},
         retrySharedTypesPublish: async () => {},
         resetSharedTypesPublish: () => {},
-        sharedTypesHistory: { mode: 'branch', status: 'idle', query: '', entries: [], hits: [], found: null, earliestBranch: null, endedBy: null, scanned: 0, error: null, depth: 0, maxScanned: 0 },
+        sharedTypesHistory: { mode: 'branch', status: 'idle', query: '', entries: [], hits: [], found: null, truncated: false, earliestBranch: null, endedBy: null, scanned: 0, error: null, depth: 0, maxScanned: 0 },
         sharedTypesHistoryBranches: [],
         sharedTypesHistoryBranchesStatus: 'idle',
         startSharedTypesHistorySearch: async () => {},

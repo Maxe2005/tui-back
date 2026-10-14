@@ -2,7 +2,7 @@
 title: 'shared-types Version History Library'
 type: 'feature'
 created: '2026-10-14'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'ab341273883c09d38e76626d2fa344aa78e9cc79'
 review_loop_iteration: 0
 context: [_bmad-output/implementation-artifacts/epic-4-context.md]
