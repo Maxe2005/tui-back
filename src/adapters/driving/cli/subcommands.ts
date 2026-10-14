@@ -9,7 +9,7 @@ import { createInterface } from 'node:readline/promises';
 import { err, ok, type Result } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
-import { switchActiveEdt } from '../../../core/edt/switch.js';
+import { type DirtyPolicy, switchActiveEdt } from '../../../core/edt/switch.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
@@ -38,7 +38,7 @@ import type { Subcommand } from './dispatch.js';
 const EDT_CREATE_USAGE =
   'tui-back edt create --topic <topic> --member <path> [--create-branches] ' +
   '[--base <branch>] [--branch-mode grouped|individual] [--branch-name <name>|<path>=<name>]';
-const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force]';
+const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force] [--discard-dirty | --adopt-dirty [--adopt-branch <name>]]';
 const EDT_MODIFY_USAGE =
   'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +
   ' (each --add-member requires a matching --set-branch for that same path — no current-branch default)';
@@ -458,10 +458,31 @@ async function runEdtSwitch(
 ): Promise<Result<unknown>> {
   let topic: string | undefined;
   let force = false;
+  let discardDirty = false;
+  let adoptDirty = false;
+  let adoptBranch: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     switch (flag) {
+      case '--discard-dirty':
+        discardDirty = true;
+        break;
+      case '--adopt-dirty':
+        adoptDirty = true;
+        break;
+      case '--adopt-branch': {
+        const value = args[i + 1];
+        if (value === undefined) {
+          return err('invalid-argument', `Missing value for --adopt-branch. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        if (adoptBranch !== undefined) {
+          return err('invalid-argument', `--adopt-branch may only be given once. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        adoptBranch = value;
+        i += 1;
+        break;
+      }
       case '--to': {
         const value = args[i + 1];
         if (value === undefined) {
@@ -485,6 +506,20 @@ async function runEdtSwitch(
   if (topic === undefined) {
     return err('invalid-argument', `Missing --to. Usage: ${EDT_SWITCH_USAGE}`);
   }
+  if (adoptDirty && discardDirty) {
+    return err('invalid-argument', `--adopt-dirty and --discard-dirty are mutually exclusive. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+  if (adoptBranch !== undefined && !adoptDirty) {
+    return err('invalid-argument', `--adopt-branch requires --adopt-dirty. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+  if (adoptBranch !== undefined && adoptBranch.trim() === '') {
+    return err('invalid-argument', '--adopt-branch must not be empty');
+  }
+  const dirtyPolicy: DirtyPolicy | undefined = discardDirty
+    ? { kind: 'discard' }
+    : adoptDirty
+      ? { kind: 'adopt', branch: adoptBranch }
+      : undefined;
 
   return switchActiveEdt({
     edtRegistry: deps.edtRegistry,
@@ -496,11 +531,10 @@ async function runEdtSwitch(
     state: deps.state,
     topic,
     force,
-    // Story 2.39: the CLI passes neither a seam nor dirtyResolutions yet (its explicit
-    // --adopt-dirty/--discard-dirty flags land in story 2.40), so it fails safe: a dirty
-    // outgoing-EDT member is still auto-stashed, but any other dirty service makes the switch
-    // exit non-zero with switch-dirty-services-unresolved before any git write.
-    onDirtyReposBeforeSwitch: undefined,
+    // Story 2.40: no dialog on this path. The flags build a policy the core expands per dirty
+    // state-2/3 repo after its own classification; with no flag, a dirty state-2/3 repo fails
+    // safe (switch-dirty-services-unresolved). A dirty outgoing-EDT member is auto-stashed.
+    dirtyPolicy,
   });
 }
 
