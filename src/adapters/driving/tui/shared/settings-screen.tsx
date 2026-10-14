@@ -71,7 +71,7 @@ export function resolveSharedTypesSettingsKey(input: string, key: TextEditKey, c
   return input === ' ' && row ? { type: 'toggle', id: row.id } : { type: 'ignore' };
 }
 
-// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> General order
+// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> Logs -> st -> General order
 // (SETTINGS_TABS' declared order) — Left and Tab both step forward, simpler than zones.ts's
 // nextZoneId since every settings tab is always reachable.
 export function nextSettingsTab(current: SettingsTab, direction: 1 | -1): SettingsTab {

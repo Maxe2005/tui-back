@@ -1232,6 +1232,12 @@ describe("app store", () => {
       });
     });
 
+    it("updateSettings() merges a partial sharedTypes update, keeping the sibling keys", async () => {
+      const store = createAppStore();
+      await store.getState().updateSettings({ sharedTypes: { cleanRestart: true } });
+      expect(store.getState().settings.sharedTypes).toEqual({ install: true, cleanRestart: true, commit: true });
+    });
+
     it("updateSettings() shallow-merges only the provided sub-object, leaving the other untouched", async () => {
       const store = createAppStore(fakeDeps());
       store.setState({

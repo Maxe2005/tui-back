@@ -143,6 +143,8 @@ describe('sharedTypesBusy', () => {
   it('counts blocked runs as awaiting the developer', () => {
     expect(at('blocked', 'idle')).toEqual({ incidents: 1 });
     expect(at('blocked', 'blocked')).toEqual({ incidents: 2 });
+    expect(at('blocked', 'idle')).toEqual({ incidents: 1 });
+    expect(at('running', 'blocked')).toEqual({ incidents: 1 });
   });
 
   it('is null when idle or done', () => {

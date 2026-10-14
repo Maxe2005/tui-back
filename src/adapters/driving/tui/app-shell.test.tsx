@@ -35,6 +35,29 @@ describe('help-open decision helpers', () => {
   });
 });
 
+describe('AppShell tab bar busy badges', () => {
+  const render = async (state: Partial<AppState>) => {
+    const store = createAppStore();
+    store.setState(state);
+    return renderToString(<AppShell useStore={store} onQuit={() => {}} />);
+  };
+
+  it('shows the updating badge on a running shared-types run and nothing when idle', async () => {
+    const running = await render({ sharedTypesRun: { ...createAppStore().getState().sharedTypesRun, status: 'running' } });
+    expect(running).toContain('⇄ updating');
+    expect(await render({})).not.toContain('⇄ updating');
+  });
+
+  it('shows the awaiting badge when a publish is blocked', async () => {
+    const output = await render({ sharedTypesPublish: { ...createAppStore().getState().sharedTypesPublish, status: 'blocked' } });
+    expect(output).toContain('1 awaiting you');
+  });
+
+  it('keeps the Update tab badge while a group update runs', async () => {
+    expect(await render({ updateStatus: 'running' })).toContain('⇄ updating');
+  });
+});
+
 describe('AppShell', () => {
   it('advertises W wrap-all and [Ctrl+W] resize in the Logs footer, and no [W] hint in another zone', async () => {
     const store = createAppStore();

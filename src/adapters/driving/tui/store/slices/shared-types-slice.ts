@@ -64,10 +64,11 @@ export type SharedTypesSlice = {
 // blocked awaiting the developer (same two states the Update tab's badge has).
 export function sharedTypesBusy(state: { sharedTypesRun: { status: SharedTypesRunStatus }; sharedTypesPublish: { status: SharedTypesPublishStatus } }): { incidents: number } | null {
   const blocked = (state.sharedTypesRun.status === 'blocked' ? 1 : 0) + (state.sharedTypesPublish.status === 'blocked' ? 1 : 0);
-  if (state.sharedTypesRun.status === 'running' || state.sharedTypesPublish.status === 'running') {
-    return { incidents: 0 };
+  // A blocked run awaits the developer, which matters more than another run still going.
+  if (blocked > 0) {
+    return { incidents: blocked };
   }
-  return blocked > 0 ? { incidents: blocked } : null;
+  return state.sharedTypesRun.status === 'running' || state.sharedTypesPublish.status === 'running' ? { incidents: 0 } : null;
 }
 
 const IDLE_OPTIONS: PropagateOptions = { install: false, cleanRestart: false, commit: false };
