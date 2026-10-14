@@ -48,6 +48,11 @@ export interface ServiceActions {
 
 export const NO_CLEAN_RECIPE_NOTICE = 'no clean-restart recipe — restarted simply';
 
+// A blank repoPath would resolve to the process cwd and target the wrong directory.
+function rejectBlankRepoPath(repoPath: string): Result<never> | null {
+  return repoPath.trim() === '' ? err('invalid-argument', 'repoPath must not be empty — pass the service repo directory') : null;
+}
+
 const AVAILABLE: ServiceActionAvailability = { available: true };
 
 function hasContainer(manifest: Manifest): boolean {
@@ -57,6 +62,10 @@ function hasContainer(manifest: Manifest): boolean {
 // The editor needs nothing else from the registry, so a consumer that only opens the IDE
 // (the Update zone's blocker menu) can call it without wiring restart ports.
 export function openInIde(editor: EditorPort, repoPath: string, ctx: ServiceActionContext): Result<void> {
+  const invalid = rejectBlankRepoPath(repoPath);
+  if (invalid !== null) {
+    return invalid;
+  }
   return editor.launch(repoPath, ctx.editorCommand);
 }
 
@@ -80,8 +89,9 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
 
   return {
     async list(repoPath) {
-      if (repoPath.trim() === '') {
-        return err('invalid-argument', 'repoPath must not be empty — pass the service repo directory');
+      const invalid = rejectBlankRepoPath(repoPath);
+      if (invalid !== null) {
+        return invalid;
       }
       const restartState = await restartAvailability(repoPath);
       return ok([
@@ -96,8 +106,12 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
     },
 
     async restart(repoPath, mode) {
-      if (repoPath.trim() === '') {
-        return err('invalid-argument', 'repoPath must not be empty — pass the service repo directory');
+      const invalid = rejectBlankRepoPath(repoPath);
+      if (invalid !== null) {
+        return invalid;
+      }
+      if (mode !== 'simple' && mode !== 'clean') {
+        return err('invalid-argument', `Unknown restart mode "${String(mode)}" — expected simple or clean`);
       }
       const run = await withActionLock(lock, serviceRestartLockKey(repoPath), async (): Promise<Result<RestartOutcome>> => {
         const loaded = await manifest.load(repoPath);

@@ -105,7 +105,26 @@ describe('service actions restart', () => {
   });
 });
 
+describe('service actions restart validation', () => {
+  it('rejects a blank repoPath and an unknown mode without touching any port', async () => {
+    const { actions, container, lock } = setup({ container: 'api' });
+    const blank = await actions.restart(' ', 'simple');
+    const unknown = await actions.restart('/repo/a', 'bogus' as never);
+    expect(!blank.ok && blank.error.code).toBe('invalid-argument');
+    expect(!unknown.ok && unknown.error.code).toBe('invalid-argument');
+    expect(container.restart).not.toHaveBeenCalled();
+    expect(lock.acquire).not.toHaveBeenCalled();
+  });
+});
+
 describe('service actions openInIde', () => {
+  it('rejects a blank repoPath without launching', () => {
+    const { actions, editor } = setup({});
+    const result = actions.openInIde('  ', { editorCommand: '' });
+    expect(!result.ok && result.error.code).toBe('invalid-argument');
+    expect(editor.launch).not.toHaveBeenCalled();
+  });
+
   it('delegates to the editor port with the configured command', () => {
     const { actions, editor } = setup({});
     expect(actions.openInIde('/repo/a', { editorCommand: 'code <repo>' })).toEqual(ok(undefined));
