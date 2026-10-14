@@ -17,7 +17,9 @@ puis redistribution de la cible vers chaque worktree pour que tous soient à jou
   projet, cf. CLAUDE.md). Alias accepté : si l'utilisateur dit `development`
   et que seule `devlopment` existe, utiliser `devlopment` et le signaler.
   Un `--target <branche>` explicite gagne toujours.
-- `{sources}` : branches des worktrees, hors checkout de `{target}`.
+- `{sources}` : branches des worktrees, hors checkout de `{target}`, plus les
+  branches d'epic locales sans worktree (ex. `epic-2-edt-workspace-management`,
+  qui n'a pas de worktree dédié).
 
 ## Protocole
 
@@ -37,8 +39,13 @@ git fetch origin
 - Lister chaque worktree (chemin + branche). Ignorer les detached HEAD
   (signaler, ne pas merger).
 - Exclure le worktree déjà sur `{target}` : c'est là que les merges ont lieu.
-- Ordre par défaut : alphabétique (`epic-3`, `epic-4`, …). `--order a,b,c`
-  surcharge l'ordre.
+- Ajouter les branches d'epic locales sans worktree :
+  `git branch --list 'epic-*' --format='%(refname:short)'`, moins celles déjà
+  portées par un worktree. Elles se mergent depuis le checkout de `{target}`
+  comme les autres (pas de chemin de worktree : pas de test `dirty`, et pas de
+  redistribution à l'étape 5, la branche est simplement laissée telle quelle).
+- Ordre par défaut : numérique par epic (`epic-2`, `epic-3`, `epic-4`, …).
+  `--order a,b,c` surcharge l'ordre.
 - Pour chaque source, pré-calculer :
   - `git merge-base --is-ancestor <source> <target>` → déjà mergée : marquer
     `already-up-to-date`, ne rien faire.
@@ -146,7 +153,7 @@ commit partiel).
 /worktree-merge
 
 # Cible explicite et ordre imposé
-/worktree-merge --target devlopment --order epic-3-group-update-migrations,epic-4-shared-types-propagation
+/worktree-merge --target devlopment --order epic-2-edt-workspace-management,epic-3-group-update-migrations,epic-4-shared-types-propagation
 
 # Merger sans redistribuer, ou redistribuer seulement
 /worktree-merge --no-sync
