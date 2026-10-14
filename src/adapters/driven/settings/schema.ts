@@ -87,6 +87,16 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.update),
+    // Optional-with-default: a settings.yaml written before this group existed has no `sharedTypes:`.
+    sharedTypes: z
+      .object({
+        install: z.boolean().optional().default(DEFAULT_SETTINGS.sharedTypes.install),
+        cleanRestart: z.boolean().optional().default(DEFAULT_SETTINGS.sharedTypes.cleanRestart),
+        commit: z.boolean().optional().default(DEFAULT_SETTINGS.sharedTypes.commit),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.sharedTypes),
     // An invalid `logs.bufferSize` does not just reset this `logs` block: the whole top-level
     // `.strict()` object fails validation as one unit, so *every* top-level key falls back to
     // DEFAULT_SETTINGS, like any other invalid field in this schema (index.test.ts's

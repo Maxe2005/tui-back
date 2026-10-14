@@ -35,16 +35,41 @@ import {
 import { StateLine } from './components/state-line.js';
 import { BoundedList } from './components/bounded-list.js';
 
-export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs';
+export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'shared-types';
 
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs'];
+export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'shared-types'];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   general: 'General',
   edts: 'EDTs',
   'command-palette': 'Command Palette',
   logs: 'Logs',
+  'shared-types': 'st',
 };
+
+// st tab: a flat Up/Down checkbox list of the shared-types zone's option defaults (Space toggles).
+// Later stories append their own rows here.
+export type SharedTypesSettingsRowId = 'install' | 'cleanRestart' | 'commit';
+
+export const SHARED_TYPES_SETTINGS_ROWS: readonly { id: SharedTypesSettingsRowId; label: string }[] = [
+  { id: 'install', label: 'Run npm i' },
+  { id: 'cleanRestart', label: 'Clean restart' },
+  { id: 'commit', label: 'Commit package.json + package-lock.json' },
+];
+
+export type SharedTypesSettingsStep =
+  | { type: 'move'; cursor: number }
+  | { type: 'toggle'; id: SharedTypesSettingsRowId }
+  | { type: 'ignore' };
+
+export function resolveSharedTypesSettingsKey(input: string, key: TextEditKey, cursor: number): SharedTypesSettingsStep {
+  const moved = nextCursorForKey(key, cursor, SHARED_TYPES_SETTINGS_ROWS.length);
+  if (moved !== null) {
+    return { type: 'move', cursor: moved };
+  }
+  const row = SHARED_TYPES_SETTINGS_ROWS[cursor];
+  return input === ' ' && row ? { type: 'toggle', id: row.id } : { type: 'ignore' };
+}
 
 // Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> General order
 // (SETTINGS_TABS' declared order) — Left and Tab both step forward, simpler than zones.ts's
@@ -359,6 +384,8 @@ export function settingsFooterContext(
       return state.paletteGroup == null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.paletteGroup];
     case 'edts':
       return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
+    case 'shared-types':
+      return 'settings-shared-types';
     case 'logs':
       return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
   }
@@ -427,6 +454,7 @@ export function SettingsScreen({
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   // The General tab's row cursor + in-progress editor-command edit (null when browsing).
   // The edit is a local draft: only Enter persists it, Esc drops it.
+  const [sharedTypesCursor, setSharedTypesCursor] = useState(0);
   const [generalCursor, setGeneralCursor] = useState(initialGeneralEditing ? GENERAL_SETTINGS_ROWS.indexOf('editor-command') : 0);
   const [generalEditing, setGeneralEditing] = useState<TextInputState | null>(
     initialGeneralEditing ? { value: settings.general.editorCommand, cursor: settings.general.editorCommand.length } : null,
@@ -538,6 +566,16 @@ export function SettingsScreen({
         void updateSettings({ general: { editorCommand: step.value } });
       } else if (step.type === 'set-concurrency') {
         void updateSettings({ update: { concurrency: step.value } });
+      }
+      return;
+    }
+
+    if (tab === 'shared-types') {
+      const step = resolveSharedTypesSettingsKey(input, key, sharedTypesCursor);
+      if (step.type === 'move') {
+        setSharedTypesCursor(step.cursor);
+      } else if (step.type === 'toggle') {
+        void updateSettings({ sharedTypes: { [step.id]: !settings.sharedTypes[step.id] } });
       }
       return;
     }
@@ -812,6 +850,17 @@ export function SettingsScreen({
         </Box>
 
         {settingsWarning ? <DimAnnotation text={settingsWarning} /> : null}
+
+        {tab === 'shared-types' ? (
+          <Box flexDirection="column">
+            {SHARED_TYPES_SETTINGS_ROWS.map((row, index) => (
+              <Box key={row.id} flexDirection="row">
+                <Text color={colors.accent} wrap="truncate-end">{index === sharedTypesCursor ? '›' : ' '}</Text>
+                <CheckboxListItem label={row.label} selected={index === sharedTypesCursor} state={settings.sharedTypes[row.id] ? 'checked' : 'unchecked'} />
+              </Box>
+            ))}
+          </Box>
+        ) : null}
 
         {tab === 'general' ? (
           <Box flexDirection="column">

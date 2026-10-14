@@ -43,6 +43,13 @@ export interface Settings {
   update: {
     concurrency: number;
   };
+  // The shared-types zone's option checkboxes' initial state; ticking one in the zone only
+  // affects that run and never writes back here.
+  sharedTypes: {
+    install: boolean;
+    cleanRestart: boolean;
+    commit: boolean;
+  };
   logs: {
     bufferSize: number;
     // When true, subscribing to a service's logs immediately loads its most recent history
@@ -79,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // without state.json growing unbounded; filterHistoryGridMaxRows=8 mirrors
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
   update: { concurrency: 3 },
+  sharedTypes: { install: true, cleanRestart: false, commit: true },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
 };
 
