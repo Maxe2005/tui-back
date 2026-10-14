@@ -276,11 +276,23 @@ export const FOOTER_CONTEXTS = {
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'remove selection'], CLOSE],
   },
   'shared-types-version': { label: 'Shared types version field', hints: [['Enter', 'done'], ['Esc', 'done'], [KEY_UP_DOWN, 'move']] },
-  'shared-types-version-row': { label: 'Shared types version row', hints: [['Enter', 'edit version'], MOVE] },
-  'shared-types-form': { label: 'Shared types form', hints: [MOVE, ['Space', 'toggle'], ['Enter', 'propagate']] },
+  'shared-types-version-row': { label: 'Shared types version row', hints: [['Enter', 'edit version'], MOVE, ['H', 'history']] },
+  'shared-types-form': { label: 'Shared types form', hints: [MOVE, ['Space', 'toggle'], ['Enter', 'propagate'], ['H', 'history']] },
   'shared-types-results': { label: 'Shared types results', hints: [MOVE, ['R', 'retry failed'], ['Esc', 'new run']] },
   'shared-types-publish-failed': { label: 'Shared types publish failed', hints: [['R', 'relaunch'], ['Esc', 'back']] },
   'shared-types-publish-done': { label: 'Shared types publish done', hints: [['C', 'chain into propagation'], ['Esc', 'stop']] },
+  'shared-types-history-input': {
+    label: 'Shared types history search',
+    hints: [['Enter', 'search'], ['Tab', 'mode'], ['Esc', 'close']],
+  },
+  'shared-types-history-results': {
+    label: 'Shared types history results',
+    hints: [MOVE, ['Enter', 'use version'], ['Tab', 'mode'], ['/', 'search'], ['Esc', 'cancel/close']],
+  },
+  'shared-types-history-running': {
+    label: 'Shared types history search running',
+    hints: [['Enter', 'new search'], ['Tab', 'mode'], ['Esc', 'cancel']],
+  },
   'reset-select': {
     label: 'Reset categories',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'review'], CANCEL],
@@ -299,6 +311,10 @@ export const FOOTER_CONTEXTS = {
   'settings-update': {
     label: 'Settings Update tab',
     hints: [MOVE, ['Space', 'toggle'], ['+/-', 'adjust'], TAB_SWITCH, CLOSE],
+  },
+  'settings-shared-types': {
+    label: 'Settings st tab',
+    hints: [MOVE, ['Space', 'toggle'], TAB_SWITCH, CLOSE],
   },
   'settings-groups': {
     label: 'Settings group list',

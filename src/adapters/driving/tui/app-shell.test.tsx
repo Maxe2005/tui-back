@@ -35,6 +35,29 @@ describe('help-open decision helpers', () => {
   });
 });
 
+describe('AppShell tab bar busy badges', () => {
+  const render = async (state: Partial<AppState>) => {
+    const store = createAppStore();
+    store.setState(state);
+    return renderToString(<AppShell useStore={store} onQuit={() => {}} />);
+  };
+
+  it('shows the updating badge on a running shared-types run and nothing when idle', async () => {
+    const running = await render({ sharedTypesRun: { ...createAppStore().getState().sharedTypesRun, status: 'running' } });
+    expect(running).toContain('⇄ updating');
+    expect(await render({})).not.toContain('⇄ updating');
+  });
+
+  it('shows the awaiting badge when a publish is blocked', async () => {
+    const output = await render({ sharedTypesPublish: { ...createAppStore().getState().sharedTypesPublish, status: 'blocked' } });
+    expect(output).toContain('1 awaiting you');
+  });
+
+  it('keeps the Update tab badge while a group update runs', async () => {
+    expect(await render({ updateStatus: 'running' })).toContain('⇄ updating');
+  });
+});
+
 describe('AppShell', () => {
   it('advertises W wrap-all and [Ctrl+W] resize in the Logs footer, and no [W] hint in another zone', async () => {
     const store = createAppStore();
@@ -359,7 +382,7 @@ it('shouldQuit returns true for q', () => {
         footerContexts: [],
         setFooterContext: () => {},
         // Settings
-        settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+        settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -587,6 +610,13 @@ it('shouldQuit returns true for q', () => {
         runSharedTypesPublish: async () => {},
         retrySharedTypesPublish: async () => {},
         resetSharedTypesPublish: () => {},
+        sharedTypesHistory: { mode: 'branch', status: 'idle', query: '', entries: [], hits: [], found: null, truncated: false, earliestBranch: null, endedBy: null, scanned: 0, error: null, depth: 0, maxScanned: 0 },
+        sharedTypesHistoryBranches: [],
+        sharedTypesHistoryBranchesStatus: 'idle',
+        startSharedTypesHistorySearch: async () => {},
+        cancelSharedTypesHistorySearch: () => {},
+        resetSharedTypesHistory: () => {},
+        loadSharedTypesHistoryBranches: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

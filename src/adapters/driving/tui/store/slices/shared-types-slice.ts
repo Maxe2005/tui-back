@@ -14,6 +14,13 @@ import {
 } from '../../../../../core/shared-types/propagate-version.js';
 import { listConsumers, listSources, type ConsumerIssue, type DependencyConsumer, type SourceEntry, type SourceIssue } from '../../../../../core/shared-types/list-consumers.js';
 import { runPublish } from '../../../../../core/shared-types/publish-version.js';
+import {
+  searchByBranch,
+  searchByVersion,
+  type BranchSearchEnd,
+  type VersionHistoryEntry,
+  type VersionHit,
+} from '../../../../../core/shared-types/version-history.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 export type SharedTypesConsumersStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -39,7 +46,39 @@ export type SharedTypesPublish = {
   notice: string | null;
 };
 
+export type SharedTypesHistoryMode = 'branch' | 'version';
+export type SharedTypesHistoryStatus = 'idle' | 'searching' | 'done' | 'error';
+
+// The History view's state: one search at a time, results streamed in as git yields them.
+export type SharedTypesHistory = {
+  mode: SharedTypesHistoryMode;
+  status: SharedTypesHistoryStatus;
+  query: string;
+  entries: VersionHistoryEntry[];
+  hits: VersionHit[];
+  // By-version only: null until the search completed.
+  found: boolean | null;
+  // By-version: the walk stopped at a bound, so a miss only means "not found so far".
+  truncated: boolean;
+  earliestBranch: string | null;
+  endedBy: BranchSearchEnd | null;
+  scanned: number;
+  error: { code: string; message: string } | null;
+  // The bounds the search ran with, so the "stopped: ..." line states the real numbers.
+  depth: number;
+  maxScanned: number;
+};
+
+export type SharedTypesHistoryBranchesStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 export type SharedTypesSlice = {
+  sharedTypesHistory: SharedTypesHistory;
+  sharedTypesHistoryBranches: string[];
+  sharedTypesHistoryBranchesStatus: SharedTypesHistoryBranchesStatus;
+  startSharedTypesHistorySearch: (input: { mode: SharedTypesHistoryMode; query: string }) => Promise<void>;
+  cancelSharedTypesHistorySearch: () => void;
+  resetSharedTypesHistory: () => void;
+  loadSharedTypesHistoryBranches: () => Promise<void>;
   sharedTypesConsumers: DependencyConsumer[];
   sharedTypesIssues: ConsumerIssue[];
   sharedTypesConsumersStatus: SharedTypesConsumersStatus;
@@ -60,6 +99,17 @@ export type SharedTypesSlice = {
   resetSharedTypesPublish: () => void;
 };
 
+// What the tab bar shows on the st tab: null = no badge, incidents 0 = running, N > 0 = N runs
+// blocked awaiting the developer (same two states the Update tab's badge has).
+export function sharedTypesBusy(state: { sharedTypesRun: { status: SharedTypesRunStatus }; sharedTypesPublish: { status: SharedTypesPublishStatus } }): { incidents: number } | null {
+  const blocked = (state.sharedTypesRun.status === 'blocked' ? 1 : 0) + (state.sharedTypesPublish.status === 'blocked' ? 1 : 0);
+  // A blocked run awaits the developer, which matters more than another run still going.
+  if (blocked > 0) {
+    return { incidents: blocked };
+  }
+  return state.sharedTypesRun.status === 'running' || state.sharedTypesPublish.status === 'running' ? { incidents: 0 } : null;
+}
+
 const IDLE_OPTIONS: PropagateOptions = { install: false, cleanRestart: false, commit: false };
 
 const IDLE_RUN: SharedTypesRun = {
@@ -78,6 +128,22 @@ const IDLE_PUBLISH: SharedTypesPublish = {
   output: null,
   error: null,
   notice: null,
+};
+
+const IDLE_HISTORY: SharedTypesHistory = {
+  mode: 'branch',
+  status: 'idle',
+  query: '',
+  entries: [],
+  hits: [],
+  found: null,
+  truncated: false,
+  earliestBranch: null,
+  endedBy: null,
+  scanned: 0,
+  error: null,
+  depth: 0,
+  maxScanned: 0,
 };
 
 const RUN_IN_PROGRESS_MESSAGE = 'Another run is already in progress — wait for it to finish before starting another.';
@@ -262,7 +328,143 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
       set({ sharedTypesPublish: { ...IDLE_PUBLISH, status: 'done', version: result.data.version, output: result.data.output } });
     }
 
+    // The one live history walk: a new search or a cancel aborts it, and its callbacks only
+    // land while their token is still the current one.
+    let historyController: AbortController | null = null;
+    let historyToken = 0;
+
+    function stopHistoryWalk(): void {
+      historyController?.abort();
+      historyController = null;
+      historyToken += 1;
+    }
+
     return {
+      sharedTypesHistory: IDLE_HISTORY,
+      sharedTypesHistoryBranches: [],
+      sharedTypesHistoryBranchesStatus: 'idle',
+      startSharedTypesHistorySearch: async ({ mode, query }) => {
+        stopHistoryWalk();
+        const token = historyToken;
+        const controller = new AbortController();
+        historyController = controller;
+        const bounds = get().settings.sharedTypes;
+        const base: SharedTypesHistory = { ...IDLE_HISTORY, mode, query: query.trim(), status: 'searching', depth: bounds.historyDepth, maxScanned: bounds.maxCommitsScanned };
+        const current = (): boolean => token === historyToken && !controller.signal.aborted;
+        const fail = (error: { code: string; message: string }): void => {
+          if (token === historyToken) {
+            set((state) => ({ sharedTypesHistory: { ...state.sharedTypesHistory, status: 'error', error } }));
+          }
+        };
+        // Validate before any git call (an invalid version never reaches the adapter).
+        set({ sharedTypesHistory: base });
+        try {
+          const resolved = await resolveSingleSource();
+          if (!current()) {
+            return;
+          }
+          if (!resolved.ok) {
+            fail({
+              code: resolved.code ?? 'no-source',
+              message: resolved.message ?? 'No shared-types source repo in the active EDT.',
+            });
+            return;
+          }
+          const repoPath = resolved.source.repoPath;
+          if (mode === 'branch') {
+            const result = await searchByBranch({
+              git: deps!.git,
+              repoPath,
+              branch: query,
+              depth: bounds.historyDepth,
+              maxScanned: bounds.maxCommitsScanned,
+              signal: controller.signal,
+              onEntry: (entry) => {
+                if (current()) {
+                  set((state) => ({ sharedTypesHistory: { ...state.sharedTypesHistory, entries: [...state.sharedTypesHistory.entries, entry] } }));
+                }
+              },
+            });
+            if (token !== historyToken) {
+              return;
+            }
+            if (!result.ok) {
+              fail(result.error);
+              return;
+            }
+            set((state) => ({ sharedTypesHistory: { ...state.sharedTypesHistory, status: 'done', endedBy: result.data.endedBy, scanned: result.data.scanned } }));
+            return;
+          }
+          const result = await searchByVersion({
+            git: deps!.git,
+            repoPath,
+            version: query,
+            signal: controller.signal,
+            onHit: (hit) => {
+              if (current()) {
+                set((state) => ({ sharedTypesHistory: { ...state.sharedTypesHistory, hits: [...state.sharedTypesHistory.hits, hit] } }));
+              }
+            },
+          });
+          if (token !== historyToken) {
+            return;
+          }
+          if (!result.ok) {
+            fail(result.error);
+            return;
+          }
+          set((state) => ({
+            sharedTypesHistory: {
+              ...state.sharedTypesHistory,
+              status: 'done',
+              hits: result.data.hits,
+              found: result.data.aborted ? null : result.data.found,
+              truncated: result.data.truncated,
+              earliestBranch: result.data.earliestBranch,
+              endedBy: result.data.aborted ? 'aborted' : null,
+            },
+          }));
+        } catch (error) {
+          fail({ code: 'internal-error', message: error instanceof Error ? error.message : String(error) });
+        } finally {
+          if (token === historyToken) {
+            historyController = null;
+          }
+        }
+      },
+      cancelSharedTypesHistorySearch: () => {
+        if (get().sharedTypesHistory.status !== 'searching') {
+          return;
+        }
+        stopHistoryWalk();
+        set((state) => ({ sharedTypesHistory: { ...state.sharedTypesHistory, status: 'done', endedBy: 'aborted' } }));
+      },
+      resetSharedTypesHistory: () => {
+        stopHistoryWalk();
+        set({ sharedTypesHistory: IDLE_HISTORY });
+      },
+      loadSharedTypesHistoryBranches: async () => {
+        set({ sharedTypesHistoryBranchesStatus: 'loading' });
+        try {
+          const resolved = await resolveSingleSource();
+          if (!resolved.ok || deps === undefined) {
+            set({ sharedTypesHistoryBranches: [], sharedTypesHistoryBranchesStatus: 'error' });
+            return;
+          }
+          const [local, remote] = await Promise.all([
+            deps.git.listBranches(resolved.source.repoPath),
+            deps.git.listRemoteBranches(resolved.source.repoPath),
+          ]);
+          if (!local.ok && !remote.ok) {
+            set({ sharedTypesHistoryBranches: [], sharedTypesHistoryBranchesStatus: 'error' });
+            return;
+          }
+          const names = [...(local.ok ? local.data : []), ...(remote.ok ? remote.data : [])];
+          set({ sharedTypesHistoryBranches: [...new Set(names)], sharedTypesHistoryBranchesStatus: 'ready' });
+        } catch {
+          set({ sharedTypesHistoryBranches: [], sharedTypesHistoryBranchesStatus: 'error' });
+        }
+      },
       sharedTypesConsumers: [],
       sharedTypesIssues: [],
       sharedTypesConsumersStatus: 'idle',

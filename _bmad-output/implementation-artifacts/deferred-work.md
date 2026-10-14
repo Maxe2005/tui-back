@@ -781,3 +781,16 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
   summary: Settings Update tab cursor is not reset when switching tabs, and rapid toggles read a render-time snapshot of settings.
   evidence: Same behaviour as other settings tabs/concurrency edit; surfaced by edge-case review.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
+  summary: Version-bump walk skips merge commits that change `package.json` (no diff under `git log -p`), so bumps introduced via merges are missed.
+  evidence: `listVersionBumpCommits` does not pass `-m`/`-c`; edge-case review of story 4.6.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
+  summary: In a shallow clone the grafted boundary commit shows the whole `package.json` as added and is reported as a false bump; the port doc promises a shallow-clone error.
+  evidence: No `git rev-parse --is-shallow-repository` check in the history adapter.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
+  summary: `loadSharedTypesHistoryBranches` has no stale-load token, so an EDT switch during an in-flight load can show the old source repo's branches.
+  evidence: Slice sets state after await without checking the active EDT.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
+  summary: Tab toggles the History search mode while the branch autocomplete dropdown may be open, instead of letting the autocomplete consume it; it also conflicts with the Tab-moves-focus convention.
+  evidence: `shared-types-history.logic.ts` was added to the focus-navigation guard allowlist.

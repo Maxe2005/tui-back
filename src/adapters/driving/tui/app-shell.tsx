@@ -9,6 +9,7 @@ import { Footer, footerRowsFor, useFooterItems } from './shared/components/foote
 import { InputGate, useInput } from './shared/hooks/use-input.js';
 import { KeybindingHelp } from './shared/components/keybinding-help.js';
 import { TopBar } from './shared/components/top-bar.js';
+import { sharedTypesBusy } from './store/slices/shared-types-slice.js';
 import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { ResetScreen } from './shared/reset-screen.js';
@@ -163,6 +164,7 @@ export function AppShell({
   const zoneEvents = useStore((state) => state.zoneEvents);
   const updateRunning = useStore((state) => state.updateStatus === 'running');
   const updateIncidents = useStore((state) => state.incidents.length);
+  const sharedTypesTabBusy = useStore((state) => sharedTypesBusy(state)?.incidents ?? -1);
   const setActiveZone = useStore((state) => state.setActiveZone);
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
@@ -399,7 +401,7 @@ export function AppShell({
       ) : null}
       <Box flexDirection="column" height={rows} overflow="hidden" display={tooSmall ? 'none' : 'flex'}>
         <TopBar activeEdt={activeEdt} edts={edts} />
-        <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} updateRunning={updateRunning} updateIncidents={updateIncidents} />
+        <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} busy={{ ...(updateRunning ? { update: { incidents: updateIncidents } } : {}), ...(sharedTypesTabBusy >= 0 ? { 'shared-types': { incidents: sharedTypesTabBusy } } : {}) }} />
         <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
           <BoundsProvider columns={columns} rows={zoneRows}>
             <ZoneScreen useStore={useStore} />

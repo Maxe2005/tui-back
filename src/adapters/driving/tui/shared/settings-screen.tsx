@@ -21,7 +21,11 @@ import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
   MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
+  MAX_HISTORY_DEPTH,
   MAX_INPUT_HISTORY_SIZE,
+  MAX_MAX_COMMITS_SCANNED,
+  MIN_HISTORY_DEPTH,
+  MIN_MAX_COMMITS_SCANNED,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
   MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
@@ -37,9 +41,9 @@ import {
 import { StateLine } from './components/state-line.js';
 import { BoundedList } from './components/bounded-list.js';
 
-export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update';
+export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update' | 'shared-types';
 
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update'];
+export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types'];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   general: 'General',
@@ -47,9 +51,66 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   'command-palette': 'Command Palette',
   logs: 'Logs',
   update: 'Update',
+  'shared-types': 'st',
 };
 
-// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> Logs -> Update order
+// st tab: a flat Up/Down list of the shared-types zone's option defaults (Space toggles the
+// checkboxes) followed by the History view's two numeric bounds (+/- step them, always clamped to
+// the schema's range).
+export type SharedTypesCheckboxRowId = 'install' | 'cleanRestart' | 'commit';
+export type SharedTypesNumberRowId = 'historyDepth' | 'maxCommitsScanned';
+export type SharedTypesSettingsRowId = SharedTypesCheckboxRowId | SharedTypesNumberRowId;
+
+export const SHARED_TYPES_SETTINGS_ROWS: readonly (
+  | { id: SharedTypesCheckboxRowId; label: string; kind: 'checkbox' }
+  | { id: SharedTypesNumberRowId; label: string; kind: 'number'; min: number; max: number; step: number; hint: string }
+)[] = [
+  { id: 'install', label: 'Run npm i', kind: 'checkbox' },
+  { id: 'cleanRestart', label: 'Clean restart', kind: 'checkbox' },
+  { id: 'commit', label: 'Commit package.json + package-lock.json', kind: 'checkbox' },
+  { id: 'historyDepth', label: 'History depth', kind: 'number', min: MIN_HISTORY_DEPTH, max: MAX_HISTORY_DEPTH, step: 1, hint: 'Version bumps a by-branch History search lists at most (+/-).' },
+  { id: 'maxCommitsScanned', label: 'History max commits scanned', kind: 'number', min: MIN_MAX_COMMITS_SCANNED, max: MAX_MAX_COMMITS_SCANNED, step: 100, hint: 'Commits touching package.json a by-branch History search scans at most (+/-).' },
+];
+
+export type SharedTypesSettingsStep =
+  | { type: 'move'; cursor: number }
+  | { type: 'toggle'; id: SharedTypesCheckboxRowId }
+  | { type: 'set-number'; id: SharedTypesNumberRowId; value: number }
+  | { type: 'ignore' };
+
+export function clampSharedTypesNumber(id: SharedTypesNumberRowId, value: number): number {
+  const row = SHARED_TYPES_SETTINGS_ROWS.find((candidate) => candidate.id === id);
+  return row?.kind === 'number' ? Math.min(Math.max(value, row.min), row.max) : value;
+}
+
+export function resolveSharedTypesSettingsKey(
+  input: string,
+  key: TextEditKey,
+  cursor: number,
+  current: { historyDepth: number; maxCommitsScanned: number },
+): SharedTypesSettingsStep {
+  const moved = nextCursorForKey(key, cursor, SHARED_TYPES_SETTINGS_ROWS.length);
+  if (moved !== null) {
+    return { type: 'move', cursor: moved };
+  }
+  const row = SHARED_TYPES_SETTINGS_ROWS[cursor];
+  if (row === undefined) {
+    return { type: 'ignore' };
+  }
+  if (row.kind === 'checkbox') {
+    return input === ' ' ? { type: 'toggle', id: row.id } : { type: 'ignore' };
+  }
+  const value = current[row.id];
+  if (input === '+') {
+    return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, value + row.step) };
+  }
+  if (input === '-') {
+    return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, value - row.step) };
+  }
+  return { type: 'ignore' };
+}
+
+// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> Logs -> Update -> st -> General order
 // (SETTINGS_TABS' declared order) — Left and Tab both step forward, simpler than zones.ts's
 // nextZoneId since every settings tab is always reachable.
 export function nextSettingsTab(current: SettingsTab, direction: 1 | -1): SettingsTab {
@@ -409,6 +470,8 @@ export function settingsFooterContext(
       return state.paletteGroup == null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.paletteGroup];
     case 'edts':
       return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
+    case 'shared-types':
+      return 'settings-shared-types';
     case 'logs':
       return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
   }
@@ -477,6 +540,7 @@ export function SettingsScreen({
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   // The General tab's row cursor + in-progress editor-command edit (null when browsing).
   // The edit is a local draft: only Enter persists it, Esc drops it.
+  const [sharedTypesCursor, setSharedTypesCursor] = useState(0);
   const [generalCursor, setGeneralCursor] = useState(initialGeneralEditing ? GENERAL_SETTINGS_ROWS.indexOf('editor-command') : 0);
   const [updateCursor, setUpdateCursor] = useState(0);
   const [generalEditing, setGeneralEditing] = useState<TextInputState | null>(
@@ -603,6 +667,18 @@ export function SettingsScreen({
         void updateSettings({ update: { cleanRestart: !settings.update.cleanRestart } });
       } else if (step.type === 'set-merge-source') {
         void updateSettings({ update: { mergeSource: step.value } });
+      }
+      return;
+    }
+
+    if (tab === 'shared-types') {
+      const step = resolveSharedTypesSettingsKey(input, key, sharedTypesCursor, settings.sharedTypes);
+      if (step.type === 'move') {
+        setSharedTypesCursor(step.cursor);
+      } else if (step.type === 'set-number') {
+        void updateSettings({ sharedTypes: { [step.id]: step.value } });
+      } else if (step.type === 'toggle') {
+        void updateSettings({ sharedTypes: { [step.id]: !settings.sharedTypes[step.id] } });
       }
       return;
     }
@@ -877,6 +953,27 @@ export function SettingsScreen({
         </Box>
 
         {settingsWarning ? <DimAnnotation text={settingsWarning} /> : null}
+
+        {tab === 'shared-types' ? (
+          <Box flexDirection="column">
+            {SHARED_TYPES_SETTINGS_ROWS.map((row, index) => (
+              <Box key={row.id} flexDirection="row">
+                <Text color={colors.accent} wrap="truncate-end">{index === sharedTypesCursor ? '›' : ' '}</Text>
+                {row.kind === 'checkbox' ? (
+                  <CheckboxListItem label={row.label} selected={index === sharedTypesCursor} state={settings.sharedTypes[row.id] ? 'checked' : 'unchecked'} />
+                ) : (
+                  <Text color={index === sharedTypesCursor ? colors.accent : colors.text} wrap="truncate-end">
+                    {row.label}: <Text color={colors.accent}>{settings.sharedTypes[row.id]}</Text>
+                  </Text>
+                )}
+              </Box>
+            ))}
+            {(() => {
+              const focused = SHARED_TYPES_SETTINGS_ROWS[sharedTypesCursor];
+              return focused?.kind === 'number' ? <DimAnnotation text={focused.hint} /> : null;
+            })()}
+          </Box>
+        ) : null}
 
         {tab === 'general' ? (
           <Box flexDirection="column">

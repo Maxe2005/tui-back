@@ -14,6 +14,7 @@ import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
+import { SharedTypesHistory, type HistoryUiState } from './shared-types-history.js';
 import {
   OPTION_ROWS,
   STEP_LABELS,
@@ -46,6 +47,21 @@ const FORM_CHROME_ROWS = 4 + OPTION_ROWS.length + 4;
 const RUN_CHROME_ROWS = 6;
 const MAX_ISSUE_ROWS = 3;
 const MAX_CLAMPED_LINES = 4;
+
+export function isHistoryKey(input: string): boolean {
+  return input === 'h' || input === 'H';
+}
+
+// Why the History view cannot open: it reads the one shared-types-source repo of the active EDT.
+export function historyDisabledReason(sourcesStatus: string, sourceError: string | undefined, sourceCount: number): string {
+  if (sourcesStatus === 'error' && sourceError !== undefined) {
+    return `History is unavailable: ${sourceError}`;
+  }
+  if (sourceCount === 0) {
+    return 'History is unavailable: the shared-types source repo is not part of the active EDT.';
+  }
+  return 'History is unavailable: the source repo is still loading.';
+}
 
 export function formatSharedTypesDisabledMessage(carryingServices: string[]): string {
   const list = carryingServices.join(', ');
@@ -92,9 +108,18 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const activeEdt = useStore((state) => state.activeEdt);
 
-  const [form, setForm] = useState<FormState>(initialFormState);
+  const settingsOptions = useStore((state) => state.settings.sharedTypes);
+  const [form, setForm] = useState<FormState>(() => initialFormState(settingsOptions));
+  // A change of the saved defaults (`:settings` st tab) re-seeds the toggles; ticking one in the
+  // zone stays local to the form and never writes back.
+  useEffect(() => {
+    setForm((previous) => ({ ...previous, options: { install: settingsOptions.install, cleanRestart: settingsOptions.cleanRestart, commit: settingsOptions.commit } }));
+  }, [settingsOptions.install, settingsOptions.cleanRestart, settingsOptions.commit]);
   const [resultRow, setResultRow] = useState(0);
   const [quitConfirm, setQuitConfirm] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyUi, setHistoryUi] = useState<HistoryUiState>({ editing: true, searching: false });
+  const [historyNotice, setHistoryNotice] = useState<string | null>(null);
 
   useEffect(() => {
     void loadConsumers();
@@ -102,6 +127,12 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   useEffect(() => {
     void loadSource();
   }, [loadSource, activeEdt]);
+  // Another EDT means another source repo: a History view left open would show the old one.
+  useEffect(() => {
+    setHistoryOpen(false);
+    setHistoryNotice(null);
+  }, [activeEdt]);
+  const historyAvailable = sourcesStatus === 'ready' && sources.length === 1;
 
   const repoPaths = consumers.map((consumer) => consumer.repoPath);
   const repoPathsKey = repoPaths.join('\n');
@@ -116,15 +147,21 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
 
   // The version field types freely (letters included), and a quit confirmation owns the keys.
   useEffect(() => {
-    setZoneInputCaptured(quitConfirm || onVersionField);
+    setZoneInputCaptured(quitConfirm || onVersionField || (historyOpen && historyUi.editing));
     return () => setZoneInputCaptured(false);
-  }, [quitConfirm, onVersionField, setZoneInputCaptured]);
+  }, [quitConfirm, onVersionField, historyOpen, historyUi.editing, setZoneInputCaptured]);
 
   useFooterContext(
     'shared-types',
     quitConfirm
       ? 'confirm'
-      : run.status === 'running' || publish.status === 'running'
+      : historyOpen
+        ? historyUi.editing
+          ? historyUi.searching
+            ? 'shared-types-history-running'
+            : 'shared-types-history-input'
+          : 'shared-types-history-results'
+        : run.status === 'running' || publish.status === 'running'
         ? 'busy'
         : publish.status === 'blocked'
           ? 'shared-types-publish-failed'
@@ -160,7 +197,19 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       setQuitConfirm(true);
       return;
     }
+    if (historyOpen) {
+      return;
+    }
     if (publish.status === 'running' || run.status === 'running') {
+      return;
+    }
+    if (isHistoryKey(input) && !form.editing && run.status === 'idle' && publish.status === 'idle') {
+      if (historyAvailable) {
+        setHistoryNotice(null);
+        setHistoryOpen(true);
+      } else {
+        setHistoryNotice(historyDisabledReason(sourcesStatus, sourcesError?.message, sources.length));
+      }
       return;
     }
     if (publish.status === 'blocked' && !form.editing) {
@@ -235,14 +284,39 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>
       <Text color={colors['text-dim']}>SHARED TYPES</Text>
-      {renderPublish()}
-      {renderBody()}
+      {historyOpen ? (
+        <SharedTypesHistory
+          useStore={useStore}
+          onUiState={setHistoryUi}
+          onClose={() => setHistoryOpen(false)}
+          onSelectVersion={(version) => {
+            setForm((previous) => ({ ...previous, version: { value: version, cursor: version.length }, row: 0, editing: false }));
+            setHistoryOpen(false);
+          }}
+        />
+      ) : (
+        <>
+          {renderPublish()}
+          {renderHistoryHint()}
+          {renderBody()}
+        </>
+      )}
       <ModalDialog title={SHARED_TYPES_QUIT_TITLE} open={quitConfirm}>
         <ClampedParagraph color={colors.text} maxLines={MAX_CLAMPED_LINES}>{publishQuitBody}</ClampedParagraph>
         <Text color={colors['text-dim']} wrap="truncate-end">Enter quit, Esc keep running</Text>
       </ModalDialog>
     </Box>
   );
+
+  function renderHistoryHint() {
+    if (run.status !== 'idle' || publish.status !== 'idle' || sourcesStatus === 'loading') {
+      return null;
+    }
+    if (historyNotice !== null) {
+      return <ClampedParagraph color={colors.warning} maxLines={2}>{historyNotice}</ClampedParagraph>;
+    }
+    return historyAvailable ? <Text color={colors['text-dim']} wrap="truncate-end">H version history</Text> : null;
+  }
 
   function renderPublish() {
     if (sourcesStatus === 'loading') {

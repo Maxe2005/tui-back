@@ -95,3 +95,126 @@ export function runProcess(command: string, args: readonly string[], options: Pr
     }
   });
 }
+
+export interface StreamOptions {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  // Aborting kills the child; the result reports `aborted: true`.
+  signal?: AbortSignal;
+  // Called for each stdout line as it arrives (without the line terminator). Returning
+  // `false` stops the walk: the child is killed and the result reports `stopped: true`.
+  onLine: (line: string) => boolean | void;
+}
+
+export interface StreamResult {
+  status: number | null;
+  stderr: string;
+  aborted: boolean;
+  stopped: boolean;
+  error?: Error;
+}
+
+const STREAM_STDERR_CAP = 64 * 1024;
+
+// The streaming sibling of runProcess: stdout is handed to `onLine` line by line instead of
+// being buffered, and the child is killed as soon as the caller aborts or stops the walk. Like
+// runProcess it never rejects; a spawn failure is reported through `error`.
+export function streamProcess(command: string, args: readonly string[], options: StreamOptions): Promise<StreamResult> {
+  return new Promise((resolveResult) => {
+    let stderr = '';
+    let pending = '';
+    let aborted = false;
+    let stopped = false;
+    let failure: Error | undefined;
+    let settled = false;
+
+    const finish = (status: number | null): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      options.signal?.removeEventListener('abort', onAbort);
+      resolveResult({
+        status: failure === undefined ? status : null,
+        stderr,
+        aborted,
+        stopped,
+        ...(failure === undefined ? {} : { error: failure }),
+      });
+    };
+
+    if (options.signal?.aborted === true) {
+      aborted = true;
+      finish(null);
+      return;
+    }
+
+    let child;
+    try {
+      child = spawn(command, [...args], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+        ...(options.env === undefined ? {} : { env: options.env }),
+      });
+    } catch (error) {
+      failure = error instanceof Error ? error : new Error(String(error));
+      finish(null);
+      return;
+    }
+
+    const halt = (): void => {
+      child.kill('SIGKILL');
+      child.stdout.destroy();
+      child.stderr.destroy();
+      finish(null);
+    };
+    function onAbort(): void {
+      aborted = true;
+      halt();
+    }
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+
+    const feed = (line: string): void => {
+      if (settled || stopped) {
+        return;
+      }
+      try {
+        if (options.onLine(line) === false) {
+          stopped = true;
+          halt();
+        }
+      } catch (error) {
+        // A throwing consumer must not escape as an uncaught listener exception: kill the
+        // child and report the failure through the result.
+        failure ??= error instanceof Error ? error : new Error(String(error));
+        halt();
+      }
+    };
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      pending += chunk;
+      let index = pending.indexOf('\n');
+      while (index >= 0 && !settled) {
+        feed(pending.slice(0, index).replace(/\r$/, ''));
+        pending = pending.slice(index + 1);
+        index = pending.indexOf('\n');
+      }
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (stderr.length < STREAM_STDERR_CAP) {
+        stderr += chunk.toString('utf8');
+      }
+    });
+    child.on('error', (error) => {
+      failure ??= error;
+      finish(null);
+    });
+    child.on('close', (code) => {
+      if (pending !== '' && !settled) {
+        feed(pending.replace(/\r$/, ''));
+        pending = '';
+      }
+      finish(code);
+    });
+  });
+}

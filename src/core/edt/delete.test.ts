@@ -109,6 +109,8 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     hasStash: vi.fn(async () => ok(false)),
     fetchRemote: vi.fn(async () => ok(undefined)),
     listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+    listBranchesContaining: vi.fn(async () => ok([] as string[])),
     pull: vi.fn(async () => ok(undefined)),
     isMergeInProgress: vi.fn(async () => ok(false)),
     mergeBranch: vi.fn(async () => ok(undefined)),
@@ -363,6 +365,8 @@ describe('deleteEdt', () => {
       hasStash: vi.fn(async (repoPath: string, tag: string) => ok(repoPath === '/repo/a' && tag === 'tui-back:target-ulid')),
       fetchRemote: vi.fn(async () => ok(undefined)),
       listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+      listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+      listBranchesContaining: vi.fn(async () => ok([] as string[])),
     });
     const params = await makeParams({ edtRegistry, git, dispositions: { '/repo/a': 'delete' } });
 
@@ -382,6 +386,8 @@ describe('deleteEdt', () => {
       hasStash: vi.fn(async () => ok(false)),
       fetchRemote: vi.fn(async () => ok(undefined)),
       listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+      listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+      listBranchesContaining: vi.fn(async () => ok([] as string[])),
     });
     const params = await makeParams({ edtRegistry, git, dispositions: { '/repo/a': 'delete' } });
 
@@ -546,6 +552,8 @@ describe('resolveMemberDeleteStatuses', () => {
       hasStash: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
       fetchRemote: vi.fn(async () => ok(undefined)),
       listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+      listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+      listBranchesContaining: vi.fn(async () => ok([] as string[])),
     });
 
     const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, TARGET.members);
@@ -591,6 +599,8 @@ describe('resolveMemberDeleteStatuses', () => {
         hasStash: vi.fn(async (repoPath: string, tag: string) => ok(repoPath === '/repo/a' && tag === 'tui-back:target-ulid')),
         fetchRemote: vi.fn(async () => ok(undefined)),
         listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);
@@ -605,6 +615,8 @@ describe('resolveMemberDeleteStatuses', () => {
         hasStash: vi.fn(async () => ok(false)),
         fetchRemote: vi.fn(async () => ok(undefined)),
         listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);
@@ -620,6 +632,8 @@ describe('resolveMemberDeleteStatuses', () => {
         hasStash: vi.fn(async () => ok(false)),
         fetchRemote: vi.fn(async () => ok(undefined)),
         listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);

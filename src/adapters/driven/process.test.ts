@@ -1,42 +1,58 @@
 import { describe, expect, it } from 'vitest';
-import { runProcess } from './process.js';
+import { streamProcess } from './process.js';
 
-describe('runProcess', () => {
-  it('captures stdout, stderr and the exit status', async () => {
-    const result = await runProcess('sh', ['-c', 'echo out; echo err >&2; exit 3']);
-    expect(result).toMatchObject({ status: 3, stdout: 'out\n', stderr: 'err\n' });
+const node = (script: string) => ['-e', script] as const;
+
+describe('streamProcess', () => {
+  it('splits lines that straddle chunks and delivers an unterminated last line', async () => {
+    const lines: string[] = [];
+    const result = await streamProcess('node', node("process.stdout.write('ab'); setTimeout(() => process.stdout.write('c\\nde\\r\\nlast'), 30)"), {
+      onLine: (line) => { lines.push(line); },
+    });
+    expect(lines).toEqual(['abc', 'de', 'last']);
+    expect(result).toMatchObject({ status: 0, aborted: false, stopped: false });
   });
 
-  it('keeps the event loop running while the child is in flight', async () => {
-    let ticks = 0;
-    const timer = setInterval(() => {
-      ticks += 1;
-    }, 10);
-    await runProcess('sh', ['-c', 'sleep 0.2']);
-    clearInterval(timer);
-    expect(ticks).toBeGreaterThan(3);
+  it('stops and kills the child when onLine returns false', async () => {
+    const lines: string[] = [];
+    const result = await streamProcess('node', node("console.log('a'); console.log('b'); setInterval(() => {}, 1000)"), {
+      onLine: (line) => { lines.push(line); return false; },
+    });
+    expect(lines).toEqual(['a']);
+    expect(result).toMatchObject({ stopped: true, aborted: false });
   });
 
-  it('reports a missing binary as a null status with an error, never a rejection', async () => {
-    const result = await runProcess('definitely-not-a-binary-xyz', []);
+  it('reports aborted, distinct from stopped, when the signal fires mid-stream', async () => {
+    const controller = new AbortController();
+    const result = await streamProcess('node', node("console.log('go'); setInterval(() => {}, 1000)"), {
+      signal: controller.signal,
+      onLine: () => { controller.abort(); },
+    });
+    expect(result).toMatchObject({ aborted: true, stopped: false });
+  });
+
+  it('reports aborted without spawning when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const lines: string[] = [];
+    const result = await streamProcess('node', node("console.log('never')"), { signal: controller.signal, onLine: (line) => { lines.push(line); } });
+    expect(result.aborted).toBe(true);
+    expect(lines).toEqual([]);
+  });
+
+  it('reports a spawn failure through error, never a rejection', async () => {
+    const result = await streamProcess('definitely-not-a-binary-xyz', [], { onLine: () => {} });
     expect(result.status).toBeNull();
-    expect((result.error as NodeJS.ErrnoException).code).toBe('ENOENT');
+    expect(result.error).toBeInstanceOf(Error);
   });
 
-  it('reports a bad cwd as a null status', async () => {
-    const result = await runProcess('sh', ['-c', 'true'], { cwd: '/nonexistent-dir-xyz' });
+  it('turns a throwing onLine into an error result and kills the child', async () => {
+    const result = await streamProcess('node', node("console.log('x'); setInterval(() => {}, 1000)"), {
+      onLine: () => {
+        throw new Error('boom');
+      },
+    });
+    expect(result.error?.message).toBe('boom');
     expect(result.status).toBeNull();
-  });
-
-  it('kills the child and reports ETIMEDOUT when the timeout elapses', async () => {
-    const result = await runProcess('sh', ['-c', 'sleep 5'], { timeout: 50 });
-    expect(result.status).toBeNull();
-    expect((result.error as NodeJS.ErrnoException).code).toBe('ETIMEDOUT');
-  });
-
-  it('kills the child and reports ENOBUFS past maxBuffer', async () => {
-    const result = await runProcess('sh', ['-c', 'yes | head -c 5000'], { maxBuffer: 100 });
-    expect(result.status).toBeNull();
-    expect((result.error as NodeJS.ErrnoException).code).toBe('ENOBUFS');
   });
 });

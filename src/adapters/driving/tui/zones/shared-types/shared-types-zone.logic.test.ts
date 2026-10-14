@@ -97,3 +97,16 @@ describe('summarizeResult', () => {
     expect(summarizeResult({ service: 'a', repoPath: '/r/a', outcome: 'skipped', steps: [], reason: 'package.json dirty' })).toContain('package.json dirty');
   });
 });
+
+describe('initialFormState — default options', () => {
+  it('keeps the historical defaults without argument', () => {
+    expect(initialFormState().options).toEqual({ install: true, cleanRestart: false, commit: true });
+  });
+
+  it('seeds the toggles from the given settings, copying them', () => {
+    const saved = { install: false, cleanRestart: true, commit: false };
+    const form = initialFormState(saved);
+    expect(form.options).toEqual(saved);
+    expect(form.options).not.toBe(saved);
+  });
+});

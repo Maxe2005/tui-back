@@ -26,13 +26,15 @@ export type FormState = {
   options: PropagateOptions;
 };
 
-export function initialFormState(): FormState {
+export const DEFAULT_FORM_OPTIONS: PropagateOptions = { install: true, cleanRestart: false, commit: true };
+
+export function initialFormState(options: PropagateOptions = DEFAULT_FORM_OPTIONS): FormState {
   return {
     version: { value: VERSION_PREFIX, cursor: VERSION_PREFIX.length },
     row: 0,
     editing: false,
     unchecked: new Set(),
-    options: { install: true, cleanRestart: false, commit: true },
+    options: { ...options },
   };
 }
 

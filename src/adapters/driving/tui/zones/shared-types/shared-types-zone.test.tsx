@@ -67,6 +67,22 @@ describe('SharedTypesZone', () => {
     expect(output).toContain('Commit');
   });
 
+  it('pre-sets the option toggles from the saved settings', async () => {
+    const store = createAppStore();
+    store.setState({
+      settings: { ...store.getState().settings, sharedTypes: { install: false, cleanRestart: true, commit: false, historyDepth: 20, maxCommitsScanned: 1000 } },
+      sharedTypesConsumersStatus: 'ready',
+      sharedTypesConsumers: [
+        { service: 'api', repoPath: '/r/api', branch: 'feat/x', dependency: '@ianord/shared-types', packageJsonPath: 'package.json' },
+      ],
+      loadSharedTypesConsumers: async () => {},
+    });
+    const output = await renderToString(<SharedTypesZone useStore={store} />);
+    expect(output).toMatch(/\[ \] Run npm i/);
+    expect(output).toMatch(/\[x\] Clean restart/);
+    expect(output).toMatch(/\[ \] Commit/);
+  });
+
   it('shows a blocked run with its explicit message', async () => {
     const store = createAppStore();
     store.setState({
