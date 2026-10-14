@@ -2,7 +2,7 @@
 title: 'edt switch CLI — Fail-Safe Dirty Handling & Explicit Flags'
 type: 'feature'
 created: '2026-10-14'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 context: []
 ---
