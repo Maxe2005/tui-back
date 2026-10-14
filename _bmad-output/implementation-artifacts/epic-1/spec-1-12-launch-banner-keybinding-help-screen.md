@@ -290,7 +290,7 @@ Monochrome in `{colors.text-dim}`, on `{colors.surface}`, above the Dashboard's 
 - [ ] [Review][Patch] `no-tui-leak-outside-driving-tui` rule's new `src/bin/tui.ts` exception is not pinned by a config regression test [`dependency-cruiser.config.test.ts`] — the diff widens the rule but only `no-core-to-adapters` has fixture tests. Add a fixture asserting `src/bin/tui.ts`→`tui/` is allowed and a `src/bin/*` non-TUI file is flagged.
 - [ ] [Review][Patch] First AppShell test renders with the module-global store, permanently mutating `launchBannerShown` for the rest of the file [`src/adapters/driving/tui/app-shell.test.tsx:25`] — `<AppShell />` (no injected store) runs the mount effect on the shared `useAppStore`. Inject a fresh store in every AppShell test.
 - [ ] [Review][Patch] `src/bin/tui.ts` places comments before imports [`src/bin/tui.ts:1-6`] — violates the "imports always first" depcruise acorn-fallback convention (AGENTS.md). Move the explanatory comment after the import block.
-- [ ] [Review][Patch] Story artifact header says `Status: ready-for-dev` while the footer and change log say `review`/implemented [`_bmad-output/implementation-artifacts/1-12-launch-banner-keybinding-help-screen.md:35` vs `:262-263`] — the header status and the stale "Next Steps" block contradict the completed/review state. Update the header status and next-steps.
+- [ ] [Review][Patch] Story artifact header says `Status: ready-for-dev` while the footer and change log say `review`/implemented [`_bmad-output/implementation-artifacts/spec-1-12-launch-banner-keybinding-help-screen.md:35` vs `:262-263`] — the header status and the stale "Next Steps" block contradict the completed/review state. Update the header status and next-steps.
 
 ### Deferred
 

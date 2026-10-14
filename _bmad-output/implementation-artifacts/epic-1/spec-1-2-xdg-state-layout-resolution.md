@@ -113,7 +113,7 @@ so that they never collide with a bespoke directory layout.
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#Consistency Conventions]
 - [Source: _bmad-output/planning-artifacts/prds/prd-tui-back-2026-08-10/prd.md#Cross-Cutting NFRs — Local state layout]
 - [Source: _bmad-output/planning-artifacts/prds/prd-tui-back-2026-08-10/prd.md#6.1 MVP Scope — storage topology deferred to architecture]
-- [Source: _bmad-output/implementation-artifacts/1-1-project-scaffolding-hexagonal-skeleton.md — Review Findings item 1, dependency-cruiser/TypeScript 7 parsing gap]
+- [Source: _bmad-output/implementation-artifacts/spec-1-1-project-scaffolding-hexagonal-skeleton.md — Review Findings item 1, dependency-cruiser/TypeScript 7 parsing gap]
 - [Source: _bmad-output/implementation-artifacts/deferred-work.md — item 1]
 - [Source: CLAUDE.md#Git workflow]
 - [Source: XDG Base Directory Specification v0.8 (freedesktop.org, 2021-05-08) — default paths and relative/empty-value handling, https://specifications.freedesktop.org/basedir/latest/ (per 2026-08-11 web verification)]
@@ -143,7 +143,7 @@ so that they never collide with a bespoke directory layout.
 - `dependency-cruiser.config.test.ts` (new during code review — regression fixture for the rule fix)
 - `_bmad-output/implementation-artifacts/deferred-work.md` (modified — new item documenting the depcheck NodeNext-resolution gap, then corrected/resolved during code review)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story status)
-- `_bmad-output/implementation-artifacts/1-2-xdg-state-layout-resolution.md` (this file)
+- `_bmad-output/implementation-artifacts/spec-1-2-xdg-state-layout-resolution.md` (this file)
 
 ## Change Log
 

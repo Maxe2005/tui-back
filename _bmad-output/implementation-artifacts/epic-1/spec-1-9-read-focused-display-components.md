@@ -201,7 +201,7 @@ From `_bmad-output/planning-artifacts/epics.md#Story-1.9` (lines 390-414), verba
 - [Source: `_bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md`] — Component Patterns table (66-76): status-badge passive, list-row keyboard behavior, detail-pane read-focused; State Patterns (80-158) for how the components are consumed zone-by-zone; keybinding contract (160-176) informs later stories only.
 - [Source: `_bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/mockups/key-update-run.html` (lines 164-177)] — 1:1 fidelity reference for list-row (selected `›` + meta suffix in text-dim + nested indent) and detail-pane (uppercase label title + outcome tally). Illustrative, not authoritative (DESIGN.md wins).
 - [Source: `_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md`] — §AD-13 (151-157: TUI render() smokes only; ink-testing-library unmaintained), §AD-15 (161-165: `tui/shared/` for cross-zone Atelier UI), tree (49-58), stack (181-182: Ink 7.1.1 / React 19.2.8).
-- [Source: `_bmad-output/implementation-artifacts/1-8-atelier-design-tokens-theme-module.md`] — the theme module contract, D-theme-1 (Ink/React deferred to 1.9), review findings incl. the three deferred items this story picks up.
+- [Source: `_bmad-output/implementation-artifacts/spec-1-8-atelier-design-tokens-theme-module.md`] — the theme module contract, D-theme-1 (Ink/React deferred to 1.9), review findings incl. the three deferred items this story picks up.
 - [Source: `_bmad-output/implementation-artifacts/epic-1-context.md` (line 60)] — "1.8 (theme module) is the prerequisite for 1.9–1.12".
 - [Source: `_bmad-output/implementation-artifacts/deferred-work.md`] — acorn/imports-first landmine (line 50); 1-8 deferred items (lines 5-9).
 - [Source (tech, web 2026)] — ink@7.1.1 latest stable (npm, 2026-07-16), `render()` RenderOptions incl. `interactive`, `waitUntilRenderFlush`, `waitUntilExit`, `unmount` (ink@7.1.1 `render.d.ts`); Box per-side border props `borderTop`/`borderBottom`/`borderLeft`/`borderRight` + `borderTopColor` (ink@7.1.1 `styles.d.ts`, verified); `@types/react` 19.2.18 current stable (npm, 2026-07-30).
@@ -245,7 +245,7 @@ opencode / deepseek-v4-flash-free (story creation session, 2026-08-14).
 
 ### File List
 
-- `_bmad-output/implementation-artifacts/1-9-read-focused-display-components.md` (this file)
+- `_bmad-output/implementation-artifacts/spec-1-9-read-focused-display-components.md` (this file)
 - `src/adapters/driving/tui/shared/components/status-badge.tsx`
 - `src/adapters/driving/tui/shared/components/status-badge.test.tsx`
 - `src/adapters/driving/tui/shared/components/list-row.tsx`

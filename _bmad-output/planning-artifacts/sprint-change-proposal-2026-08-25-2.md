@@ -147,7 +147,7 @@ Story 3.2 AC (lines ~1009-1011) and `epic-3-context.md` line 27 are already corr
 
 ### Explicitly out of scope for this change
 
-- `epic-1-context.md`, `1-4-manifest-schema-loader-validation.md`, `1-6-static-module-registry.md` — frozen implementation records of an already-closed, already-merged epic (Epic 1, merged into `devlopment`). Left as historical record; `epics.md`/`ARCHITECTURE-SPINE.md` remain the living source of truth and are the ones corrected above.
+- `epic-1-context.md`, `spec-1-4-manifest-schema-loader-validation.md`, `spec-1-6-static-module-registry.md` — frozen implementation records of an already-closed, already-merged epic (Epic 1, merged into `devlopment`). Left as historical record; `epics.md`/`ARCHITECTURE-SPINE.md` remain the living source of truth and are the ones corrected above.
 - `src/core/edt/create.ts` placeholder manifest — remains valid unchanged.
 - PRD, UX designs — no mention of `migrationCommand`, nothing to change.
 

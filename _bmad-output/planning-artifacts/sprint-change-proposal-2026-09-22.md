@@ -30,7 +30,7 @@ Traced against the code (not just the symptom):
   scan+register — no deregister action exists anywhere in the app, CLI or TUI.
 
 This is not a newly-discovered defect: it was named at Story 1.5's own code review
-(`deferred-work.md`, "Deferred from: code review of 1-5-explicit-repo-registry.md") —
+(`deferred-work.md`, "Deferred from: code review of spec-1-5-explicit-repo-registry.md") —
 "`RegistryPort` has no unregister/remove: dead/replaced paths accumulate in `registry.yaml`
 forever; nothing prunes them. **Track:** the story where registry editing (unregister) is in
 scope" — and again by Story 2.25's own acceptance criteria (`epics.md`), which built an
