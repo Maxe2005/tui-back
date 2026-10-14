@@ -191,22 +191,8 @@ describe('subcommand registry guards', () => {
     };
   }
 
-  function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
-    const registry: RegistryPort = {
-      list: async () => ok([]),
-      add: async () => ok(undefined),
-      exists: async () => ok(false),
-      scan: async () => ok({ candidates: [], skipped: [] }),
-      reset: async () => ok({ path: '/p', backupPath: null }),
-      remove: async () => ok(undefined),
-    };
-    const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
-    const container: ContainerPort = { restart: async () => ok(undefined) };
-    const migration: MigrationPort = { run: async () => ok({ output: '' }) };
-    const restart: RestartPort = { run: async () => ok({ output: '' }) };
-    const scanner: RouteScannerPort = { scan: async () => ok([]) };
-    const auth: DevAuthPort = { getSession: async () => ok({ cookie: 'sid=abc' }) };
-    const git: GitPort = {
+  function fakeGitPort(overrides: Partial<GitPort> = {}): GitPort {
+    return {
       assertAllowedBranch: async () => ok(undefined),
       createBranch: async () => ok(undefined),
       deleteBranch: async () => ok(undefined),
@@ -248,7 +234,26 @@ describe('subcommand registry guards', () => {
       listUnpushedCommits: async () => ok([] as string[]),
       listVersionBumpCommits: async () => ok({ endedBy: "exhausted" as const, scanned: 0 }),
       listBranchesContaining: async () => ok([] as string[]),
+      ...overrides,
     };
+  }
+
+  function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
+    const registry: RegistryPort = {
+      list: async () => ok([]),
+      add: async () => ok(undefined),
+      exists: async () => ok(false),
+      scan: async () => ok({ candidates: [], skipped: [] }),
+      reset: async () => ok({ path: '/p', backupPath: null }),
+      remove: async () => ok(undefined),
+    };
+    const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
+    const container: ContainerPort = { restart: async () => ok(undefined) };
+    const migration: MigrationPort = { run: async () => ok({ output: '' }) };
+    const restart: RestartPort = { run: async () => ok({ output: '' }) };
+    const scanner: RouteScannerPort = { scan: async () => ok([]) };
+    const auth: DevAuthPort = { getSession: async () => ok({ cookie: 'sid=abc' }) };
+    const git: GitPort = fakeGitPort();
 
     return buildSubcommands({
       registry,
@@ -1279,6 +1284,145 @@ describe('subcommand registry guards', () => {
           },
         },
       });
+    });
+  });
+
+  describe('registry validate', () => {
+    function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
+      const registry = subcommands.find((subcommand) => subcommand.name === 'registry');
+      if (!registry) throw new Error('expected registry subcommand');
+      return registry;
+    }
+
+    function healthyDeps() {
+      const registryPort: RegistryPort = {
+        list: async () => ok(['/repo/a']),
+        add: async () => ok(undefined),
+        exists: async () => ok(true),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const manifest: ManifestPort = {
+        load: async () => ok({ service: 'svc', container: 'ctr', sharedBranch: 'development', modules: {} }),
+      };
+      return { registry: registryPort, manifest };
+    }
+
+    it('validates a healthy repo as valid', async () => {
+      const registry = findRegistry(buildTestSubcommands(healthyDeps()));
+
+      const result = await registry.run(['validate']);
+
+      expect(result).toEqual({ ok: true, data: { results: [{ path: '/repo/a', outcome: 'valid' }] } });
+    });
+
+    it('reports a missing sharedBranch as invalid with shared-branch-missing', async () => {
+      const registryPort: RegistryPort = {
+        list: async () => ok(['/repo/a']),
+        add: async () => ok(undefined),
+        exists: async () => ok(true),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const manifest: ManifestPort = {
+        load: async () => ok({ service: 'svc', container: 'ctr', sharedBranch: 'release', modules: {} }),
+      };
+      const subcommands = buildTestSubcommands({
+        registry: registryPort,
+        manifest,
+        git: fakeGitPort({ branchExistsLocally: async () => ok(false) }),
+      });
+      const validate = subcommands.find((subcommand) => subcommand.name === 'registry');
+      if (!validate) throw new Error('expected registry subcommand');
+
+      const result = await validate.run(['validate']);
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: { results: [{ path: '/repo/a', outcome: 'invalid', detail: { code: 'shared-branch-missing' } }] },
+      });
+    });
+
+    it('reports an unreachable path as unreachable', async () => {
+      const registryPort: RegistryPort = {
+        list: async () => ok(['/repo/gone']),
+        add: async () => ok(undefined),
+        exists: async () => ok(false),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const registry = findRegistry(buildTestSubcommands({ registry: registryPort }));
+
+      const result = await registry.run(['validate']);
+
+      expect(result).toEqual({ ok: true, data: { results: [{ path: '/repo/gone', outcome: 'unreachable' }] } });
+    });
+
+    it('surfaces a loader failure with its exact code as invalid', async () => {
+      const registryPort: RegistryPort = {
+        list: async () => ok(['/repo/a']),
+        add: async () => ok(undefined),
+        exists: async () => ok(true),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const manifest: ManifestPort = { load: async () => err('unknown-module', 'Unknown module id "bogus"') };
+      const registry = findRegistry(buildTestSubcommands({ registry: registryPort, manifest }));
+
+      const result = await registry.run(['validate']);
+
+      expect(result).toEqual({
+        ok: true,
+        data: { results: [{ path: '/repo/a', outcome: 'invalid', detail: { code: 'unknown-module', message: 'Unknown module id "bogus"' } }] },
+      });
+    });
+
+    it('maps a git-read error to inconclusive', async () => {
+      const registryPort: RegistryPort = {
+        list: async () => ok(['/repo/a']),
+        add: async () => ok(undefined),
+        exists: async () => ok(true),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const manifest: ManifestPort = {
+        load: async () => ok({ service: 'svc', container: 'ctr', sharedBranch: 'development', modules: {} }),
+      };
+      const git = fakeGitPort({
+        branchExistsLocally: async () => err('git-branch-check-error', 'Cannot verify branch state'),
+      });
+      const registry = findRegistry(buildTestSubcommands({ registry: registryPort, manifest, git }));
+
+      const result = await registry.run(['validate']);
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: { results: [{ path: '/repo/a', outcome: 'inconclusive', detail: { code: 'git-branch-check-error' } }] },
+      });
+    });
+
+    it('rejects excess args with invalid-argument and a validate usage', async () => {
+      const registry = findRegistry(buildTestSubcommands());
+
+      const result = await registry.run(['validate', 'extra']);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      if (!result.ok) {
+        expect(result.error.message).toContain('tui-back registry validate');
+      }
+    });
+
+    it('returns an explicit empty results list for an empty registry, exit 0 shape', async () => {
+      const registry = findRegistry(buildTestSubcommands());
+
+      const result = await registry.run(['validate']);
+
+      expect(result).toEqual({ ok: true, data: { results: [] } });
     });
   });
 
