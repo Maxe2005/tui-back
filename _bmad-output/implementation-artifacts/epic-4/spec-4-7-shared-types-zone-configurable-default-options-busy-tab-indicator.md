@@ -2,7 +2,7 @@
 title: 'shared-types Zone: Configurable Default Options & Busy Tab Indicator'
 type: 'feature'
 created: '2026-10-14'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'e8f4b7af5c281863a535d7b8b86602ebdb64ad08'
 review_loop_iteration: 0
 context: [_bmad-output/implementation-artifacts/epic-4-context.md]
