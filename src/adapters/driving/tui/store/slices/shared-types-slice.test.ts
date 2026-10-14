@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../../../core/result.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { sharedTypesBusy } from './shared-types-slice.js';
 
 const MODULE = 'consumer-module';
 
@@ -127,5 +128,25 @@ describe('shared-types slice', () => {
     expect(run.status).toBe('done');
     expect(run.results[0]).toMatchObject({ outcome: 'failed' });
     expect(run.notice).toContain('Registry unreachable');
+  });
+});
+
+describe('sharedTypesBusy', () => {
+  const at = (run: 'idle' | 'running' | 'done' | 'blocked', publish: 'idle' | 'running' | 'done' | 'blocked') =>
+    sharedTypesBusy({ sharedTypesRun: { status: run }, sharedTypesPublish: { status: publish } });
+
+  it('is running while a run or a publish runs', () => {
+    expect(at('running', 'idle')).toEqual({ incidents: 0 });
+    expect(at('idle', 'running')).toEqual({ incidents: 0 });
+  });
+
+  it('counts blocked runs as awaiting the developer', () => {
+    expect(at('blocked', 'idle')).toEqual({ incidents: 1 });
+    expect(at('blocked', 'blocked')).toEqual({ incidents: 2 });
+  });
+
+  it('is null when idle or done', () => {
+    expect(at('idle', 'idle')).toBeNull();
+    expect(at('done', 'done')).toBeNull();
   });
 });

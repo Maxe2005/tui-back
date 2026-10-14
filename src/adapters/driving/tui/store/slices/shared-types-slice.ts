@@ -60,6 +60,16 @@ export type SharedTypesSlice = {
   resetSharedTypesPublish: () => void;
 };
 
+// What the tab bar shows on the st tab: null = no badge, incidents 0 = running, N > 0 = N runs
+// blocked awaiting the developer (same two states the Update tab's badge has).
+export function sharedTypesBusy(state: { sharedTypesRun: { status: SharedTypesRunStatus }; sharedTypesPublish: { status: SharedTypesPublishStatus } }): { incidents: number } | null {
+  const blocked = (state.sharedTypesRun.status === 'blocked' ? 1 : 0) + (state.sharedTypesPublish.status === 'blocked' ? 1 : 0);
+  if (state.sharedTypesRun.status === 'running' || state.sharedTypesPublish.status === 'running') {
+    return { incidents: 0 };
+  }
+  return blocked > 0 ? { incidents: blocked } : null;
+}
+
 const IDLE_OPTIONS: PropagateOptions = { install: false, cleanRestart: false, commit: false };
 
 const IDLE_RUN: SharedTypesRun = {
