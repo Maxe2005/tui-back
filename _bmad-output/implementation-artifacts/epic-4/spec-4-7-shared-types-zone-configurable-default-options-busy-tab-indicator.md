@@ -2,7 +2,7 @@
 title: 'shared-types Zone: Configurable Default Options & Busy Tab Indicator'
 type: 'feature'
 created: '2026-10-14'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'e8f4b7af5c281863a535d7b8b86602ebdb64ad08'
 review_loop_iteration: 0
 context: [_bmad-output/implementation-artifacts/epic-4-context.md]
@@ -67,3 +67,34 @@ context: [_bmad-output/implementation-artifacts/epic-4-context.md]
 **Commands:**
 - `npm test` -- expected: all pass
 - `npm run typecheck` -- expected: no errors
+
+## Suggested Review Order
+
+**Settings model**
+
+- Zod defaults equal the old hard-coded values, so behaviour is unchanged until edited.
+  [`settings.ts:48`](../../../src/core/ports/settings.ts#L48)
+
+- Optional-with-default group keeps older settings.yaml files valid.
+  [`schema.ts:90`](../../../src/adapters/driven/settings/schema.ts#L90)
+
+**st settings tab**
+
+- Flat checkbox rows and pure key resolver; 4.6 appends rows here.
+  [`settings-screen.tsx:65`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L65)
+
+**Zone seeding**
+
+- Form options come from settings; toggles stay local to the run.
+  [`shared-types-zone.tsx:95`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L95)
+
+**Busy badge**
+
+- Blocked outranks running; incidents 0 means plain updating badge.
+  [`shared-types-slice.ts:65`](../../../src/adapters/driving/tui/store/slices/shared-types-slice.ts#L65)
+
+- Generic per-zone busy map replaces update-only props.
+  [`zone-tab-bar.tsx:63`](../../../src/adapters/driving/tui/shared/components/zone-tab-bar.tsx#L63)
+
+- Shell builds the map from update and shared-types state.
+  [`app-shell.tsx:167`](../../../src/adapters/driving/tui/app-shell.tsx#L167)
