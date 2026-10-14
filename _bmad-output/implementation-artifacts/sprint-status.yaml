@@ -48,6 +48,7 @@ development_status:
   2-28-registry-manifest-semantic-validation: backlog
   2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: backlog
   2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: backlog
+  2-44-edt-switch-optional-parallel-service-restart-verified-state: backlog
   epic-2-retrospective: optional
 
   epic-3: in-progress
@@ -69,7 +70,6 @@ development_status:
 
   epic-5: in-progress
   5-6-command-history-recall-shared-input-history-primitive: done
-  # 5-7 added 2026-10-12; after 7-12.
   5-7-logs-restart-mode-setting-open-ide-shortcut: backlog
   epic-5-retrospective: optional
 
