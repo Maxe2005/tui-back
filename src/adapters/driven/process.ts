@@ -178,8 +178,15 @@ export function streamProcess(command: string, args: readonly string[], options:
       if (settled || stopped) {
         return;
       }
-      if (options.onLine(line) === false) {
-        stopped = true;
+      try {
+        if (options.onLine(line) === false) {
+          stopped = true;
+          halt();
+        }
+      } catch (error) {
+        // A throwing consumer must not escape as an uncaught listener exception: kill the
+        // child and report the failure through the result.
+        failure ??= error instanceof Error ? error : new Error(String(error));
         halt();
       }
     };

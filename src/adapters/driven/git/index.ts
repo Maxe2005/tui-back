@@ -9,7 +9,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import type { GitPort, VersionBump, VersionBumpWalkOptions, VersionBumpWalkSummary, VersionWalkEnd } from '../../../core/ports/git.js';
+import type { GitPort, VersionBumpWalkOptions, VersionBumpWalkSummary, VersionWalkEnd } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 // The FR-7 protected-branch rule lives in core, shared with the TUI's advisory check.
 import { isProtectedBranch } from '../../../core/edt/shared-branches.js';
@@ -1079,8 +1079,14 @@ export async function checkoutSide(
 }
 
 const BUMP_HEADER = '@@bump@@';
-const ADDED_VERSION_LINE = /^\+(?: {2}|\t)"version"\s*:\s*"([^"]+)"/;
+// Any indentation and spacing around the colon, or a whole minified one-line file.
+const ADDED_VERSION_LINE = /^\+.*?"version"\s*:\s*"([^"]+)"/;
 const COMMIT_SHA = /^[0-9a-f]{4,64}$/i;
+const HISTORY_GIT_OPTIONS = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-show-signature'];
+
+function escapeRegexLiteral(text: string): string {
+  return text.replace(/[.[\]\\^$*+?(){}|]/g, '\\$&');
+}
 
 // Read-only walk of the commits touching `package.json` (see GitPort.listVersionBumpCommits).
 // One `git log -p -U0` child is streamed; a commit header line opens a commit and its added
@@ -1091,18 +1097,27 @@ export async function listVersionBumpCommits(
   ref: string,
   opts: VersionBumpWalkOptions,
 ): Promise<Result<VersionBumpWalkSummary>> {
-  if (ref.startsWith('-') && ref !== '--all') {
+  if (opts.allRefs !== true && (ref.startsWith('-') || ref.trim() === '')) {
     return err('git-history-error', `Invalid ref "${ref}".`);
   }
-  const args = ['log', ...(ref === '--all' ? ['--all'] : [ref]), `-n${String(opts.maxScanned + 1)}`, `--format=${BUMP_HEADER}%H%x09%aI`, '-p', '-U0', '--no-color', '--no-ext-diff'];
+  const args = [
+    'log',
+    ...(opts.allRefs === true ? ['--branches', '--remotes'] : [ref]),
+    `-n${String(opts.maxScanned + 1)}`,
+    `--format=${BUMP_HEADER}%H%x09%aI`,
+    '-p',
+    '-U0',
+    ...HISTORY_GIT_OPTIONS,
+  ];
   if (opts.pickaxeVersion !== undefined) {
-    args.push(`-S"version": "${opts.pickaxeVersion}"`);
+    args.push(`-G"version"[[:space:]]*:[[:space:]]*"${escapeRegexLiteral(opts.pickaxeVersion)}"`);
   }
   args.push('--', 'package.json');
   let scanned = 0;
   let current: { commit: string; date: string } | null = null;
   let emitted = 0;
   let endedBy: VersionWalkEnd | null = null;
+  let callbackError: Error | null = null;
   const result = await streamProcess('git', args, {
     cwd: repoPath,
     ...(opts.signal === undefined ? {} : { signal: opts.signal }),
@@ -1125,7 +1140,12 @@ export async function listVersionBumpCommits(
         current = null;
         if (opts.pickaxeVersion === undefined || opts.pickaxeVersion === version) {
           emitted += 1;
-          opts.onEntry({ version, commit: commit.commit, date: commit.date });
+          try {
+            opts.onEntry({ version, commit: commit.commit, date: commit.date });
+          } catch (error) {
+            callbackError = error instanceof Error ? error : new Error(String(error));
+            return false;
+          }
           if (emitted >= opts.limit) {
             endedBy = 'limit';
             return false;
@@ -1135,14 +1155,17 @@ export async function listVersionBumpCommits(
       return true;
     },
   });
+  if (callbackError !== null) {
+    return err('git-history-error', `Handling a version bump failed: ${(callbackError as Error).message}`);
+  }
   if (result.aborted) {
     return ok({ endedBy: 'aborted', scanned });
   }
   if (endedBy !== null) {
     return ok({ endedBy, scanned });
   }
-  if (result.status !== 0) {
-    return err('git-history-error', `git log failed in ${repoPath}: ${spawnFailureDetail({ ...result, stderr: result.stderr })}`);
+  if (result.error !== undefined || result.status !== 0) {
+    return err('git-history-error', `git log failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
   return ok({ endedBy: 'exhausted', scanned });
 }
@@ -1151,17 +1174,25 @@ export async function listBranchesContaining(repoPath: string, commit: string, s
   if (!COMMIT_SHA.test(commit)) {
     return err('git-history-error', `Invalid commit "${commit}".`);
   }
-  const lines: string[] = [];
+  const refs: string[] = [];
   const result = await streamProcess(
     'git',
-    ['for-each-ref', `--contains=${commit}`, '--format=%(refname:short)', 'refs/heads/', 'refs/remotes/'],
-    { cwd: repoPath, ...(signal === undefined ? {} : { signal }), onLine: (line) => { lines.push(line); } },
+    ['for-each-ref', `--contains=${commit}`, '--format=%(refname)', 'refs/heads/', 'refs/remotes/'],
+    { cwd: repoPath, ...(signal === undefined ? {} : { signal }), onLine: (line) => { refs.push(line.trim()); } },
   );
   if (result.aborted) {
-    return ok([]);
+    return err('git-history-aborted', 'The branch lookup was cancelled.');
   }
-  if (result.status !== 0) {
+  if (result.error !== undefined || result.status !== 0) {
     return err('git-history-error', `git for-each-ref failed in ${repoPath}: ${spawnFailureDetail(result)}`);
   }
-  return ok(lines.map((line) => line.trim()).filter((name) => name !== '' && !name.endsWith('/HEAD') && name !== 'origin'));
+  const names: string[] = [];
+  for (const ref of refs) {
+    if (ref.startsWith('refs/heads/')) {
+      names.push(ref.slice('refs/heads/'.length));
+    } else if (ref.startsWith('refs/remotes/') && !/^refs\/remotes\/[^/]+\/HEAD$/.test(ref)) {
+      names.push(ref.slice('refs/remotes/'.length));
+    }
+  }
+  return ok(names);
 }

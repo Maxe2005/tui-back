@@ -180,15 +180,18 @@ export interface GitPort {
 
   // Read-only history walk over the commits that touch the repo's root `package.json`, newest
   // first, streamed: `onEntry` is called per commit whose diff adds a `"version": "x.y.z"` line
-  // (a version bump). `ref` is a branch/revision, or `'--all'` for every ref (pass
-  // `pickaxeVersion` then, to only walk commits adding that exact version string). The walk
+  // (a version bump). `ref` is a branch/revision (never starting with `-`); with
+  // `opts.allRefs` the walk covers every local and remote-tracking branch instead (stash, notes
+  // and tags excluded) and `ref` is ignored — pass `pickaxeVersion` then, to only walk commits
+  // adding that exact version string. The walk
   // stops after `limit` bumps (`endedBy: 'limit'`), once `maxScanned` package.json-touching
   // commits were looked at (`'scanned'`), when the history runs out (`'exhausted'`), or when
   // `signal` aborts (`'aborted'` — the git child is killed; still an `ok` result). Never fetches
   // or writes. Fails `git-history-error` (unknown ref, shallow clone, git unreachable).
   listVersionBumpCommits(repoPath: string, ref: string, opts: VersionBumpWalkOptions): Promise<Result<VersionBumpWalkSummary>>;
   // Every local and remote-tracking branch containing `commit` (`<remote>/<branch>` names for
-  // the latter; symbolic `<remote>/HEAD` excluded). Read-only. Fails `git-history-error`.
+  // the latter; symbolic `<remote>/HEAD` excluded). Read-only. Fails `git-history-error`, or
+  // `git-history-aborted` when `signal` aborted before the answer was complete.
   listBranchesContaining(repoPath: string, commit: string, signal?: AbortSignal): Promise<Result<string[]>>;
 }
 
@@ -207,6 +210,8 @@ export interface VersionBumpWalkOptions {
   signal?: AbortSignal;
   onEntry: (bump: VersionBump) => void;
   pickaxeVersion?: string;
+  // Walk every local and remote-tracking branch instead of one `ref`.
+  allRefs?: boolean;
 }
 
 export interface VersionBumpWalkSummary {
