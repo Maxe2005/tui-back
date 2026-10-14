@@ -63,7 +63,7 @@ import {
 import { createAddToEdtDialogHandlers, AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
 import { createCreateWizardHandlers, CreateWizardView } from './dialogs/create-wizard/create-wizard.js';
 import { createDeleteDialogHandlers, DeleteDialogView } from './dialogs/delete-dialog.js';
-import { IssuesDialogView } from './dialogs/issues-dialog.js';
+import { buildIssuesLines, IssuesDialogView, maxIssuesScroll } from './dialogs/issues-dialog.js';
 import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-dialog.js';
 import { createQuickPickDialogHandlers, resolveQuickPickCandidates, QuickPickDialogView } from './dialogs/quick-pick-dialog.js';
 import { createServiceActionsDialogHandlers, ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
@@ -91,6 +91,10 @@ const CREATE_WIZARD_CHROME_ROWS = 17;
 // title and column header, the blocked-row detail, the Ctrl+N error, the list-loading note and
 // the footer. The read-only state-1 rows below the table are added on top. An approximation.
 const SWITCH_RESOLUTION_CHROME_ROWS = 17;
+
+// Rows the issues dialog spends around its scrollable list (plus the zone's own chrome). An
+// approximation, as above.
+const ISSUES_DIALOG_CHROME_ROWS = 18;
 
 export function EdtsZone({
   useStore = useAppStore,
@@ -338,6 +342,8 @@ export function EdtsZone({
     windowSize.rows - SWITCH_RESOLUTION_CHROME_ROWS - (switchDirtyRepos !== null ? autoStashedRepos(switchDirtyRepos).length : 0),
     3,
   );
+  // NFR-7: the issues dialog's line budget (modal border/padding, title, rule, footer).
+  const issuesMaxRows = Math.max(windowSize.rows - ISSUES_DIALOG_CHROME_ROWS, 3);
   const edtServicesMaxVisibleRows = servicesListsAvailableHeight;
   // Review fix: an empty EDT SERVICES list still renders a 1-row placeholder ("No services in
   // this EDT.") instead of the BoundedList's own 0 rows — `Math.min(edtServices.length, …)` was
@@ -773,9 +779,15 @@ export function EdtsZone({
       return;
     }
     if (dialog.kind === 'issues') {
-      // Read-only dialog, no submit path — Esc or Enter both just close it.
+      // Read-only dialog, no submit path — Esc or Enter both just close it; arrows scroll.
       if (key.escape || key.return) {
         setDialog({ kind: 'none' });
+        return;
+      }
+      if (key.upArrow || key.downArrow) {
+        const lineCount = buildIssuesLines(unreachable, errors).length;
+        const delta = key.downArrow ? 1 : -1;
+        setDialog({ ...dialog, scroll: Math.min(Math.max(dialog.scroll + delta, 0), maxIssuesScroll(lineCount, issuesMaxRows)) });
       }
       return;
     }
@@ -1059,7 +1071,7 @@ export function EdtsZone({
         <QuickPickDialogView dialog={dialog} pool={resolveQuickPickCandidates(dialog.mode, edtsRows, activeEdtUlid)} />
       ) : null}
 
-      {dialog.kind === 'issues' ? <IssuesDialogView unreachable={unreachable} errors={errors} /> : null}
+      {dialog.kind === 'issues' ? <IssuesDialogView unreachable={unreachable} errors={errors} scroll={dialog.scroll} maxVisibleRows={issuesMaxRows} /> : null}
     </Box>
   );
 }
