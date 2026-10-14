@@ -759,3 +759,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: epic-7/spec-7-11-overlay-owns-the-arrow-keys-settings-screen-help-panel.md
   summary: Gate `issues-dialog.tsx`'s `useInput` on the zone-input predicate and derive AppShell's two hand-written overlay-flag lists from `isZoneInputActive`.
   evidence: Story 7.11 review — both are unreachable leaks today, but a new overlay registered only in the predicate would not update AppShell.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+  summary: Harden `tokenizeCommandLine`/`resolveEditorCommand` (unterminated quote, quotes-only value that should fall through to `$EDITOR`, `<repo>` in the binary position).
+  evidence: The code was moved unchanged from the Update zone; the edge cases exist in the original (command.ts tokenizer swallows an unclosed quote into one token; an empty-string first token is chosen as the binary).
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+  summary: The editor launch runs `spawnSync` with inherited stdio without suspending Ink raw mode / alternate screen, and ignores signal/non-zero exit.
+  evidence: Same behaviour as the pre-move `launchEditor`; terminal editors launched from the TUI may share the terminal with Ink's rendering.
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+  summary: Restart conflict is reported with the code `update-already-running`, which is misleading outside the update flow; the Update slice's `describeServiceRestart` still offers restart for a container-less service with a recipe, unlike the registry.
+  evidence: Code reused from `service-restart.ts`; the two availability rules diverge until Stories 5.7/7.5 adopt the registry.
