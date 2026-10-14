@@ -133,8 +133,8 @@ describe('shared-types history slice', () => {
   });
 
   it('finds a version with its containing branches and flags the earliest', async () => {
-    const { deps } = makeDeps(async (_repo, ref, opts) => {
-      expect(ref).toBe('--all');
+    const { deps } = makeDeps(async (_repo, _ref, opts) => {
+      expect(opts.allRefs).toBe(true);
       opts.onEntry(bump('0.1.3770'));
       return ok({ endedBy: 'exhausted' as const, scanned: 1 });
     });

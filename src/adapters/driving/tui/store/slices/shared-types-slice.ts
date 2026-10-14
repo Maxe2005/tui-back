@@ -58,6 +58,8 @@ export type SharedTypesHistory = {
   hits: VersionHit[];
   // By-version only: null until the search completed.
   found: boolean | null;
+  // By-version: the walk stopped at a bound, so a miss only means "not found so far".
+  truncated: boolean;
   earliestBranch: string | null;
   endedBy: BranchSearchEnd | null;
   scanned: number;
@@ -135,6 +137,7 @@ const IDLE_HISTORY: SharedTypesHistory = {
   entries: [],
   hits: [],
   found: null,
+  truncated: false,
   earliestBranch: null,
   endedBy: null,
   scanned: 0,
@@ -416,6 +419,7 @@ export function createSharedTypesSlice(deps?: AppStoreDeps): StateCreator<AppSta
               status: 'done',
               hits: result.data.hits,
               found: result.data.aborted ? null : result.data.found,
+              truncated: result.data.truncated,
               earliestBranch: result.data.earliestBranch,
               endedBy: result.data.aborted ? 'aborted' : null,
             },

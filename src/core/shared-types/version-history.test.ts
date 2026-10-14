@@ -74,6 +74,13 @@ describe('searchByBranch', () => {
     expect(result.ok && result.data.endedBy).toBe('aborted');
   });
 
+  it.each(['--all', '-x', '--output=/tmp/x'])('rejects the option-like branch %s without any git call', async (branch) => {
+    const { git, walk } = fakeGit([]);
+    const result = await searchByBranch({ git, repoPath: '/r', branch, depth: 20, maxScanned: 100 });
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid-branch' } });
+    expect(walk).not.toHaveBeenCalled();
+  });
+
   it('rejects an empty branch without any git call', async () => {
     const { git, walk } = fakeGit([]);
     const result = await searchByBranch({ git, repoPath: '/r', branch: '  ', depth: 20, maxScanned: 100 });
@@ -125,6 +132,47 @@ describe('searchByVersion', () => {
     } as unknown as GitPort;
     const result = await searchByVersion({ git, repoPath: '/r', version: '0.1.5' });
     expect(result).toMatchObject({ ok: false, error: { code: 'git-history-error' } });
+  });
+
+  it('walks every branch through allRefs, never the --all sentinel', async () => {
+    const { git, walk } = fakeGit([]);
+    await searchByVersion({ git, repoPath: '/r', version: '1.2.3' });
+    expect(walk).toHaveBeenCalledWith('/r', '', expect.objectContaining({ allRefs: true, pickaxeVersion: '1.2.3' }));
+  });
+
+  it('streams each hit before the walk has ended', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const git = {
+      listVersionBumpCommits: vi.fn(async (_r: string, _ref: string, opts: VersionBumpWalkOptions) => {
+        opts.onEntry(bump('0.1.5', 'a', '2026-01-02T00:00:00Z'));
+        await gate;
+        return ok({ endedBy: 'exhausted' as const, scanned: 1 });
+      }),
+      listBranchesContaining: vi.fn(async () => ok(['main'])),
+    } as unknown as GitPort;
+    const hits: string[] = [];
+    const running = searchByVersion({ git, repoPath: '/r', version: '0.1.5', onHit: (hit) => hits.push(hit.commit) });
+    await vi.waitFor(() => expect(hits).toEqual(['a']));
+    release();
+    expect(await running).toMatchObject({ ok: true, data: { found: true, truncated: false } });
+  });
+
+  it.each(['limit', 'scanned'] as const)('flags a miss as truncated, not "not found", when the walk ended on %s', async (endedBy) => {
+    const { git } = fakeGit([], endedBy);
+    const result = await searchByVersion({ git, repoPath: '/r', version: '9.9.9' });
+    expect(result).toMatchObject({ ok: true, data: { found: false, truncated: true } });
+  });
+
+  it('never flags a branchless hit or a NaN-dated hit as the earliest', async () => {
+    const { git } = fakeGit(
+      [bump('0.1.5', 'orphan', '2020-01-01T00:00:00Z'), bump('0.1.5', 'garbled', 'not-a-date'), bump('0.1.5', 'good', '2026-01-01T00:00:00Z')],
+      'exhausted',
+      { orphan: [], garbled: ['x'], good: ['main'] },
+    );
+    const result = await searchByVersion({ git, repoPath: '/r', version: '0.1.5' });
+    expect(result.ok && result.data.hits.map((hit) => [hit.commit, hit.earliest])).toEqual([['orphan', false], ['garbled', false], ['good', true]]);
+    expect(result.ok && result.data.earliestBranch).toBe('main');
   });
 
   it('stops listing hits once aborted', async () => {
