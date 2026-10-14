@@ -458,6 +458,25 @@ describe('EdtsZone (story 2.6)', () => {
     expect(output).toContain('YAML');
   });
 
+  it('bounds and truncates the issues dialog instead of overlapping lines', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranchesStatus: 'idle',
+      edtsBranches: [service({ service: 'api-gateway' })],
+      edtsUnreachable: [],
+      edtsErrors: Array.from({ length: 40 }, (_, i) => ({
+        path: `/repos/bad-${i}`,
+        code: 'manifest-invalid-yaml' as const,
+        message: 'x'.repeat(500),
+      })),
+      loadEdtsBranches: noopLoad,
+    });
+    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="issues" />);
+    expect(output).toContain('more below');
+    expect(output).not.toContain('/repos/bad-39');
+    expect(output).not.toContain('x'.repeat(300));
+  });
+
   it('shows no summary line when unreachable/errors are both empty', async () => {
     const store = createAppStore();
     store.setState({

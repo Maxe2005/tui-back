@@ -892,7 +892,7 @@ export function formatDeleteMemberMeta(row: DeleteMemberRow): string {
 // Story 2.34: the issues dialog is read-only and carries no payload of its own — the
 // unreachable/errors data it renders already lives in the zone's own store selectors, so
 // unlike every other dialog here there's nothing to seed on open.
-export type IssuesDialogState = { kind: 'issues' };
+export type IssuesDialogState = { kind: 'issues'; scroll: number };
 
 // Story 2.30 -----------------------------------------------------------------------------
 // The shared EDT quick-pick — a filterable, arrow-navigable list of EDT topics — opened in
@@ -928,7 +928,7 @@ export type EdtDialogState =
   | QuickPickDialogState;
 
 export function initialIssuesDialog(): IssuesDialogState {
-  return { kind: 'issues' };
+  return { kind: 'issues', scroll: 0 };
 }
 
 export function initialQuickPickDialog(mode: QuickPickMode, notFound: string | null = null): QuickPickDialogState {

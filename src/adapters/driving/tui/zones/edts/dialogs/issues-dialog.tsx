@@ -12,37 +12,67 @@ import { explainIssueErrorCode, explainUnreachable } from '../edts-zone.logic.js
 export type IssuesDialogViewProps = {
   unreachable: readonly string[];
   errors: readonly BranchDivergenceEntryError[];
+  // Scroll position (index of the first visible line) and the row budget for the list — paths and error messages are unbounded, so every line is truncated to one row and
+  // the whole listing is windowed (NFR-7) instead of letting wrapped text overflow the modal.
+  scroll?: number;
+  maxVisibleRows?: number;
 };
 
-export function IssuesDialogView({ unreachable, errors }: IssuesDialogViewProps) {
+type IssueLine = { key: string; text: string; color: string };
+
+// One physical row per entry: the view renders each with wrap="truncate-end", so the line
+// count is exactly the scrollable length (the zone's key handler clamps against it).
+export function buildIssuesLines(
+  unreachable: readonly string[],
+  errors: readonly BranchDivergenceEntryError[],
+): IssueLine[] {
+  const lines: IssueLine[] = [];
+  const gap = (key: string) => lines.push({ key, text: ' ', color: colors.text });
+  unreachable.forEach((path, index) => {
+    const { reason, suggestion } = explainUnreachable();
+    lines.push({ key: `u${index}`, text: `${path} — ${reason}`, color: colors.warning });
+    lines.push({ key: `u${index}s`, text: `  → ${suggestion}`, color: colors['text-dim'] });
+    gap(`u${index}g`);
+  });
+  errors.forEach((entry, index) => {
+    const { reason, suggestion } = explainIssueErrorCode(entry.code);
+    lines.push({ key: `e${index}`, text: `${entry.path} — ${reason}`, color: colors.error });
+    lines.push({ key: `e${index}m`, text: `  ${entry.message}`, color: colors['text-dim'] });
+    lines.push({ key: `e${index}s`, text: `  → ${suggestion}`, color: colors['text-dim'] });
+    gap(`e${index}g`);
+  });
+  return lines;
+}
+
+// The two ▲/▼ indicator rows are always reserved so the dialog's height never jumps while
+// scrolling; the zone's key handler clamps `scroll` against the same figures.
+export function issuesWindowSize(maxVisibleRows: number): number {
+  return Math.max(maxVisibleRows - 2, 1);
+}
+
+export function maxIssuesScroll(lineCount: number, maxVisibleRows: number): number {
+  return Math.max(lineCount - issuesWindowSize(maxVisibleRows), 0);
+}
+
+export function IssuesDialogView({ unreachable, errors, scroll = 0, maxVisibleRows = 12 }: IssuesDialogViewProps) {
+  const lines = buildIssuesLines(unreachable, errors);
+  const windowSize = issuesWindowSize(maxVisibleRows);
+  const top = Math.min(Math.max(scroll, 0), maxIssuesScroll(lines.length, maxVisibleRows));
+  const visible = lines.slice(top, top + windowSize);
   return (
-    <ModalDialog title="SERVICE LISTING ISSUES" onConfirm={() => {}} onCancel={() => {}} open={true} maxHeight={20}>
+    <ModalDialog title="SERVICE LISTING ISSUES" onConfirm={() => {}} onCancel={() => {}} open={true}>
       <Box flexDirection="column">
-        {unreachable.length === 0 && errors.length === 0 ? <Text color={colors.text}>No issues.</Text> : null}
-        {unreachable.map((path) => {
-          const { reason, suggestion } = explainUnreachable();
-          return (
-            <Box key={path} flexDirection="column" marginBottom={1}>
-              <Text color={colors.warning}>
-                {path} — {reason}
-              </Text>
-              <Text color={colors['text-dim']}>  → {suggestion}</Text>
-            </Box>
-          );
-        })}
-        {errors.map((entry, index) => {
-          const { reason, suggestion } = explainIssueErrorCode(entry.code);
-          return (
-            <Box key={`${entry.path}-${index}`} flexDirection="column" marginBottom={1}>
-              <Text color={colors.error}>
-                {entry.path} — {reason}
-              </Text>
-              <Text color={colors['text-dim']}>  {entry.message}</Text>
-              <Text color={colors['text-dim']}>  → {suggestion}</Text>
-            </Box>
-          );
-        })}
-        <Text color={colors.text}>[Esc] close</Text>
+        {lines.length === 0 ? <Text color={colors.text}>No issues.</Text> : null}
+        {top > 0 ? <Text color={colors['text-dim']}>▲ more above</Text> : null}
+        {visible.map((line) => (
+          <Text key={line.key} color={line.color} wrap="truncate-end">
+            {line.text}
+          </Text>
+        ))}
+        {top + windowSize < lines.length ? <Text color={colors['text-dim']}>▼ more below</Text> : null}
+        <Text color={colors['text-dim']} wrap="truncate-end">
+          [↑/↓] scroll · [Esc] close
+        </Text>
       </Box>
     </ModalDialog>
   );
