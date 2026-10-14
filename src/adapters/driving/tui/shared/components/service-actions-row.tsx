@@ -21,9 +21,10 @@ export function ServiceActionsRow({ actions }: { actions: readonly ServiceAction
               </Text>
             );
           }
+          const reason = normalizeMessage(action.availability.reason);
           return (
             <Text key={action.id} color={colors['text-dim']}>
-              {`${separator}[${normalizeMessage(action.key)}] ${normalizeMessage(action.label)} (${normalizeMessage(action.availability.reason)})`}
+              {`${separator}[${normalizeMessage(action.key)}] ${normalizeMessage(action.label)}${reason === '' ? '' : ` (${reason})`}`}
             </Text>
           );
         })}

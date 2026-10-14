@@ -27,4 +27,11 @@ describe('ServiceActionsRow', () => {
     expect(output.trimEnd().split('\n')).toHaveLength(1);
     expect(output).toContain('…');
   });
+
+  it('omits the parentheses when an unavailable action has a blank reason', async () => {
+    const blank: ServiceAction = { id: 'x', label: 'Restart', key: 'Ctrl+R', availability: { available: false, reason: '  ' } };
+    const output = await renderToString(<ServiceActionsRow actions={[blank]} />);
+    expect(output).toContain('[Ctrl+R] Restart');
+    expect(output).not.toContain('()');
+  });
 });
