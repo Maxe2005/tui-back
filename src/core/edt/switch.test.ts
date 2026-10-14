@@ -140,6 +140,7 @@ function makeParams(overrides: Partial<SwitchActiveEdtParams> = {}): SwitchActiv
     topic: overrides.topic ?? 'target-topic',
     force: overrides.force,
     dirtyResolutions: overrides.dirtyResolutions,
+    dirtyPolicy: overrides.dirtyPolicy,
     onDirtyReposBeforeSwitch: overrides.onDirtyReposBeforeSwitch,
   };
 }
@@ -1401,5 +1402,95 @@ describe('switchActiveEdt — review patches (story 2.39)', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     expectZeroWrites(git);
     expect(calls(state.writeActiveEdt)).toHaveLength(0);
+  });
+});
+
+describe('switchActiveEdt — dirtyPolicy flag sugar (story 2.40)', () => {
+  function policySetup(currentBranch: string, dirtyPolicy: SwitchActiveEdtParams['dirtyPolicy'], withOutgoing = true) {
+    const git = fakeGit({
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      currentBranch: vi.fn(async () => ok(currentBranch)),
+      listDirtyPaths: vi.fn(async () => ok(['a.txt'])),
+    });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok(withOutgoing ? 'outgoing-ulid' : null)) });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok(withOutgoing ? [TARGET, OUTGOING] : [TARGET])) });
+    const onDirtyReposBeforeSwitch = vi.fn();
+    return { git, edtRegistry, onDirtyReposBeforeSwitch, params: makeParams({ git, state, edtRegistry, dirtyPolicy, onDirtyReposBeforeSwitch }) };
+  }
+
+  it('discard policy discards every dirty state-2/3 repo and skips the seam', async () => {
+    const { git, onDirtyReposBeforeSwitch, params } = policySetup('wip/b', { kind: 'discard' });
+
+    const result = await switchActiveEdt(params);
+
+    expect(result.ok).toBe(true);
+    expect(calls(git.discardAll)).toEqual([['/repo/b']]);
+    expect(onDirtyReposBeforeSwitch).not.toHaveBeenCalled();
+  });
+
+  it('adopt policy keeps a non-shared current branch and needs no branch name', async () => {
+    const { git, params } = policySetup('wip/b', { kind: 'adopt' });
+
+    const result = await switchActiveEdt(params);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual(
+        expect.objectContaining({ service: 'svc-b', outcome: 'adopted', detail: expect.objectContaining({ adoptedBranch: 'wip/b' }) }),
+      );
+    }
+    expect(calls(git.createBranch)).toHaveLength(0);
+    expect(calls(git.stashSave)).toEqual([['/repo/b', 'tui-back:outgoing-ulid']]);
+  });
+
+  it('adopt policy moves a shared-branch repo onto the given branch', async () => {
+    const { git, params } = policySetup('development', { kind: 'adopt', branch: 'feat/rescue' });
+
+    const result = await switchActiveEdt(params);
+
+    expect(result.ok).toBe(true);
+    expect(calls(git.createBranch)).toEqual([['/repo/b', 'feat/rescue', 'development']]);
+  });
+
+  it('adopt policy without a branch on a shared-branch repo fails up front with missing-argument', async () => {
+    const { git, params } = policySetup('development', { kind: 'adopt' });
+
+    const result = await switchActiveEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+    expectZeroWrites(git);
+  });
+
+  it('adopt policy with no outgoing EDT fails with switch-adopt-without-outgoing', async () => {
+    const { git, params } = policySetup('wip/b', { kind: 'adopt', branch: 'x' }, false);
+
+    const result = await switchActiveEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'switch-adopt-without-outgoing' } });
+    expectZeroWrites(git);
+  });
+
+  it('adopt policy with no outgoing EDT and a shared-branch repo reports switch-adopt-without-outgoing first', async () => {
+    const { git, params } = policySetup('development', { kind: 'adopt' }, false);
+
+    const result = await switchActiveEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'switch-adopt-without-outgoing' } });
+    expectZeroWrites(git);
+  });
+
+  it('an explicit dirtyResolutions entry wins over the policy for that repo', async () => {
+    const { git, edtRegistry, onDirtyReposBeforeSwitch } = policySetup('wip/b', { kind: 'discard' });
+    const params = makeParams({
+      git,
+      edtRegistry,
+      dirtyPolicy: { kind: 'discard' },
+      dirtyResolutions: { '/repo/b': { kind: 'adopt', branch: 'wip/b' } },
+      onDirtyReposBeforeSwitch,
+    });
+
+    await switchActiveEdt(params);
+
+    expect(calls(git.discardAll)).toHaveLength(0);
   });
 });

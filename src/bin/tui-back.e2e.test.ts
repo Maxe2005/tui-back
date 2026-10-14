@@ -1491,6 +1491,115 @@ describe('tui-back edt switch (black-box)', () => {
     expect(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8')).toBe(edtsBefore);
   });
 
+  describe('dirty flags (story 2.40)', () => {
+    async function dirtyNonMemberSetup() {
+      const xdg = await makeTempDir();
+      const env = createEnv(xdg);
+      const r1 = await makeCleanGitRepo();
+      const r2 = await makeCleanGitRepo();
+      await registerRepos([r1, r2], env);
+      const created = runCli(
+        ['edt', 'create', '--topic', 'a', '--member', r1, '--create-branches', '--branch-name', 'feat/r1'],
+        env,
+      );
+      expect(created.status).toBe(0);
+      await writeFile(join(r2, 'orphan.txt'), 'nobody owns this');
+      return { xdg, env, r1, r2 };
+    }
+
+    it('--discard-dirty discards the non-member work and lists the paths in detail.discardedPaths', async () => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', '--discard-dirty'], env);
+
+      expect(switched.status).toBe(0);
+      const parsed = JSON.parse(switched.stdout.trim());
+      expect(parsed.ok).toBe(true);
+      const row = parsed.data.results.find((r: { outcome: string }) => r.outcome === 'discarded');
+      expect(row.detail.discardedPaths).toEqual(['orphan.txt']);
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toBe('');
+    });
+
+    it('--adopt-dirty without --adopt-branch on a shared branch fails with missing-argument, zero writes', async () => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+      const r3 = await makeCleanGitRepo();
+      await registerRepos([r3], env);
+      expect(runCli(['edt', 'switch', '--to', 'a', '--discard-dirty'], env).status).toBe(0);
+      expect(runCli(['edt', 'create', '--topic', 'b', '--member', r3, '--create-branches', '--branch-name', 'feat/r3'], env).status).toBe(0);
+      await writeFile(join(r2, 'orphan2.txt'), 'rescue me');
+
+      const switched = runCli(['edt', 'switch', '--to', 'b', '--adopt-dirty'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('missing-argument');
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan2.txt');
+    });
+
+    it('--adopt-dirty without --adopt-branch and no outgoing EDT reports switch-adopt-without-outgoing', async () => {
+      const { env } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', '--adopt-dirty'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('switch-adopt-without-outgoing');
+    });
+
+    it.each([
+      ['--adopt-branch alone', ['--adopt-branch', 'x']],
+      ['--adopt-branch with --discard-dirty', ['--discard-dirty', '--adopt-branch', 'x']],
+      ['an empty --adopt-branch', ['--adopt-dirty', '--adopt-branch', '']],
+      ['a repeated --adopt-branch', ['--adopt-dirty', '--adopt-branch', 'x', '--adopt-branch', 'y']],
+      ['a trailing --adopt-branch', ['--adopt-dirty', '--adopt-branch']],
+      ['a flag as the --adopt-branch value', ['--adopt-dirty', '--adopt-branch', '--force']],
+    ])('rejects %s with invalid-argument, zero writes', async (_label, flags) => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', ...flags], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('invalid-argument');
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan.txt');
+    });
+
+    it('--adopt-dirty --adopt-branch adopts onto a new branch, never checking out the work away', async () => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+      // Outgoing EDT needed: activate a first, then adopt into it while switching to b.
+      const r3 = await makeCleanGitRepo();
+      await registerRepos([r3], env);
+      expect(runCli(['edt', 'switch', '--to', 'a', '--discard-dirty'], env).status).toBe(0);
+      expect(runCli(['edt', 'create', '--topic', 'b', '--member', r3, '--create-branches', '--branch-name', 'feat/r3'], env).status).toBe(0);
+      await writeFile(join(r2, 'orphan2.txt'), 'rescue me');
+
+      const switched = runCli(['edt', 'switch', '--to', 'b', '--adopt-dirty', '--adopt-branch', 'feat/rescue'], env);
+
+      expect(switched.status).toBe(0);
+      const parsed = JSON.parse(switched.stdout.trim());
+      expect(parsed.data.results).toContainEqual(
+        expect.objectContaining({ outcome: 'adopted', detail: expect.objectContaining({ adoptedBranch: 'feat/rescue' }) }),
+      );
+      expect(runGit(r2, ['branch', '--list', 'feat/rescue']).stdout).toContain('feat/rescue');
+    });
+
+    it('--adopt-dirty with --discard-dirty is invalid-argument, zero writes', async () => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', '--adopt-dirty', '--discard-dirty'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('invalid-argument');
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan.txt');
+    });
+
+    it('--adopt-dirty with no outgoing EDT fails with switch-adopt-without-outgoing', async () => {
+      const { env } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', '--adopt-dirty', '--adopt-branch', 'feat/x'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('switch-adopt-without-outgoing');
+    });
+  });
+
   it('a target member whose own branch is missing locally is `failed` in data.results, never a thrown error (AC)', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);

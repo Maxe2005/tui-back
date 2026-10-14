@@ -30,13 +30,13 @@
 // Pre-flight: before ANY git write, the dirtiness of every registered repo is re-read. A
 // failed read just leaves that repo out (the main loop re-reads and reports it `failed`).
 // When a dirty state-2/3 repo exists, resolutions come from the caller's explicit
-// `dirtyResolutions` (CLI path, which skips the seam) or else from the
+// `dirtyResolutions` (CLI path, which skips the seam) or from the `dirtyPolicy` flag sugar (story 2.40) or else from the
 // `onDirtyReposBeforeSwitch` seam (TUI path), invoked once with every dirty repo — state-1 rows
 // flagged `resolution: 'auto-stash'`. `cancel` → `switch-cancelled-by-user`; any dirty
 // state-2/3 repo still without a resolution → `switch-dirty-services-unresolved`; an `adopt`
 // with no outgoing EDT (first switch) → `switch-adopt-without-outgoing`. All three return
 // with zero repos touched and state.json/edts.yaml untouched. With no seam and no
-// resolutions (the CLI today), a dirty state-2/3 repo therefore fails safe.
+// resolutions (a bare CLI call), a dirty state-2/3 repo therefore fails safe.
 //
 // Per-repo isolation mirrors create.ts: one repo's failure is a `failed` row, never aborts
 // the others or the state.json write. A repo that turned dirty after the pre-flight with no
@@ -77,6 +77,13 @@ export interface SwitchEdtRepoResult {
 // holds any path outside it (a file changed while the dialog was open). The CLI never sets it,
 // so its discard behavior is unchanged.
 export type DirtyResolution = { kind: 'adopt'; branch: string } | { kind: 'discard'; confirmedPaths?: string[] };
+
+// Story 2.40: the CLI's flag-driven sugar. It is expanded into per-repo `DirtyResolution`s AFTER
+// the pre-flight classification (the CLI never classifies repos itself): `discard` discards every
+// dirty state-2/3 repo; `adopt` adopts each onto `branch` when it sits on a shared branch, or
+// keeping its current (non-shared) branch otherwise — `branch` may then be omitted, but a dirty
+// shared-branch repo with no `branch` fails up front with `missing-argument`.
+export type DirtyPolicy = { kind: 'adopt'; branch?: string } | { kind: 'discard' };
 
 export type SwitchDirtyScope = 'outgoing-member' | 'member-of-other-edt' | 'non-member';
 
@@ -143,6 +150,9 @@ export interface SwitchActiveEdtParams {
   // Story 2.39: explicit per-repo resolutions keyed by repoPath (the CLI path, story 2.40).
   // When supplied, the seam below is never invoked.
   dirtyResolutions?: Record<string, DirtyResolution>;
+  // Story 2.40: policy sugar for the CLI flags; an explicit `dirtyResolutions` entry for a repo
+  // wins over the policy. When supplied (like dirtyResolutions), the seam is never invoked.
+  dirtyPolicy?: DirtyPolicy;
   // Story 2.39: the TUI's resolution seam — see the file header.
   onDirtyReposBeforeSwitch?: OnDirtyReposBeforeSwitch;
 }
@@ -364,7 +374,7 @@ async function resolveDirtyRepos(input: {
   const needingResolution = dirtyRows.filter((row) => row.scope !== 'outgoing-member');
 
   let supplied: Record<string, DirtyResolution> | undefined = params.dirtyResolutions;
-  if (needingResolution.length > 0 && supplied === undefined && params.onDirtyReposBeforeSwitch !== undefined) {
+  if (needingResolution.length > 0 && supplied === undefined && params.dirtyPolicy === undefined && params.onDirtyReposBeforeSwitch !== undefined) {
     const choice = await params.onDirtyReposBeforeSwitch(dirtyRows);
     if (choice.kind === 'cancel') {
       return err(
@@ -380,6 +390,35 @@ async function resolveDirtyRepos(input: {
     resolutions.set(resolve(rawPath), resolution);
   }
 
+  const policy = params.dirtyPolicy;
+  if (policy !== undefined) {
+    if (policy.kind === 'adopt' && outgoing === undefined && needingResolution.length > 0) {
+      return err(
+        'switch-adopt-without-outgoing',
+        'Cannot adopt uncommitted changes: there is no active EDT to adopt them into. Use --discard-dirty or resolve them by hand. Nothing was touched.',
+      );
+    }
+    for (const row of needingResolution) {
+      if (resolutions.has(row.repoPath)) {
+        continue;
+      }
+      if (policy.kind === 'discard') {
+        resolutions.set(row.repoPath, { kind: 'discard' });
+        continue;
+      }
+      if (row.currentBranchShared && (policy.branch === undefined || policy.branch.trim() === '')) {
+        return err(
+          'missing-argument',
+          `${row.service} has uncommitted changes on the shared branch "${row.currentBranch}": adopting them needs a new branch name (--adopt-branch). Nothing was touched.`,
+        );
+      }
+      resolutions.set(row.repoPath, {
+        kind: 'adopt',
+        branch: row.currentBranchShared ? (policy.branch as string) : row.currentBranch,
+      });
+    }
+  }
+
   const unresolved: SwitchUnresolvedDirtyRepo[] = needingResolution
     .filter((row) => !resolutions.has(row.repoPath))
     .map((row) => ({
@@ -391,7 +430,7 @@ async function resolveDirtyRepos(input: {
   if (unresolved.length > 0) {
     return err(
       'switch-dirty-services-unresolved',
-      `Switch to "${topic}" refused: uncommitted changes in ${unresolved.map((row) => row.service).join(', ')} are not in the outgoing EDT and have no resolution — commit or stash them by hand, then switch again (they can also be adopted or discarded from the TUI once available). Nothing was touched.`,
+      `Switch to "${topic}" refused: uncommitted changes in ${unresolved.map((row) => row.service).join(', ')} are not in the outgoing EDT and have no resolution — commit or stash them by hand, then switch again (from the CLI, pass --discard-dirty or --adopt-dirty [--adopt-branch <name>]; the TUI offers the same choices in its dialog). Nothing was touched.`,
       unresolved,
     );
   }

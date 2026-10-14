@@ -42,6 +42,8 @@
 
 generated: 2026-08-11
 last_updated: 2026-10-14
+# 2026-10-14: Story 2-40 validated by the developer, moved to done and merged into epic-2.
+# 2026-10-14: Story 2-40 (edt switch CLI dirty flags) moved to review (bmad-build).
 # 2026-10-01: Story 2-31 validated by the developer, moved to done and merged into epic-2.
 # 2026-10-01: Story 2-42 validated by the developer, moved to done and merged into epic-2.
 # 2026-10-01: Story 2-42 moved to review after the adversarial review + patch loop (bmad-build).
@@ -183,7 +185,7 @@ development_status:
   2-37-edt-creation-wizard-step-3-global-branch-strategy-per-service-overrides: done
   2-38-edt-creation-wizard-step-4-activation-switch-choice: review
   2-39-edt-switch-core-three-state-partition-dirty-service-resolutions: done
-  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: backlog
+  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: done
   2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: review
   2-42-manifest-defined-protected-branches-per-service: done
   2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: backlog
