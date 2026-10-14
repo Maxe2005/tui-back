@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
-import { settingsFooterContext } from './settings-screen.js';
+import { SHARED_TYPES_SETTINGS_ROWS, resolveSharedTypesSettingsKey, settingsFooterContext } from './settings-screen.js';
 import {
   EDITOR_COMMAND_PLACEHOLDER_TEXT,
   FILTER_HISTORY_SIZE_STEP,
@@ -67,22 +67,24 @@ describe('update concurrency row', () => {
 });
 
 describe('nextSettingsTab', () => {
-  it('cycles General -> EDTs -> Command Palette -> Logs -> General going forward', () => {
+  it('cycles General -> EDTs -> Command Palette -> Logs -> st -> General going forward', () => {
     expect(nextSettingsTab('general', 1)).toBe('edts');
     expect(nextSettingsTab('edts', 1)).toBe('command-palette');
     expect(nextSettingsTab('command-palette', 1)).toBe('logs');
-    expect(nextSettingsTab('logs', 1)).toBe('general');
+    expect(nextSettingsTab('logs', 1)).toBe('shared-types');
+    expect(nextSettingsTab('shared-types', 1)).toBe('general');
   });
 
   it('cycles the same order in reverse going backward', () => {
-    expect(nextSettingsTab('general', -1)).toBe('logs');
+    expect(nextSettingsTab('general', -1)).toBe('shared-types');
+    expect(nextSettingsTab('shared-types', -1)).toBe('logs');
     expect(nextSettingsTab('logs', -1)).toBe('command-palette');
     expect(nextSettingsTab('command-palette', -1)).toBe('edts');
     expect(nextSettingsTab('edts', -1)).toBe('general');
   });
 
   it('SETTINGS_TABS is declared in exactly that order', () => {
-    expect(SETTINGS_TABS).toEqual(['general', 'edts', 'command-palette', 'logs']);
+    expect(SETTINGS_TABS).toEqual(['general', 'edts', 'command-palette', 'logs', 'shared-types']);
   });
 });
 
@@ -644,5 +646,19 @@ describe('settingsFooterContext', () => {
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'branch-dropdown-rows' })).toBe('settings-adjust');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'buffer-size' })).toBe('settings-adjust');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'clear-history' })).toBe('settings-run');
+  });
+});
+
+describe('st settings tab', () => {
+  it('is a tab labelled st with the three option rows', () => {
+    expect(SETTINGS_TABS).toContain('shared-types');
+    expect(SHARED_TYPES_SETTINGS_ROWS.map((row) => row.id)).toEqual(['install', 'cleanRestart', 'commit']);
+    expect(settingsFooterContext('shared-types', { generalEditing: false, edtsGroup: null, logsGroup: null })).toBe('settings-shared-types');
+  });
+
+  it('moves with the arrows and toggles the row under the cursor with Space', () => {
+    expect(resolveSharedTypesSettingsKey('', { downArrow: true }, 0)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveSharedTypesSettingsKey(' ', {}, 1)).toEqual({ type: 'toggle', id: 'cleanRestart' });
+    expect(resolveSharedTypesSettingsKey('x', {}, 1)).toEqual({ type: 'ignore' });
   });
 });

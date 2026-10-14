@@ -296,6 +296,10 @@ export const FOOTER_CONTEXTS = {
     label: 'Settings General tab',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'edit'], TAB_SWITCH, CLOSE],
   },
+  'settings-shared-types': {
+    label: 'Settings st tab',
+    hints: [MOVE, ['Space', 'toggle'], TAB_SWITCH, CLOSE],
+  },
   'settings-groups': {
     label: 'Settings group list',
     hints: [MOVE, ['Enter', 'open'], TAB_SWITCH, CLOSE],

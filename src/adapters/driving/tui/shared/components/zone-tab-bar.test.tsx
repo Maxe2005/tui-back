@@ -23,15 +23,30 @@ describe('resolveZoneTabState — busy', () => {
   });
 
   it('the rendered bar shows the awaiting count', async () => {
-    const output = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} updateRunning updateIncidents={3} />);
+    const output = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} busy={{ update: { incidents: 3 } }} />);
     expect(output).toContain('3 awaiting you');
   });
 
   it('the badge shows in the rendered bar only when the update runs', async () => {
-    const running = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} updateRunning />);
+    const running = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} busy={{ update: { incidents: 0 } }} />);
     const idle = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} />);
     expect(running).toContain('⇄ updating');
     expect(idle).not.toContain('⇄ updating');
+  });
+});
+
+describe('ZoneTabBar — st tab busy', () => {
+  it('shows the updating badge on the st tab from another zone and while st is active', async () => {
+    const other = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} busy={{ 'shared-types': { incidents: 0 } }} />);
+    const active = await renderToString(<ZoneTabBar activeZone="shared-types" events={ZERO_EVENTS} busy={{ 'shared-types': { incidents: 0 } }} />);
+    expect(other).toContain('⇄ updating');
+    expect(active).toContain('⇄ updating');
+  });
+
+  it('shows the awaiting badge when blocked and nothing for another zone when idle', async () => {
+    const blocked = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} busy={{ 'shared-types': { incidents: 1 } }} />);
+    expect(blocked).toContain('1 awaiting you');
+    expect(await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} />)).not.toContain('updating');
   });
 });
 

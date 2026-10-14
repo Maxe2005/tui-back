@@ -60,16 +60,14 @@ export function ZoneTabBar({
   activeZone,
   events,
   tabVisibility = DEFAULT_TAB_VISIBILITY,
-  updateRunning = false,
-  updateIncidents = 0,
+  busy = {},
 }: {
   activeZone: ZoneId;
   events: Record<ZoneId, number>;
   tabVisibility?: ResolveTabVisibilityData;
-  // A group update is in flight: the Update tab shows its status badge from any zone.
-  updateRunning?: boolean;
-  // Pending incidents of that run: the badge then reads `N awaiting you`.
-  updateIncidents?: number;
+  // Zones with a run in flight (or blocked awaiting the developer) show their status badge from
+  // any zone; `incidents` > 0 turns it into `N awaiting you`.
+  busy?: Partial<Record<ZoneId, { incidents: number }>>;
 }) {
   const { columns } = useBounds();
   const tabs = ZONES.map((zone) => ({ zone, status: zoneGatedStatus(zone.id, tabVisibility) })).filter(
@@ -78,14 +76,14 @@ export function ZoneTabBar({
   // Full labels when they fit; otherwise only the active tab keeps its label, the rest shrink
   // to their `[mnemonic]`.
   const fullWidth = tabs.reduce((sum, { zone, status }) => {
-    const badge = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update', zone.id === 'update' ? updateIncidents : 0).badge;
+    const badge = resolveZoneTabState(zone, activeZone, events[zone.id], status, busy[zone.id] !== undefined, busy[zone.id]?.incidents ?? 0).badge;
     return sum + 2 + `[${zone.mnemonic}] ${zone.label}`.length + (badge ? badge.text.length + 1 : 0);
   }, 0);
   const compact = fullWidth > columns;
   return (
     <Box backgroundColor={colors.background} flexShrink={0} height={1} overflow="hidden">
       {tabs.map(({ zone, status }) => {
-          const state = resolveZoneTabState(zone, activeZone, events[zone.id], status, updateRunning && zone.id === 'update', zone.id === 'update' ? updateIncidents : 0);
+          const state = resolveZoneTabState(zone, activeZone, events[zone.id], status, busy[zone.id] !== undefined, busy[zone.id]?.incidents ?? 0);
           const collapsed = compact && !state.active;
           return (
             <Box

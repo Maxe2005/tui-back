@@ -15,6 +15,7 @@ export type SettingsUpdate = {
   // Same shallow-merge convention as the two fields above.
   logs?: Partial<Settings['logs']>;
   update?: Partial<Settings['update']>;
+  sharedTypes?: Partial<Settings['sharedTypes']>;
 };
 
 export type SettingsSlice = {
@@ -73,6 +74,7 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
         edts: { ...current.edts, ...partial.edts },
         logs: { ...current.logs, ...partial.logs },
         update: { ...current.update, ...partial.update },
+        sharedTypes: { ...current.sharedTypes, ...partial.sharedTypes },
       };
       // Optimistic: applies to the live store immediately, before persistence even starts —
       // no separate save step.

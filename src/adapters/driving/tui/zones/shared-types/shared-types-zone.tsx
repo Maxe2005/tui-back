@@ -92,7 +92,13 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const activeEdt = useStore((state) => state.activeEdt);
 
-  const [form, setForm] = useState<FormState>(initialFormState);
+  const settingsOptions = useStore((state) => state.settings.sharedTypes);
+  const [form, setForm] = useState<FormState>(() => initialFormState(settingsOptions));
+  // A change of the saved defaults (`:settings` st tab) re-seeds the toggles; ticking one in the
+  // zone stays local to the form and never writes back.
+  useEffect(() => {
+    setForm((previous) => ({ ...previous, options: { install: settingsOptions.install, cleanRestart: settingsOptions.cleanRestart, commit: settingsOptions.commit } }));
+  }, [settingsOptions.install, settingsOptions.cleanRestart, settingsOptions.commit]);
   const [resultRow, setResultRow] = useState(0);
   const [quitConfirm, setQuitConfirm] = useState(false);
 

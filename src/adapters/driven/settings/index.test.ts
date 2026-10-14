@@ -73,7 +73,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -229,7 +229,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -319,7 +319,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -344,7 +344,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -434,7 +434,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -457,7 +457,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -475,6 +475,25 @@ describe('loadSettings', () => {
   });
 });
 
+describe('loadSettings — sharedTypes', () => {
+  it('reads custom option defaults and fills the missing ones', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'sharedTypes:\n  install: false\n  cleanRestart: true\n');
+    const result = await loadSettings(file);
+    expect(result.ok && result.data.settings.sharedTypes).toEqual({ install: false, cleanRestart: true, commit: true });
+  });
+
+  it('rejects an unknown key with a warning and falls back to defaults', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'sharedTypes:\n  bogus: 1\n');
+    const result = await loadSettings(file);
+    expect(result.ok && result.data.warning).not.toBeNull();
+    expect(result.ok && result.data.settings.sharedTypes).toEqual(DEFAULT_SETTINGS.sharedTypes);
+  });
+});
+
 describe('saveSettings', () => {
   it('creates the config dir and persists the settings as YAML', async () => {
     const root = await tempRoot();
@@ -483,7 +502,7 @@ describe('saveSettings', () => {
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 10, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
-      update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     const result = await saveSettings(file, settings);
@@ -501,14 +520,14 @@ describe('saveSettings', () => {
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-      update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-      update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
   });
 });
@@ -522,7 +541,7 @@ describe('createSettingsPort', () => {
       general: { quitShortcutEnabled: false, editorCommand: '' },
       commandPalette: { gridMaxRows: 5, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'], branchDropdownMaxRows: 5 },
-      update: { concurrency: 3 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     await port.save(settings);
