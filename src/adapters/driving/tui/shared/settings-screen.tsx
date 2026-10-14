@@ -300,6 +300,7 @@ export type LogsSettingsGroupId =
   | 'filter-history-size'
   | 'filter-history-grid'
   | 'filter-history-dedup'
+  | 'restart-mode'
   | 'clear-history';
 
 export type LogsSettingsGroup = { id: LogsSettingsGroupId; label: string };
@@ -310,6 +311,7 @@ export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
   { id: 'filter-history-size', label: 'Filter history size' },
   { id: 'filter-history-grid', label: 'Filter history grid' },
   { id: 'filter-history-dedup', label: 'Filter history dedup' },
+  { id: 'restart-mode', label: 'Restart mode' },
   { id: 'clear-history', label: 'Clear history' },
 ];
 
@@ -338,6 +340,7 @@ const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | Pale
   'filter-history-size': 'settings-adjust',
   'filter-history-grid': 'settings-adjust',
   'filter-history-dedup': 'settings-toggle',
+  'restart-mode': 'settings-toggle',
   'clear-history': 'settings-run',
 };
 
@@ -703,6 +706,13 @@ export function SettingsScreen({
         return;
       }
 
+      if (logsGroup === 'restart-mode') {
+        if (key.leftArrow || key.rightArrow || input === ' ') {
+          void updateSettings({ logs: { restartMode: settings.logs.restartMode === 'clean' ? 'simple' : 'clean' } });
+        }
+        return;
+      }
+
       // logsGroup === null: the group-list level — Up/Down navigates, Enter drills in.
       const moved = nextCursorForKey(key, logsGroupCursor, LOGS_SETTINGS_GROUPS.length);
       if (moved !== null) {
@@ -966,6 +976,15 @@ export function SettingsScreen({
               state={settings.logs.filterHistoryDedup ? 'checked' : 'unchecked'}
             />
             <DimAnnotation text="Checked: reusing a filter moves it to the most recent place instead of storing it twice." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'restart-mode' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Restart mode (R in Logs): <Text color={colors.accent}>{settings.logs.restartMode}</Text>
+            </Text>
+            <DimAnnotation text="simple: plain container restart. clean: run the manifest's clean-restart recipe, falling back to a simple restart when none is declared." />
           </Box>
         ) : null}
 

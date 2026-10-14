@@ -4,6 +4,7 @@
 import { Box, Text } from 'ink';
 import { colors } from '../../shared/theme/theme.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { LogsPaneData } from '../../store/app-store.js';
 import { LogsPaneView } from './logs-pane-view.js';
 import {
@@ -27,6 +28,7 @@ export function LogsGrid({
   globalFilter,
   paneFilterEngaged,
   paneFilters,
+  restartMode = 'simple',
 }: {
   panes: ServiceBranchDivergence[];
   // Active panes that do not fit the grid at a readable size.
@@ -41,6 +43,7 @@ export function LogsGrid({
   globalFilter: LogFilterSpec;
   paneFilterEngaged: Record<string, boolean>;
   paneFilters: Record<string, LogFilterSpec>;
+  restartMode?: RestartMode;
 }) {
   const cols = Math.max(layout.cols, 1);
   // `panes` is already capped to what fits; the rest is announced below.
@@ -67,6 +70,7 @@ export function LogsGrid({
                 globalFilter={globalFilter}
                 engaged={isPaneEngagedInGlobalFilter(paneFilterEngaged, service.path)}
                 ownFilter={paneFilters[service.path] ?? null}
+                restartMode={restartMode}
               />
             );
           })}

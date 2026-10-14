@@ -64,6 +64,7 @@ const EXPECTED = [
   ['W (Logs)', 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)'],
   ['i (Logs)', 'Logs: toggle the focused pane between following and ignoring the global filter'],
   ['R (Logs)', "Logs: restart the focused pane's service"],
+  ['O (Logs)', "Logs: open the focused pane's service repo in your editor (also for services without a container)"],
   ['m / a / p (Update)', 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service'],
   ['f (Update)', 'Update: open the full-screen report of the highlighted service (Enter on a failed recap row too)'],
   ['i (Update)', 'Update: reopen the incident queue of the running update (also `:update-incidents`)'],

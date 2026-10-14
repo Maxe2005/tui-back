@@ -7,6 +7,7 @@ import { formatHint } from '../../shared/components/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors } from '../../shared/theme/theme.js';
+import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { LogsPaneData } from '../../store/app-store.js';
 import {
   computeLineRowCount,
@@ -17,6 +18,7 @@ import {
   isDefaultLogFilterSpec,
   isRestartingDisplay,
   resolveEffectiveLines,
+  restartHintVerb,
   sliceVisibleWindow,
   type LogFilterSpec,
   type VisibilityFlags,
@@ -34,6 +36,7 @@ export function LogsPaneView({
   globalFilter,
   engaged,
   ownFilter,
+  restartMode = 'simple',
 }: {
   service: ServiceBranchDivergence;
   pane: LogsPaneData | undefined;
@@ -45,6 +48,7 @@ export function LogsPaneView({
   globalFilter: LogFilterSpec;
   engaged: boolean;
   ownFilter: LogFilterSpec | null;
+  restartMode?: RestartMode;
 }) {
   const [contentRef, measuredSize] = useElementSize();
   const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
@@ -92,10 +96,11 @@ export function LogsPaneView({
         {noContainer ? null : displayHealth === 'restarting' ? (
           <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHint(['R', 'restart requested — re-verifying…'])}`}</Text>
         ) : (
-          <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHint(['R', 'restart'])}`}</Text>
+          <Text color={colors['text-dim']} wrap="truncate-end">{` ${formatHint(['R', restartHintVerb(restartMode)])}`}</Text>
         )}
       </Box>
       {pane?.streamError ? <DimAnnotation text={pane.streamError.message} /> : null}
+      {pane?.notice ? <DimAnnotation text={pane.notice} /> : null}
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
       {!engaged ? (
         <DimAnnotation text="global filter: off" />
