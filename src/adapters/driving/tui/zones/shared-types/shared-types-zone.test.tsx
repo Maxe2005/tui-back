@@ -70,7 +70,7 @@ describe('SharedTypesZone', () => {
   it('pre-sets the option toggles from the saved settings', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...store.getState().settings, sharedTypes: { install: false, cleanRestart: true, commit: false } },
+      settings: { ...store.getState().settings, sharedTypes: { install: false, cleanRestart: true, commit: false, historyDepth: 20, maxCommitsScanned: 1000 } },
       sharedTypesConsumersStatus: 'ready',
       sharedTypesConsumers: [
         { service: 'api', repoPath: '/r/api', branch: 'feat/x', dependency: '@ianord/shared-types', packageJsonPath: 'package.json' },

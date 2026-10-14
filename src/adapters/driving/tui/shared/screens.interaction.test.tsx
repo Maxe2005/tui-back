@@ -82,6 +82,28 @@ describe('SettingsScreen (real keypress)', () => {
     }
   });
 
+  it('on the st tab + steps the History depth row live, shown in the rendered row', async () => {
+    const store = createAppStore();
+    const { press, stop, stdout, instance } = mount(createElement(SettingsScreen, { useStore: store, initialTab: 'shared-types' }));
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(KEYS.down);
+      await press(KEYS.down);
+      await press(KEYS.down); // History depth
+      await press('+');
+      expect(store.getState().settings.sharedTypes.historyDepth).toBe(21);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('History depth'))).toContain('21');
+      await press('7'); // digits do not edit the row
+      expect(store.getState().settings.sharedTypes.historyDepth).toBe(21);
+      await press(KEYS.down); // max commits scanned
+      await press('+');
+      expect(store.getState().settings.sharedTypes.maxCommitsScanned).toBe(1100);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('History max commits scanned'))).toContain('1100');
+    } finally {
+      await stop();
+    }
+  });
+
   it('Space no longer clears the global filter history; Enter does', async () => {
     const store = createAppStore();
     const clearGlobalFilterHistory = vi.fn();

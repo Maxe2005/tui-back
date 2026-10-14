@@ -49,6 +49,10 @@ export interface Settings {
     install: boolean;
     cleanRestart: boolean;
     commit: boolean;
+    // History view bounds: how many version bumps a by-branch search lists at most, and how
+    // many commits it scans at most before giving up.
+    historyDepth: number;
+    maxCommitsScanned: number;
   };
   logs: {
     bufferSize: number;
@@ -86,7 +90,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // without state.json growing unbounded; filterHistoryGridMaxRows=8 mirrors
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
   update: { concurrency: 3 },
-  sharedTypes: { install: true, cleanRestart: false, commit: true },
+  sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
 };
 
@@ -100,6 +104,13 @@ export const MAX_GRID_MAX_ROWS = 99;
 // update.concurrency's valid range — shared by the zod schema and the settings screen's clamp.
 export const MIN_UPDATE_CONCURRENCY = 1;
 export const MAX_UPDATE_CONCURRENCY = 8;
+
+// sharedTypes.historyDepth / maxCommitsScanned valid ranges — shared by the zod schema and the
+// settings screen's clamp.
+export const MIN_HISTORY_DEPTH = 1;
+export const MAX_HISTORY_DEPTH = 200;
+export const MIN_MAX_COMMITS_SCANNED = 100;
+export const MAX_MAX_COMMITS_SCANNED = 20000;
 
 // logs.bufferSize's valid range — shared by the zod schema (adapters/driven/settings/schema.ts)
 // and the settings screen's own clamp (adapters/driving/tui/shared/settings-screen.tsx), same

@@ -650,15 +650,32 @@ describe('settingsFooterContext', () => {
 });
 
 describe('st settings tab', () => {
-  it('is a tab labelled st with the three option rows', () => {
+  it('is a tab labelled st with the option rows then the two History bounds', () => {
     expect(SETTINGS_TABS).toContain('shared-types');
-    expect(SHARED_TYPES_SETTINGS_ROWS.map((row) => row.id)).toEqual(['install', 'cleanRestart', 'commit']);
+    expect(SHARED_TYPES_SETTINGS_ROWS.map((row) => row.id)).toEqual(['install', 'cleanRestart', 'commit', 'historyDepth', 'maxCommitsScanned']);
     expect(settingsFooterContext('shared-types', { generalEditing: false, edtsGroup: null, logsGroup: null })).toBe('settings-shared-types');
   });
 
   it('moves with the arrows and toggles the row under the cursor with Space', () => {
-    expect(resolveSharedTypesSettingsKey('', { downArrow: true }, 0)).toEqual({ type: 'move', cursor: 1 });
-    expect(resolveSharedTypesSettingsKey(' ', {}, 1)).toEqual({ type: 'toggle', id: 'cleanRestart' });
-    expect(resolveSharedTypesSettingsKey('x', {}, 1)).toEqual({ type: 'ignore' });
+    expect(resolveSharedTypesSettingsKey('', { downArrow: true }, 0, { historyDepth: 20, maxCommitsScanned: 1000 })).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveSharedTypesSettingsKey(' ', {}, 1, { historyDepth: 20, maxCommitsScanned: 1000 })).toEqual({ type: 'toggle', id: 'cleanRestart' });
+    expect(resolveSharedTypesSettingsKey('x', {}, 1, { historyDepth: 20, maxCommitsScanned: 1000 })).toEqual({ type: 'ignore' });
+  });
+
+  it('steps and clamps the History depth row with +/- only', () => {
+    const current = { historyDepth: 20, maxCommitsScanned: 1000 };
+    expect(resolveSharedTypesSettingsKey('+', {}, 3, current)).toEqual({ type: 'set-number', id: 'historyDepth', value: 21 });
+    expect(resolveSharedTypesSettingsKey('-', {}, 3, { ...current, historyDepth: 1 })).toEqual({ type: 'set-number', id: 'historyDepth', value: 1 });
+    expect(resolveSharedTypesSettingsKey('+', {}, 3, { ...current, historyDepth: 200 })).toEqual({ type: 'set-number', id: 'historyDepth', value: 200 });
+    expect(resolveSharedTypesSettingsKey('5', {}, 3, current)).toEqual({ type: 'ignore' });
+    expect(resolveSharedTypesSettingsKey('', { backspace: true }, 3, current)).toEqual({ type: 'ignore' });
+    expect(resolveSharedTypesSettingsKey(' ', {}, 3, current)).toEqual({ type: 'ignore' });
+  });
+
+  it('steps by 100 and clamps the max commits scanned row to 100..20000', () => {
+    const current = { historyDepth: 20, maxCommitsScanned: 1000 };
+    expect(resolveSharedTypesSettingsKey('+', {}, 4, current)).toEqual({ type: 'set-number', id: 'maxCommitsScanned', value: 1100 });
+    expect(resolveSharedTypesSettingsKey('-', {}, 4, { ...current, maxCommitsScanned: 100 })).toEqual({ type: 'set-number', id: 'maxCommitsScanned', value: 100 });
+    expect(resolveSharedTypesSettingsKey('+', {}, 4, { ...current, maxCommitsScanned: 20000 })).toEqual({ type: 'set-number', id: 'maxCommitsScanned', value: 20000 });
   });
 });
