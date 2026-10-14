@@ -73,4 +73,15 @@ describe('createEditorPort.launch', () => {
 
     expect(launch('/repo/a', 'nope <repo>')).toEqual({ ok: false, error: { code: 'editor-launch-failed', message: 'Could not launch "nope": spawnSync nope ENOENT' } });
   });
+
+  it('turns a synchronous spawn throw into editor-launch-failed instead of throwing', () => {
+    vi.mocked(spawnSync).mockImplementationOnce(() => {
+      throw new Error('invalid argument');
+    });
+
+    expect(launch('/repo/a', 'nope <repo>')).toEqual({
+      ok: false,
+      error: { code: 'editor-launch-failed', message: 'Could not launch "nope": invalid argument' },
+    });
+  });
 });
