@@ -11,6 +11,7 @@ import { CheckboxListItem, ModalDialog, Spinner, StateLine, TextInputLine } from
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { ClampedParagraph, TruncatedText } from '../../shared/components/truncated-text.js';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import {
@@ -142,6 +143,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   );
 
   const publishQuitBody = publish.status === 'running' ? SHARED_TYPES_PUBLISH_QUIT_BODY : SHARED_TYPES_QUIT_BODY;
+  const zoneInputActive = useZoneInputActive(useStore);
 
   useInput((input, key) => {
     if (quitConfirm) {
@@ -228,7 +230,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
         options: step.state.options,
       });
     }
-  });
+  }, { isActive: zoneInputActive });
 
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface} paddingX={spacing['pane-padding-x']}>

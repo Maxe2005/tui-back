@@ -3,11 +3,11 @@
 // phase and issue log). Dirty/conflicted repos pause the run on a bounded menu (stash / open in
 // editor / cancel repo / cancel run); `q` mid-run asks to confirm and marks the EDT interrupted.
 // Every keystroke decision is a pure function; useInput stays a thin dispatcher.
-import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { GroupUpdateRepoResult, UpdateBlockerChoice } from '../../../../../core/scripts/group-update.js';
 import type { IncidentBlocker } from '../../store/slices/update-slice.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
@@ -35,7 +35,6 @@ import {
   formatServiceOutcomeDetail,
   isServiceTargetedByRun,
   partitionUpdateServiceRows,
-  resolveEditorCommand,
   resolveRecapToggle,
   resolveUpdatePaneRows,
   applyReportScroll,
@@ -308,23 +307,6 @@ export function formatBlockerRetry(blocker: IncidentBlocker): string | null {
   return `↻ Retry #${String(blocker.retry)} still blocked${reason}`;
 }
 
-// The driving-side editor launch — core only ever sees the `edited` choice. Spawns the resolved
-// editor command (see resolveEditorCommand) on the blocked repo with the terminal attached and
-// waits for exit. The exit status is deliberately unread: core's re-verification is the gate (a
-// no-op edit, or a GUI editor that returns immediately, simply re-presents the menu). Only a
-// command that could not be started at all is reported, so a misconfigured setting is never a
-// silent no-op.
-export type LaunchEditorResult = { ok: true } | { ok: false; message: string };
-
-export function launchEditor(repoPath: string, configured = ''): LaunchEditorResult {
-  const { binary, args } = resolveEditorCommand(configured, process.env.EDITOR, repoPath);
-  const result = spawnSync(binary, args, { stdio: 'inherit' });
-  if (result.error !== undefined) {
-    return { ok: false, message: `Could not launch "${binary}": ${result.error.message}` };
-  }
-  return { ok: true };
-}
-
 // The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
 // key focuses a service. Tests pass `initialRecap={false}` to start on a service.
 // Rows the detail pane keeps around the running list / the recap's result lines.
@@ -388,11 +370,6 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const edts = useStore((state) => state.edts);
   const requestQuit = useStore((state) => state.requestQuit);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
-  const commandBarOpen = useStore((state) => state.commandBarOpen);
-  const registryScreenOpen = useStore((state) => state.registryScreenOpen);
-  const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
-  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
-  const resizeMode = useStore((state) => state.resizeMode);
 
   // The always-visible service list — the same active-EDT-scoped `edtsBranches` rows the Logs
   // and EDTs zones load, plus this zone's own live health poll and last-run-outcome map.
@@ -417,7 +394,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const branchDropdownMaxRows = useStore((state) => state.settings.edts.branchDropdownMaxRows);
   const listBranchesAction = useStore((state) => state.listBranches);
   // The user-defined "Open in editor" command line (empty: `$EDITOR`, else `vi`).
-  const editorCommand = useStore((state) => state.settings.general.editorCommand);
+  const openInIde = useStore((state) => state.openInIde);
 
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
@@ -634,6 +611,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateServiceSelectRequest]);
 
+  const zoneInputActive = useZoneInputActive(useStore);
   // The full report's content for a service, read from the store every render: the live steps and
   // issue log while a run targets it, the settled last run afterwards (falling back to its last
   // outcome row when no run snapshot exists). `available` drives whether `f` opens anything.
@@ -710,9 +688,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
             // report the choice — core re-verifies before resuming (a no-op edit
             // re-presents). An editor that could not be started reports nothing to core:
             // the menu stays open on its error line so another choice can be made.
-            const launched = launchEditor(updateBlocker.repoPath, editorCommand);
+            const launched = openInIde(updateBlocker.repoPath);
             if (!launched.ok) {
-              setEditorError(launched.message);
+              setEditorError(launched.error.message);
               return;
             }
           }
@@ -885,7 +863,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
         }
       }
     },
-    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode },
+    { isActive: zoneInputActive },
   );
 
   // The active EDT's own membership — the per-service spinner rows during a run, before the

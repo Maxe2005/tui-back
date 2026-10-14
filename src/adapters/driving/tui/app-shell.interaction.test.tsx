@@ -2734,4 +2734,21 @@ describe('AppShell footer contexts (real keypress)', () => {
       expect(footerIdOf(store)).toBe('confirm');
     });
   });
+
+  it('"?" still closes an open help panel when a zone dialog captured input meanwhile', async () => {
+    const store = createAppStore();
+    store.setState({ helpOpen: true, zoneInputCaptured: true });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '?');
+
+      expect(store.getState().helpOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 });

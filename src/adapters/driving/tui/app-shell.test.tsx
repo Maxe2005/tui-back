@@ -457,6 +457,7 @@ it('shouldQuit returns true for q', () => {
         serviceRestartInFlight: {},
         runServiceRestart: async () => {},
         describeServiceRestart: async () => ({ restartAvailable: true }),
+        openInIde: () => ({ ok: true, data: undefined }),
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
         // Update zone service-list health poll + last-outcome map

@@ -11,6 +11,7 @@ import { createManifestCarryPort } from "../adapters/driven/manifest/carry.js";
 import { loadManifest } from "../adapters/driven/manifest/index.js";
 import { createContainerPort } from "../adapters/driven/container/index.js";
 import { createMigrationPort } from "../adapters/driven/migration/index.js";
+import { createEditorPort } from "../adapters/driven/editor/index.js";
 import { createRestartPort } from "../adapters/driven/restart/index.js";
 import { createGitPort } from "../adapters/driven/git/index.js";
 import { createLockPort } from "../adapters/driven/lock/index.js";
@@ -100,6 +101,7 @@ const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
 const migration = createMigrationPort();
 const restart = createRestartPort();
+const editor = createEditorPort();
 const stateFile = resolveStateFile(xdg);
 const state = createStatePort(stateFile);
 // The registry screen's registerRepo needs a LockPort + resource key for withActionLock — the
@@ -176,6 +178,7 @@ const store = createAppStore({
   container,
   migration,
   restart,
+  editor,
   edtRegistry,
   state,
   lock: actionLock,

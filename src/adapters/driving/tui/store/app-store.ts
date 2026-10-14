@@ -7,6 +7,7 @@ import type { UseBoundStore, StoreApi } from 'zustand';
 import type { ContainerPort } from '../../../../core/ports/container.js';
 import type { DevAuthPort } from '../../../../core/ports/dev-auth.js';
 import type { DockerPort } from '../../../../core/ports/docker.js';
+import type { EditorPort } from '../../../../core/ports/editor.js';
 import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
 import type { LockPort } from '../../../../core/ports/lock.js';
@@ -75,6 +76,9 @@ export type AppStoreDeps = {
   // declared `restartCommands` entry, in order, when the clean-restart toggle calls for it).
   // Same optionality contract — runGroupUpdate requires all three before starting a run.
   restart?: RestartPort;
+  // The editor-launch port behind the shared open-in-IDE action. Optional like the rest; the
+  // action reports an explicit error when it is missing.
+  editor?: EditorPort;
   // The Logs zone's Docker touchpoint — wrapped by the single LogsManager instance the logs
   // slice creates and closes over.
   docker: DockerPort;

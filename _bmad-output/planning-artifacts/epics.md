@@ -136,7 +136,7 @@ FR-2: Epic 1 - Per-repo manifest declares identity and active modules
 FR-3: Epic 2 - Create an EDT
 FR-4: Epic 2 - Create dev branches for EDT member services
 FR-5: Epic 2 - Modify an EDT after creation
-FR-6: Epic 2 - Switch the active EDT without data loss
+FR-6: Epic 2 - Switch the active EDT without data loss (amended 2026-10-14: optional post-switch restart — Story 2.44)
 FR-7: Epic 2 - An EDT never claims a shared branch
 FR-8: Epic 2 - Non-member managed repos stay on development
 FR-9: Epic 2 - Branch and divergence visibility
@@ -162,6 +162,7 @@ FR-29: Epic 7 - Container-less managed services (added 2026-10-01, Sprint Change
 FR-32: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal — Story 7.8)
 FR-35: Epic 7/5 - Service actions: open IDE, simple/clean restart (added 2026-10-12 — Stories 7.12, 5.7, 7.5)
 FR-36: Epics 3/4/5 - Configurable defaults: Update globals, st options, Logs restart mode (added 2026-10-12 — Stories 3.20, 4.7, 5.7)
+FR-37: Epic 2 - Post-switch service restart (none/simple/clean), parallel, verified per-service state; default in settings (added 2026-10-14 — Story 2.44)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
@@ -174,7 +175,7 @@ A developer can launch the tool, see the full navigation shell (top bar, six zon
 
 ### Epic 2: EDT Workspace Management
 A developer can create, modify, and safely switch between EDTs (no uncommitted work ever lost), with branch/divergence visibility across every managed repo, and the guarantee that non-member repos stay on `development`.
-**FRs covered:** FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9
+**FRs covered:** FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-37 (Story 2.44, added 2026-10-14)
 **Implementation notes:** Per-EDT SQLite storage (AD-7), centralized git branch-scope safety gate (AD-8), EDTs zone (UX-DR20), blast-radius isolation (NFR-2).
 
 ### Epic 3: Group Update & Migrations
@@ -2226,6 +2227,51 @@ This happens before any `git` invocation (AD-8).
   - `branchOwners`;
   - the annotation rendering;
   - inline refusals in the wizard box and in `BranchPicker`.
+
+### Story 2.44: EDT Switch — Optional Parallel Service Restart & Verified State
+
+> Added 2026-10-14 (Sprint Change Proposal `sprint-change-proposal-2026-10-14.md`). Amends FR-6, FR-18, FR-36; adds FR-37. Builds on Stories 2.39/2.41 (switch core and dialog), 2.40 (CLI), 3.18 (`runPool`) and 7.12 (`ServiceActions`). **Prerequisite (blocking):** 3.18 and 7.12 are `done` and merged; otherwise HALT — never re-implement the pool or the restart here.
+
+As a developer, I want to restart my services as part of an EDT switch and see whether each one came back up and answers, so that my containers run the new EDT's code without a second manual step and I immediately know which service needs attention.
+
+**Acceptance Criteria:**
+
+**Given** the switch confirm dialog (TUI) **When** it renders **Then** it shows a selector "Redémarrer les services après le switch" with three values — `(•) Aucun  ( ) Redémarrage simple  ( ) Clean restart` — pre-selected from the setting `switch.restartMode` (default `none`); `←/→`/`Space` change it for this switch only (never written back); the hint names that clean restart falls back to a simple restart where no recipe exists.
+
+**Given** `:settings` **When** the developer picks the post-switch restart choice **Then** `switch.restartMode` is `none` (default, today's behaviour), `simple` or `clean`, persisted and applied live; with the setting untouched, behaviour is unchanged (FR-36).
+
+**Given** *Aucun* **When** the switch completes **Then** behaviour is exactly today's: no restart, no verification, no new UI.
+
+**Given** *Redémarrage simple* or *Clean restart* **When** the switch itself succeeded **Then** a restart phase starts automatically: the targeted services are those whose branch changed in this switch (`switched` / `adopted` / `discarded` rows) and that declare a container. Every other managed service appears in the report as `skipped` with its reason (`unchanged` / `no container`) — never `failed`.
+
+**Given** the restart phase **When** it runs **Then** targets are processed by `runPool` with `update.concurrency` in flight, each calling `ServiceActions.restart(repoPath, mode)`; two targets on the same repoPath are never concurrent; a worker that throws becomes that service's `failed` row; the run never rejects.
+
+**Given** *Clean restart* and a service **without** a recipe **When** it runs **Then** it restarts simply and its row carries `NO_CLEAN_RECIPE_NOTICE`.
+
+**Given** a restart that returned **When** the service is verified **Then** `ServiceActions.verifyService(repoPath)` reports exactly one closed final state: `functional` (container `up` **and** `healthUrl` answered 2xx), `up-unverified` (container `up`, no `healthUrl` declared), `unhealthy` (container `up`, `healthUrl` timed out or non-2xx), `restarting` (still restarting at timeout), `down`, or `failed` (the restart itself errored, with the error). Verification polls (1 s interval, 30 s overall timeout, constants in `core/`) and settles on the first definitive state.
+
+**Given** the restart phase is running **When** the developer looks at the switch result **Then** per-service rows update live (`pending → restarting → verifying → final state`) with glyph **and** colour (never colour alone), consistent with the Update zone's status set; the TUI stays responsive and the developer may navigate to other zones; the run state is intact on return.
+
+**Given** a restart run in flight **When** the developer starts an update, another switch, or another restart run **Then** it is rejected with a clear message through the existing action lock (same exclusion as Story 3.16, in both directions).
+
+**Given** a restart failure or an `unhealthy` / `down` outcome **When** the run ends **Then** the switch is **not** rolled back; the summary counts functional / up-unverified / unhealthy / down / failed / skipped and lists the non-green services first, each with its detail; the action-log entry (written to the new active EDT) records the mode and every service's final state.
+
+**Given** the CLI `tui-back edt switch <topic> [--restart none|simple|clean]` **When** run **Then** an absent flag uses `switch.restartMode` (script/CLI parity, FR-1) and the flag overrides it; the same core orchestration runs, rows are emitted in the script output envelope (`restart: [{service, mode, state, detail?}]`), concurrency follows `update.concurrency`, and the exit code is non-zero if any targeted service ended `failed`, `down` or `unhealthy`. An unknown value is rejected before anything is touched.
+
+**Given** the EDT-creation wizard Step 4 (Story 2.38) and the quick-pick switch (Story 2.30) **When** they trigger a switch **Then** they go through the same seam; the story verifies they expose the same selector (or explicitly pass *Aucun*) and documents which.
+
+**Given** a manifest that declares `healthUrl` **When** it is loaded **Then** the value must be a non-blank `http://` or `https://` URL, otherwise validation fails with a precise message; absent = `undefined` (no probe). The probe is a single `GET` with a per-request timeout, issued through `HealthProbePort`.
+
+**Given** the docs **When** updated **Then** `docs/tui-back-manifest.md` documents `healthUrl` (semantics, absent behaviour, example) **and** the `manifest-generator` skill is updated to detect/offer it.
+
+**Implementation notes:**
+- Core: new `core/edt/switch-restart.ts` — `restartAfterSwitch({ results, mode, concurrency, serviceActions, onPhase })` (pure orchestration over `runPool`, ports injected, returns `Result<RestartReport>`); `ServiceActions.verifyService` added to `core/service-actions` (uses `DockerPort.getContainerHealth` + `HealthProbePort`). Keep `switchActiveEdt` unchanged: the restart phase is a *second* call made after a successful switch, so the switch's atomicity and its tests are untouched.
+- Ports/adapters: `core/ports/health-probe.ts` + `adapters/driven/health/http-probe.ts` (Node `fetch` with `AbortSignal.timeout`).
+- Settings: `switch: { restartMode: 'none' }` group in `core/ports/settings.ts` (zod default = today's behaviour), a control in the `:settings` screen (Story 2.19).
+- Store: a `switchRestart` state (rows + status) in `edt-slice.ts`, set by the switch action and consumed by `switch-dialog.tsx` (results view); live updates via an `onPhase` callback, as `update-slice` does.
+- Manifest: optional `healthUrl` in the zod schema (`core/ports/manifest.ts`).
+- Build in this order, one commit each: `HealthProbePort` + adapter → manifest `healthUrl` (+ docs + skill) → `verifyService` → `switch.restartMode` setting → `restartAfterSwitch` over the pool → store + dialog selector → report view → CLI flag.
+- Bounded rendering (AD-19): the report goes through `BoundedList`; register any new dialog in `dialog-registry.tsx`.
 
 ## Epic 3: Group Update & Migrations
 

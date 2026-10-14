@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
@@ -123,11 +124,6 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const clearLogsPane = useStore((state) => state.clearLogsPane);
   const restartLogsPane = useStore((state) => state.restartLogsPane);
   const setLogsPaneScrollOffset = useStore((state) => state.setLogsPaneScrollOffset);
-  const commandBarOpen = useStore((state) => state.commandBarOpen);
-  const registryScreenOpen = useStore((state) => state.registryScreenOpen);
-  const settingsScreenOpen = useStore((state) => state.settingsScreenOpen);
-  const resetScreenOpen = useStore((state) => state.resetScreenOpen);
-  const resizeMode = useStore((state) => state.resizeMode);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const setLogsPaneGridArrowsActive = useStore((state) => state.setLogsPaneGridArrowsActive);
   // The persisted filter-history lists, plus the setting driving the history grid browser's
@@ -348,6 +344,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     }
   }
 
+  const zoneInputActive = useZoneInputActive(useStore);
   useInput(
     (input, key) => {
       // The filter editor captures every keystroke while open, from the grid or fullscreen —
@@ -772,7 +769,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
       }
     },
-    { isActive: !commandBarOpen && !registryScreenOpen && !settingsScreenOpen && !resetScreenOpen && !resizeMode },
+    { isActive: zoneInputActive },
   );
 
   return (

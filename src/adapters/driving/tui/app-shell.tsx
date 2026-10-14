@@ -270,6 +270,13 @@ export function AppShell({
     }
     const state = useStore.getState();
 
+    // An open help panel is the sole consumer of keys, so it can always be closed — even when a
+    // zone dialog captured input after it opened (the zones are inert behind it meanwhile).
+    if (state.helpOpen) {
+      resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+      return;
+    }
+
     // A zone-owned dialog/form sets zoneInputCaptured while it owns the keystroke — no global
     // shortcut, `?` help included, may fire while it's set. The focused Routes right pane
     // counts as captured straight from the store: the zone's own zoneInputCaptured effect lands

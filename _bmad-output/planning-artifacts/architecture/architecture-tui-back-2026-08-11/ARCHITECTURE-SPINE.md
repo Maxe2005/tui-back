@@ -253,5 +253,6 @@ graph LR
 - **Binds:** FR-35, Stories 7.12, 5.7, 7.5
 - **Prevents:** Logs and Dashboard each re-implementing restart / open-in-IDE with diverging behaviour; `child_process` leaking into the TUI layer.
 - **Rule:** per-service actions (`openInIde`, `restart(simple|clean)`, future ones) are declared once in `core/` with availability rules (container-less, no clean-restart recipe, held lock) and consumed by any driving adapter. Editor launching sits behind a port. `GitPort` also gains read-only, streaming, cancellable history capabilities (`listVersionBumpCommits`, `listBranchesContaining`) for Story 4.6 (AD-16 extension).
-- **Settings:** new `sharedTypes` group (`historyDepth`, `maxCommitsScanned`, option defaults), `logs.restartMode`, Update global defaults — every zod default equals today's behaviour.
+- **Extension (2026-10-14, FR-37, Story 2.44):** `ServiceActions.verifyService(repoPath)` settles a service's post-action state (container health + optional manifest `healthUrl` probe through a driven `HealthProbePort`); `core/` never does inline HTTP. A post-switch restart is a second use-case call after a successful switch (`core/edt/switch-restart.ts` over `runPool`), leaving `switchActiveEdt` unchanged.
+- **Settings:** new `switch.restartMode` (`none` default) alongside the `sharedTypes` group (`historyDepth`, `maxCommitsScanned`, option defaults), `logs.restartMode`, Update global defaults — every zod default equals today's behaviour.
 

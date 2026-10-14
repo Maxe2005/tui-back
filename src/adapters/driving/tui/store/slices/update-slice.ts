@@ -18,6 +18,7 @@ import {
   type UpdatePhase,
 } from '../../../../../core/scripts/group-update.js';
 import { serviceRestart as serviceRestartUseCase } from '../../../../../core/scripts/service-restart.js';
+import { openInIde } from '../../../../../core/service-actions/index.js';
 import { getServiceHealth } from '../../../../../core/logs/use-cases.js';
 import { err, ok, type Result } from '../../../../../core/result.js';
 import type { HealthState } from '../../../../../core/ports/docker.js';
@@ -232,6 +233,10 @@ export type UpdateSlice = {
   // the load failure instead of hiding the row silently. The zone calls this when opening
   // the menu — never a driven port directly from a component.
   describeServiceRestart: (repoPath: string) => Promise<{ restartAvailable: boolean }>;
+  // Opens a repo in the developer's editor through the shared service-actions registry, with
+  // the configured `general.editorCommand`. Synchronous: the editor owns the terminal until it
+  // exits. Errors (unwired port, launch failure) come back as a Result for the caller to show.
+  openInIde: (repoPath: string) => Result<void>;
   markUpdateInterrupted: () => Promise<void>;
   clearUpdate: () => void;
 
@@ -1318,6 +1323,12 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             updateUlid: null,
           });
         }
+      },
+      openInIde: (repoPath: string) => {
+        if (deps?.editor === undefined) {
+          return err('editor-unavailable', 'No editor port is wired — cannot open the repo in an editor.');
+        }
+        return openInIde(deps.editor, repoPath, { editorCommand: get().settings.general.editorCommand });
       },
       describeServiceRestart: async (repoPath: string) => {
         if (!deps) {

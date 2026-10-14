@@ -188,6 +188,8 @@ A developer can switch the active EDT at any time; the tool auto-preserves any u
 
 > Amended 2026-09-24 (Sprint Change Proposal, Stories 2.39-2.41): three-state evaluation added; previously only membership of the target EDT was considered.
 
+> Amended 2026-10-14 (Sprint Change Proposal, Story 2.44): the developer may chain a restart of the affected services (none / simple / clean) onto the switch, run in parallel; each service's final state is reported (FR-37).
+
 #### FR-7: An EDT never claims a shared branch
 
 Assigning a protected branch as an EDT's "own" branch for a service is rejected. A service's protected branches are the ones its manifest lists in `protectedBranches`, plus its `sharedBranch`, which is always protected. Without `protectedBranches`, only `sharedBranch` is protected.
@@ -358,7 +360,18 @@ A single set of per-service actions — open in IDE, simple restart, clean resta
 
 #### FR-36: Configurable defaults (added 2026-10-12, Sprint Change Proposal)
 
-The defaults of the Update global parameters, the st zone's option toggles and the Logs restart mode are settings. A per-run change never writes back; with untouched settings behaviour is unchanged.
+The defaults of the Update global parameters, the st zone's option toggles, the Logs restart mode and the post-switch restart choice (`switch.restartMode`, amended 2026-10-14) are settings. A per-run change never writes back; with untouched settings behaviour is unchanged.
+
+#### FR-37: Post-switch service restart (added 2026-10-14, Sprint Change Proposal)
+
+When switching the active EDT, the developer can choose to restart the services in the same gesture: none (default), simple restart, or clean restart.
+
+**Consequences (testable):**
+- Only services whose branch changed in the switch and that declare a container are restarted; the others are reported as skipped with their reason, never failed.
+- Services restart in parallel, bounded by `update.concurrency`, with live per-service progress, like the group update.
+- Each service ends in one reported state: functional (container up and the manifest's `healthUrl` answers 2xx), up-unverified (up, no `healthUrl`), unhealthy, restarting, down, or failed.
+- A restart failure never rolls the switch back; a clean restart without a recipe falls back to a simple restart with a visible notice.
+- The default choice is the setting `switch.restartMode`; the CLI `edt switch --restart none|simple|clean` overrides it.
 
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
@@ -441,6 +454,7 @@ Service health (up / down / restarting) is visible inline with the log view, so 
 - Restarting a failing service is a developer-triggered action from this view, replacing `check_health.sh`'s current silent auto-restart.
 - Restart honours `logs.restartMode` (simple | clean) and an open-in-IDE shortcut acts on the focused service (FR-35, added 2026-10-12).
 - A restart request on a service that's already restarting is a no-op — the control is disabled during restart, never triggering a second concurrent restart.
+- A service whose manifest declares `healthUrl` can additionally be verified *functional / unhealthy* where a restart is reported (FR-37, added 2026-10-14).
 
 ---
 
