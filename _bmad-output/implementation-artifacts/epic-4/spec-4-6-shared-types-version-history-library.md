@@ -2,7 +2,7 @@
 title: 'shared-types Version History Library'
 type: 'feature'
 created: '2026-10-14'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'ab341273883c09d38e76626d2fa344aa78e9cc79'
 review_loop_iteration: 0
 context: [_bmad-output/implementation-artifacts/epic-4-context.md]
@@ -83,3 +83,55 @@ Entry shape: `{ version, commit, date, branch }`. By-version results: `{ version
 
 **Manual checks (if no CLI):**
 - In the TUI on the st tab, open History on a real `shared-types` checkout: entries stream in, Esc stops, Enter pre-fills the form.
+
+## Suggested Review Order
+
+**Search orchestration**
+
+- Pure by-version search over the port: streams hits, flags truncation, picks earliest branch.
+  [`version-history.ts:96`](../../../src/core/shared-types/version-history.ts#L96)
+
+- By-branch walk rejects option-like names before any git call.
+  [`version-history.ts:22`](../../../src/core/shared-types/version-history.ts#L22)
+
+**Read-only git primitives**
+
+- Port contract for the two new streamed, abortable methods.
+  [`git.ts:191`](../../../src/core/ports/git.ts#L191)
+
+- Bump walk via `git log -p` with tolerant version-line parsing and bounds.
+  [`index.ts:1095`](../../../src/adapters/driven/git/index.ts#L1095)
+
+- Containing branches filtered on full refs, never short names.
+  [`index.ts:1173`](../../../src/adapters/driven/git/index.ts#L1173)
+
+- Streaming runner: line callbacks, abort kills the child.
+  [`process.ts:122`](../../../src/adapters/driven/process.ts#L122)
+
+**Settings**
+
+- New bounded `historyDepth` / `maxCommitsScanned` fields.
+  [`settings.ts:54`](../../../src/core/ports/settings.ts#L54)
+  [`schema.ts:100`](../../../src/adapters/driven/settings/schema.ts#L100)
+
+- st tab rows stepped with +/- only.
+  [`settings-screen.tsx:83`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L83)
+
+**History view**
+
+- Slice owns search state; a new search aborts the previous walk.
+  [`shared-types-slice.ts:78`](../../../src/adapters/driving/tui/store/slices/shared-types-slice.ts#L78)
+
+- Pure key reducer: modes, cancel, row selection.
+  [`shared-types-history.logic.ts:25`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-history.logic.ts#L25)
+
+- Rendering with a windowed result list.
+  [`shared-types-history.tsx:31`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-history.tsx#L31)
+
+- Enter pre-fills the st form version.
+  [`shared-types-zone.tsx:292`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L292)
+
+**Tests**
+
+- Real temp-repo coverage of the git primitives.
+  [`version-history.test.ts:3`](../../../src/adapters/driven/git/version-history.test.ts#L3)

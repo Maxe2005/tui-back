@@ -125,7 +125,7 @@ describe('SharedTypesZone history', () => {
     const { store } = seed({
       sharedTypesHistory: {
         mode: 'branch', status: 'done', query: 'feat/x', entries: [ENTRY('0.1.3770'), ENTRY('0.1.3769')], hits: [], found: null,
-        earliestBranch: null, endedBy: 'depth', scanned: 2, error: null, depth: 2, maxScanned: 1000,
+        earliestBranch: null, truncated: false, endedBy: 'depth', scanned: 2, error: null, depth: 2, maxScanned: 1000,
       },
     });
     const { instance, stdout, stdin } = mount(store);
@@ -136,7 +136,7 @@ describe('SharedTypesZone history', () => {
       store.setState({
         sharedTypesHistory: {
           mode: 'branch', status: 'done', query: 'feat/x', entries: [ENTRY('0.1.3770'), ENTRY('0.1.3769')], hits: [], found: null,
-          earliestBranch: null, endedBy: 'depth', scanned: 2, error: null, depth: 2, maxScanned: 1000,
+          earliestBranch: null, truncated: false, endedBy: 'depth', scanned: 2, error: null, depth: 2, maxScanned: 1000,
         },
       });
       await press(instance, stdin, KEYS.escape); // leave the field
