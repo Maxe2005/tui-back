@@ -31,22 +31,25 @@ import {
   MIN_LOG_BUFFER_SIZE,
   MAX_UPDATE_CONCURRENCY,
   MIN_UPDATE_CONCURRENCY,
+  type Settings,
+  type UpdateMergeSourceDefault,
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
 import { BoundedList } from './components/bounded-list.js';
 
-export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs';
+export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update';
 
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs'];
+export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update'];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   general: 'General',
   edts: 'EDTs',
   'command-palette': 'Command Palette',
   logs: 'Logs',
+  update: 'Update',
 };
 
-// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> General order
+// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> Logs -> Update order
 // (SETTINGS_TABS' declared order) — Left and Tab both step forward, simpler than zones.ts's
 // nextZoneId since every settings tab is always reachable.
 export function nextSettingsTab(current: SettingsTab, direction: 1 | -1): SettingsTab {
@@ -155,23 +158,9 @@ export function parseFilterHistoryGridMaxRowsDigit(input: string): number | null
 // General tab: a small Up/Down row list — the quit-shortcut checkbox (Space toggles; the cursor
 // starts on it) and the editor command, a free-text field (Enter opens it for editing, Enter
 // again commits, Esc cancels the edit).
-export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command' | 'update-concurrency';
+export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command';
 
-export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command', 'update-concurrency'];
-
-// update.concurrency: how many services a group update processes at once. `+`/`-` step it, a typed
-// digit sets it; the schema enforces the same [MIN, MAX] bound.
-export function clampUpdateConcurrency(value: number): number {
-  return Math.min(Math.max(value, MIN_UPDATE_CONCURRENCY), MAX_UPDATE_CONCURRENCY);
-}
-
-export function adjustUpdateConcurrency(current: number, direction: 'up' | 'down'): number {
-  return clampUpdateConcurrency(current + (direction === 'up' ? 1 : -1));
-}
-
-export function parseUpdateConcurrencyDigit(input: string): number | null {
-  return /^[1-9]$/.test(input) ? clampUpdateConcurrency(Number(input)) : null;
-}
+export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command'];
 
 export const EDITOR_COMMAND_PLACEHOLDER_TEXT = '(not set — $EDITOR, else vi)';
 
@@ -183,7 +172,6 @@ export type GeneralSettingsStep =
   | { type: 'begin-edit' }
   | { type: 'edit'; editing: TextInputState }
   | { type: 'commit-edit'; value: string }
-  | { type: 'set-concurrency'; value: number }
   | { type: 'ignore' };
 
 // The General tab's whole key mapping as one pure step (Esc is handled by the screen's own
@@ -195,7 +183,6 @@ export function resolveGeneralSettingsKey(
   input: string,
   key: TextEditKey,
   view: GeneralSettingsView,
-  concurrency = MIN_UPDATE_CONCURRENCY,
 ): GeneralSettingsStep {
   if (view.editing !== null) {
     if (key.return) {
@@ -214,17 +201,78 @@ export function resolveGeneralSettingsKey(
   if (row === 'editor-command' && key.return) {
     return { type: 'begin-edit' };
   }
-  if (row === 'update-concurrency') {
+  return { type: 'ignore' };
+}
+
+// Update tab: the group-update defaults — concurrency (moved here from General), and the three
+// global defaults the 3.7 config screen and the CLI start from. A flat Up/Down row list; edits
+// persist immediately. Per-run changes in the config screen are never written back here.
+export type UpdateSettingsRowId = 'concurrency' | 'run-migrations' | 'clean-restart' | 'merge-source';
+
+export const UPDATE_SETTINGS_ROWS: readonly UpdateSettingsRowId[] = ['concurrency', 'run-migrations', 'clean-restart', 'merge-source'];
+
+export const UPDATE_SETTINGS_ROW_HINTS: Record<UpdateSettingsRowId, string> = {
+  concurrency: 'Services a group update processes at once (+/- or a digit). 1 = one after the other.',
+  'run-migrations': 'Whether a group update runs migrations by default (config screen and CLI); a per-run change is never saved here.',
+  'clean-restart': 'Whether a group update does a clean restart by default (config screen and CLI); a per-run change is never saved here.',
+  'merge-source': 'Space toggles. From EDT applies to the EDT-scoped config screen only (the all-repos and single-service screens have no merge-source line).',
+};
+
+// update.concurrency: how many services a group update processes at once. `+`/`-` step it, a typed
+// digit sets it; the schema enforces the same [MIN, MAX] bound.
+export function clampUpdateConcurrency(value: number): number {
+  return Math.min(Math.max(value, MIN_UPDATE_CONCURRENCY), MAX_UPDATE_CONCURRENCY);
+}
+
+export function adjustUpdateConcurrency(current: number, direction: 'up' | 'down'): number {
+  return clampUpdateConcurrency(current + (direction === 'up' ? 1 : -1));
+}
+
+export function parseUpdateConcurrencyDigit(input: string): number | null {
+  return /^[1-9]$/.test(input) ? clampUpdateConcurrency(Number(input)) : null;
+}
+
+export type UpdateSettingsStep =
+  | { type: 'move'; cursor: number }
+  | { type: 'set-concurrency'; value: number }
+  | { type: 'toggle-run-migrations' }
+  | { type: 'toggle-clean-restart' }
+  | { type: 'set-merge-source'; value: UpdateMergeSourceDefault }
+  | { type: 'ignore' };
+
+export function nextMergeSourceDefault(current: UpdateMergeSourceDefault): UpdateMergeSourceDefault {
+  return current === 'shared' ? 'edt-pending' : 'shared';
+}
+
+export function resolveUpdateSettingsKey(
+  input: string,
+  key: TextEditKey,
+  cursor: number,
+  update: Settings['update'],
+): UpdateSettingsStep {
+  const moved = nextCursorForKey(key, cursor, UPDATE_SETTINGS_ROWS.length);
+  if (moved !== null) {
+    return { type: 'move', cursor: moved };
+  }
+  const row = UPDATE_SETTINGS_ROWS[cursor];
+  if (row === 'concurrency') {
     if (input === '+') {
-      return { type: 'set-concurrency', value: adjustUpdateConcurrency(concurrency, 'up') };
+      return { type: 'set-concurrency', value: adjustUpdateConcurrency(update.concurrency, 'up') };
     }
     if (input === '-') {
-      return { type: 'set-concurrency', value: adjustUpdateConcurrency(concurrency, 'down') };
+      return { type: 'set-concurrency', value: adjustUpdateConcurrency(update.concurrency, 'down') };
     }
     const digit = parseUpdateConcurrencyDigit(input);
-    if (digit !== null) {
-      return { type: 'set-concurrency', value: digit };
-    }
+    return digit !== null ? { type: 'set-concurrency', value: digit } : { type: 'ignore' };
+  }
+  if (row === 'run-migrations' && input === ' ') {
+    return { type: 'toggle-run-migrations' };
+  }
+  if (row === 'clean-restart' && input === ' ') {
+    return { type: 'toggle-clean-restart' };
+  }
+  if (row === 'merge-source' && (input === ' ' || key.return)) {
+    return { type: 'set-merge-source', value: nextMergeSourceDefault(update.mergeSource) };
   }
   return { type: 'ignore' };
 }
@@ -355,6 +403,8 @@ export function settingsFooterContext(
   switch (tab) {
     case 'general':
       return state.generalEditing ? 'confirm' : 'settings-general';
+    case 'update':
+      return 'settings-update';
     case 'command-palette':
       return state.paletteGroup == null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.paletteGroup];
     case 'edts':
@@ -428,6 +478,7 @@ export function SettingsScreen({
   // The General tab's row cursor + in-progress editor-command edit (null when browsing).
   // The edit is a local draft: only Enter persists it, Esc drops it.
   const [generalCursor, setGeneralCursor] = useState(initialGeneralEditing ? GENERAL_SETTINGS_ROWS.indexOf('editor-command') : 0);
+  const [updateCursor, setUpdateCursor] = useState(0);
   const [generalEditing, setGeneralEditing] = useState<TextInputState | null>(
     initialGeneralEditing ? { value: settings.general.editorCommand, cursor: settings.general.editorCommand.length } : null,
   );
@@ -524,7 +575,7 @@ export function SettingsScreen({
     }
 
     if (tab === 'general') {
-      const step = resolveGeneralSettingsKey(input, key, { cursor: generalCursor, editing: generalEditing }, settings.update.concurrency);
+      const step = resolveGeneralSettingsKey(input, key, { cursor: generalCursor, editing: generalEditing });
       if (step.type === 'move') {
         setGeneralCursor(step.cursor);
       } else if (step.type === 'toggle-quit') {
@@ -536,8 +587,22 @@ export function SettingsScreen({
       } else if (step.type === 'commit-edit') {
         setGeneralEditing(null);
         void updateSettings({ general: { editorCommand: step.value } });
+      }
+      return;
+    }
+
+    if (tab === 'update') {
+      const step = resolveUpdateSettingsKey(input, key, updateCursor, settings.update);
+      if (step.type === 'move') {
+        setUpdateCursor(step.cursor);
       } else if (step.type === 'set-concurrency') {
         void updateSettings({ update: { concurrency: step.value } });
+      } else if (step.type === 'toggle-run-migrations') {
+        void updateSettings({ update: { runMigrations: !settings.update.runMigrations } });
+      } else if (step.type === 'toggle-clean-restart') {
+        void updateSettings({ update: { cleanRestart: !settings.update.cleanRestart } });
+      } else if (step.type === 'set-merge-source') {
+        void updateSettings({ update: { mergeSource: step.value } });
       }
       return;
     }
@@ -838,21 +903,54 @@ export function SettingsScreen({
                 </Text>
               )}
             </Box>
-            <Box flexDirection="row">
-              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? '›' : ' '}</Text>
-              <Text color={GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? colors.accent : colors.text} wrap="truncate-end">
-                Update concurrency: <Text color={colors.accent}>{settings.update.concurrency}</Text>
-              </Text>
-            </Box>
-            {GENERAL_SETTINGS_ROWS[generalCursor] === 'update-concurrency' ? (
-              <DimAnnotation text="Services a group update processes at once (+/- or a digit). 1 = one after the other." />
-            ) : GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
+            {GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
               <DimAnnotation text="Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
             ) : generalEditing !== null ? (
               <DimAnnotation text="<repo> is replaced by the repo path (appended when absent), e.g. code <repo>. Empty: $EDITOR, else vi." />
             ) : (
               <DimAnnotation text="Run by the Update zone's “Open in editor” choice on a blocked repo, e.g. code <repo>." />
             )}
+          </Box>
+        ) : null}
+
+        {tab === 'update' ? (
+          <Box flexDirection="column">
+            {UPDATE_SETTINGS_ROWS.map((row, index) => {
+              const highlighted = index === updateCursor;
+              const cursorGlyph = <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>;
+              if (row === 'concurrency') {
+                return (
+                  <Box key={row} flexDirection="row">
+                    {cursorGlyph}
+                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">
+                      Update concurrency: <Text color={colors.accent}>{settings.update.concurrency}</Text>
+                    </Text>
+                  </Box>
+                );
+              }
+              if (row === 'merge-source') {
+                return (
+                  <Box key={row} flexDirection="row">
+                    {cursorGlyph}
+                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">
+                      Merge source:{' '}
+                      <Text color={colors.accent}>{settings.update.mergeSource === 'shared' ? 'Shared branch' : 'From EDT (pick at run time)'}</Text>
+                    </Text>
+                  </Box>
+                );
+              }
+              return (
+                <Box key={row} flexDirection="row">
+                  {cursorGlyph}
+                  <CheckboxListItem
+                    label={row === 'run-migrations' ? 'Run migrations' : 'Clean restart'}
+                    selected={highlighted}
+                    state={(row === 'run-migrations' ? settings.update.runMigrations : settings.update.cleanRestart) ? 'checked' : 'unchecked'}
+                  />
+                </Box>
+              );
+            })}
+            <DimAnnotation text={UPDATE_SETTINGS_ROW_HINTS[UPDATE_SETTINGS_ROWS[updateCursor] ?? 'concurrency']} />
           </Box>
         ) : null}
 
