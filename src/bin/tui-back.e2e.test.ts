@@ -420,6 +420,95 @@ describe('tui-back list-repos (black-box)', () => {
   });
 });
 
+describe('tui-back registry validate (black-box, story 2.28)', () => {
+  it('validates a healthy repo as valid in exactly one JSON line, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'validate'], env);
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { results: [{ path: repo, outcome: 'valid' }] } });
+  });
+
+  it('reports a missing sharedBranch as invalid with shared-branch-missing, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    await writeFile(
+      join(repo, '.tui-back.yaml'),
+      ['service: route-explorer', 'container: route-explorer', 'sharedBranch: release', 'modules: {}'].join('\n'),
+    );
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'validate'], env);
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed).toMatchObject({
+      ok: true,
+      data: { results: [{ path: repo, outcome: 'invalid', detail: { code: 'shared-branch-missing' } }] },
+    });
+    expect(parsed.data.results[0].detail.message).toContain('release');
+  });
+
+  it('surfaces an invalid manifest with the loader exact code as invalid, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(false);
+    await writeFile(join(repo, '.tui-back.yaml'), 'service: [unclosed\n');
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'validate'], env);
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.results).toHaveLength(1);
+    expect(parsed.data.results[0].outcome).toBe('invalid');
+    expect(['manifest-invalid-yaml', 'manifest-validation-failed']).toContain(parsed.data.results[0].detail.code);
+  });
+
+  it('reports an unreachable path as unreachable and an empty registry as empty results, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    const gone = join(xdg, 'gone-repo');
+    expect(runCli(['register', gone], env).status).toBe(0);
+
+    const unreachable = runCli(['registry', 'validate'], env);
+    expect(unreachable.status).toBe(0);
+    expect(JSON.parse(unreachable.stdout.trim())).toEqual({
+      ok: true,
+      data: { results: [{ path: gone, outcome: 'unreachable' }] },
+    });
+
+    const emptyXdg = await makeTempDir();
+    const emptyEnv = { XDG_CONFIG_HOME: emptyXdg, XDG_STATE_HOME: emptyXdg };
+    const { status, stdout } = runCli(['registry', 'validate'], emptyEnv);
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { results: [] } });
+  });
+
+  it('rejects excess args with invalid-argument as exactly one JSON line, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['registry', 'validate', 'extra'], env);
+
+    expect(status).toBe(1);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    expect(parsed.error.message).toContain('tui-back registry validate');
+  });
+});
+
 describe('tui-back list-routes (black-box, story 6.1)', () => {
   const routesManifest = [
     'service: api-gateway',

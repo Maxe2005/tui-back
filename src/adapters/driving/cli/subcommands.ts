@@ -15,6 +15,7 @@ import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
 import { groupUpdate } from '../../../core/scripts/group-update.js';
 import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
+import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { GitPort } from '../../../core/ports/git.js';
@@ -48,7 +49,8 @@ const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}
 const UPDATE_USAGE = 'tui-back update | tui-back update --all --yes';
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
-const REGISTRY_USAGE = REGISTRY_CLEAN_USAGE;
+const REGISTRY_VALIDATE_USAGE = 'tui-back registry validate';
+const REGISTRY_USAGE = `${REGISTRY_CLEAN_USAGE}\n${REGISTRY_VALIDATE_USAGE}`;
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -229,6 +231,9 @@ export function buildSubcommands(deps: {
       run: async (args) => {
         if (args[0] === 'clean') {
           return runRegistryClean(deps, args.slice(1));
+        }
+        if (args[0] === 'validate') {
+          return runRegistryValidate(deps, args.slice(1));
         }
         const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
         return err('invalid-argument', `Unknown registry action: ${label}. Usage:\n${REGISTRY_USAGE}`);
@@ -836,6 +841,24 @@ async function runRegistryClean(
     return removed;
   }
   return ok({ candidates: classified.data.candidates, errors: classified.data.errors, results: removed.data.results });
+}
+
+// `registry validate` (story 2.28): flagless read-only semantic validation over every
+// registered path — zero args; any excess arg is an explicit invalid-argument rejection,
+// never silently ignored (mirrors list-repos's own zero-flag arity pattern). No isTTY
+// gate: read-only output has no prompt path, the envelope owns TTY/JSON rendering.
+async function runRegistryValidate(
+  deps: {
+    registry: RegistryPort;
+    manifest: ManifestPort;
+    git: GitPort;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  if (args.length > 0) {
+    return err('invalid-argument', `Usage: ${REGISTRY_VALIDATE_USAGE}`);
+  }
+  return validateRegistry({ registry: deps.registry, manifest: deps.manifest, git: deps.git });
 }
 
 export function assertUniqueSubcommandNames(subcommands: Subcommand[]): void {
