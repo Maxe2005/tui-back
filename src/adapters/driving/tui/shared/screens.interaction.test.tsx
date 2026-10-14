@@ -3,6 +3,7 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
 import { RepoRegistryScreen } from './repo-registry-screen.js';
 import { SettingsScreen } from './settings-screen.js';
@@ -53,13 +54,12 @@ describe('RepoRegistryScreen candidates (real keypress)', () => {
 });
 
 describe('SettingsScreen (real keypress)', () => {
-  it('End jumps to the last General row; one Up lands on the editor command, where Enter starts the edit', async () => {
+  it('End jumps to the last General row, the editor command, where Enter starts the edit', async () => {
     const store = createAppStore();
     const { press, stop, stdout, instance } = mount(createElement(SettingsScreen, { useStore: store }));
     try {
       await instance.waitUntilRenderFlush();
       await press(KEYS.end);
-      await press(KEYS.up);
       await press(KEYS.enter);
       expect(footerIdOf(store)).toBe('confirm');
     } finally {
@@ -67,16 +67,47 @@ describe('SettingsScreen (real keypress)', () => {
     }
   });
 
-  it('on the last General row a digit sets update.concurrency live', async () => {
+  it('on the Update tab concurrency row a digit sets update.concurrency live', async () => {
     const store = createAppStore();
-    const { press, stop, instance } = mount(createElement(SettingsScreen, { useStore: store }));
+    const { press, stop, instance } = mount(createElement(SettingsScreen, { useStore: store, initialTab: 'update' }));
     try {
       await instance.waitUntilRenderFlush();
-      await press(KEYS.end);
       await press('5');
       expect(store.getState().settings.update.concurrency).toBe(5);
       await press('-');
       expect(store.getState().settings.update.concurrency).toBe(4);
+    } finally {
+      await stop();
+    }
+  });
+
+  it('Update tab: Space toggles run-migrations and clean-restart, each changing only its own key', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...store.getState().settings, update: { concurrency: 6, runMigrations: true, cleanRestart: false, mergeSource: 'shared' } } });
+    const { press, stop, instance } = mount(createElement(SettingsScreen, { useStore: store, initialTab: 'update' }));
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(KEYS.down);
+      await press(KEYS.space);
+      expect(store.getState().settings.update).toEqual({ concurrency: 6, runMigrations: false, cleanRestart: false, mergeSource: 'shared' });
+      await press(KEYS.down);
+      await press(KEYS.space);
+      expect(store.getState().settings.update).toEqual({ concurrency: 6, runMigrations: false, cleanRestart: true, mergeSource: 'shared' });
+    } finally {
+      await stop();
+    }
+  });
+
+  it('Update tab: Space then Enter on the merge-source row flip it and keep the other keys', async () => {
+    const store = createAppStore();
+    const { press, stop, instance } = mount(createElement(SettingsScreen, { useStore: store, initialTab: 'update' }));
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(KEYS.end);
+      await press(KEYS.space);
+      expect(store.getState().settings.update).toEqual({ ...DEFAULT_SETTINGS.update, mergeSource: 'edt-pending' });
+      await press(KEYS.enter);
+      expect(store.getState().settings.update).toEqual(DEFAULT_SETTINGS.update);
     } finally {
       await stop();
     }

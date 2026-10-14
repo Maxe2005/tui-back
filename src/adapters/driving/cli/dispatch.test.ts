@@ -11,6 +11,7 @@ import type { GitPort } from '../../../core/ports/git.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { SavedRequest, SavedRequestPort } from '../../../core/ports/saved-request.js';
+import { DEFAULT_SETTINGS, type Settings, type SettingsPort } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
@@ -261,6 +262,7 @@ describe('subcommand registry guards', () => {
       migration,
       restart,
       state: fakeState(),
+      settings: { load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }), save: async () => ok(undefined) },
       scanner,
       auth,
       savedRequests: fakeSavedRequests(),
@@ -848,6 +850,129 @@ describe('subcommand registry guards', () => {
     });
   });
 
+  describe('update settings defaults and override flags', () => {
+    function wiredUpdate(update: Partial<Settings['update']>) {
+      const registry: RegistryPort = {
+        list: async () => ok(['/repo/a']),
+        add: async () => ok(undefined),
+        exists: async () => ok(false),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const manifest: ManifestPort = {
+        load: async () => ok({ service: 'svc-a', container: 'ctr-a', migrationCommand: 'npm run m', sharedBranch: 'main', modules: {} }),
+      };
+      const migrationRun = vi.fn(async () => ok({ output: 'migrated\n' }));
+      const settings: SettingsPort = {
+        load: async () => ok({ settings: { ...DEFAULT_SETTINGS, update: { ...DEFAULT_SETTINGS.update, ...update } }, warning: null }),
+        save: async () => ok(undefined),
+      };
+      const subcommands = buildTestSubcommands({ registry, manifest, migration: { run: migrationRun }, settings });
+      const run = subcommands.find((subcommand) => subcommand.name === 'update')?.run;
+      if (!run) throw new Error('expected update subcommand');
+      return { run, migrationRun };
+    }
+
+    it('runs migrations by default and skips them when settings turn them off', async () => {
+      const on = wiredUpdate({});
+      await on.run(['--all', '--yes']);
+      expect(on.migrationRun).toHaveBeenCalledTimes(1);
+
+      const off = wiredUpdate({ runMigrations: false });
+      await off.run(['--all', '--yes']);
+      expect(off.migrationRun).not.toHaveBeenCalled();
+    });
+
+    it('explicit flags win over the settings defaults, in any position', async () => {
+      const forcedOn = wiredUpdate({ runMigrations: false });
+      await forcedOn.run(['--migrations', '--all', '--yes']);
+      expect(forcedOn.migrationRun).toHaveBeenCalledTimes(1);
+
+      const forcedOff = wiredUpdate({ runMigrations: true });
+      await forcedOff.run(['--all', '--no-migrations', '--yes']);
+      expect(forcedOff.migrationRun).not.toHaveBeenCalled();
+    });
+
+    it('rejects a flag together with its negation as invalid-argument', async () => {
+      const { run } = wiredUpdate({});
+      expect(await run(['--migrations', '--no-migrations'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(await run(['--clean-restart', '--no-clean-restart', '--all', '--yes'])).toMatchObject({
+        ok: false,
+        error: { code: 'invalid-argument' },
+      });
+    });
+
+    it('rejects an unknown flag alongside the override flags', async () => {
+      const { run } = wiredUpdate({});
+      expect(await run(['--all', '--yes', '--no-migrations', '--bogus'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('falls back to defaults and reports on stderr when settings fail to load or carry a warning', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        for (const load of [
+          async () => err('io-error', 'disk on fire'),
+          async () => ok({ settings: { ...DEFAULT_SETTINGS, update: { ...DEFAULT_SETTINGS.update, runMigrations: false } }, warning: 'Invalid settings: update.cleanRestart' }),
+        ]) {
+          errorSpy.mockClear();
+          const migrationRun = vi.fn(async () => ok({ output: '' }));
+          const subcommands = buildTestSubcommands({
+            registry: { list: async () => ok(['/repo/a']), add: async () => ok(undefined), exists: async () => ok(false), scan: async () => ok({ candidates: [], skipped: [] }), reset: async () => ok({ path: '/p', backupPath: null }), remove: async () => ok(undefined) },
+            manifest: { load: async () => ok({ service: 'svc-a', container: 'ctr-a', migrationCommand: 'npm run m', sharedBranch: 'main', modules: {} }) },
+            migration: { run: migrationRun },
+            settings: { load: load as never, save: async () => ok(undefined) },
+          });
+          const run = subcommands.find((subcommand) => subcommand.name === 'update')!.run;
+          await run(['--all', '--yes']);
+          expect(errorSpy).toHaveBeenCalledTimes(1);
+          // The failing load uses the built-in defaults (migrations on); the warned load keeps its parsed settings.
+          expect(migrationRun).toHaveBeenCalledTimes(load.toString().includes('io-error') ? 1 : 0);
+        }
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    describe('clean restart wiring', () => {
+      function wiredRestart(update: Partial<Settings['update']>) {
+        const restartRun = vi.fn(async () => ok({ output: '' }));
+        const containerRestart = vi.fn(async () => ok(undefined));
+        const subcommands = buildTestSubcommands({
+          registry: { list: async () => ok(['/repo/a']), add: async () => ok(undefined), exists: async () => ok(false), scan: async () => ok({ candidates: [], skipped: [] }), reset: async () => ok({ path: '/p', backupPath: null }), remove: async () => ok(undefined) },
+          manifest: { load: async () => ok({ service: 'svc-a', container: 'ctr-a', sharedBranch: 'main', restartCommands: ['npm run clean'], modules: {} }) },
+          restart: { run: restartRun },
+          container: { restart: containerRestart },
+          settings: {
+            load: async () => ok({ settings: { ...DEFAULT_SETTINGS, update: { ...DEFAULT_SETTINGS.update, ...update } }, warning: null }),
+            save: async () => ok(undefined),
+          },
+        });
+        const run = subcommands.find((subcommand) => subcommand.name === 'update')!.run;
+        return { run, restartRun, containerRestart };
+      }
+
+      it('settings cleanRestart: true runs the recipe; --no-clean-restart overrides it; --clean-restart forces it', async () => {
+        const fromSettings = wiredRestart({ cleanRestart: true });
+        await fromSettings.run(['--all', '--yes']);
+        expect(fromSettings.restartRun).toHaveBeenCalled();
+
+        const overridden = wiredRestart({ cleanRestart: true });
+        await overridden.run(['--all', '--yes', '--no-clean-restart']);
+        expect(overridden.restartRun).not.toHaveBeenCalled();
+
+        const forced = wiredRestart({});
+        await forced.run(['--clean-restart', '--all', '--yes']);
+        expect(forced.restartRun).toHaveBeenCalled();
+      });
+    });
+
+    it('still gates --all behind --yes when only override flags are added', async () => {
+      const { run } = wiredUpdate({});
+      expect(await run(['--all', '--no-clean-restart'])).toMatchObject({ ok: false, error: { code: 'confirmation-required' } });
+    });
+  });
+
   it('update fails with no-active-edt when no EDT is active', async () => {
     const subcommands = buildTestSubcommands();
     const update = subcommands.find((subcommand) => subcommand.name === 'update');
@@ -885,8 +1010,10 @@ describe('subcommand registry guards', () => {
       members: [{ service: 'svc-a', repoPath: '/repo/a', branch }],
     });
 
-    function wired(localBranches: string[]) {
+    function wired(localBranches: string[], update: Partial<Settings['update']> = {}) {
       const merges: [string, string][] = [];
+      const restartRun = vi.fn(async () => ok({ output: '' }));
+      const migrationRun = vi.fn(async () => ok({ output: '' }));
       // Every GitPort method answers ok(undefined) unless overridden below.
       const git = new Proxy(
         {
@@ -915,13 +1042,32 @@ describe('subcommand registry guards', () => {
         },
         state: { ...fakeState(), readActiveEdt: async () => ok('A') },
         manifest: {
-          load: async () => ok({ service: 'svc-a', container: 'ctr-a', sharedBranch: 'development', modules: {} }),
+          load: async () =>
+            ok({ service: 'svc-a', container: 'ctr-a', migrationCommand: 'npm run m', restartCommands: ['npm run clean'], sharedBranch: 'development', modules: {} }),
+        },
+        restart: { run: restartRun },
+        migration: { run: migrationRun },
+        settings: {
+          load: async () => ok({ settings: { ...DEFAULT_SETTINGS, update: { ...DEFAULT_SETTINGS.update, ...update } }, warning: null }),
+          save: async () => ok(undefined),
         },
       });
-      const update = subcommands.find((subcommand) => subcommand.name === 'update');
-      if (!update) throw new Error('expected update subcommand');
-      return { update, merges };
+      const updateCommand = subcommands.find((subcommand) => subcommand.name === 'update');
+      if (!updateCommand) throw new Error('expected update subcommand');
+      return { update: updateCommand, merges, restartRun, migrationRun };
     }
+
+    it('applies the settings defaults and explicit override flags to the toggles', async () => {
+      const fromSettings = wired(['feat/x'], { cleanRestart: true, runMigrations: false });
+      await fromSettings.update.run(['--from-edt', 'sibling']);
+      expect(fromSettings.restartRun).toHaveBeenCalled();
+      expect(fromSettings.migrationRun).not.toHaveBeenCalled();
+
+      const overridden = wired(['feat/x'], { cleanRestart: true, runMigrations: false });
+      await overridden.update.run(['--from-edt', 'sibling', '--no-clean-restart', '--migrations']);
+      expect(overridden.restartRun).not.toHaveBeenCalled();
+      expect(overridden.migrationRun).toHaveBeenCalled();
+    });
 
     it('merges the sibling EDT branch instead of the shared branch', async () => {
       const { update, merges } = wired(['feat/x']);

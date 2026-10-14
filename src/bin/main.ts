@@ -16,6 +16,7 @@ import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/regi
 import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
 import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
 import { createSavedRequestPort, resolveGlobalDbFile } from '../adapters/driven/saved-requests/index.js';
+import { createSettingsPort, resolveSettingsFile } from '../adapters/driven/settings/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
 import { moduleRegistry, resolveModule } from '../adapters/driven/modules/module-registry.js';
 import { ROUTES_MODULE_ID } from '../core/edt/resolve-tab-visibility.js';
@@ -82,6 +83,7 @@ const subcommands = buildSubcommands({
   migration,
   restart,
   state,
+  settings: createSettingsPort(resolveSettingsFile(xdg)),
   isTTY: interactiveIsTTY,
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,

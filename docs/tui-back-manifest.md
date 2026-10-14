@@ -98,10 +98,10 @@ modules:
 
   | Contexte | Comportement |
   |-----------|----------------|
-  | Mise à jour d'un groupe (EDT) dans le TUI, option **Clean restart** cochée (paramètre global, surchargeable par service dans le tableau) | La recette s'exécute à la place du redémarrage simple du conteneur. |
+  | Mise à jour d'un groupe (EDT) dans le TUI, option **Clean restart** cochée (paramètre global, initialisé depuis `update.cleanRestart` de `settings.yaml`, surchargeable par service dans le tableau) | La recette s'exécute à la place du redémarrage simple du conteneur. |
   | Même mise à jour, **Clean restart** décoché | Redémarrage simple du conteneur ; `restartCommands` est ignoré. |
   | Menu d'un service (zone Update) → **Clean restart** (restart standalone d'un seul service) | La recette s'exécute toujours (le mode clean est implicite). |
-  | Mise à jour via la CLI (`tui-back update …`) | Clean restart **toujours désactivé** (pas de flag dédié) : `restartCommands` est ignoré, redémarrage simple du conteneur. |
+  | Mise à jour via la CLI (`tui-back update …`) | Clean restart selon `update.cleanRestart` de `settings.yaml` (désactivé par défaut) ; `--clean-restart` / `--no-clean-restart` l'emportent. Désactivé : `restartCommands` est ignoré, redémarrage simple du conteneur. |
 
 - **Repli** : si le clean restart est demandé mais que `restartCommands` est
   absent ou vide, `tui-back` retombe **silencieusement** sur le redémarrage
@@ -282,6 +282,22 @@ services. Un échec met le run en pause (réessayer / ignorer `shared-types` / a
 > Note : toute autre clé sous une entrée de module est acceptée par le
 > schéma (les valeurs de `modules.<id>` sont un `Record<string, unknown>`
 > libre) mais n'a d'effet que si le code du module correspondant la lit.
+
+## Valeurs par défaut des mises à jour (`settings.yaml`) et flags CLI
+
+Ces réglages ne font pas partie du manifeste : ils vivent dans `settings.yaml` (éditables dans `:settings`, onglet **Update**) et fixent les valeurs de départ globales d'une mise à jour de groupe.
+
+```yaml
+update:
+  concurrency: 3        # services traités en parallèle (1-8)
+  runMigrations: true   # défaut : migrations activées
+  cleanRestart: false   # défaut : clean restart désactivé
+  mergeSource: shared   # shared | edt-pending
+```
+
+- Toutes les clés sont optionnelles ; une valeur invalide fait retomber **tout** le fichier sur les défauts, avec un avertissement.
+- Le TUI initialise l'écran de configuration pré-run avec ces valeurs ; les changements faits dans l'écran ne sont jamais réécrits dans `settings.yaml`. `mergeSource: edt-pending` ouvre la source de merge sur « From EDT » (aucun EDT choisi) uniquement dans l'écran EDT.
+- La CLI (`tui-back update`) utilise `runMigrations` et `cleanRestart` de `settings.yaml` ; **elle ignore `mergeSource`** (utiliser `--from-edt <topic>`). Les flags explicites l'emportent : `--migrations` / `--no-migrations` et `--clean-restart` / `--no-clean-restart` (un flag et sa négation ensemble : `invalid-argument`). Si `settings.yaml` est illisible ou invalide, un avertissement est écrit sur stderr et les défauts intégrés s'appliquent.
 
 ## Exemple complet — service `api-gateway` avec `route-explorer`
 

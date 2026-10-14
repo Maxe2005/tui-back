@@ -4,6 +4,9 @@
 // and a field-naming `warning`; only a genuine I/O error is an `err`.
 import type { Result } from '../result.js';
 
+export const UPDATE_MERGE_SOURCES = ['shared', 'edt-pending'] as const;
+export type UpdateMergeSourceDefault = (typeof UPDATE_MERGE_SOURCES)[number];
+
 export interface Settings {
   // The `q` keybinding (quit the app) is global, so it lives on the General tab. Only the raw
   // `q` keypress is gated by this flag; the `:quit` command always works.
@@ -42,6 +45,11 @@ export interface Settings {
   // sequential run). Read when a run starts.
   update: {
     concurrency: number;
+    // Global defaults the Update config screen (3.7) seeds its run-wide toggles from, and the
+    // CLI `update` falls back to when no explicit flag is passed. Never written back from a run.
+    runMigrations: boolean;
+    cleanRestart: boolean;
+    mergeSource: UpdateMergeSourceDefault;
   };
   logs: {
     bufferSize: number;
@@ -78,7 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // filterHistorySize=20 covers a session's worth of committed filters per (scope, mode) list
   // without state.json growing unbounded; filterHistoryGridMaxRows=8 mirrors
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
-  update: { concurrency: 3 },
+  update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
 };
 

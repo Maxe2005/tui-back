@@ -457,7 +457,11 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     ): Promise<void> {
       const sharedTypesSource = await resolveSharedTypesSource(rows);
       set({
-        updateConfig: createUpdateConfigDraft(scope, rows, { ...options, sharedTypesSource }),
+        updateConfig: createUpdateConfigDraft(scope, rows, {
+          ...options,
+          sharedTypesSource,
+          defaults: get().settings.update,
+        }),
         updateStatus: 'idle',
         updateError: null,
         updateErrorCode: null,
