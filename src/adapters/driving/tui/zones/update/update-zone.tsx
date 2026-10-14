@@ -3,7 +3,6 @@
 // phase and issue log). Dirty/conflicted repos pause the run on a bounded menu (stash / open in
 // editor / cancel repo / cancel run); `q` mid-run asks to confirm and marks the EDT interrupted.
 // Every keystroke decision is a pure function; useInput stays a thin dispatcher.
-import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
@@ -36,7 +35,6 @@ import {
   formatServiceOutcomeDetail,
   isServiceTargetedByRun,
   partitionUpdateServiceRows,
-  resolveEditorCommand,
   resolveRecapToggle,
   resolveUpdatePaneRows,
   applyReportScroll,
@@ -309,23 +307,6 @@ export function formatBlockerRetry(blocker: IncidentBlocker): string | null {
   return `↻ Retry #${String(blocker.retry)} still blocked${reason}`;
 }
 
-// The driving-side editor launch — core only ever sees the `edited` choice. Spawns the resolved
-// editor command (see resolveEditorCommand) on the blocked repo with the terminal attached and
-// waits for exit. The exit status is deliberately unread: core's re-verification is the gate (a
-// no-op edit, or a GUI editor that returns immediately, simply re-presents the menu). Only a
-// command that could not be started at all is reported, so a misconfigured setting is never a
-// silent no-op.
-export type LaunchEditorResult = { ok: true } | { ok: false; message: string };
-
-export function launchEditor(repoPath: string, configured = ''): LaunchEditorResult {
-  const { binary, args } = resolveEditorCommand(configured, process.env.EDITOR, repoPath);
-  const result = spawnSync(binary, args, { stdio: 'inherit' });
-  if (result.error !== undefined) {
-    return { ok: false, message: `Could not launch "${binary}": ${result.error.message}` };
-  }
-  return { ok: true };
-}
-
 // The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
 // key focuses a service. Tests pass `initialRecap={false}` to start on a service.
 // Rows the detail pane keeps around the running list / the recap's result lines.
@@ -413,7 +394,7 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
   const branchDropdownMaxRows = useStore((state) => state.settings.edts.branchDropdownMaxRows);
   const listBranchesAction = useStore((state) => state.listBranches);
   // The user-defined "Open in editor" command line (empty: `$EDITOR`, else `vi`).
-  const editorCommand = useStore((state) => state.settings.general.editorCommand);
+  const openInIde = useStore((state) => state.openInIde);
 
   const [quitConfirm, setQuitConfirm] = useState(false);
   const [blockerCursor, setBlockerCursor] = useState(0);
@@ -707,9 +688,9 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
             // report the choice — core re-verifies before resuming (a no-op edit
             // re-presents). An editor that could not be started reports nothing to core:
             // the menu stays open on its error line so another choice can be made.
-            const launched = launchEditor(updateBlocker.repoPath, editorCommand);
+            const launched = openInIde(updateBlocker.repoPath);
             if (!launched.ok) {
-              setEditorError(launched.message);
+              setEditorError(launched.error.message);
               return;
             }
           }
