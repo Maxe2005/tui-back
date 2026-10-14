@@ -3,6 +3,7 @@
 // per-service source branch defaulting to the manifest `sharedBranch`, and two run-wide toggles
 // (migrate ON, clean restart OFF). Deselecting excludes a service entirely; confirming with
 // zero selected is rejected inline. Every keystroke behavior is a pure, unit-tested function.
+import { DEFAULT_SETTINGS, type Settings } from '../../../../../core/ports/settings.js';
 import type { GroupUpdateScope, GroupUpdateSelectionItem } from '../../../../../core/scripts/group-update.js';
 import type { SharedTypesMode } from '../../../../../core/shared-types/smart-update.js';
 import type { MergeSourceError, MergeSourceOrigin, MergeSourceRow } from '../../../../../core/scripts/resolve-merge-sources.js';
@@ -76,14 +77,19 @@ export interface UpdateConfigRowInput {
   recipeDeclared?: boolean;
 }
 
-// Every targeted service starts pre-selected with its branch pre-filled; migrate ON and clean
-// restart OFF — deliberate defaults.
+// The run-wide starting values, taken from `settings.update` (per-run edits never go back).
+export type UpdateConfigGlobalDefaults = Pick<Settings['update'], 'runMigrations' | 'cleanRestart' | 'mergeSource'>;
+
+// Every targeted service starts pre-selected with its branch pre-filled (rows always `follow`
+// the globals); the globals start from `options.defaults` — migrate ON / clean restart OFF /
+// shared when absent.
 export function createUpdateConfigDraft(
   scope: GroupUpdateScope,
   rows: readonly UpdateConfigRowInput[],
-  options: { layout?: ConfigLayout; sharedTypesSource?: string | null } = {},
+  options: { layout?: ConfigLayout; sharedTypesSource?: string | null; defaults?: UpdateConfigGlobalDefaults } = {},
 ): UpdateConfigDraft {
-  return {
+  const defaults = options.defaults ?? DEFAULT_SETTINGS.update;
+  const draft: UpdateConfigDraft = {
     scope,
     rows: rows.map((row) => ({
       service: row.service,
@@ -97,14 +103,19 @@ export function createUpdateConfigDraft(
       migrations: 'follow',
       cleanRestart: 'follow',
     })),
-    runMigrations: true,
-    cleanRestart: false,
+    runMigrations: defaults.runMigrations,
+    cleanRestart: defaults.cleanRestart,
     error: null,
     layout: options.layout ?? 'service-panels',
     strategy: { kind: 'shared' },
     sharedTypes: 'off',
     sharedTypesSource: options.sharedTypesSource ?? null,
   };
+  // The merge-source line exists only in the EDT layout: a persisted `edt-pending` default
+  // opens it on From EDT with no EDT picked yet (every non-manual row blocked until one is).
+  return defaults.mergeSource === 'edt-pending' && draft.layout === 'edt-panels'
+    ? applyMergeStrategy(draft, { kind: 'edt-pending' })
+    : draft;
 }
 
 // Re-resolves every non-manual row under `strategy`; manual rows keep their branch. Rows

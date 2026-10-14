@@ -32,6 +32,36 @@ describe('createUpdateConfigDraft', () => {
   });
 });
 
+describe('createUpdateConfigDraft with settings defaults', () => {
+  it('seeds the run-wide globals from the defaults while rows keep following them', () => {
+    const created = createUpdateConfigDraft('edt', ROWS, {
+      defaults: { runMigrations: false, cleanRestart: true, mergeSource: 'shared' },
+    });
+
+    expect(created.runMigrations).toBe(false);
+    expect(created.cleanRestart).toBe(true);
+    expect(created.strategy).toEqual({ kind: 'shared' });
+    expect(created.rows.every((row) => row.migrations === 'follow' && row.cleanRestart === 'follow')).toBe(true);
+  });
+
+  it('leaves a per-service exception untouched when the defaults change', () => {
+    const seeded = createUpdateConfigDraft('edt', ROWS, { defaults: { runMigrations: false, cleanRestart: true, mergeSource: 'shared' } });
+    const withException = setRow(seeded, 0, { ...seeded.rows[0]!, migrations: 'on' });
+    expect(withException.rows[0]?.migrations).toBe('on');
+    expect(withException.rows[1]?.migrations).toBe('follow');
+  });
+
+  it('opens a persisted edt-pending merge source only in the EDT layout', () => {
+    const defaults = { runMigrations: true, cleanRestart: false, mergeSource: 'edt-pending' as const };
+    const edt = createUpdateConfigDraft('edt', ROWS, { layout: 'edt-panels', defaults });
+    expect(edt.strategy).toEqual({ kind: 'edt-pending' });
+    expect(edt.rows.every((row) => row.sourceError === 'no-edt-chosen')).toBe(true);
+
+    expect(createUpdateConfigDraft('all', ROWS, { layout: 'all-panels', defaults }).strategy).toEqual({ kind: 'shared' });
+    expect(createUpdateConfigDraft('edt', ROWS, { defaults }).strategy).toEqual({ kind: 'shared' });
+  });
+});
+
 describe('confirmUpdateConfigDraft', () => {
   it('confirms exactly the selected services with their branches plus the uniform toggles', () => {
     const deselected = toggleRowSelection(draft(), 1);

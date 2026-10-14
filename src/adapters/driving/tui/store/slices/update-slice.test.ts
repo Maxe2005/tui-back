@@ -544,7 +544,7 @@ describe('update slice', () => {
       }),
     };
     const store = createAppStore(fakeDeps({ migration } as never));
-    store.setState({ settings: { ...store.getState().settings, update: { concurrency: 2 } } });
+    store.setState({ settings: { ...store.getState().settings, update: { concurrency: 2, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const } } });
 
     await store.getState().runGroupUpdate();
 
@@ -599,7 +599,7 @@ describe('update slice', () => {
       listDirtyPaths: vi.fn(async () => ok(['wip.txt'])),
     };
     const store = createAppStore(fakeDeps({ git }));
-    store.setState({ activeZone: 'update', settings: { ...store.getState().settings, update: { concurrency: 2 } } });
+    store.setState({ activeZone: 'update', settings: { ...store.getState().settings, update: { concurrency: 2, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const } } });
 
     const run = store.getState().runGroupUpdate();
     await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(2));
@@ -859,6 +859,29 @@ describe('update slice: pre-run configuration screen', () => {
     });
     // Opening the screen runs no git/docker action and starts no run.
     expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('openUpdateConfig seeds the run-wide globals from settings.update and never writes them back', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    const savesBefore = vi.mocked(deps.settings!.save).mock.calls.length;
+    store.setState({
+      settings: { ...store.getState().settings, update: { concurrency: 3, runMigrations: false, cleanRestart: true, mergeSource: 'edt-pending' as const } },
+    });
+
+    await store.getState().openUpdateConfig('edt');
+
+    const draft = store.getState().updateConfig;
+    expect(draft).toMatchObject({ runMigrations: false, cleanRestart: true, strategy: { kind: 'edt-pending' } });
+    expect(draft?.rows.every((row) => row.migrations === 'follow' && row.cleanRestart === 'follow')).toBe(true);
+
+    // The all-repos screen has no merge-source line: it opens on shared regardless.
+    await store.getState().openUpdateConfig('all');
+    expect(store.getState().updateConfig).toMatchObject({ runMigrations: false, cleanRestart: true, strategy: { kind: 'shared' } });
+
+    // Per-run edits stay in the draft: settings in the store and on disk are untouched.
+    expect(store.getState().settings.update.runMigrations).toBe(false);
+    expect(vi.mocked(deps.settings!.save).mock.calls.length).toBe(savesBefore);
   });
 
   it('openUpdateConfig(all) lists every managed repo pre-selected', async () => {
