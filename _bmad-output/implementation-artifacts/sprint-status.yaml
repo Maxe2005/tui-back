@@ -177,7 +177,7 @@ development_status:
   7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch: done
   # 2026-10-12: 7-11 first (bug); 7-12 -> 5-7, 7-5 -> 7-6. 7-5 rewritten (services console).
   7-11-overlay-owns-the-arrow-keys-settings-screen-help-panel: done
-  7-12-shared-service-actions-open-in-ide-simple-clean-restart: in-progress
+  7-12-shared-service-actions-open-in-ide-simple-clean-restart: review
   7-5-dashboard-active-edt-services-console-last-update-persistence: backlog
   7-6-dashboard-alerts-quick-actions-registry-health-operation-indicator: backlog
   epic-7-retrospective: optional

@@ -2,7 +2,7 @@
 title: 'Story 7.12 — Shared Service Actions: Open in IDE, Simple/Clean Restart (AD-21)'
 type: 'feature'
 created: '2026-10-13'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '32bf01abb1b9844a84a80d15b6285f0a6e810d04'
 review_loop_iteration: 0
 context:
@@ -51,11 +51,11 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/ports/editor.ts` + `src/adapters/driven/editor/{index,command}.ts` (+tests) -- `EditorPort.launch(repoPath, editorCommand): Result<void>`; move tokenizer/resolver/spawn here unchanged -- hexagonal boundary.
-- [ ] `src/core/service-actions/index.ts` (+test) -- `createServiceActions({manifest, container, restart, editor, lock})` with `list(repoPath, ctx)`, `openInIde`, `restart(repoPath, mode)`; entries carry `id,label,key,availability` -- AD-21.
-- [ ] `update-zone.tsx`/`.logic.ts`, `app-store.ts`, `src/bin/{tui,main}.ts` -- Update zone calls the port-backed action; drop TUI-side spawn; wire deps -- behaviour unchanged, existing tests pass.
-- [ ] `src/adapters/driving/tui/shared/components/service-actions-row.tsx` (+test) -- renders listed actions with key and greyed reason when unavailable, bounded (ellipsis) -- consumed later by 5.7/7.5.
-- [ ] Docs: note AD-21 registry in `AGENTS.md`/README only if they list ports or components.
+- [x] `src/core/ports/editor.ts` + `src/adapters/driven/editor/{index,command}.ts` (+tests) -- `EditorPort.launch(repoPath, editorCommand): Result<void>`; move tokenizer/resolver/spawn here unchanged -- hexagonal boundary.
+- [x] `src/core/service-actions/index.ts` (+test) -- `createServiceActions({manifest, container, restart, editor, lock})` with `list(repoPath, ctx)`, `openInIde`, `restart(repoPath, mode)`; entries carry `id,label,key,availability` -- AD-21.
+- [x] `update-zone.tsx`/`.logic.ts`, `app-store.ts`, `src/bin/{tui,main}.ts` -- Update zone calls the port-backed action; drop TUI-side spawn; wire deps -- behaviour unchanged, existing tests pass.
+- [x] `src/adapters/driving/tui/shared/components/service-actions-row.tsx` (+test) -- renders listed actions with key and greyed reason when unavailable, bounded (ellipsis) -- consumed later by 5.7/7.5.
+- [x] Docs: note AD-21 registry in `AGENTS.md`/README only if they list ports or components.
 
 **Acceptance Criteria:**
 - Given any service, when `list` is called, then it returns open-in-IDE, restart simple and restart clean, each with availability and reason.
@@ -72,3 +72,37 @@ Availability is computed from manifest + lock state at `list` time, so consumers
 **Commands:**
 - `npm test` -- expected: all green
 - `npm run lint && npx tsc --noEmit` -- expected: no errors (incl. dependency-cruiser boundaries)
+
+## Suggested Review Order
+
+**Registry (design entry point)**
+
+- One core registry: availability rules, restart modes, clean-restart fallback notice.
+  [`index.ts:72`](../../src/core/service-actions/index.ts#L72)
+
+- Free `openInIde` shared by the registry and the Update slice.
+  [`index.ts:64`](../../src/core/service-actions/index.ts#L64)
+
+**Editor behind a port**
+
+- Port contract keeps `child_process` out of core and the TUI.
+  [`editor.ts:5`](../../src/core/ports/editor.ts#L5)
+
+- Driven adapter: moved launcher, now throw-safe.
+  [`index.ts:8`](../../src/adapters/driven/editor/index.ts#L8)
+
+**Update zone switch-over**
+
+- Slice action reads `general.editorCommand` and calls the port.
+  [`update-slice.ts:1327`](../../src/adapters/driving/tui/store/slices/update-slice.ts#L1327)
+
+- Blocker menu now uses the store action instead of a local spawn.
+  [`update-zone.tsx:691`](../../src/adapters/driving/tui/zones/update/update-zone.tsx#L691)
+
+- Composition root wires the adapter.
+  [`tui.ts:104`](../../src/bin/tui.ts#L104)
+
+**Presentation**
+
+- Bounded row rendering whatever the registry lists.
+  [`service-actions-row.tsx:9`](../../src/adapters/driving/tui/shared/components/service-actions-row.tsx#L9)
