@@ -7,13 +7,14 @@ import { createInterface } from 'node:readline/promises';
 import { err, ok, type Result } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
-import { switchActiveEdt } from '../../../core/edt/switch.js';
+import { type DirtyPolicy, switchActiveEdt } from '../../../core/edt/switch.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
 import { groupUpdate } from '../../../core/scripts/group-update.js';
 import { selectionFromEdt } from '../../../core/scripts/resolve-merge-sources.js';
 import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
+import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { GitPort } from '../../../core/ports/git.js';
@@ -40,7 +41,7 @@ import type { Subcommand } from './dispatch.js';
 const EDT_CREATE_USAGE =
   'tui-back edt create --topic <topic> --member <path> [--create-branches] ' +
   '[--base <branch>] [--branch-mode grouped|individual] [--branch-name <name>|<path>=<name>]';
-const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force]';
+const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force] [--discard-dirty | --adopt-dirty [--adopt-branch <name>]]';
 const EDT_MODIFY_USAGE =
   'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +
   ' (each --add-member requires a matching --set-branch for that same path — no current-branch default)';
@@ -77,7 +78,8 @@ function parseUpdateOverrides(
 }
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
-const REGISTRY_USAGE = REGISTRY_CLEAN_USAGE;
+const REGISTRY_VALIDATE_USAGE = 'tui-back registry validate';
+const REGISTRY_USAGE = `${REGISTRY_CLEAN_USAGE}\n${REGISTRY_VALIDATE_USAGE}`;
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -296,6 +298,9 @@ export function buildSubcommands(deps: {
       run: async (args) => {
         if (args[0] === 'clean') {
           return runRegistryClean(deps, args.slice(1));
+        }
+        if (args[0] === 'validate') {
+          return runRegistryValidate(deps, args.slice(1));
         }
         const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
         return err('invalid-argument', `Unknown registry action: ${label}. Usage:\n${REGISTRY_USAGE}`);
@@ -792,10 +797,31 @@ async function runEdtSwitch(
 ): Promise<Result<unknown>> {
   let topic: string | undefined;
   let force = false;
+  let discardDirty = false;
+  let adoptDirty = false;
+  let adoptBranch: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     switch (flag) {
+      case '--discard-dirty':
+        discardDirty = true;
+        break;
+      case '--adopt-dirty':
+        adoptDirty = true;
+        break;
+      case '--adopt-branch': {
+        const value = args[i + 1]?.trim();
+        if (value === undefined || value.startsWith('--')) {
+          return err('invalid-argument', `Missing value for --adopt-branch. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        if (adoptBranch !== undefined) {
+          return err('invalid-argument', `--adopt-branch may only be given once. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        adoptBranch = value;
+        i += 1;
+        break;
+      }
       case '--to': {
         const value = args[i + 1];
         if (value === undefined) {
@@ -819,6 +845,23 @@ async function runEdtSwitch(
   if (topic === undefined) {
     return err('invalid-argument', `Missing --to. Usage: ${EDT_SWITCH_USAGE}`);
   }
+  if (adoptDirty && discardDirty) {
+    return err('invalid-argument', `--adopt-dirty and --discard-dirty are mutually exclusive. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+  if (adoptBranch !== undefined && discardDirty) {
+    return err('invalid-argument', `--adopt-branch cannot be combined with --discard-dirty. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+  if (adoptBranch !== undefined && !adoptDirty) {
+    return err('invalid-argument', `--adopt-branch requires --adopt-dirty. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+  if (adoptBranch !== undefined && adoptBranch.trim() === '') {
+    return err('invalid-argument', '--adopt-branch must not be empty');
+  }
+  const dirtyPolicy: DirtyPolicy | undefined = discardDirty
+    ? { kind: 'discard' }
+    : adoptDirty
+      ? { kind: 'adopt', branch: adoptBranch }
+      : undefined;
 
   return switchActiveEdt({
     edtRegistry: deps.edtRegistry,
@@ -831,9 +874,10 @@ async function runEdtSwitch(
     state: deps.state,
     topic,
     force,
-    // The CLI passes neither a seam nor dirtyResolutions, so it fails safe: a dirty
-    // outgoing-EDT member is still auto-stashed, but any other dirty service makes the switch
-    // exit non-zero with switch-dirty-services-unresolved before any git write.
+    // no dialog on this path. The flags build a policy the core expands per dirty
+    // state-2/3 repo after its own classification; with no flag, a dirty state-2/3 repo fails
+    // safe (switch-dirty-services-unresolved). A dirty outgoing-EDT member is auto-stashed.
+    dirtyPolicy,
     onDirtyReposBeforeSwitch: undefined,
   });
 }
@@ -1165,6 +1209,24 @@ async function runRegistryClean(
     return removed;
   }
   return ok({ candidates: classified.data.candidates, errors: classified.data.errors, results: removed.data.results });
+}
+
+// `registry validate`: flagless read-only semantic validation over every
+// registered path — zero args; any excess arg is an explicit invalid-argument rejection,
+// never silently ignored (mirrors list-repos's own zero-flag arity pattern). No isTTY
+// gate: read-only output has no prompt path, the envelope owns TTY/JSON rendering.
+async function runRegistryValidate(
+  deps: {
+    registry: RegistryPort;
+    manifest: ManifestPort;
+    git: GitPort;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  if (args.length > 0) {
+    return err('invalid-argument', `Usage: ${REGISTRY_VALIDATE_USAGE}`);
+  }
+  return validateRegistry({ registry: deps.registry, manifest: deps.manifest, git: deps.git });
 }
 
 export function assertUniqueSubcommandNames(subcommands: Subcommand[]): void {

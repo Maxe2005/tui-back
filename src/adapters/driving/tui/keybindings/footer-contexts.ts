@@ -282,7 +282,7 @@ export const FOOTER_CONTEXTS = {
   },
   'registry-path': {
     label: 'Repo registry path',
-    hints: [['Enter', 'scan'], ['Ctrl+L', 'clean stale entries'], CLOSE],
+    hints: [['Enter', 'scan'], ['Ctrl+L', 'clean stale entries'], ['Ctrl+V', 'validate repos'], CLOSE],
   },
   'registry-candidates': {
     label: 'Repo registry candidates',
