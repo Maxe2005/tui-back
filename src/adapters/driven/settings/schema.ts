@@ -17,6 +17,7 @@ import {
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
   MIN_UPDATE_CONCURRENCY,
+  UPDATE_MERGE_SOURCES,
   type Settings,
 } from '../../../core/ports/settings.js';
 
@@ -83,6 +84,9 @@ export const settingsSchema: z.ZodType<Settings> = z
           .max(MAX_UPDATE_CONCURRENCY)
           .optional()
           .default(DEFAULT_SETTINGS.update.concurrency),
+        runMigrations: z.boolean().optional().default(DEFAULT_SETTINGS.update.runMigrations),
+        cleanRestart: z.boolean().optional().default(DEFAULT_SETTINGS.update.cleanRestart),
+        mergeSource: z.enum(UPDATE_MERGE_SOURCES).optional().default(DEFAULT_SETTINGS.update.mergeSource),
       })
       .strict()
       .optional()

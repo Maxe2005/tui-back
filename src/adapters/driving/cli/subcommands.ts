@@ -26,6 +26,7 @@ import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { SavedRequestPort } from '../../../core/ports/saved-request.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
@@ -47,7 +48,33 @@ const EDT_DELETE_USAGE =
   'tui-back edt delete <topic> [--branches <repoPath>=<leave|delete>]... ' +
   '(a member with no matching --branches entry defaults to leave; the active EDT can never be deleted)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}`;
-const UPDATE_USAGE = 'tui-back update | tui-back update --from-edt <topic> | tui-back update --all --yes';
+const UPDATE_FLAGS = '[--migrations|--no-migrations] [--clean-restart|--no-clean-restart]';
+const UPDATE_USAGE =
+  `tui-back update ${UPDATE_FLAGS}\n` +
+  `tui-back update --from-edt <topic> ${UPDATE_FLAGS}\n` +
+  `tui-back update --all --yes ${UPDATE_FLAGS}\n` +
+  '(unflagged options default to settings.yaml update.runMigrations / update.cleanRestart)';
+
+// Pulls the run-wide override flags out of `update`'s args. A flag and its negation together are
+// contradictory: reported as an invalid-argument rather than silently picking one.
+function parseUpdateOverrides(
+  args: readonly string[],
+): { ok: true; rest: string[]; runMigrations?: boolean; cleanRestart?: boolean } | { ok: false; message: string } {
+  const has = (flag: string): boolean => args.includes(flag);
+  if (has('--migrations') && has('--no-migrations')) {
+    return { ok: false, message: '--migrations and --no-migrations are mutually exclusive' };
+  }
+  if (has('--clean-restart') && has('--no-clean-restart')) {
+    return { ok: false, message: '--clean-restart and --no-clean-restart are mutually exclusive' };
+  }
+  const flags = new Set(['--migrations', '--no-migrations', '--clean-restart', '--no-clean-restart']);
+  return {
+    ok: true,
+    rest: args.filter((arg) => !flags.has(arg)),
+    ...(has('--migrations') ? { runMigrations: true } : has('--no-migrations') ? { runMigrations: false } : {}),
+    ...(has('--clean-restart') ? { cleanRestart: true } : has('--no-clean-restart') ? { cleanRestart: false } : {}),
+  };
+}
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
 const REGISTRY_USAGE = REGISTRY_CLEAN_USAGE;
@@ -66,6 +93,8 @@ export function buildSubcommands(deps: {
   migration: MigrationPort;
   restart: RestartPort;
   state: StatePort;
+  // Source of the `update` defaults (runMigrations / cleanRestart); a load failure or warning is reported on stderr and the built-in defaults apply.
+  settings: SettingsPort;
   // Gates `registry clean`'s bare-invocation interactive list-then-confirm prompt. Defaults to
   // false (never prompts); only bin/main.ts wires it, and only when BOTH stdout and stdin are
   // real TTYs — a piped stdin must never let `rl.question()` block on or misread a
@@ -164,7 +193,24 @@ export function buildSubcommands(deps: {
       // (order-insensitive) runs the same per-service flow against every managed repo; `--all`
       // alone is a `confirmation-required` rejection naming `--yes` (confirmation stays out of
       // core — a driving concern). Any other flag is an explicit invalid-argument rejection.
-      run: async (args) => {
+      run: async (rawArgs) => {
+        const overrides = parseUpdateOverrides(rawArgs);
+        if (!overrides.ok) {
+          return err('invalid-argument', `${overrides.message}. Usage: ${UPDATE_USAGE}`);
+        }
+        const args = overrides.rest;
+        // Defaults come from settings.yaml (a load failure falls back to the built-in ones);
+        // explicit flags win.
+        const loaded = await deps.settings.load();
+        if (!loaded.ok) {
+          // stderr is separate from the stdout JSON envelope (same idiom as dispatch.ts).
+          console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+        } else if (loaded.data.warning !== null) {
+          console.error(`tui-back: ${loaded.data.warning}`);
+        }
+        const defaults = (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).update;
+        const runMigrations = overrides.runMigrations ?? defaults.runMigrations;
+        const cleanRestart = overrides.cleanRestart ?? defaults.cleanRestart;
         // The CLI passes no resolution seam: dirty worktrees stay `skipped`/`dirty-worktree`
         // rows and conflicts abort-and-report as `failed`/`merge-conflict`, with no prompt and
         // single-line JSON output.
@@ -180,10 +226,10 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'edt',
-            // The CLI takes no configuration — full default selection (no `selection`
-            // filter), migrate ON, clean restart OFF.
-            runMigrations: true,
-            cleanRestart: false,
+            // Full default selection (no `selection` filter); the two toggles are the
+            // settings defaults unless a flag overrides them.
+            runMigrations,
+            cleanRestart,
             onUpdateBlocker: undefined,
             // No live observer either: the output stays a single JSON line.
             onPhase: undefined,
@@ -202,9 +248,9 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'all',
-            // Same full-default configuration as the bare invocation above.
-            runMigrations: true,
-            cleanRestart: false,
+            // Same toggles as the bare invocation above.
+            runMigrations,
+            cleanRestart,
             onUpdateBlocker: undefined,
             // Same no-observer wiring as above.
             onPhase: undefined,
@@ -227,8 +273,8 @@ export function buildSubcommands(deps: {
             registry: deps.registry,
             scope: 'edt',
             selection: selection.data,
-            runMigrations: true,
-            cleanRestart: false,
+            runMigrations,
+            cleanRestart,
             onUpdateBlocker: undefined,
             onPhase: undefined,
           });

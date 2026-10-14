@@ -296,6 +296,10 @@ export const FOOTER_CONTEXTS = {
     label: 'Settings General tab',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'edit'], TAB_SWITCH, CLOSE],
   },
+  'settings-update': {
+    label: 'Settings Update tab',
+    hints: [MOVE, ['Space', 'toggle'], ['+/-', 'adjust'], TAB_SWITCH, CLOSE],
+  },
   'settings-groups': {
     label: 'Settings group list',
     hints: [MOVE, ['Enter', 'open'], TAB_SWITCH, CLOSE],

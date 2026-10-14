@@ -44,6 +44,8 @@ import {
   parseGridMaxRowsDigit,
   parseLogBufferSizeDigit,
   resolveGeneralSettingsKey,
+  resolveUpdateSettingsKey,
+  UPDATE_SETTINGS_ROWS,
   resolveSettingsTabState,
   toggleHiddenHint,
 } from './settings-screen.js';
@@ -59,30 +61,59 @@ describe('update concurrency row', () => {
   });
 
   it('only reacts on its own row', () => {
-    expect(resolveGeneralSettingsKey('+', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 4 });
-    expect(resolveGeneralSettingsKey('-', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 2 });
-    expect(resolveGeneralSettingsKey('6', {}, { cursor: 2, editing: null }, 3)).toEqual({ type: 'set-concurrency', value: 6 });
-    expect(resolveGeneralSettingsKey('+', {}, { cursor: 0, editing: null }, 3)).toEqual({ type: 'ignore' });
+    const update = { ...DEFAULT_SETTINGS.update, concurrency: 3 };
+    expect(resolveUpdateSettingsKey('+', {}, 0, update)).toEqual({ type: 'set-concurrency', value: 4 });
+    expect(resolveUpdateSettingsKey('-', {}, 0, update)).toEqual({ type: 'set-concurrency', value: 2 });
+    expect(resolveUpdateSettingsKey('6', {}, 0, update)).toEqual({ type: 'set-concurrency', value: 6 });
+    expect(resolveUpdateSettingsKey('+', {}, 1, update)).toEqual({ type: 'ignore' });
+  });
+});
+
+describe('resolveUpdateSettingsKey (Update tab)', () => {
+  const update = DEFAULT_SETTINGS.update;
+  it('moves the cursor, clamped', () => {
+    expect(resolveUpdateSettingsKey('', { downArrow: true }, 0, update)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveUpdateSettingsKey('', { downArrow: true }, UPDATE_SETTINGS_ROWS.length - 1, update)).toEqual({
+      type: 'move',
+      cursor: UPDATE_SETTINGS_ROWS.length - 1,
+    });
+  });
+
+  it('Space toggles the two booleans on their own rows only', () => {
+    expect(resolveUpdateSettingsKey(' ', {}, UPDATE_SETTINGS_ROWS.indexOf('run-migrations'), update)).toEqual({ type: 'toggle-run-migrations' });
+    expect(resolveUpdateSettingsKey(' ', {}, UPDATE_SETTINGS_ROWS.indexOf('clean-restart'), update)).toEqual({ type: 'toggle-clean-restart' });
+    expect(resolveUpdateSettingsKey(' ', {}, UPDATE_SETTINGS_ROWS.indexOf('concurrency'), update)).toEqual({ type: 'ignore' });
+  });
+
+  it('Space/Enter flips the merge source between shared and edt-pending', () => {
+    const row = UPDATE_SETTINGS_ROWS.indexOf('merge-source');
+    expect(resolveUpdateSettingsKey(' ', {}, row, update)).toEqual({ type: 'set-merge-source', value: 'edt-pending' });
+    expect(resolveUpdateSettingsKey('', { return: true }, row, { ...update, mergeSource: 'edt-pending' })).toEqual({
+      type: 'set-merge-source',
+      value: 'shared',
+    });
   });
 });
 
 describe('nextSettingsTab', () => {
-  it('cycles General -> EDTs -> Command Palette -> Logs -> General going forward', () => {
+  it('cycles General -> EDTs -> Command Palette -> Logs -> Update -> General going forward', () => {
     expect(nextSettingsTab('general', 1)).toBe('edts');
     expect(nextSettingsTab('edts', 1)).toBe('command-palette');
     expect(nextSettingsTab('command-palette', 1)).toBe('logs');
-    expect(nextSettingsTab('logs', 1)).toBe('general');
+    expect(nextSettingsTab('logs', 1)).toBe('update');
+    expect(nextSettingsTab('update', 1)).toBe('general');
   });
 
   it('cycles the same order in reverse going backward', () => {
-    expect(nextSettingsTab('general', -1)).toBe('logs');
+    expect(nextSettingsTab('general', -1)).toBe('update');
+    expect(nextSettingsTab('update', -1)).toBe('logs');
     expect(nextSettingsTab('logs', -1)).toBe('command-palette');
     expect(nextSettingsTab('command-palette', -1)).toBe('edts');
     expect(nextSettingsTab('edts', -1)).toBe('general');
   });
 
   it('SETTINGS_TABS is declared in exactly that order', () => {
-    expect(SETTINGS_TABS).toEqual(['general', 'edts', 'command-palette', 'logs']);
+    expect(SETTINGS_TABS).toEqual(['general', 'edts', 'command-palette', 'logs', 'update']);
   });
 });
 
@@ -345,6 +376,21 @@ describe('SettingsScreen', () => {
     expect(output).toContain("Enable 'q' to quit");
   });
 
+  it('renders the Update tab with concurrency and the three persisted defaults', async () => {
+    const store = createAppStore();
+    store.setState({
+      settings: { ...DEFAULT_SETTINGS, update: { concurrency: 5, runMigrations: false, cleanRestart: true, mergeSource: 'edt-pending' } },
+    });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="update" />);
+    expect(output).toContain('Update');
+    expect(output).toContain('Update concurrency: 5');
+    expect(output.split('\n').find((line) => line.includes('Run migrations'))).toContain('[ ]');
+    expect(output.split('\n').find((line) => line.includes('Clean restart'))).toContain('[x]');
+    expect(output).toContain('From EDT');
+    const general = await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
+    expect(general).not.toContain('Update concurrency');
+  });
+
   it('renders the quitShortcutEnabled checkbox on the General tab, checked/unchecked to match the live setting', async () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, general: { quitShortcutEnabled: true, editorCommand: '' } } });
@@ -595,8 +641,7 @@ describe('resolveGeneralSettingsKey (General tab row list + editor command field
 
   it('Up/Down move the row cursor, clamped at both ends', () => {
     expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
-    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: editorRow + 1 });
-    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow + 1, editing: null })).toEqual({ type: 'move', cursor: editorRow + 1 });
+    expect(resolveGeneralSettingsKey('', { downArrow: true }, { cursor: editorRow, editing: null })).toEqual({ type: 'move', cursor: editorRow });
     expect(resolveGeneralSettingsKey('', { upArrow: true }, { cursor: quitRow, editing: null })).toEqual({ type: 'move', cursor: quitRow });
   });
 
@@ -635,6 +680,7 @@ describe('settingsFooterContext', () => {
 
   it('maps each tab and drill-down level to its footer context', () => {
     expect(settingsFooterContext('general', closed)).toBe('settings-general');
+    expect(settingsFooterContext('update', closed)).toBe('settings-update');
     expect(settingsFooterContext('general', { ...closed, generalEditing: true })).toBe('confirm');
     expect(settingsFooterContext('command-palette', closed)).toBe('settings-groups');
     expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'grid-max-rows' })).toBe('settings-adjust');
