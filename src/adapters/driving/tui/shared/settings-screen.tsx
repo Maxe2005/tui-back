@@ -21,7 +21,11 @@ import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
   MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MAX_FILTER_HISTORY_GRID_MAX_ROWS,
+  MAX_HISTORY_DEPTH,
   MAX_INPUT_HISTORY_SIZE,
+  MAX_MAX_COMMITS_SCANNED,
+  MIN_HISTORY_DEPTH,
+  MIN_MAX_COMMITS_SCANNED,
   MAX_GRID_MAX_ROWS,
   MAX_LOG_BUFFER_SIZE,
   MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
@@ -47,28 +51,66 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   'shared-types': 'st',
 };
 
-// st tab: a flat Up/Down checkbox list of the shared-types zone's option defaults (Space toggles).
-// Later stories append their own rows here.
-export type SharedTypesSettingsRowId = 'install' | 'cleanRestart' | 'commit';
+// st tab: a flat Up/Down list of the shared-types zone's option defaults (Space toggles the
+// checkboxes) followed by the History view's two numeric bounds (+/-, a typed digit appends,
+// Backspace drops the last digit; always clamped to the schema's range).
+export type SharedTypesCheckboxRowId = 'install' | 'cleanRestart' | 'commit';
+export type SharedTypesNumberRowId = 'historyDepth' | 'maxCommitsScanned';
+export type SharedTypesSettingsRowId = SharedTypesCheckboxRowId | SharedTypesNumberRowId;
 
-export const SHARED_TYPES_SETTINGS_ROWS: readonly { id: SharedTypesSettingsRowId; label: string }[] = [
-  { id: 'install', label: 'Run npm i' },
-  { id: 'cleanRestart', label: 'Clean restart' },
-  { id: 'commit', label: 'Commit package.json + package-lock.json' },
+export const SHARED_TYPES_SETTINGS_ROWS: readonly (
+  | { id: SharedTypesCheckboxRowId; label: string; kind: 'checkbox' }
+  | { id: SharedTypesNumberRowId; label: string; kind: 'number'; min: number; max: number; step: number; hint: string }
+)[] = [
+  { id: 'install', label: 'Run npm i', kind: 'checkbox' },
+  { id: 'cleanRestart', label: 'Clean restart', kind: 'checkbox' },
+  { id: 'commit', label: 'Commit package.json + package-lock.json', kind: 'checkbox' },
+  { id: 'historyDepth', label: 'History depth', kind: 'number', min: MIN_HISTORY_DEPTH, max: MAX_HISTORY_DEPTH, step: 1, hint: 'Version bumps a by-branch History search lists at most (+/- or digits).' },
+  { id: 'maxCommitsScanned', label: 'History max commits scanned', kind: 'number', min: MIN_MAX_COMMITS_SCANNED, max: MAX_MAX_COMMITS_SCANNED, step: 100, hint: 'Commits a by-branch History search scans at most (+/- or digits).' },
 ];
 
 export type SharedTypesSettingsStep =
   | { type: 'move'; cursor: number }
-  | { type: 'toggle'; id: SharedTypesSettingsRowId }
+  | { type: 'toggle'; id: SharedTypesCheckboxRowId }
+  | { type: 'set-number'; id: SharedTypesNumberRowId; value: number }
   | { type: 'ignore' };
 
-export function resolveSharedTypesSettingsKey(input: string, key: TextEditKey, cursor: number): SharedTypesSettingsStep {
+export function clampSharedTypesNumber(id: SharedTypesNumberRowId, value: number): number {
+  const row = SHARED_TYPES_SETTINGS_ROWS.find((candidate) => candidate.id === id);
+  return row?.kind === 'number' ? Math.min(Math.max(value, row.min), row.max) : value;
+}
+
+export function resolveSharedTypesSettingsKey(
+  input: string,
+  key: TextEditKey,
+  cursor: number,
+  current: { historyDepth: number; maxCommitsScanned: number } = { historyDepth: 20, maxCommitsScanned: 1000 },
+): SharedTypesSettingsStep {
   const moved = nextCursorForKey(key, cursor, SHARED_TYPES_SETTINGS_ROWS.length);
   if (moved !== null) {
     return { type: 'move', cursor: moved };
   }
   const row = SHARED_TYPES_SETTINGS_ROWS[cursor];
-  return input === ' ' && row ? { type: 'toggle', id: row.id } : { type: 'ignore' };
+  if (row === undefined) {
+    return { type: 'ignore' };
+  }
+  if (row.kind === 'checkbox') {
+    return input === ' ' ? { type: 'toggle', id: row.id } : { type: 'ignore' };
+  }
+  const value = current[row.id];
+  if (input === '+') {
+    return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, value + row.step) };
+  }
+  if (input === '-') {
+    return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, value - row.step) };
+  }
+  if (/^[0-9]$/.test(input)) {
+    return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, Number(`${String(value)}${input}`)) };
+  }
+  if (key.backspace === true || key.delete === true) {
+    return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, Math.floor(value / 10)) };
+  }
+  return { type: 'ignore' };
 }
 
 // Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> Logs -> st -> General order
@@ -571,9 +613,11 @@ export function SettingsScreen({
     }
 
     if (tab === 'shared-types') {
-      const step = resolveSharedTypesSettingsKey(input, key, sharedTypesCursor);
+      const step = resolveSharedTypesSettingsKey(input, key, sharedTypesCursor, settings.sharedTypes);
       if (step.type === 'move') {
         setSharedTypesCursor(step.cursor);
+      } else if (step.type === 'set-number') {
+        void updateSettings({ sharedTypes: { [step.id]: step.value } });
       } else if (step.type === 'toggle') {
         void updateSettings({ sharedTypes: { [step.id]: !settings.sharedTypes[step.id] } });
       }
@@ -856,9 +900,19 @@ export function SettingsScreen({
             {SHARED_TYPES_SETTINGS_ROWS.map((row, index) => (
               <Box key={row.id} flexDirection="row">
                 <Text color={colors.accent} wrap="truncate-end">{index === sharedTypesCursor ? '›' : ' '}</Text>
-                <CheckboxListItem label={row.label} selected={index === sharedTypesCursor} state={settings.sharedTypes[row.id] ? 'checked' : 'unchecked'} />
+                {row.kind === 'checkbox' ? (
+                  <CheckboxListItem label={row.label} selected={index === sharedTypesCursor} state={settings.sharedTypes[row.id] ? 'checked' : 'unchecked'} />
+                ) : (
+                  <Text color={index === sharedTypesCursor ? colors.accent : colors.text} wrap="truncate-end">
+                    {row.label}: <Text color={colors.accent}>{settings.sharedTypes[row.id]}</Text>
+                  </Text>
+                )}
               </Box>
             ))}
+            {(() => {
+              const focused = SHARED_TYPES_SETTINGS_ROWS[sharedTypesCursor];
+              return focused?.kind === 'number' ? <DimAnnotation text={focused.hint} /> : null;
+            })()}
           </Box>
         ) : null}
 

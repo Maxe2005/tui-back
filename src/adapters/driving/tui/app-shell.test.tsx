@@ -382,7 +382,7 @@ it('shouldQuit returns true for q', () => {
         footerContexts: [],
         setFooterContext: () => {},
         // Settings
-        settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+        settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -610,6 +610,13 @@ it('shouldQuit returns true for q', () => {
         runSharedTypesPublish: async () => {},
         retrySharedTypesPublish: async () => {},
         resetSharedTypesPublish: () => {},
+        sharedTypesHistory: { mode: 'branch', status: 'idle', query: '', entries: [], hits: [], found: null, earliestBranch: null, endedBy: null, scanned: 0, error: null, depth: 0, maxScanned: 0 },
+        sharedTypesHistoryBranches: [],
+        sharedTypesHistoryBranchesStatus: 'idle',
+        startSharedTypesHistorySearch: async () => {},
+        cancelSharedTypesHistorySearch: () => {},
+        resetSharedTypesHistory: () => {},
+        loadSharedTypesHistoryBranches: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

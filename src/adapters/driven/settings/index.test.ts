@@ -73,7 +73,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -229,7 +229,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -288,6 +288,32 @@ describe('loadSettings', () => {
     expect(invalid.ok && invalid.data.warning).toContain('update.concurrency');
   });
 
+  it('defaults the History bounds for an old sharedTypes group and rejects out-of-range values', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'sharedTypes:\n  install: false\n');
+    const legacy = await loadSettings(file);
+    expect(legacy.ok && legacy.data.settings.sharedTypes).toEqual({ ...DEFAULT_SETTINGS.sharedTypes, install: false });
+    expect(legacy.ok && legacy.data.settings.sharedTypes.historyDepth).toBe(20);
+    expect(legacy.ok && legacy.data.settings.sharedTypes.maxCommitsScanned).toBe(1000);
+
+    await writeFile(file, 'sharedTypes:\n  historyDepth: 50\n  maxCommitsScanned: 5000\n');
+    const configured = await loadSettings(file);
+    expect(configured.ok && configured.data.settings.sharedTypes).toMatchObject({ historyDepth: 50, maxCommitsScanned: 5000 });
+
+    for (const [yaml, field] of [
+      ['sharedTypes:\n  historyDepth: 0\n', 'historyDepth'],
+      ['sharedTypes:\n  historyDepth: 201\n', 'historyDepth'],
+      ['sharedTypes:\n  maxCommitsScanned: 99\n', 'maxCommitsScanned'],
+      ['sharedTypes:\n  maxCommitsScanned: 20001\n', 'maxCommitsScanned'],
+    ] as const) {
+      await writeFile(file, yaml);
+      const invalid = await loadSettings(file);
+      expect(invalid.ok && invalid.data.settings).toEqual(DEFAULT_SETTINGS);
+      expect(invalid.ok && invalid.data.warning).toContain(field);
+    }
+  });
+
   it('falls back to defaults with a warning on an unknown top-level field (strict schema)', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -319,7 +345,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -344,7 +370,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -434,7 +460,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -457,7 +483,7 @@ describe('loadSettings', () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
         },
         warning: null,
       },
@@ -481,7 +507,7 @@ describe('loadSettings — sharedTypes', () => {
     const file = join(root, 'settings.yaml');
     await writeFile(file, 'sharedTypes:\n  install: false\n  cleanRestart: true\n');
     const result = await loadSettings(file);
-    expect(result.ok && result.data.settings.sharedTypes).toEqual({ install: false, cleanRestart: true, commit: true });
+    expect(result.ok && result.data.settings.sharedTypes).toEqual({ install: false, cleanRestart: true, commit: true, historyDepth: 20, maxCommitsScanned: 1000 });
   });
 
   it('rejects an unknown key with a warning and falls back to defaults', async () => {
@@ -502,7 +528,7 @@ describe('saveSettings', () => {
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 10, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
-      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     const result = await saveSettings(file, settings);
@@ -520,14 +546,14 @@ describe('saveSettings', () => {
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     });
   });
 });
@@ -541,7 +567,7 @@ describe('createSettingsPort', () => {
       general: { quitShortcutEnabled: false, editorCommand: '' },
       commandPalette: { gridMaxRows: 5, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'], branchDropdownMaxRows: 5 },
-      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3 }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
     };
 
     await port.save(settings);
