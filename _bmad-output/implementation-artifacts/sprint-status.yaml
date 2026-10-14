@@ -34,6 +34,8 @@
 
 generated: 2026-08-11
 last_updated: 2026-10-14
+# 2026-10-14: Story 2-40 validated by the developer, moved to done and merged into epic-2.
+# 2026-10-14: Story 2-40 (edt switch CLI dirty flags) moved to review (bmad-build).
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -45,8 +47,10 @@ development_status:
   epic-1-retrospective: done
 
   epic-2: in-progress
-  2-28-registry-manifest-semantic-validation: backlog
-  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: backlog
+  2-28-registry-manifest-semantic-validation: review
+  2-38-edt-creation-wizard-step-4-activation-switch-choice: review
+  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: done
+  2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: review
   2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: backlog
   2-44-edt-switch-optional-parallel-service-restart-verified-state: backlog
   epic-2-retrospective: optional

@@ -426,6 +426,95 @@ describe('tui-back list-repos (black-box)', () => {
   });
 });
 
+describe('tui-back registry validate (black-box)', () => {
+  it('validates a healthy repo as valid in exactly one JSON line, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'validate'], env);
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { results: [{ path: repo, outcome: 'valid' }] } });
+  });
+
+  it('reports a missing sharedBranch as invalid with shared-branch-missing, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeGitRepo();
+    await writeFile(
+      join(repo, '.tui-back.yaml'),
+      ['service: route-explorer', 'container: route-explorer', 'sharedBranch: release', 'modules: {}'].join('\n'),
+    );
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'validate'], env);
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed).toMatchObject({
+      ok: true,
+      data: { results: [{ path: repo, outcome: 'invalid', detail: { code: 'shared-branch-missing' } }] },
+    });
+    expect(parsed.data.results[0].detail.message).toContain('release');
+  });
+
+  it('surfaces an invalid manifest with the loader exact code as invalid, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(false);
+    await writeFile(join(repo, '.tui-back.yaml'), 'service: [unclosed\n');
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['registry', 'validate'], env);
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.results).toHaveLength(1);
+    expect(parsed.data.results[0].outcome).toBe('invalid');
+    expect(['manifest-invalid-yaml', 'manifest-validation-failed']).toContain(parsed.data.results[0].detail.code);
+  });
+
+  it('reports an unreachable path as unreachable and an empty registry as empty results, exit 0', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    const gone = join(xdg, 'gone-repo');
+    expect(runCli(['register', gone], env).status).toBe(0);
+
+    const unreachable = runCli(['registry', 'validate'], env);
+    expect(unreachable.status).toBe(0);
+    expect(JSON.parse(unreachable.stdout.trim())).toEqual({
+      ok: true,
+      data: { results: [{ path: gone, outcome: 'unreachable' }] },
+    });
+
+    const emptyXdg = await makeTempDir();
+    const emptyEnv = { XDG_CONFIG_HOME: emptyXdg, XDG_STATE_HOME: emptyXdg };
+    const { status, stdout } = runCli(['registry', 'validate'], emptyEnv);
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { results: [] } });
+  });
+
+  it('rejects excess args with invalid-argument as exactly one JSON line, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+
+    const { status, stdout } = runCli(['registry', 'validate', 'extra'], env);
+
+    expect(status).toBe(1);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe('invalid-argument');
+    expect(parsed.error.message).toContain('tui-back registry validate');
+  });
+});
+
 describe('tui-back list-routes (black-box)', () => {
   const routesManifest = [
     'service: api-gateway',
@@ -1454,6 +1543,115 @@ describe('tui-back edt switch (black-box)', () => {
     expect(runGit(r2, ['stash', 'list']).stdout.trim()).toBe('');
     await expect(access(join(xdg, 'tui-back', 'state.json'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8')).toBe(edtsBefore);
+  });
+
+  describe('dirty flags', () => {
+    async function dirtyNonMemberSetup() {
+      const xdg = await makeTempDir();
+      const env = createEnv(xdg);
+      const r1 = await makeCleanGitRepo();
+      const r2 = await makeCleanGitRepo();
+      await registerRepos([r1, r2], env);
+      const created = runCli(
+        ['edt', 'create', '--topic', 'a', '--member', r1, '--create-branches', '--branch-name', 'feat/r1'],
+        env,
+      );
+      expect(created.status).toBe(0);
+      await writeFile(join(r2, 'orphan.txt'), 'nobody owns this');
+      return { xdg, env, r1, r2 };
+    }
+
+    it('--discard-dirty discards the non-member work and lists the paths in detail.discardedPaths', async () => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', '--discard-dirty'], env);
+
+      expect(switched.status).toBe(0);
+      const parsed = JSON.parse(switched.stdout.trim());
+      expect(parsed.ok).toBe(true);
+      const row = parsed.data.results.find((r: { outcome: string }) => r.outcome === 'discarded');
+      expect(row.detail.discardedPaths).toEqual(['orphan.txt']);
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toBe('');
+    });
+
+    it('--adopt-dirty without --adopt-branch on a shared branch fails with missing-argument, zero writes', async () => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+      const r3 = await makeCleanGitRepo();
+      await registerRepos([r3], env);
+      expect(runCli(['edt', 'switch', '--to', 'a', '--discard-dirty'], env).status).toBe(0);
+      expect(runCli(['edt', 'create', '--topic', 'b', '--member', r3, '--create-branches', '--branch-name', 'feat/r3'], env).status).toBe(0);
+      await writeFile(join(r2, 'orphan2.txt'), 'rescue me');
+
+      const switched = runCli(['edt', 'switch', '--to', 'b', '--adopt-dirty'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('missing-argument');
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan2.txt');
+    });
+
+    it('--adopt-dirty without --adopt-branch and no outgoing EDT reports switch-adopt-without-outgoing', async () => {
+      const { env } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', '--adopt-dirty'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('switch-adopt-without-outgoing');
+    });
+
+    it.each([
+      ['--adopt-branch alone', ['--adopt-branch', 'x']],
+      ['--adopt-branch with --discard-dirty', ['--discard-dirty', '--adopt-branch', 'x']],
+      ['an empty --adopt-branch', ['--adopt-dirty', '--adopt-branch', '']],
+      ['a repeated --adopt-branch', ['--adopt-dirty', '--adopt-branch', 'x', '--adopt-branch', 'y']],
+      ['a trailing --adopt-branch', ['--adopt-dirty', '--adopt-branch']],
+      ['a flag as the --adopt-branch value', ['--adopt-dirty', '--adopt-branch', '--force']],
+    ])('rejects %s with invalid-argument, zero writes', async (_label, flags) => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', ...flags], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('invalid-argument');
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan.txt');
+    });
+
+    it('--adopt-dirty --adopt-branch adopts onto a new branch, never checking out the work away', async () => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+      // Outgoing EDT needed: activate a first, then adopt into it while switching to b.
+      const r3 = await makeCleanGitRepo();
+      await registerRepos([r3], env);
+      expect(runCli(['edt', 'switch', '--to', 'a', '--discard-dirty'], env).status).toBe(0);
+      expect(runCli(['edt', 'create', '--topic', 'b', '--member', r3, '--create-branches', '--branch-name', 'feat/r3'], env).status).toBe(0);
+      await writeFile(join(r2, 'orphan2.txt'), 'rescue me');
+
+      const switched = runCli(['edt', 'switch', '--to', 'b', '--adopt-dirty', '--adopt-branch', 'feat/rescue'], env);
+
+      expect(switched.status).toBe(0);
+      const parsed = JSON.parse(switched.stdout.trim());
+      expect(parsed.data.results).toContainEqual(
+        expect.objectContaining({ outcome: 'adopted', detail: expect.objectContaining({ adoptedBranch: 'feat/rescue' }) }),
+      );
+      expect(runGit(r2, ['branch', '--list', 'feat/rescue']).stdout).toContain('feat/rescue');
+    });
+
+    it('--adopt-dirty with --discard-dirty is invalid-argument, zero writes', async () => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', '--adopt-dirty', '--discard-dirty'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('invalid-argument');
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan.txt');
+    });
+
+    it('--adopt-dirty with no outgoing EDT fails with switch-adopt-without-outgoing', async () => {
+      const { env } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', '--adopt-dirty', '--adopt-branch', 'feat/x'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('switch-adopt-without-outgoing');
+    });
   });
 
   it('a target member whose own branch is missing locally is `failed` in data.results, never a thrown error', async () => {

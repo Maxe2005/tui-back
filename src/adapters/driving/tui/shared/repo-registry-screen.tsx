@@ -22,6 +22,8 @@ import {
   type StaleRegistryEntry,
   type RemoveStaleRegistryEntryResult,
   type RemoveStaleRegistryOutcome,
+  type ValidateRegistryEntryResult,
+  type ValidateRegistryOutcome,
 } from '../store/app-store.js';
 import type { ScanResult } from '../../../../core/ports/registry.js';
 import { BoundedBlocks, BoundedList } from './components/bounded-list.js';
@@ -54,7 +56,13 @@ export type RegistryScreenPhase =
   // block.
   | 'clean-candidates'
   | 'cleaning'
-  | 'clean-results';
+  | 'clean-results'
+  // mirrors cleaning/clean-results above, but for the "Validate registered
+  // repos" action — a one-shot read-only run (no list-then-confirm), so loading and
+  // results are its only two states; a use-case failure folds into 'validate-results' and
+  // is told apart inside its own render block.
+  | 'validating'
+  | 'validate-results';
 
 // Pure phase derivation from the store's registry-screen fields — scanning, distinct
 // empty-vs-error, candidates, registering, results, and the clean-candidates/cleaning/
@@ -68,12 +76,22 @@ export function resolveRegistryScreenPhase(store: {
   registryCleanCandidates: StaleRegistryEntry[] | null;
   registryCleanStatus: 'idle' | 'loading';
   registryCleanResults: RemoveStaleRegistryEntryResult[] | null;
+  registryValidateStatus: 'idle' | 'loading' | 'error';
+  registryValidateResults: ValidateRegistryEntryResult[] | null;
 }): RegistryScreenPhase {
   if (store.registryCleanResults !== null) {
     return 'clean-results';
   }
   if (store.registryCleanStatus === 'loading') {
     return 'cleaning';
+  }
+  // validate slots below cleaning, above results — clean's locked priority
+  // (clean-results > cleaning > results) never moves.
+  if (store.registryValidateResults !== null || store.registryValidateStatus === 'error') {
+    return 'validate-results';
+  }
+  if (store.registryValidateStatus === 'loading') {
+    return 'validating';
   }
   if (store.registryRegisterResults !== null) {
     return 'results';
@@ -173,6 +191,20 @@ const REGISTRY_CHROME_ROWS = 14;
 // A result's path line plus up to three annotation lines.
 const DETAIL_BLOCK_ROWS = 4;
 
+function validateOutcomeColor(outcome: ValidateRegistryOutcome): string {
+  switch (outcome) {
+    case 'valid':
+      return colors.success;
+    case 'invalid':
+      return colors.error;
+    case 'unreachable':
+      return colors.info;
+    case 'inconclusive':
+    default:
+      return colors.warning;
+  }
+}
+
 export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppStore }) {
   const registryScanStatus = useStore((state) => state.registryScanStatus);
   const registryScanError = useStore((state) => state.registryScanError);
@@ -189,6 +221,10 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const registryCleanStatus = useStore((state) => state.registryCleanStatus);
   const registryCleanResults = useStore((state) => state.registryCleanResults);
   const removeStaleRegistryCandidates = useStore((state) => state.removeStaleRegistryCandidates);
+  const registryValidateStatus = useStore((state) => state.registryValidateStatus);
+  const registryValidateError = useStore((state) => state.registryValidateError);
+  const registryValidateResults = useStore((state) => state.registryValidateResults);
+  const runRegistryValidate = useStore((state) => state.runRegistryValidate);
 
   // No mount-effect reset here: app-store's openRegistryScreen() clears scan/register/clean
   // state atomically with becoming open (before this component ever mounts), so a reopened
@@ -202,6 +238,8 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     registryCleanCandidates,
     registryCleanStatus,
     registryCleanResults,
+    registryValidateStatus,
+    registryValidateResults,
   });
 
   const [root, setRoot] = useState('');
@@ -226,6 +264,12 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
       // as ordinary root-path text (like branch-picker.tsx's Ctrl+T).
       if (key.ctrl && input.toLowerCase() === 'l') {
         void scanRegistryStaleEntries();
+        return;
+      }
+      // Ctrl+V: "Validate registered repos" — same root-input-only
+      // convention as Ctrl+L above; verified free (no other screen claims it).
+      if (key.ctrl && input.toLowerCase() === 'v') {
+        void runRegistryValidate();
         return;
       }
       if (key.return) {
@@ -302,6 +346,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
               <Text color={colors['text-dim']}>█</Text>
             </Text>
             <DimAnnotation text="Type a path. Stale registry entries (unreachable or unmanaged) can be cleaned too." />
+            <DimAnnotation text="Ctrl+V to validate registered repos (shared branch exists locally or on origin)." />
           </Box>
         ) : null}
 
@@ -455,6 +500,42 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                 ),
               }))}
             />
+          </Box>
+        ) : null}
+
+        {phase === 'validating' ? (
+          <StateLine kind="loading" verb="Validating" subject="registered repos" />
+        ) : null}
+
+        {phase === 'validate-results' ? (
+          <Box flexDirection="column">
+            {registryValidateStatus === 'error' ? (
+              <Box flexDirection="column">
+                <StateLine kind="error" verb="Failed to validate" subject="registered repos" />
+                {registryValidateError ? <DimAnnotation text={registryValidateError} /> : null}
+              </Box>
+            ) : (registryValidateResults ?? []).length === 0 ? (
+              <StateLine kind="empty" subject="registered repos" text="No registered repos." />
+            ) : (
+              <Box flexDirection="column">
+                <Text color={colors['text-dim']}>VALIDATION RESULTS</Text>
+                <BoundedBlocks
+                  chromeRows={REGISTRY_CHROME_ROWS}
+                  blocks={(registryValidateResults ?? []).map((result) => ({
+                    key: result.path,
+                    rows: result.detail ? DETAIL_BLOCK_ROWS : 1,
+                    node: (
+                      <Box flexDirection="column">
+                        <Text color={colors.text} wrap="truncate-end">
+                          {result.path} — <Text color={validateOutcomeColor(result.outcome)}>{result.outcome}</Text>
+                        </Text>
+                        {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
+                      </Box>
+                    ),
+                  }))}
+                />
+              </Box>
+            )}
           </Box>
         ) : null}
       </Box>
