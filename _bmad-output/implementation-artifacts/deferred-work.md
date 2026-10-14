@@ -769,3 +769,15 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
   summary: Restart conflict is reported with the code `update-already-running`, which is misleading outside the update flow; the Update slice's `describeServiceRestart` still offers restart for a container-less service with a recipe, unlike the registry.
   evidence: Code reused from `service-restart.ts`; the two availability rules diverge until Stories 5.7/7.5 adopt the registry.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
+  summary: An invalid value in any settings key (e.g. `update.cleanRestart`) makes the whole settings file fall back to defaults, discarding unrelated valid settings.
+  evidence: Existing loader convention (one zod parse for the whole file); Story 3.20 AC keeps it, but per-field fallback would be kinder.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
+  summary: "Start services" global default for the Update config screen was not delivered; the option does not exist in the 3.7 screen or in group-update.
+  evidence: Story 3.20 AC mentions it but the human chose to defer it (no such option in code).
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
+  summary: CLI `update --from-edt` consumes the next argument as topic even if it is an override flag, and repeated override flags are accepted silently.
+  evidence: parseUpdateOverrides filters flags before topic parsing; edge case surfaced in review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
+  summary: Settings Update tab cursor is not reset when switching tabs, and rapid toggles read a render-time snapshot of settings.
+  evidence: Same behaviour as other settings tabs/concurrency edit; surfaced by edge-case review.
