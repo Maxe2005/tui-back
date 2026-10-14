@@ -2570,3 +2570,22 @@ describe('update slice: smart group update (shared-types first)', () => {
     expect(restart.run).not.toHaveBeenCalledWith('/repo/a', 'npm run v');
   });
 });
+
+describe('openInIde', () => {
+  it('launches the editor port with the repo path and the configured editor command', () => {
+    const editor = { launch: vi.fn(() => ok(undefined)) };
+    const store = createAppStore(fakeDeps({ editor }));
+    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { ...DEFAULT_SETTINGS.general, editorCommand: 'code <repo>' } } });
+
+    expect(store.getState().openInIde('/repo/a')).toEqual(ok(undefined));
+    expect(editor.launch).toHaveBeenCalledWith('/repo/a', 'code <repo>');
+  });
+
+  it('reports editor-unavailable when no editor port is wired', () => {
+    const store = createAppStore(fakeDeps());
+
+    const result = store.getState().openInIde('/repo/a');
+
+    expect(!result.ok && result.error.code).toBe('editor-unavailable');
+  });
+});
