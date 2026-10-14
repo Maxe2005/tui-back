@@ -392,6 +392,12 @@ async function resolveDirtyRepos(input: {
 
   const policy = params.dirtyPolicy;
   if (policy !== undefined) {
+    if (policy.kind === 'adopt' && outgoing === undefined && needingResolution.length > 0) {
+      return err(
+        'switch-adopt-without-outgoing',
+        'Cannot adopt uncommitted changes: there is no active EDT to adopt them into. Use --discard-dirty or resolve them by hand. Nothing was touched.',
+      );
+    }
     for (const row of needingResolution) {
       if (resolutions.has(row.repoPath)) {
         continue;
@@ -424,7 +430,7 @@ async function resolveDirtyRepos(input: {
   if (unresolved.length > 0) {
     return err(
       'switch-dirty-services-unresolved',
-      `Switch to "${topic}" refused: uncommitted changes in ${unresolved.map((row) => row.service).join(', ')} are not in the outgoing EDT and have no resolution — commit or stash them by hand, then switch again (they can also be adopted or discarded from the TUI once available). Nothing was touched.`,
+      `Switch to "${topic}" refused: uncommitted changes in ${unresolved.map((row) => row.service).join(', ')} are not in the outgoing EDT and have no resolution — commit or stash them by hand, then switch again (from the CLI, pass --discard-dirty or --adopt-dirty [--adopt-branch <name>]; the TUI offers the same choices in its dialog). Nothing was touched.`,
       unresolved,
     );
   }

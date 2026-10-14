@@ -472,8 +472,8 @@ async function runEdtSwitch(
         adoptDirty = true;
         break;
       case '--adopt-branch': {
-        const value = args[i + 1];
-        if (value === undefined) {
+        const value = args[i + 1]?.trim();
+        if (value === undefined || value.startsWith('--')) {
           return err('invalid-argument', `Missing value for --adopt-branch. Usage: ${EDT_SWITCH_USAGE}`);
         }
         if (adoptBranch !== undefined) {
@@ -508,6 +508,9 @@ async function runEdtSwitch(
   }
   if (adoptDirty && discardDirty) {
     return err('invalid-argument', `--adopt-dirty and --discard-dirty are mutually exclusive. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+  if (adoptBranch !== undefined && discardDirty) {
+    return err('invalid-argument', `--adopt-branch cannot be combined with --discard-dirty. Usage: ${EDT_SWITCH_USAGE}`);
   }
   if (adoptBranch !== undefined && !adoptDirty) {
     return err('invalid-argument', `--adopt-branch requires --adopt-dirty. Usage: ${EDT_SWITCH_USAGE}`);

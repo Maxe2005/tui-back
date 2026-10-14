@@ -1521,12 +1521,43 @@ describe('tui-back edt switch (black-box)', () => {
     });
 
     it('--adopt-dirty without --adopt-branch on a shared branch fails with missing-argument, zero writes', async () => {
-      const { r2, env } = await dirtyNonMemberSetup();
+      const { env, r2 } = await dirtyNonMemberSetup();
+      const r3 = await makeCleanGitRepo();
+      await registerRepos([r3], env);
+      expect(runCli(['edt', 'switch', '--to', 'a', '--discard-dirty'], env).status).toBe(0);
+      expect(runCli(['edt', 'create', '--topic', 'b', '--member', r3, '--create-branches', '--branch-name', 'feat/r3'], env).status).toBe(0);
+      await writeFile(join(r2, 'orphan2.txt'), 'rescue me');
+
+      const switched = runCli(['edt', 'switch', '--to', 'b', '--adopt-dirty'], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('missing-argument');
+      expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan2.txt');
+    });
+
+    it('--adopt-dirty without --adopt-branch and no outgoing EDT reports switch-adopt-without-outgoing', async () => {
+      const { env } = await dirtyNonMemberSetup();
 
       const switched = runCli(['edt', 'switch', '--to', 'a', '--adopt-dirty'], env);
 
       expect(switched.status).not.toBe(0);
-      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('missing-argument');
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('switch-adopt-without-outgoing');
+    });
+
+    it.each([
+      ['--adopt-branch alone', ['--adopt-branch', 'x']],
+      ['--adopt-branch with --discard-dirty', ['--discard-dirty', '--adopt-branch', 'x']],
+      ['an empty --adopt-branch', ['--adopt-dirty', '--adopt-branch', '']],
+      ['a repeated --adopt-branch', ['--adopt-dirty', '--adopt-branch', 'x', '--adopt-branch', 'y']],
+      ['a trailing --adopt-branch', ['--adopt-dirty', '--adopt-branch']],
+      ['a flag as the --adopt-branch value', ['--adopt-dirty', '--adopt-branch', '--force']],
+    ])('rejects %s with invalid-argument, zero writes', async (_label, flags) => {
+      const { env, r2 } = await dirtyNonMemberSetup();
+
+      const switched = runCli(['edt', 'switch', '--to', 'a', ...flags], env);
+
+      expect(switched.status).not.toBe(0);
+      expect(JSON.parse(switched.stdout.trim()).error.code).toBe('invalid-argument');
       expect(runGit(r2, ['status', '--porcelain']).stdout.trim()).toContain('orphan.txt');
     });
 

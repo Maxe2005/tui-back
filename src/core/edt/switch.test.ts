@@ -1434,6 +1434,11 @@ describe('switchActiveEdt — dirtyPolicy flag sugar (story 2.40)', () => {
     const result = await switchActiveEdt(params);
 
     expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toContainEqual(
+        expect.objectContaining({ service: 'svc-b', outcome: 'adopted', detail: expect.objectContaining({ adoptedBranch: 'wip/b' }) }),
+      );
+    }
     expect(calls(git.createBranch)).toHaveLength(0);
     expect(calls(git.stashSave)).toEqual([['/repo/b', 'tui-back:outgoing-ulid']]);
   });
@@ -1458,6 +1463,15 @@ describe('switchActiveEdt — dirtyPolicy flag sugar (story 2.40)', () => {
 
   it('adopt policy with no outgoing EDT fails with switch-adopt-without-outgoing', async () => {
     const { git, params } = policySetup('wip/b', { kind: 'adopt', branch: 'x' }, false);
+
+    const result = await switchActiveEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'switch-adopt-without-outgoing' } });
+    expectZeroWrites(git);
+  });
+
+  it('adopt policy with no outgoing EDT and a shared-branch repo reports switch-adopt-without-outgoing first', async () => {
+    const { git, params } = policySetup('development', { kind: 'adopt' }, false);
 
     const result = await switchActiveEdt(params);
 
