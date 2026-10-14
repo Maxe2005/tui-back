@@ -65,7 +65,7 @@ development_status:
   4-5-auto-resolve-shared-types-only-merge-conflicts: done
   # 4-6 rewritten 2026-10-12 (version history library); 4-7 added. Order: 4-3 merged -> 4-7 -> 4-6. Prerequisite relaxed to 7-3/7-4 done.
   4-6-shared-types-version-history-library: backlog
-  4-7-shared-types-zone-configurable-default-options-busy-tab-indicator: backlog
+  4-7-shared-types-zone-configurable-default-options-busy-tab-indicator: in-progress
   epic-4-retrospective: optional
 
   epic-5: in-progress

@@ -2,7 +2,8 @@
 title: 'shared-types Zone: Configurable Default Options & Busy Tab Indicator'
 type: 'feature'
 created: '2026-10-14'
-status: 'draft'
+status: 'in-progress'
+baseline_commit: 'e8f4b7af5c281863a535d7b8b86602ebdb64ad08'
 review_loop_iteration: 0
 context: [_bmad-output/implementation-artifacts/epic-4-context.md]
 ---
@@ -50,10 +51,10 @@ context: [_bmad-output/implementation-artifacts/epic-4-context.md]
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `settings.ts`, `schema.ts`, `settings-slice.ts` -- `sharedTypes` group, defaults, schema, update type -- tests incl. old-file-without-key
-- [ ] `shared-types-zone.logic.ts`, `shared-types-zone.tsx` -- seed options from settings -- logic + zone tests
-- [ ] `settings-screen.tsx` -- `st` tab with three checkboxes, footer context -- screen/logic tests
-- [ ] `shared-types-slice.ts`, `zone-tab-bar.tsx`, `app-shell.tsx` -- `sharedTypesBusy`, generic `busy` map -- update existing tab-bar/app-shell/update tests, add st cases
+- [x] `settings.ts`, `schema.ts`, `settings-slice.ts` -- `sharedTypes` group, defaults, schema, update type -- tests incl. old-file-without-key
+- [x] `shared-types-zone.logic.ts`, `shared-types-zone.tsx` -- seed options from settings -- logic + zone tests
+- [x] `settings-screen.tsx` -- `st` tab with three checkboxes, footer context -- screen/logic tests
+- [x] `shared-types-slice.ts`, `zone-tab-bar.tsx`, `app-shell.tsx` -- `sharedTypesBusy`, generic `busy` map -- update existing tab-bar/app-shell/update tests, add st cases
 
 **Acceptance Criteria:**
 - Given `:settings`, when the st tab is opened, then the three options show their saved state and `Space` toggles and persists each.
