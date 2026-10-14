@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../result.js';
 import type { DockerPort } from '../ports/docker.js';
 import type { LogsManager } from './index.js';
-import { clearLogs, getServiceHealth, loadOlderLogs, restartService, subscribeLogs, unsubscribeLogs } from './use-cases.js';
+import { clearLogs, getServiceHealth, loadOlderLogs, subscribeLogs, unsubscribeLogs } from './use-cases.js';
 
 function fakeManager(overrides: Partial<LogsManager> = {}): LogsManager {
   return {
@@ -92,24 +92,5 @@ describe('getServiceHealth', () => {
       ok: false,
       error: { code: 'docker-unavailable', message: 'daemon down' },
     });
-  });
-});
-
-describe('restartService', () => {
-  it('delegates to docker.restartContainer with the container, forwarding its Result as-is', async () => {
-    const docker = fakeDocker();
-
-    const result = await restartService({ docker, container: 'ctr-a' });
-
-    expect(result).toEqual({ ok: true, data: undefined });
-    expect(docker.restartContainer).toHaveBeenCalledWith('ctr-a');
-  });
-
-  it('forwards a restart failure untouched', async () => {
-    const docker = fakeDocker({ restartContainer: vi.fn(async () => err('docker-unavailable', 'no such container')) });
-
-    const result = await restartService({ docker, container: 'ctr-a' });
-
-    expect(result).toEqual({ ok: false, error: { code: 'docker-unavailable', message: 'no such container' } });
   });
 });

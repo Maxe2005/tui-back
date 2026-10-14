@@ -82,6 +82,10 @@ export interface Settings {
     // per list. When false, only a repeat of the top entry is deduped (a non-top repeat is
     // stored twice). Toggleable from the Logs settings tab.
     filterHistoryDedup: boolean;
+    // How `R` restarts a service in Logs: `simple` is a plain container restart, `clean` runs
+    // the manifest's clean-restart recipe (falling back to a simple restart when none is
+    // declared). Read on every `R`, so a change applies live. Default `simple`.
+    restartMode: 'simple' | 'clean';
   };
 }
 
@@ -99,7 +103,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
   update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const },
   sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
-  logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+  logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' },
 };
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/

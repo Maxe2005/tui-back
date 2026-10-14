@@ -1179,7 +1179,7 @@ describe("app store", () => {
               general: { quitShortcutEnabled: true, editorCommand: '' },
               commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
               edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-              update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+              update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
             },
             warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
           }),
@@ -1194,7 +1194,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       });
       expect(store.getState().settingsWarning).toContain("using defaults");
     });
@@ -1244,7 +1244,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       });
     });
 
@@ -1261,7 +1261,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
       });
 
@@ -1271,7 +1271,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       });
     });
 
@@ -1282,7 +1282,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
       });
 
@@ -1292,7 +1292,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       });
     });
 
@@ -1398,7 +1398,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
         warning: null,
       });
@@ -2108,37 +2108,90 @@ describe("logs slice: inline service health & restart", () => {
     }
   });
 
-  it("restartLogsPane issues exactly one docker restart for that pane's container and re-polls health immediately", async () => {
+  function restartDeps(overrides: Partial<AppStoreDeps> = {}) {
+    const containerRestart = vi.fn(async (_container: string) => ok(undefined));
+    const recipeRun = vi.fn(async (_repoPath: string, _command: string) => ok({ output: "" }));
+    const launch = vi.fn((_repoPath: string, _editor: string) => ok(undefined));
     const getContainerHealth = vi.fn(async () => ok("up" as const));
-    const restartContainer = vi.fn(async () => ok(undefined));
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => ok([])),
       getContainerHealth,
-      restartContainer,
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
-    const store = createAppStore(fakeDeps({ docker }));
+    const deps = fakeDeps({
+      docker,
+      container: { restart: containerRestart },
+      restart: { run: recipeRun },
+      editor: { launch },
+      ...overrides,
+    });
+    return { deps, containerRestart, recipeRun, launch, getContainerHealth, docker };
+  }
+
+  it("restartLogsPane runs the registry's simple restart for that pane's container and re-polls health immediately", async () => {
+    const { deps, containerRestart, getContainerHealth, docker } = restartDeps();
+    const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
     const callsAfterSubscribe = getContainerHealth.mock.calls.length;
 
     await store.getState().restartLogsPane("/repo/a");
 
-    expect(restartContainer).toHaveBeenCalledTimes(1);
-    expect(restartContainer).toHaveBeenCalledWith("ctr-a");
+    expect(containerRestart).toHaveBeenCalledTimes(1);
+    expect(containerRestart).toHaveBeenCalledWith("ctr-a");
+    expect(docker.restartContainer).not.toHaveBeenCalled();
     expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
-    // Health re-polled immediately after the restart resolves.
+    expect(store.getState().logsPanes["/repo/a"]?.notice ?? null).toBeNull();
     expect(getContainerHealth.mock.calls.length).toBeGreaterThan(callsAfterSubscribe);
   });
 
-  it("restartLogsPane is a no-op while that pane is already restarting — never a second concurrent docker restart", async () => {
-    const restartContainer = vi.fn(async () => ok(undefined));
-    const docker: DockerPort = {
-      streamLogs: vi.fn(() => () => {}),
-      fetchLogsBefore: vi.fn(async () => ok([])),
-      getContainerHealth: vi.fn(async () => ok("up" as const)),
-      restartContainer,
+  it("restartLogsPane in clean mode runs the manifest recipe and shows no notice", async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (path: string) => ok({ ...manifestFor(path), restartCommands: ["npm run reset"] })),
     };
-    const store = createAppStore(fakeDeps({ docker }));
+    const { deps, containerRestart, recipeRun } = restartDeps({ manifest });
+    const store = createAppStore(deps);
+    store.setState((s) => ({ settings: { ...s.settings, logs: { ...s.settings.logs, restartMode: "clean" } } }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(recipeRun).toHaveBeenCalledWith("/repo/a", "npm run reset");
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]?.notice ?? null).toBeNull();
+  });
+
+  it("restartLogsPane in clean mode without a recipe falls back to a simple restart and sets the dim notice", async () => {
+    const { deps, containerRestart } = restartDeps();
+    const store = createAppStore(deps);
+    store.setState((s) => ({ settings: { ...s.settings, logs: { ...s.settings.logs, restartMode: "clean" } } }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(containerRestart).toHaveBeenCalledWith("ctr-a");
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("no clean-restart recipe — simple restart");
+    expect(store.getState().logsPanes["/repo/a"]?.streamError).toBeNull();
+  });
+
+  it("restartLogsPane reads the current mode on every call (live change, simple again after clean)", async () => {
+    const { deps, recipeRun, containerRestart } = restartDeps({
+      manifest: { load: vi.fn(async (path: string) => ok({ ...manifestFor(path), restartCommands: ["x"] })) },
+    });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    await store.getState().restartLogsPane("/repo/a");
+    expect(containerRestart).toHaveBeenCalledTimes(1);
+    expect(recipeRun).not.toHaveBeenCalled();
+
+    store.setState((s) => ({ settings: { ...s.settings, logs: { ...s.settings.logs, restartMode: "clean" } } }));
+    await store.getState().restartLogsPane("/repo/a");
+    expect(recipeRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("restartLogsPane is a no-op while that pane is already restarting — never a second concurrent restart", async () => {
+    const { deps, containerRestart } = restartDeps();
+    const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
     store.setState((state) => ({
       logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, restarting: true } },
@@ -2146,23 +2199,18 @@ describe("logs slice: inline service health & restart", () => {
 
     await store.getState().restartLogsPane("/repo/a");
 
-    expect(restartContainer).not.toHaveBeenCalled();
+    expect(containerRestart).not.toHaveBeenCalled();
   });
 
   it("restartLogsPane surfaces a restart failure inline on the pane while the badge keeps last-known health", async () => {
-    const docker: DockerPort = {
-      streamLogs: vi.fn(() => () => {}),
-      fetchLogsBefore: vi.fn(async () => ok([])),
-      getContainerHealth: vi.fn(async () => ok("up" as const)),
-      restartContainer: vi.fn(async () => err("docker-unavailable", "no such container")),
-    };
-    const store = createAppStore(fakeDeps({ docker }));
+    const { deps } = restartDeps({ container: { restart: vi.fn(async () => err("container-restart-error", "no such container")) } });
+    const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
 
     await store.getState().restartLogsPane("/repo/a");
 
     expect(store.getState().logsPanes["/repo/a"]?.streamError).toEqual({
-      code: "docker-unavailable",
+      code: "container-restart-error",
       message: "no such container",
     });
     expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
@@ -2179,26 +2227,106 @@ describe("logs slice: inline service health & restart", () => {
         .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
         .mockResolvedValueOnce(err("manifest-not-found", "no manifest here")),
     };
-    const restartContainer = vi.fn(async () => ok(undefined));
-    const docker: DockerPort = {
-      streamLogs: vi.fn(() => () => {}),
-      fetchLogsBefore: vi.fn(async () => ok([])),
-      getContainerHealth: vi.fn(async () => ok("up" as const)),
-      restartContainer,
-    };
-    const store = createAppStore(fakeDeps({ docker, manifest }));
+    const { deps, containerRestart } = restartDeps({ manifest });
+    const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
 
     await store.getState().restartLogsPane("/repo/a");
 
-    // The restart never reached the adapter, the pane shows the failure inline, and the
-    // control is usable again instead of stuck on `[R] restarting…`.
-    expect(restartContainer).not.toHaveBeenCalled();
+    expect(containerRestart).not.toHaveBeenCalled();
     expect(store.getState().logsPanes["/repo/a"]?.streamError).toEqual({
       code: "manifest-not-found",
       message: "no manifest here",
     });
     expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
+  });
+
+  it("restartLogsPane on a manifest without container marks the pane no-container and calls no restart port", async () => {
+    const manifest: ManifestPort = {
+      load: vi
+        .fn()
+        .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
+        .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
+        .mockResolvedValue(ok({ service: "svc-a", sharedBranch: "development", modules: {} })),
+    };
+    const { deps, containerRestart, recipeRun } = restartDeps({ manifest });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    const pane = store.getState().logsPanes["/repo/a"];
+    expect(pane?.health).toBe("no-container");
+    expect(pane?.streamError?.code).toBe("no-container");
+    expect(pane?.restarting).toBe(false);
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(recipeRun).not.toHaveBeenCalled();
+  });
+
+  it("restartLogsPane on a pane already at no-container calls no restart port", async () => {
+    const { deps, containerRestart, recipeRun } = restartDeps();
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    store.setState((state) => ({
+      logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, health: "no-container" as const } },
+    }));
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(recipeRun).not.toHaveBeenCalled();
+  });
+
+  it("a successful restart clears a lingering streamError", async () => {
+    const { deps } = restartDeps();
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    store.setState((state) => ({
+      logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, streamError: { code: "x", message: "old" } } },
+    }));
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(store.getState().logsPanes["/repo/a"]?.streamError).toBeNull();
+  });
+
+  it("a failed restart clears a lingering notice", async () => {
+    const { deps } = restartDeps({ container: { restart: vi.fn(async () => err("container-restart-error", "boom")) } });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    store.setState((state) => ({
+      logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, notice: "old notice" } },
+    }));
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    const pane = store.getState().logsPanes["/repo/a"];
+    expect(pane?.notice).toBeNull();
+    expect(pane?.streamError?.message).toBe("boom");
+  });
+
+  it("openLogsPaneInIde launches the editor on the repo with the configured editor command", async () => {
+    const { deps, launch } = restartDeps();
+    const store = createAppStore(deps);
+    store.setState((s) => ({ settings: { ...s.settings, general: { ...s.settings.general, editorCommand: "code" } } }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    store.getState().openLogsPaneInIde("/repo/a");
+
+    expect(launch).toHaveBeenCalledWith("/repo/a", "code");
+    expect(store.getState().logsPanes["/repo/a"]?.notice ?? null).toBeNull();
+  });
+
+  it("openLogsPaneInIde surfaces a launch failure as a one-line pane notice without throwing", async () => {
+    const { deps } = restartDeps({
+      editor: { launch: vi.fn(() => err("editor-launch-failed", 'Could not launch "nope": ENOENT\nsecond line')) },
+    });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    store.getState().openLogsPaneInIde("/repo/a");
+
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe('Could not launch "nope": ENOENT');
   });
 });
 
@@ -2249,7 +2377,7 @@ describe("logs slice: filter history", () => {
 
   it("commitFilterHistoryEntry with filterHistoryDedup moves a repeat to the front without duplicating it", () => {
     const store = createAppStore(fakeDeps());
-    store.setState((current) => ({ settings: { ...current.settings, logs: { ...current.settings.logs, filterHistoryDedup: true } } }));
+    store.setState((current) => ({ settings: { ...current.settings, logs: { ...current.settings.logs, filterHistoryDedup: true, restartMode: 'simple' as const } } }));
 
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "a");
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "b");

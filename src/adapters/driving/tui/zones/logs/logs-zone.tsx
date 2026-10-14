@@ -123,6 +123,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const loadOlderLogsPane = useStore((state) => state.loadOlderLogsPane);
   const clearLogsPane = useStore((state) => state.clearLogsPane);
   const restartLogsPane = useStore((state) => state.restartLogsPane);
+  const openLogsPaneInIde = useStore((state) => state.openLogsPaneInIde);
+  const restartMode = useStore((state) => state.settings.logs.restartMode);
   const setLogsPaneScrollOffset = useStore((state) => state.setLogsPaneScrollOffset);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
   const setLogsPaneGridArrowsActive = useStore((state) => state.setLogsPaneGridArrowsActive);
@@ -232,7 +234,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     logsFooterContext(filterEditor !== null, historyGridCursor !== null, {
       open: logsFullscreenTarget !== null,
       restartable: logsFullscreenTarget === null || logsPanes[logsFullscreenTarget]?.health !== 'no-container',
-    }),
+    }, restartMode),
     useStore,
   );
 
@@ -564,6 +566,12 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           }
           return;
         }
+        // Uppercase `O` opens the service's repo in the editor — lowercase `o` is the stdout toggle.
+        // Works for container-less panes too.
+        if (input === 'O') {
+          openLogsPaneInIde(logsFullscreenTarget);
+          return;
+        }
         const toggle = resolveVisibilityToggleKey(input);
         if (toggle !== null) {
           setVisibility((current) => toggleVisibilityFlag(current, toggle));
@@ -762,6 +770,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
+      if (input === 'O') {
+        const focused = activePanes[subFocus];
+        if (focused !== undefined) {
+          openLogsPaneInIde(focused.path);
+        }
+        return;
+      }
       if (key.return) {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
@@ -786,6 +801,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           globalFilter={globalFilter}
           engaged={isPaneEngagedInGlobalFilter(paneFilterEngaged, logsFullscreenTarget)}
           ownFilter={paneFilters[logsFullscreenTarget] ?? null}
+          restartMode={restartMode}
         />
       ) : (
         <Box flexDirection="column" flexGrow={1} minHeight={0}>
@@ -903,6 +919,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   globalFilter={globalFilter}
                   paneFilterEngaged={paneFilterEngaged}
                   paneFilters={paneFilters}
+                  restartMode={restartMode}
                 />
               )}
             </Box>
