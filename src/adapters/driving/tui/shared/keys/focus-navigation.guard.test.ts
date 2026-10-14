@@ -14,6 +14,8 @@ const ALLOWED = new Set([
   'adapters/driving/tui/shared/components/branch-picker.tsx',
   'adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx',
   'adapters/driving/tui/zones/routes/routes-zone.tsx',
+  // History view: Tab toggles the by-branch / by-version search mode, not a focus move.
+  'adapters/driving/tui/zones/shared-types/shared-types-history.logic.ts',
 ]);
 
 function sourceFiles(dir: string): string[] {
