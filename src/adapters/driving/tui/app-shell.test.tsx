@@ -627,6 +627,8 @@ it('shouldQuit returns true for q', () => {
         dashboardRegistryStatus: 'idle',
         dashboardRegistry: null,
         dashboardUpdatedAt: null,
+        dashboardFocusedService: null,
+        focusDashboardService: () => {},
         loadDashboard: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);

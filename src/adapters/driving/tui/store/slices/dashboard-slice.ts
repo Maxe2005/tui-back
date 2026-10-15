@@ -19,6 +19,9 @@ export type DashboardSlice = {
   dashboardRegistry: DashboardRegistrySummary | null;
   // Epoch ms of the last section that loaded successfully; null before the first one.
   dashboardUpdatedAt: number | null;
+  // Service the developer picked from the Attention block; the services table focuses its row.
+  dashboardFocusedService: string | null;
+  focusDashboardService: (name: string | null) => void;
   loadDashboard: (options?: LoadDashboardOptions) => Promise<void>;
 };
 
@@ -36,6 +39,8 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
       dashboardRegistryStatus: 'idle',
       dashboardRegistry: null,
       dashboardUpdatedAt: null,
+      dashboardFocusedService: null,
+      focusDashboardService: (name) => set({ dashboardFocusedService: name }),
       loadDashboard: async (options) => {
         if (get().dashboardServicesStatus === 'loading' || get().dashboardRegistryStatus === 'loading') {
           reloadQueued = reloadQueued || options?.queueIfBusy === true;
@@ -49,12 +54,13 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
         // A builder that throws degrades its own section; the other one is untouched.
         const services = buildDashboardServices(deps).then(
           (result) =>
-            set({
+            set((state) => ({
               dashboardServicesStatus: result.ok ? 'ready' : 'error',
               dashboardServices: result.ok ? result.data : null,
+              dashboardFocusedService: result.ok && result.data.services.some((service) => service.service === state.dashboardFocusedService) ? state.dashboardFocusedService : null,
               ...(result.ok ? { dashboardUpdatedAt: Date.now() } : {}),
-            }),
-          () => set({ dashboardServicesStatus: 'error', dashboardServices: null }),
+            })),
+          () => set({ dashboardServicesStatus: 'error', dashboardServices: null, dashboardFocusedService: null }),
         );
         const registry = buildDashboardRegistrySummary(deps).then(
           (result) =>
