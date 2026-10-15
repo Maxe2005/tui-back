@@ -114,6 +114,7 @@ describe('registry and cursor helpers', () => {
   it('detects an all-clear registry', () => {
     expect(registryAllClear({ repoCount: 4, invalidManifests: 0, unreachable: 0, listingIssues: 0 })).toBe(true);
     expect(registryAllClear({ repoCount: 4, invalidManifests: 0, unreachable: 1, listingIssues: 0 })).toBe(false);
+    expect(registryAllClear({ repoCount: 0, invalidManifests: 0, unreachable: 0, listingIssues: 0 })).toBe(false);
   });
   it('clamps the attention cursor', () => {
     expect(moveAttentionCursor(0, -1, 3)).toBe(0);

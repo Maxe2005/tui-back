@@ -2,7 +2,7 @@
 // (checked first) or the snapshot sections. The registry check re-runs on mount and whenever the
 // registry screen's open flag flips (the zone never remounts); the snapshot loads on mount and
 // on `R`, and re-loads when the active EDT changes. Overlays make the zone inert.
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -35,8 +35,14 @@ export function DashboardZone({
   const focusDashboardService = useStore((state) => state.focusDashboardService);
   const zoneInputActive = useZoneInputActive(useStore);
   const [attentionCursor, setAttentionCursor] = useState(0);
-  const attentionItems = services !== null && services.status === 'active' ? buildAttentionItems(services.services) : [];
+  const servicesStatus = useStore((state) => state.dashboardServicesStatus);
+  const attentionItems = useMemo(() => (services !== null && services.status === 'active' ? buildAttentionItems(services.services) : []), [services]);
   const cursor = Math.min(attentionCursor, Math.max(0, attentionItems.length - 1));
+
+  // Keep the stored cursor in range so a list that shrinks and regrows does not resurrect a stale index.
+  useEffect(() => {
+    setAttentionCursor((current) => Math.min(current, Math.max(0, attentionItems.length - 1)));
+  }, [attentionItems.length]);
 
   useEffect(() => {
     void checkRegistryEmpty();
@@ -60,7 +66,7 @@ export function DashboardZone({
         setAttentionCursor(moveAttentionCursor(cursor, -1, attentionItems.length));
       } else if (key.downArrow) {
         setAttentionCursor(moveAttentionCursor(cursor, 1, attentionItems.length));
-      } else if (key.return && attentionItems.length > 0) {
+      } else if (key.return && servicesStatus === 'ready' && attentionItems.length > 0) {
         focusDashboardService(attentionItems[cursor]!.service);
       }
     },
@@ -83,7 +89,7 @@ export function DashboardZone({
           <DimAnnotation text={EMPTY_REGISTRY_HINT} />
         </Box>
       ) : (
-        <DashboardBody useStore={useStore} attentionCursor={cursor} />
+        <DashboardBody useStore={useStore} attentionItems={attentionItems} attentionCursor={cursor} />
       )}
     </Box>
   );

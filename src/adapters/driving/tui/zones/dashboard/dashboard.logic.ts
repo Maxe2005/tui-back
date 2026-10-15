@@ -103,7 +103,7 @@ export function attentionHeader(count: number): string {
 }
 
 export function registryAllClear(summary: DashboardRegistrySummary): boolean {
-  return summary.invalidManifests === 0 && summary.unreachable === 0 && summary.listingIssues === 0;
+  return summary.repoCount > 0 && summary.invalidManifests === 0 && summary.unreachable === 0 && summary.listingIssues === 0;
 }
 
 export function moveAttentionCursor(cursor: number, delta: 1 | -1, count: number): number {

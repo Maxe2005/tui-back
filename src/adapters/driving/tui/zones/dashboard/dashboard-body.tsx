@@ -12,7 +12,7 @@ import { StateLine } from '../../shared/components/state-line.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { TruncatedText } from '../../shared/components/truncated-text.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { attentionHeader, buildAttentionItems, formatAttentionLine, registryAllClear, branchLabel, containerLabel, manifestLabel, formatRegistrySummary, formatUpdatedAgo, workingTreeLabel } from './dashboard.logic.js';
+import { attentionHeader, formatAttentionLine, type AttentionItem, registryAllClear, branchLabel, containerLabel, manifestLabel, formatRegistrySummary, formatUpdatedAgo, workingTreeLabel } from './dashboard.logic.js';
 
 export const NO_ACTIVE_EDT_MESSAGE = 'No active EDT.';
 export const NO_ACTIVE_EDT_HINT = `Press ${formatHint(['e', 'EDTs'])} to create or choose one.`;
@@ -22,8 +22,12 @@ export const REGISTRY_CLEAR_MESSAGE = 'Registry healthy.';
 // Rows the zone prints besides the service rows: banner (2), EDT line, attention header and its
 // lines/success line, registry header, counts and success line, updated line and one spare for a
 // "more below" indicator. The attention list is bounded separately (ATTENTION_MAX_ROWS).
-const ATTENTION_MAX_ROWS = 4;
-const BODY_CHROME_ROWS = 7 + 1 + ATTENTION_MAX_ROWS + 2;
+export const ATTENTION_MAX_ROWS = 4;
+const BODY_FIXED_ROWS = 7 + 1 + 2;
+// The attention block reserves only the rows it prints: its lines (windowed) or the success line.
+export function bodyChromeRows(attentionCount: number): number {
+  return BODY_FIXED_ROWS + Math.min(ATTENTION_MAX_ROWS, Math.max(1, attentionCount));
+}
 
 function ServiceRow({ service }: { service: DashboardService }) {
   const container = containerLabel(service.container);
@@ -41,7 +45,15 @@ function ServiceRow({ service }: { service: DashboardService }) {
   );
 }
 
-export function DashboardBody({ useStore = useAppStore, attentionCursor = 0 }: { useStore?: AppStore; attentionCursor?: number }) {
+export function DashboardBody({
+  useStore = useAppStore,
+  attentionItems = [],
+  attentionCursor = 0,
+}: {
+  useStore?: AppStore;
+  attentionItems?: AttentionItem[];
+  attentionCursor?: number;
+}) {
   const servicesStatus = useStore((state) => state.dashboardServicesStatus);
   const services = useStore((state) => state.dashboardServices);
   const registryStatus = useStore((state) => state.dashboardRegistryStatus);
@@ -58,7 +70,6 @@ export function DashboardBody({ useStore = useAppStore, attentionCursor = 0 }: {
     return () => clearInterval(timer);
   }, [ticking]);
 
-  const attentionItems = services !== null && services.status === 'active' ? buildAttentionItems(services.services) : [];
   const loading = servicesStatus === 'loading' || registryStatus === 'loading';
   return (
     <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
@@ -77,7 +88,7 @@ export function DashboardBody({ useStore = useAppStore, attentionCursor = 0 }: {
           {services.services.length === 0 ? <DimAnnotation text="This EDT has no services." /> : null}
           <BoundedList
             items={services.services}
-            chromeRows={BODY_CHROME_ROWS}
+            chromeRows={bodyChromeRows(attentionItems.length)}
             renderItem={(service) => <ServiceRow key={service.path} service={service} />}
           />
           <Box flexDirection="column">
@@ -95,7 +106,7 @@ export function DashboardBody({ useStore = useAppStore, attentionCursor = 0 }: {
                 maxVisibleRows={ATTENTION_MAX_ROWS}
                 cursorIndex={attentionCursor}
                 renderItem={(item, index) => (
-                  <Box key={`${item.service}:${item.reason}`}>
+                  <Box key={`${item.service}:${item.reason}:${index}`}>
                     <StatusBadge state={index === attentionCursor ? 'selection' : item.reason === 'protected-branch' ? 'failed' : 'awaiting'} />
                     <Box marginLeft={spacing['glyph-gap']} flexShrink={1}>
                       <TruncatedText color={index === attentionCursor ? colors.accent : colors.text}>{formatAttentionLine(item)}</TruncatedText>
