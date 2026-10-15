@@ -2,7 +2,7 @@
 title: 'Story 8.1: Dashboard Snapshot Use-Case & CLI'
 type: 'feature'
 created: '2026-10-15'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'fedca18701ccbca761bf62983077e292536c2986'
 review_loop_iteration: 0
 context:
@@ -81,3 +81,43 @@ context:
 - `npm test` -- expected: all green
 - `npm run typecheck` -- expected: no errors
 - `npm run depcheck` -- expected: no violations
+
+## Suggested Review Order
+
+**Snapshot assembly**
+
+- Entry point: one pass builds status, EDT, services and registry summary.
+  [`snapshot.ts:67`](../../src/core/dashboard/snapshot.ts#L67)
+
+- Per-member row: each probe fails alone; flags derive from manifest and other EDTs.
+  [`snapshot.ts:125`](../../src/core/dashboard/snapshot.ts#L125)
+
+- Container health reuses the logs health helper; container-less never hits docker.
+  [`snapshot.ts:172`](../../src/core/dashboard/snapshot.ts#L172)
+
+- Working-tree probes collapse into one field-level result.
+  [`snapshot.ts:188`](../../src/core/dashboard/snapshot.ts#L188)
+
+- Registry counts: unmanaged paths are not invalid manifests.
+  [`snapshot.ts:98`](../../src/core/dashboard/snapshot.ts#L98)
+
+**Reuse**
+
+- Divergence helper exported rather than copied.
+  [`list.ts:134`](../../src/core/edt/list.ts#L134)
+
+**CLI wiring**
+
+- `dashboard` subcommand delegates straight to the use-case.
+  [`subcommands.ts:175`](../../src/adapters/driving/cli/subcommands.ts#L175)
+
+- Docker adapter injected at the composition root.
+  [`main.ts:84`](../../src/bin/main.ts#L84)
+
+**Tests**
+
+- Use-case scenarios against fake ports.
+  [`snapshot.test.ts:1`](../../src/core/dashboard/snapshot.test.ts#L1)
+
+- CLI wiring through a populated EDT.
+  [`dispatch.test.ts:316`](../../src/adapters/driving/cli/dispatch.test.ts#L316)
