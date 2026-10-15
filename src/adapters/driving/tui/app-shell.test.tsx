@@ -622,6 +622,12 @@ it('shouldQuit returns true for q', () => {
         cancelSharedTypesHistorySearch: () => {},
         resetSharedTypesHistory: () => {},
         loadSharedTypesHistoryBranches: async () => {},
+        dashboardServicesStatus: 'idle',
+        dashboardServices: null,
+        dashboardRegistryStatus: 'idle',
+        dashboardRegistry: null,
+        dashboardUpdatedAt: null,
+        loadDashboard: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
