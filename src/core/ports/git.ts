@@ -164,7 +164,10 @@ export interface GitPort {
   // assertAllowedBranch (no edtId, mirroring createBranch's own gate) before touching git, so
   // a rename can never land on a protected branch name any more than a create can, nor rename
   // a protected branch (any name in the manifest-defined set — Story 2.42) away.
-  renameBranch(repoPath: string, oldName: string, newName: string): Promise<Result<void>>;
+  // Story 2.43: also rejects `branch-owned-by-other-edt` (before any git call) when the old
+  // or new name is another registered EDT's own branch for this repo; `edtId` is the caller's
+  // own EDT (its branches are exempt) — omitted, any registered owner blocks.
+  renameBranch(repoPath: string, oldName: string, newName: string, edtId?: string): Promise<Result<void>>;
   // Story 2.35: the remote-tracking refs already known locally (`refs/remotes/`), as
   // `<remote>/<branch>` names (e.g. `origin/feat/x`); the symbolic `<remote>/HEAD` ref is
   // excluded. Never fetches — it lists only what the last fetch left behind. listBranches

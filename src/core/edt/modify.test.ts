@@ -449,10 +449,10 @@ describe('modifyEdt — unit / matrix', () => {
 describe('modifyEdt — renameBranches (story 2.26)', () => {
   it('renames an existing member\'s own currently-registered branch and records the change', async () => {
     resetEdtStore();
-    const renameCalls: Array<{ repoPath: string; oldName: string; newName: string }> = [];
+    const renameCalls: Array<{ repoPath: string; oldName: string; newName: string; edtId?: string }> = [];
     const git = makeMockGit();
-    git.renameBranch = async (repoPath: string, oldName: string, newName: string) => {
-      renameCalls.push({ repoPath, oldName, newName });
+    git.renameBranch = async (repoPath: string, oldName: string, newName: string, edtId?: string) => {
+      renameCalls.push({ repoPath, oldName, newName, edtId });
       return ok(undefined);
     };
     const manifest = makeMockManifest();
@@ -498,7 +498,7 @@ describe('modifyEdt — renameBranches (story 2.26)', () => {
       expect(result.data.results[0]).toMatchObject({ outcome: 'branch-changed', newBranch: 'feature-renamed' });
     }
     // oldName is resolved from this EDT's own membership — never taken from the caller.
-    expect(renameCalls).toEqual([{ repoPath: '/repos/a', oldName: 'main', newName: 'feature-renamed' }]);
+    expect(renameCalls).toEqual([{ repoPath: '/repos/a', oldName: 'main', newName: 'feature-renamed', edtId: '01JTEST000000000000010' }]);
     // Lock-time assembly applied it: the persisted member now carries the new branch.
     expect(updateCalls[0]?.patch.members).toEqual([{ service: 'svc-a', repoPath: '/repos/a', branch: 'feature-renamed' }]);
   });
@@ -677,6 +677,30 @@ describe('renameMemberBranch (story 2.26)', () => {
     const result = await renameMemberBranch({ git, repoPath: '/repos/a', oldName: 'feature-x', newName: 'feature-y' });
 
     expect(result).toMatchObject({ ok: false, error: { code: 'branch-missing' } });
+  });
+});
+
+describe('renameMemberBranch — edtId passthrough (story 2.43)', () => {
+  it('forwards the target EDT ulid to git.renameBranch', async () => {
+    const seen: unknown[][] = [];
+    const git: any = {
+      renameBranch: async (...args: unknown[]) => {
+        seen.push(args);
+        return ok(undefined);
+      },
+    };
+
+    await renameMemberBranch({ git, repoPath: '/repos/a', oldName: 'x', newName: 'y', edtId: 'U1' });
+
+    expect(seen).toEqual([['/repos/a', 'x', 'y', 'U1']]);
+  });
+
+  it('propagates branch-owned-by-other-edt verbatim', async () => {
+    const git: any = { renameBranch: async () => err('branch-owned-by-other-edt', 'owned') };
+
+    const result = await renameMemberBranch({ git, repoPath: '/repos/a', oldName: 'x', newName: 'y' });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-owned-by-other-edt' } });
   });
 });
 

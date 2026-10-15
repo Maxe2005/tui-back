@@ -333,7 +333,7 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
       } else {
         // Story 2.35: a rename only succeeded if neither name was protected, so renaming back
         // cannot hit renameBranch's old-name gate.
-        const restored = await git.renameBranch(write.repoPath, write.renamedTo, write.originalName);
+        const restored = await git.renameBranch(write.repoPath, write.renamedTo, write.originalName, ulid);
         if (!restored.ok) {
           console.error(
             `Failed to rename branch ${write.renamedTo} back to ${write.originalName} in ${write.repoPath} after a failed EDT creation:`,
@@ -540,7 +540,7 @@ async function resolvePlannedMemberBranch(
     }
     if (plan.renameTo !== undefined && plan.renameTo !== plan.branch) {
       // renameBranch gates both the old and the new name against the shared set (Story 2.35).
-      const renamed = await git.renameBranch(member, plan.branch, plan.renameTo);
+      const renamed = await git.renameBranch(member, plan.branch, plan.renameTo, edtUlid);
       if (!renamed.ok) {
         return failed(service, renamed.error);
       }

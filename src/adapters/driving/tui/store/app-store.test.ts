@@ -987,10 +987,10 @@ describe("app store", () => {
       };
       const store = createAppStore(fakeDeps({ git }));
 
-      const result = await store.getState().renameBranch("/repo/a", "feature-old", "feature-new");
+      const result = await store.getState().renameBranch("/repo/a", "feature-old", "feature-new", "EDT1");
 
       expect(result).toEqual({ ok: true, data: undefined });
-      expect(git.renameBranch).toHaveBeenCalledWith("/repo/a", "feature-old", "feature-new");
+      expect(git.renameBranch).toHaveBeenCalledWith("/repo/a", "feature-old", "feature-new", "EDT1");
     });
 
     it("modifyEdt forwards a non-empty renameBranches param through to modifyEdtUseCase (reaches git.renameBranch)", async () => {
@@ -1055,7 +1055,7 @@ describe("app store", () => {
       expect(result.ok).toBe(true);
       // oldName ("main") is resolved by the core use case from this EDT's own membership —
       // proves renameBranches actually reached modifyEdtUseCase, not just accepted and dropped.
-      expect(git.renameBranch).toHaveBeenCalledWith("/repo/a", "main", "feature-renamed");
+      expect(git.renameBranch).toHaveBeenCalledWith("/repo/a", "main", "feature-renamed", "edt-1");
     });
   });
 

@@ -195,7 +195,7 @@ export type EdtSlice = {
   // wrapping core/edt/create.ts's listCreateCandidateBranches — never fetches.
   listCreateBranches: (repoPath: string) => Promise<Result<CreateCandidateBranches>>;
   createMemberBranch: (repoPath: string, branchName: string, baseBranch: string) => Promise<Result<void>>;
-  renameBranch: (repoPath: string, oldName: string, newName: string) => Promise<Result<void>>;
+  renameBranch: (repoPath: string, oldName: string, newName: string, edtId?: string) => Promise<Result<void>>;
   // Story 2.15: EDT action state for the detail pane — tracks in-progress action and
   // loads action log per-EDT.
   currentEdtAction: EdtActionState | null;
@@ -463,11 +463,11 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
       return createMemberBranchUseCase({ git: deps.git, repoPath, branchName, baseBranch });
     },
-    renameBranch: async (repoPath, oldName, newName) => {
+    renameBranch: async (repoPath, oldName, newName, edtId) => {
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
       }
-      return renameMemberBranchUseCase({ git: deps.git, repoPath, oldName, newName });
+      return renameMemberBranchUseCase({ git: deps.git, repoPath, oldName, newName, edtId });
     },
     // Story 2.15: EDT action state for detail pane
     currentEdtAction: null,

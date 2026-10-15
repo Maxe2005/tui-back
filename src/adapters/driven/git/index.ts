@@ -31,6 +31,7 @@ import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 // Story 2.37: the FR-7 protected-branch rule lives in core, shared with the TUI's advisory
 // check. Story 2.42: the set is manifest-defined per service.
+import { branchOwners } from '../../../core/edt/branch-owners.js';
 import { isProtectedBranch } from '../../../core/edt/shared-branches.js';
 
 export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryPort): GitPort {
@@ -62,7 +63,8 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     hasUnmergedPaths: (repoPath) => hasUnmergedPaths(repoPath),
     finalizeMerge: (repoPath) => finalizeMerge(repoPath),
     listBranches: (repoPath) => listBranches(repoPath),
-    renameBranch: (repoPath, oldName, newName) => renameBranch(manifest, repoPath, oldName, newName),
+    renameBranch: (repoPath, oldName, newName, edtId) =>
+      renameBranch(manifest, repoPath, oldName, newName, edtId, edtRegistry),
     listRemoteBranches: (repoPath) => listRemoteBranches(repoPath),
     createTrackingBranch: (repoPath, localName, remoteRef) =>
       createTrackingBranch(manifest, repoPath, localName, remoteRef),
@@ -752,6 +754,8 @@ export async function renameBranch(
   repoPath: string,
   oldName: string,
   newName: string,
+  edtId?: string,
+  edtRegistry?: EdtRegistryPort,
 ): Promise<Result<void>> {
   const allowedOld = await assertAllowedBranch(manifest, repoPath, oldName);
   if (!allowedOld.ok) {
@@ -760,6 +764,26 @@ export async function renameBranch(
   const allowed = await assertAllowedBranch(manifest, repoPath, newName);
   if (!allowed.ok) {
     return allowed;
+  }
+
+  // Story 2.43: cross-EDT gate — neither the old nor the new name may be another EDT's own
+  // branch for this repo (renaming it away, or taking its name, silently breaks that EDT).
+  // Without `edtId` any registered owner blocks; with it, the caller's own EDT is excluded.
+  // Skipped without a registry, as assertAllowedBranch's own cross-EDT half is.
+  if (edtRegistry !== undefined) {
+    const listed = await edtRegistry.list();
+    if (!listed.ok) {
+      return listed;
+    }
+    for (const name of [oldName, newName]) {
+      const owners = branchOwners(listed.data, repoPath, name, edtId);
+      if (owners.length > 0) {
+        return err(
+          'branch-owned-by-other-edt',
+          `Branch "${name}" is already registered as a different EDT's own branch (repo ${repoPath}, EDT ${owners.map((t) => `"${t}"`).join(', ')})`,
+        );
+      }
+    }
   }
 
   const source = showRef(repoPath, oldName);

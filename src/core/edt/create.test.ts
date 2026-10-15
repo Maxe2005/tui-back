@@ -870,7 +870,7 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.results[0]).toEqual({ service: 'svc-/repo/a', outcome: 'renamed' });
-    expect(calls(git.renameBranch)).toEqual([['/repo/a', 'feat/y', 'feat/z']]);
+    expect(calls(git.renameBranch)).toEqual([['/repo/a', 'feat/y', 'feat/z', result.data.ulid]]);
     expect(registeredMembers(params)).toEqual([
       { service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'feat/z' },
       { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' },
@@ -1139,8 +1139,8 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
       ['/repo/b', 'feat/q', true],
     ]);
     expect(calls(git.renameBranch)).toEqual([
-      ['/repo/c', 'feat/y', 'feat/z'],
-      ['/repo/c', 'feat/z', 'feat/y'],
+      ['/repo/c', 'feat/y', 'feat/z', expect.any(String)],
+      ['/repo/c', 'feat/z', 'feat/y', expect.any(String)],
     ]);
   });
 
