@@ -58,3 +58,54 @@ export function workingTreeLabel(workingTree: DashboardService['workingTree']): 
 export function formatRegistrySummary(summary: DashboardRegistrySummary): string {
   return `${summary.repoCount} repos · ${summary.invalidManifests} invalid manifests · ${summary.unreachable} unreachable · ${summary.listingIssues} listing issues`;
 }
+
+export type AttentionReason = 'protected-branch' | 'no-upstream' | 'unknown-offline' | 'uncommitted' | 'merging' | 'rebasing' | 'behind' | 'used-by-edt';
+
+export type AttentionItem = { service: string; reason: AttentionReason; text: string };
+
+// One item per (service, reason), severity-ordered: protected branch, upstream trouble, working
+// tree, behind, then branch shared with another EDT. A failed probe is never an item.
+export function buildAttentionItems(services: readonly DashboardService[]): AttentionItem[] {
+  const items: Array<AttentionItem & { rank: number }> = [];
+  const push = (service: string, reason: AttentionReason, rank: number, text: string) => items.push({ service, reason, rank, text });
+  for (const s of services) {
+    if (s.protectedBranch) {
+      push(s.service, 'protected-branch', 0, `on protected branch${s.branch === null ? '' : ` ${s.branch}`}`);
+    }
+    if (s.divergence.status === 'no-upstream') {
+      push(s.service, 'no-upstream', 1, 'no upstream');
+    } else if (s.divergence.status === 'unknown-offline') {
+      push(s.service, 'unknown-offline', 1, 'divergence unknown (offline)');
+    }
+    if (s.workingTree.ok) {
+      const { uncommitted, mergeInProgress, rebaseInProgress } = s.workingTree.value;
+      if (uncommitted) push(s.service, 'uncommitted', 2, 'uncommitted changes');
+      if (mergeInProgress) push(s.service, 'merging', 2, 'merge in progress');
+      if (rebaseInProgress) push(s.service, 'rebasing', 2, 'rebase in progress');
+    }
+    if (s.divergence.behind !== null && s.divergence.behind > 0) {
+      push(s.service, 'behind', 3, `behind by ${s.divergence.behind}`);
+    }
+    if (s.usedByEdts.length > 0) {
+      push(s.service, 'used-by-edt', 4, `branch also used by EDT ${s.usedByEdts.join(', ')}`);
+    }
+  }
+  // Array.prototype.sort is stable, so services keep their listing order within a severity.
+  return items.sort((a, b) => a.rank - b.rank).map(({ service, reason, text }) => ({ service, reason, text }));
+}
+
+export function formatAttentionLine(item: AttentionItem): string {
+  return `${item.service} · ${item.text}`;
+}
+
+export function attentionHeader(count: number): string {
+  return `Attention (${count})`;
+}
+
+export function registryAllClear(summary: DashboardRegistrySummary): boolean {
+  return summary.invalidManifests === 0 && summary.unreachable === 0 && summary.listingIssues === 0;
+}
+
+export function moveAttentionCursor(cursor: number, delta: 1 | -1, count: number): number {
+  return count === 0 ? 0 : Math.min(count - 1, Math.max(0, cursor + delta));
+}
