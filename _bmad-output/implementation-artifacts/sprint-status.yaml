@@ -87,9 +87,9 @@ development_status:
   7-12-shared-service-actions-open-in-ide-simple-clean-restart: done
   epic-7-retrospective: optional
 
-  epic-8: backlog
+  epic-8: in-progress
   # Dashboard rewrite (2026-10-15): active-EDT services table + shared service actions + Attention block.
-  8-1-dashboard-snapshot-use-case-and-cli: backlog
+  8-1-dashboard-snapshot-use-case-and-cli: in-progress
   8-2-dashboard-shell-states-fixed-banner-refresh: backlog
   8-3-dashboard-active-edt-services-table-service-actions: backlog
   8-4-dashboard-attention-block-registry-health: backlog
