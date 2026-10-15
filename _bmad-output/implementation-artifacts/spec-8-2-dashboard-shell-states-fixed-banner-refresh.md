@@ -2,7 +2,7 @@
 title: 'Story 8.2: Dashboard Shell — States, Fixed Banner & Refresh'
 type: 'feature'
 created: '2026-10-15'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '8e15fa7be7e493c49f61c7431b24622018f9810a'
 review_loop_iteration: 0
 context:
@@ -55,12 +55,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/dashboard/snapshot.ts` (+ test) -- export the two section builders; `buildDashboardSnapshot` composes them, output unchanged -- independent fill
-- [ ] `store/slices/dashboard-slice.ts` + `app-store.ts` (+ slice test) -- section states, `loadDashboard`, unwired degradation -- state
-- [ ] `zones/dashboard/dashboard.logic.ts` (+ test) -- precedence resolver, "updated Ns ago", field-error labels -- pure logic
-- [ ] `zones/dashboard/dashboard-body.tsx`, `dashboard-zone.tsx` (+ tests) -- bounded sections, states, refresh on mount/`R`, overlay inertness -- UI
-- [ ] `keybindings/keybindings.ts`, `zone-layouts.ts` (+ tests) -- `R refresh` hint, layout contract -- discoverability
-- [ ] `bounds` / `app-shell` tests -- banner survives; too-small screen when it cannot fit -- fixed banner
+- [x] `src/core/dashboard/snapshot.ts` (+ test) -- export the two section builders; `buildDashboardSnapshot` composes them, output unchanged -- independent fill
+- [x] `store/slices/dashboard-slice.ts` + `app-store.ts` (+ slice test) -- section states, `loadDashboard`, unwired degradation -- state
+- [x] `zones/dashboard/dashboard.logic.ts` (+ test) -- precedence resolver, "updated Ns ago", field-error labels -- pure logic
+- [x] `zones/dashboard/dashboard-body.tsx`, `dashboard-zone.tsx` (+ tests) -- bounded sections, states, refresh on mount/`R`, overlay inertness -- UI
+- [x] `keybindings/keybindings.ts`, `zone-layouts.ts` (+ tests) -- `R refresh` hint, layout contract -- discoverability
+- [x] `bounds` / `app-shell` tests -- banner survives; too-small screen when it cannot fit -- fixed banner
 
 **Acceptance Criteria:**
 - Given the Dashboard at any size, when rendered, then the banner is intact or the too-small screen replaces everything.
