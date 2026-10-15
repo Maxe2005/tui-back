@@ -1269,6 +1269,31 @@ describe('EdtsZone', () => {
     expect(preselected).toContain('( ) Aucun');
   });
 
+  it('reopens a post-switch restart report kept in the store when the zone mounts again', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+      switchRestart: {
+        topic: 'other-work',
+        mode: 'simple',
+        status: 'running',
+        error: null,
+        report: null,
+        rows: [{ service: 'api', repoPath: '/r/api', phase: 'verifying' }],
+      },
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('SWITCH EDT');
+    expect(output).toContain('Restarting services (simple)');
+    expect(output).toContain('api — verifying');
+  });
+
   it('switch-blocked-action-in-progress surfaces an explicit force-or-cancel prompt', async () => {
     const store = createAppStore();
     store.setState({

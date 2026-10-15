@@ -476,6 +476,23 @@ export function EdtsZone({
 
   // Each dialog's submit/input-handling logic lives in its own file under dialogs/ — these
   // factories close over this render's values (the deps object is recreated every render).
+  // A post-switch restart report kept in the store (the run outlives this zone's dialogs): coming
+  // back to the zone reopens it on that report once, so the run state is intact on return.
+  // Only a report already in the store at mount is reopened — never one this mount started and
+  // the developer then closed with Esc while it was still running.
+  const restartReportReopened = useRef(switchRestart === null);
+  useEffect(() => {
+    if (restartReportReopened.current || switchRestart === null || dialog.kind !== 'none') {
+      return;
+    }
+    const target = edtsRows.find((row) => row.topic === switchRestart.topic);
+    if (target === undefined) {
+      return;
+    }
+    restartReportReopened.current = true;
+    setDialog({ ...initialSwitchDialog(target), results: [], restartReport: true });
+  }, [switchRestart, edts]);
+
   const { handleSwitchDialogInput, dispatchResolutionDecision, startSwitch } = createSwitchDialogHandlers({
     setDialog,
     switchEdtAction,

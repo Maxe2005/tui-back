@@ -9,6 +9,7 @@ import { cycleSwitchRestartMode } from '../../../../../../core/ports/settings.js
 import type { AppState } from '../../../store/app-store.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
+import { SwitchRestartReport } from './switch-restart-report.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
@@ -223,7 +224,12 @@ export function describeRestartForLog(mode: SwitchRestartRunMode, rows: readonly
   return `restart ${mode}: ${rows.map((row) => `${row.service}=${row.phase}`).join(', ')}`;
 }
 
-function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; results: readonly SwitchEdtRepoResult[] }) {
+// Rows the restart report leaves for the dialog around its list (modal border, the two
+// SwitchResultsView lines, the report's own header and the hint).
+const RESTART_REPORT_CHROME_ROWS = 14;
+
+// `compact`: the restart report follows, so only the headline and any failures are shown here.
+function SwitchResultsView({ dialog, results, compact = false }: { dialog: SwitchDialogState; results: readonly SwitchEdtRepoResult[]; compact?: boolean }) {
   return (
     <>
       {results.some((row) => row.outcome === 'failed') ? (
@@ -232,7 +238,7 @@ function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; res
         <ClampedParagraph color={colors.text} maxLines={4}>{`Switch to “${dialog.target.topic}” finished.`}</ClampedParagraph>
       )}
       <BoundedList
-        items={results.filter((row) => resultLabel(row) !== null)}
+        items={compact ? [] : results.filter((row) => resultLabel(row) !== null)}
         chromeRows={14}
         renderItem={(row, index) => (
           <Text key={`${row.service}:${index}`} color={row.outcome === 'switched' ? colors['text-dim'] : colors.success} wrap="truncate-end">
@@ -283,10 +289,8 @@ export function SwitchDialogView({
     return (
       <ModalDialog title="SWITCH EDT" open={true}>
         <Box flexDirection="column">
-          <SwitchResultsView dialog={dialog} results={dialog.results} />
-          {dialog.restartReport === true && switchRestart !== null ? (
-            <DimAnnotation text={switchRestart.status === 'running' ? 'Restarting services…' : switchRestart.error ?? 'Restart finished.'} />
-          ) : null}
+          <SwitchResultsView dialog={dialog} results={dialog.results} compact={dialog.restartReport === true && switchRestart !== null} />
+          {dialog.restartReport === true && switchRestart !== null ? <SwitchRestartReport state={switchRestart} chromeRows={RESTART_REPORT_CHROME_ROWS} /> : null}
         </Box>
       </ModalDialog>
     );
