@@ -345,6 +345,8 @@ describe('AppShell', () => {
     it('shouldOpenCommand returns true for :', () => {
       expect(shouldOpenCommand(':')).toBe(true);
       expect(shouldOpenCommand('j')).toBe(false);
+      expect(shouldOpenCommand(':', { ctrl: true })).toBe(false);
+      expect(shouldOpenCommand(':', { meta: true })).toBe(false);
     });
 
 it('shouldQuit returns true for q', () => {
@@ -646,6 +648,8 @@ it('shouldQuit returns true for q', () => {
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
       expect(shouldQuit('j', {}, minimalState)).toBe(false);
+      expect(shouldQuit('q', { ctrl: true }, minimalState)).toBe(false);
+      expect(shouldQuit('q', { meta: true }, minimalState)).toBe(false);
       expect(
         shouldQuit('q', {}, { ...minimalState, settings: { ...minimalState.settings, general: { quitShortcutEnabled: false, editorCommand: '' } } }),
       ).toBe(false);
