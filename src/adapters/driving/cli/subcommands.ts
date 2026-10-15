@@ -18,6 +18,8 @@ import { selectionFromEdt } from '../../../core/scripts/resolve-merge-sources.js
 import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
 import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
+import { buildDashboardSnapshot } from '../../../core/dashboard/snapshot.js';
+import type { DockerPort } from '../../../core/ports/docker.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { DockerPort } from '../../../core/ports/docker.js';
 import type { EditorPort } from '../../../core/ports/editor.js';
@@ -99,6 +101,7 @@ export function buildSubcommands(deps: {
   edtRegistryResourceKey: string;
   git: GitPort;
   container: ContainerPort;
+  docker: DockerPort;
   migration: MigrationPort;
   restart: RestartPort;
   state: StatePort;
@@ -179,6 +182,22 @@ export function buildSubcommands(deps: {
               state: deps.state,
             })
           : err('invalid-argument', 'Usage: tui-back edts'),
+    },
+    {
+      name: 'dashboard',
+      usage: 'tui-back dashboard',
+      // The Dashboard's snapshot (active EDT services, registry health), read-only.
+      run: async (args) =>
+        args.length === 0
+          ? buildDashboardSnapshot({
+              registry: deps.registry,
+              manifest: deps.manifest,
+              git: deps.git,
+              docker: deps.docker,
+              edtRegistry: deps.edtRegistry,
+              state: deps.state,
+            })
+          : err('invalid-argument', 'Usage: tui-back dashboard'),
     },
     {
       name: 'edt',

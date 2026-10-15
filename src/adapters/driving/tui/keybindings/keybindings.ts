@@ -13,7 +13,7 @@ export type Keybinding = {
   description: string;
   // Rows of the same section are listed under one heading in the `?` help.
   section?: string;
-  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' };
+  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' | 'service-focused' | 'active-edt' };
 };
 
 // The retry key StateLine advertises beside a load error; zones bind R to their reload.
@@ -166,6 +166,46 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'Esc (switch resolution)',
     description: 'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
+  },
+  {
+    keys: 'R (Dashboard)',
+    description: 'Dashboard: refresh every section (also retries a failed section)',
+    footer: { key: 'R', verb: 'refresh', zones: ['dashboard'] },
+  },
+  {
+    keys: '↑ / ↓ (Dashboard)',
+    description: 'Dashboard: move the cursor over the active EDT\'s services',
+    footer: { key: '↑/↓', verb: 'service', zones: ['dashboard'] },
+  },
+  {
+    keys: 'Enter (Dashboard)',
+    description: 'Dashboard: open the focused service in the Logs zone',
+    footer: { key: 'Enter', verb: 'open', zones: ['dashboard'] },
+  },
+  {
+    keys: 'a (Dashboard)',
+    description: 'Dashboard: step through the Attention lines, moving the cursor to the line\'s service',
+    footer: { key: 'a', verb: 'attention', zones: ['dashboard'] },
+  },
+  {
+    keys: 'E (Dashboard)',
+    description: 'Dashboard: enter the active EDT in the EDTs zone (e opens the EDT quick-pick, or the create wizard when none exists)',
+    footer: { key: 'E', verb: 'enter EDT', zones: ['dashboard'], when: 'active-edt' },
+  },
+  {
+    keys: 'Ctrl+O (Dashboard)',
+    description: 'Dashboard: open the focused service repo in your editor',
+    footer: { key: 'Ctrl+O', verb: 'IDE', zones: ['dashboard'], when: 'service-focused' },
+  },
+  {
+    keys: 'Ctrl+R (Dashboard)',
+    description: 'Dashboard: restart the focused service (R stays refresh)',
+    footer: { key: 'Ctrl+R', verb: 'restart', zones: ['dashboard'], when: 'service-focused' },
+  },
+  {
+    keys: 'Ctrl+L (Dashboard)',
+    description: 'Dashboard: clean-restart the focused service through its recipe',
+    footer: { key: 'Ctrl+L', verb: 'clean restart', zones: ['dashboard'], when: 'service-focused' },
   },
   // Scoped to the Logs zone's pane grid.
   {

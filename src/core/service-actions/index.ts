@@ -10,7 +10,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RestartPort } from '../ports/restart.js';
 import { err, ok, type Result } from '../result.js';
-import { runRestartStep } from '../scripts/group-update.js';
+import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update.js';
 import { serviceRestartLockKey } from '../scripts/service-restart.js';
 
 export type RestartMode = 'simple' | 'clean';
@@ -63,13 +63,50 @@ export interface RestartOutcome {
   notice?: string;
 }
 
+// A restart step the run is on: 1-based `step` out of `total` (a simple restart is 1 of 1).
+export interface RestartProgress {
+  step: number;
+  total: number;
+}
+
+// A lock a consumer knows can block a restart, with the name shown when it is held.
+export interface NamedLock {
+  key: string;
+  name: string;
+}
+
+export interface ServiceActionsListOptions {
+  // Extra locks (group update, EDT switch...) checked after the service's own restart lock.
+  blockingLocks?: readonly NamedLock[];
+}
+
 export interface ServiceActions {
-  list(repoPath: string): Promise<Result<ServiceAction[]>>;
+  list(repoPath: string, options?: ServiceActionsListOptions): Promise<Result<ServiceAction[]>>;
   openInIde(repoPath: string, ctx: ServiceActionContext): Result<void>;
-  restart(repoPath: string, mode: RestartMode): Promise<Result<RestartOutcome>>;
+  restart(repoPath: string, mode: RestartMode, onProgress?: (progress: RestartProgress) => void): Promise<Result<RestartOutcome>>;
   // Settles on the first definitive state of the service's container (and `healthUrl`, when
   // declared) after a restart. Never rejects.
   verifyService(repoPath: string): Promise<Result<VerifyOutcome>>;
+}
+
+// The locks that can block a restart besides its own: the global group update and, when an EDT
+// is active, that EDT's update/switch lock.
+export function restartBlockingLocks(activeEdtUlid: string | null): NamedLock[] {
+  return [
+    { key: GROUP_UPDATE_LOCK_KEY, name: 'group update' },
+    ...(activeEdtUlid === null ? [] : [{ key: edtUpdateLockKey(activeEdtUlid), name: 'EDT update/switch' }]),
+  ];
+}
+
+// The name of the first held lock, or null when none is held (a failed peek reads as free).
+export async function heldLockName(lock: LockPort, locks: readonly NamedLock[]): Promise<string | null> {
+  for (const candidate of locks) {
+    const held = await lock.peek(candidate.key);
+    if (held.ok && held.data.locked) {
+      return candidate.name;
+    }
+  }
+  return null;
 }
 
 export const NO_CLEAN_RECIPE_NOTICE = 'no clean-restart recipe — simple restart';
@@ -80,6 +117,11 @@ function rejectBlankRepoPath(repoPath: string): Result<never> | null {
 }
 
 const AVAILABLE: ServiceActionAvailability = { available: true };
+
+// Blank recipe entries are not a recipe: only runnable commands count.
+function recipeCommands(manifest: Manifest): string[] {
+  return (manifest.restartCommands ?? []).filter((command) => command.trim() !== '');
+}
 
 function hasContainer(manifest: Manifest): boolean {
   return manifest.container !== undefined && manifest.container.trim() !== '';
@@ -99,7 +141,11 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
   const { manifest, container, restart, editor, lock } = deps;
   const clock = deps.clock ?? { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) };
 
-  async function restartAvailability(repoPath: string): Promise<ServiceActionAvailability> {
+  async function restartAvailability(
+    repoPath: string,
+    mode: RestartMode,
+    blockingLocks: readonly NamedLock[],
+  ): Promise<ServiceActionAvailability> {
     const loaded = await manifest.load(repoPath);
     if (!loaded.ok) {
       return { available: false, reason: 'manifest unreadable' };
@@ -111,20 +157,29 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
     if (held.ok && held.data.locked) {
       return { available: false, reason: 'restart in progress' };
     }
+    const blocking = await heldLockName(lock, blockingLocks);
+    if (blocking !== null) {
+      return { available: false, reason: blocking };
+    }
+    if (mode === 'clean' && recipeCommands(loaded.data).length === 0) {
+      return { available: false, reason: 'no clean recipe' };
+    }
     return AVAILABLE;
   }
 
   return {
-    async list(repoPath) {
+    async list(repoPath, options) {
       const invalid = rejectBlankRepoPath(repoPath);
       if (invalid !== null) {
         return invalid;
       }
-      const restartState = await restartAvailability(repoPath);
+      const blockingLocks = options?.blockingLocks ?? [];
+      const simpleState = await restartAvailability(repoPath, 'simple', blockingLocks);
+      const cleanState = await restartAvailability(repoPath, 'clean', blockingLocks);
       return ok([
         { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: AVAILABLE },
-        { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: restartState },
-        { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: restartState },
+        { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: simpleState },
+        { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: cleanState },
       ]);
     },
 
@@ -132,7 +187,7 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
       return openInIde(editor, repoPath, ctx);
     },
 
-    async restart(repoPath, mode) {
+    async restart(repoPath, mode, onProgress) {
       const invalid = rejectBlankRepoPath(repoPath);
       if (invalid !== null) {
         return invalid;
@@ -150,6 +205,7 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
           return err('no-container', `Repo ${repoPath} declares no container — nothing to restart`);
         }
         if (mode === 'simple') {
+          onProgress?.({ step: 1, total: 1 });
           const restarted = await container.restart(containerName);
           return restarted.ok ? ok({}) : restarted;
         }
@@ -157,15 +213,16 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
           container,
           restart,
           containerName,
-          restartCommands,
+          restartCommands: recipeCommands(loaded.data),
           repoPath,
           cleanRestart: true,
           service,
+          onStep: (step, total) => onProgress?.({ step, total }),
         });
         if (!restarted.ok) {
           return restarted;
         }
-        return ok((restartCommands?.length ?? 0) > 0 ? {} : { notice: NO_CLEAN_RECIPE_NOTICE });
+        return ok(recipeCommands(loaded.data).length > 0 ? {} : { notice: NO_CLEAN_RECIPE_NOTICE });
       });
       if (!run.ok && run.error.code === 'action-in-progress') {
         return err(

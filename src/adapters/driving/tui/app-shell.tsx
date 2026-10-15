@@ -26,6 +26,14 @@ import { boundaryOrientation, hasResizableBoundary } from './zones/zone-layouts.
 // MIN_LIST_RATIO..MAX_LIST_RATIO (0.2..0.8) clamp range.
 export const RESIZE_STEP = 0.05;
 
+// Ink delivers Ctrl+<letter> as the bare letter with `key.ctrl` set: a modified letter is a
+// zone binding (Ctrl+R restart...), never a global mnemonic.
+type ModifierKey = { ctrl?: boolean; meta?: boolean };
+
+function hasModifier(key: ModifierKey | undefined): boolean {
+  return key?.ctrl === true || key?.meta === true;
+}
+
 export function shouldOpenHelp(input: string): boolean {
   return input === '?';
 }
@@ -59,7 +67,11 @@ export function resolveHelpDispatch(
 export function shouldSwitchZone(
   input: string,
   reachable: ReadonlySet<ZoneId> = ALL_ZONE_IDS,
+  key?: ModifierKey,
 ): ZoneId | null {
+  if (hasModifier(key)) {
+    return null;
+  }
   const zone = ZONES.find((z) => z.mnemonic === input);
   if (zone === undefined || !reachable.has(zone.id)) {
     return null;
@@ -142,12 +154,12 @@ export function shouldFallbackToDashboard(
   return zoneGatedStatus(activeZone, tabVisibility) === 'omitted';
 }
 
-export function shouldOpenCommand(input: string): boolean {
-  return input === ':';
+export function shouldOpenCommand(input: string, key?: ModifierKey): boolean {
+  return input === ':' && !hasModifier(key);
 }
 
-export function shouldQuit(input: string, _key: { escape?: boolean }, state: AppState): boolean {
-  return input === 'q' && !state.runInProgress && state.settings.general.quitShortcutEnabled;
+export function shouldQuit(input: string, key: { escape?: boolean } & ModifierKey, state: AppState): boolean {
+  return input === 'q' && !hasModifier(key) && !state.runInProgress && state.settings.general.quitShortcutEnabled;
 }
 
 export function AppShell({
@@ -343,7 +355,7 @@ export function AppShell({
       // gates both the mnemonic and the arrow-nav dispatch below — an omitted tab is never
       // landed on either way; a disabled one stays reachable.
       const reachable = resolveReachableZones(state.tabVisibility);
-      const zoneId = shouldSwitchZone(input, reachable);
+      const zoneId = shouldSwitchZone(input, reachable, key);
       if (zoneId) {
         setActiveZone(zoneId);
         return;
@@ -359,7 +371,7 @@ export function AppShell({
         return;
       }
 
-      if (shouldOpenCommand(input)) {
+      if (shouldOpenCommand(input, key)) {
         openCommandBar();
         return;
       }

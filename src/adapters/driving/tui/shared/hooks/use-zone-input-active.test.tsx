@@ -57,13 +57,13 @@ describe('zone input gate', () => {
     describe(zone, () => {
       it.each(OVERLAYS)('has no live key handler while the %s is open', async (_name, overlay) => {
         const states = await zoneHandlerStates(zone, overlay);
-        expect(zone === 'dashboard' || states.length > 0).toBe(true);
+        expect(states.length > 0).toBe(true);
         expect(states.every((isActive) => isActive === false)).toBe(true);
       });
 
       it('keeps a live key handler when no overlay is open', async () => {
         const states = await zoneHandlerStates(zone, {});
-        expect(zone === 'dashboard' || states.some((isActive) => isActive !== false)).toBe(true);
+        expect(states.some((isActive) => isActive !== false)).toBe(true);
       });
     });
   }

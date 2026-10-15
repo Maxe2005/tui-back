@@ -95,6 +95,35 @@ describe('footerHintsFor', () => {
     expect(DEFAULT_FOOTER_HINTS).toContain('[↑/↓] move');
   });
 
+  it('shows the Dashboard per-service keys only while a service is focused', () => {
+    for (const hint of ['[Ctrl+O] IDE', '[Ctrl+R] restart', '[Ctrl+L] clean restart']) {
+      expect(footerHintsFor('dashboard', { serviceFocused: false })).not.toContain(hint);
+      expect(footerHintsFor('dashboard', { serviceFocused: true })).toContain(hint);
+    }
+  });
+
+  it('shows [E] enter EDT on the Dashboard only with an active EDT', () => {
+    expect(footerHintsFor('dashboard')).toContain('[E] enter EDT');
+    expect(footerHintsFor('dashboard', { activeEdt: false })).not.toContain('[E] enter EDT');
+    expect(footerHintsFor('edts')).not.toContain('[E] enter EDT');
+  });
+
+  it('useFooterItems follows the Dashboard snapshot', async () => {
+    const store = createAppStore();
+    const empty = await renderToString(<Footer zone="dashboard" useStore={store} />);
+    expect(empty).not.toContain('[Ctrl+O]');
+    expect(empty).not.toContain('[E] enter EDT');
+    store.setState({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { status: 'active', edt: { ulid: 'e', topic: 't', serviceCount: 1 }, services: [{ service: 'a' }] },
+    } as never);
+    const full = await renderToString(<Footer zone="dashboard" useStore={store} />);
+    expect(full).toContain('[Ctrl+O]');
+    expect(full).toContain('[E] enter EDT');
+    store.setState({ dashboardServicesStatus: 'error' } as never);
+    expect(await renderToString(<Footer zone="dashboard" useStore={store} />)).not.toContain('[Ctrl+O]');
+  });
+
   it('advertises Logs wrap-all as W', () => {
     expect(footerHintsFor('logs')).toContain('[W] wrap all');
     expect(footerHintsFor('edts')).not.toContain('[W] wrap all');

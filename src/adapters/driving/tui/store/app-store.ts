@@ -32,6 +32,7 @@ import { createLogsSlice, type LogsSlice } from './slices/logs-slice.js';
 import { createCommandHistorySlice, type CommandHistorySlice } from './slices/command-history-slice.js';
 import { createResetSlice, type ResetSlice } from './slices/reset-slice.js';
 import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
+import { createDashboardSlice, type DashboardSlice } from './slices/dashboard-slice.js';
 import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
@@ -45,6 +46,7 @@ export type { UpdateRunStatus } from './slices/update-slice.js';
 export type { LogsPaneData } from './slices/logs-slice.js';
 export type { ResetPreview } from './slices/reset-slice.js';
 export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types-slice.js';
+export type { DashboardSectionStatus } from './slices/dashboard-slice.js';
 export type { RoutesStatus } from './slices/routes-slice.js';
 export type { RouteResponse, RoutesPaneFocus, RoutesPaneTab } from './slices/routes-slice.js';
 
@@ -108,7 +110,7 @@ export type AppStoreDeps = {
   };
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & CommandHistorySlice & ResetSlice & RoutesSlice & SharedTypesSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & CommandHistorySlice & ResetSlice & RoutesSlice & SharedTypesSlice & DashboardSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -122,6 +124,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createResetSlice(deps)(...args),
     ...createRoutesSlice(deps)(...args),
     ...createSharedTypesSlice(deps)(...args),
+    ...createDashboardSlice(deps)(...args),
   }));
 }
 

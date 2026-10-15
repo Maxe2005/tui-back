@@ -226,7 +226,7 @@
 ## Deferred from: code review of 1-12-launch-banner-keybinding-help-screen (2026-08-17)
 
 - **Help-modal scroll counts keybinding items, not wrapped visual lines** (`src/adapters/driving/tui/shared/components/keybinding-help.tsx`): wide rows (e.g. `Ctrl+W` ~84 chars) wrap inside the modal, so one `j`/`k` press can jump multiple visual lines, and the modal height is unbounded on short terminals. Deferred: the story explicitly scoped scroll as a pure-function, prop-driven slice with no pixel measurement. **Track:** a terminal-dimension-aware scroll window if/when the TUI measures height.
-- **Help modal and launch banner clip/wrap on unusually short/narrow terminals** (`src/adapters/driving/tui/zones/dashboard/launch-banner.tsx`, `src/adapters/driving/tui/shared/components/keybinding-help.tsx`): terminal < ~26 cols wraps the 24-glyph banner; terminal < ~14 rows clips the 10-row modal. Deferred: pre-existing edge case; no terminal-dimension measurement exists in the TUI yet. **Track:** revisit when Ink terminal-dimension hooks land in the TUI.
+- **Help modal and launch banner clip/wrap on unusually short/narrow terminals** (`src/adapters/driving/tui/zones/dashboard/launch-banner.tsx`, `src/adapters/driving/tui/shared/components/keybinding-help.tsx`): terminal < ~26 cols wraps the 24-glyph banner; terminal < ~14 rows clips the 10-row modal. Deferred: pre-existing edge case; no terminal-dimension measurement exists in the TUI yet. **Track:** revisit when Ink terminal-dimension hooks land in the TUI. **RESOLVED (story 8.5):** the Dashboard keeps its banner intact at every matrix size (`dashboard-zone.bounds.test.tsx`); below the minimum the shell's too-small screen applies.
 - **`ModalDialog` `onConfirm`/`onCancel` are inert for the help instance** (`src/adapters/driving/tui/shared/components/keybinding-help.tsx`, `src/adapters/driving/tui/shared/components/modal-dialog.tsx`): closing is driven by AppShell's `useInput`; a standalone `KeybindingHelp` (outside `AppShell`) would never close on `Esc`/`?`. Deferred: pre-existing ModalDialog contract (1.10) with no internal `useInput`; works in the shipped app because AppShell owns key handling. **Track:** wire Esc/`?` into `KeybindingHelp` itself if it ever renders outside AppShell.
 
 ## Deferred from: code review of 1-11-permanent-app-shell.md (2026-08-17)
@@ -354,7 +354,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-16-permanent-dashboard-banner.md`
   summary: The pre-existing "banner clips/wraps on unusually short/narrow terminals" gap (logged under story 1.12) is now visible on every single Dashboard render instead of only a one-off first-launch flash, raising its practical severity without any code in this story addressing it.
-  evidence: `src/adapters/driving/tui/zones/dashboard/launch-banner.tsx` still has no terminal-dimension measurement (unchanged by this story, whose Never list explicitly forbids touching the component); the existing deferred entry (see "Deferred from: code review of 1-12-launch-banner-keybinding-help-screen" above) was written when the banner appeared once, transiently, on first launch — now that `dashboard-zone.tsx` renders it unconditionally on every visit, the same clipping is a permanent fixture of the Dashboard rather than a rare flash. **Track:** when picking up the original entry, re-weigh its priority given the banner's now-permanent visibility.
+  evidence: `src/adapters/driving/tui/zones/dashboard/launch-banner.tsx` still has no terminal-dimension measurement (unchanged by this story, whose Never list explicitly forbids touching the component); the existing deferred entry (see "Deferred from: code review of 1-12-launch-banner-keybinding-help-screen" above) was written when the banner appeared once, transiently, on first launch — now that `dashboard-zone.tsx` renders it unconditionally on every visit, the same clipping is a permanent fixture of the Dashboard rather than a rare flash. **Track:** when picking up the original entry, re-weigh its priority given the banner's now-permanent visibility. **RESOLVED (story 8.5):** the Dashboard keeps its banner intact at every matrix size (`dashboard-zone.bounds.test.tsx`); below the minimum the shell's too-small screen applies.
 
 ## Deferred from: code review of 2-20-top-bar-footer-hint-accuracy-fixes (2026-08-27)
 
@@ -811,3 +811,18 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
   summary: The EDTs zone's restart-report reopen effect reads `dialog`/`edtsRows` without listing them as dependencies, and the CLI gives no progress output during a long `--restart` run.
   evidence: `edts-zone.tsx` effect deps are `[switchRestart, edts]`; `runEdtSwitch` passes no `onPhase`.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-1-dashboard-snapshot-use-case-and-cli.md`
+  summary: Bound the dashboard snapshot's parallelism and add per-probe timeouts.
+  evidence: buildDashboardSnapshot runs exists/manifest.load for every registered repo and 3 git calls + 1 docker call per member through unbounded Promise.all; a hung docker/git call blocks the whole snapshot.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
+  summary: Keep the previous Dashboard data on screen (with a dim "refreshing" cue) while a refresh runs, instead of swapping it for a spinner.
+  evidence: `DashboardBody` renders the spinner whenever a section status is `loading`, so every `R` blanks the sections briefly; the spec only requires per-section spinners.
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
+  summary: Surface the cause (error code/message) of a failed Dashboard section load instead of a bare "Failed to load".
+  evidence: `dashboard-slice.ts` drops the `Result` error on failure, so unwired ports, docker and registry errors look identical.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-3-dashboard-active-edt-services-table-service-actions.md`
+  summary: `restartAvailability` is evaluated twice per `ServiceActions.list` (simple and clean), loading the manifest and peeking locks twice.
+  evidence: Both restart actions share one availability; the list runs on every Dashboard focus move, so the manifest is read twice per move.
