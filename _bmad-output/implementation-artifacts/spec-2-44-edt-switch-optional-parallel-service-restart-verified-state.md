@@ -2,7 +2,7 @@
 title: 'Story 2.44: EDT Switch — Optional Parallel Service Restart & Verified State'
 type: 'feature'
 created: '2026-10-15'
-status: 'in-review'
+status: 'done'
 baseline_commit: '6666e5124a5163d583a6024a06d174d31778610d'
 review_loop_iteration: 0
 context:
@@ -83,3 +83,71 @@ context:
 - `npm test` -- expected: all green
 - `npx tsc --noEmit` -- expected: no errors
 - `npm run lint` -- expected: clean (incl. dependency-cruiser)
+
+## Suggested Review Order
+
+**Core orchestration (entry point)**
+
+- The restart phase as a second call after the switch: targets, skips, pool, failed rows.
+  [`switch-restart.ts:113`](../../src/core/edt/switch-restart.ts#L113)
+
+- One shared definition of "branch changed in this switch", used by core, store and dialog.
+  [`switch-restart.ts:97`](../../src/core/edt/switch-restart.ts#L97)
+
+- Managed repos mapped to service name and container presence for the report.
+  [`switch-restart.ts:190`](../../src/core/edt/switch-restart.ts#L190)
+
+**Verification**
+
+- Poll docker health and healthUrl, settle on the first definitive closed state.
+  [`index.ts:179`](../../src/core/service-actions/index.ts#L179)
+
+- Polling constants live in core, not in adapters.
+  [`index.ts:35`](../../src/core/service-actions/index.ts#L35)
+
+- Probe adapter: one GET, bounded timeout, redirects not followed.
+  [`http-probe.ts:8`](../../src/adapters/driven/health/http-probe.ts#L8)
+
+**Manifest and settings surface**
+
+- `healthUrl`: non-blank http(s) only, absent means no probe.
+  [`schema.ts:21`](../../src/adapters/driven/manifest/schema.ts#L21)
+
+- `switch.restartMode` defaults to none; an unknown value falls back without invalidating the file.
+  [`schema.ts:124`](../../src/adapters/driven/settings/schema.ts#L124)
+
+- Shared none/simple/clean cycling for settings and dialog.
+  [`settings.ts:17`](../../src/core/ports/settings.ts#L17)
+
+**TUI store and dialog**
+
+- Run claimed before the first await; targets marked in flight for both-direction exclusion.
+  [`edt-slice.ts:365`](../../src/adapters/driving/tui/store/slices/edt-slice.ts#L365)
+
+- Restart chained after a successful switch, logged with mode and every final state.
+  [`switch-dialog.tsx:84`](../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L84)
+
+- Enter/Esc rules while the report is running versus done.
+  [`switch-dialog.tsx:142`](../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L142)
+
+- The "Redémarrer les services après le switch" selector.
+  [`switch-dialog.tsx:269`](../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L269)
+
+- Live report: glyph plus colour per phase, bounded list.
+  [`switch-restart-report.tsx:43`](../../src/adapters/driving/tui/zones/edts/dialogs/switch-restart-report.tsx#L43)
+
+**CLI**
+
+- `--restart` validated before anything is touched; absent flag uses the setting.
+  [`subcommands.ts:893`](../../src/adapters/driving/cli/subcommands.ts#L893)
+
+**Tests (peripherals)**
+
+- Core orchestration, pool bounds and report ordering.
+  [`switch-restart.test.ts:1`](../../src/core/edt/switch-restart.test.ts#L1)
+
+- Store exclusion and live rows.
+  [`edt-slice.test.ts:1`](../../src/adapters/driving/tui/store/slices/edt-slice.test.ts#L1)
+
+- CLI flag, envelope rows and exit code.
+  [`dispatch.test.ts:1`](../../src/adapters/driving/cli/dispatch.test.ts#L1)
