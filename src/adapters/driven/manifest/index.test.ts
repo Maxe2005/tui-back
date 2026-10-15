@@ -213,6 +213,37 @@ describe('loadManifest', () => {
     });
   });
 
+  describe('healthUrl', () => {
+    const base = ['service: route-explorer', 'container: route-explorer', 'modules: {}'];
+
+    it('leaves healthUrl undefined when the manifest omits it', async () => {
+      const result = await loadManifest(await tempRepo(base.join('\n')));
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.healthUrl).toBeUndefined();
+      }
+    });
+
+    it.each([['http://localhost:3000/health'], ['https://svc.example/ping']])('accepts %s', async (url) => {
+      const result = await loadManifest(await tempRepo([...base, `healthUrl: ${url}`].join('\n')));
+
+      expect(result).toMatchObject({ ok: true, data: { healthUrl: url } });
+    });
+
+    it.each([['""'], ['"   "'], ['localhost:3000/health'], ['ftp://host/x'], ['"http://"']])(
+      'rejects %s with a precise message',
+      async (value) => {
+        const result = await loadManifest(await tempRepo([...base, `healthUrl: ${value}`].join('\n')));
+
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: 'manifest-validation-failed', message: expect.stringContaining('healthUrl') },
+        });
+      },
+    );
+  });
+
   describe('protectedBranches', () => {
     const base = ['service: route-explorer', 'container: route-explorer', 'modules: {}'];
 

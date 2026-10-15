@@ -6,6 +6,9 @@ import type { Result } from '../result.js';
 export interface Manifest {
   service: string;
   container?: string;
+  // Optional http(s) URL probed with a single GET after an EDT-switch restart: a 2xx answer makes
+  // the service `functional`. Absent = no probe (`up-unverified`).
+  healthUrl?: string;
   migrationCommand?: string;
   restartCommands?: string[];
   sharedBranch: string;

@@ -27,6 +27,9 @@ container: <chaîne non vide>
 # Optionnel
 migrationCommand: <chaîne non vide>   # omettre la clé si aucune commande
 
+# Optionnel — URL http(s) sondée (GET) après un redémarrage consécutif à un switch d'EDT
+healthUrl: <http:// ou https:// URL>
+
 # Optionnel — recette de « clean restart » (commandes shell exécutées dans l'ordre)
 restartCommands: [<chaîne non vide>, ...]
 
@@ -123,6 +126,21 @@ modules:
   erreur plutôt que d'utiliser le défaut).
 - **Rôle** : nom de la branche Git partagée/de référence pour le dépôt.
   Elle est **toujours** protégée (voir `protectedBranches`).
+
+### `healthUrl` (optionnel)
+
+- **Type** : `string`
+- **Validation** : chaîne rognée, non vide, commençant par `http://` ou
+  `https://` ; toute autre valeur (vide, blanche, sans schéma, `ftp://`…)
+  provoque un échec `manifest-validation-failed` nommant `healthUrl`.
+- **Comportement si absent** : `undefined` — aucune sonde n'est émise ; après
+  un redémarrage post-switch, un conteneur démarré est rapporté
+  `up-unverified` (démarré, non vérifié) au lieu de `functional`.
+- **Rôle** : après le redémarrage optionnel d'un EDT switch (`switch.restartMode`
+  ≠ `none`), tui-back émet un unique `GET` (avec délai maximal) sur cette URL
+  via `HealthProbePort`. Une réponse 2xx avec conteneur `up` donne `functional` ;
+  un délai dépassé ou un statut non-2xx donne `unhealthy`.
+- **Exemple** : `healthUrl: http://localhost:3000/health`
 
 ### `protectedBranches` (optionnel)
 
@@ -304,6 +322,7 @@ update:
 ```yaml
 service: api-gateway
 container: api-gateway
+healthUrl: http://localhost:3000/health
 migrationCommand: docker exec api-gateway npx prisma migrate deploy
 restartCommands:
   - docker compose down
