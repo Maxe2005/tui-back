@@ -105,3 +105,84 @@ describe('dashboard slice', () => {
     expect(store.getState().dashboardRegistryStatus).toBe('error');
   });
 });
+
+describe('dashboard slice service actions', () => {
+  function actionDeps(restartRun = vi.fn(async (_p: string, _c: string) => ok({ output: '' }))): AppStoreDeps {
+    const base = fakeDeps() as unknown as Record<string, unknown>;
+    return {
+      ...base,
+      manifest: { load: vi.fn(async () => ok({ service: 'a', sharedBranch: 'development', modules: {}, container: 'a', restartCommands: ['x', 'y'] })) },
+      container: { restart: vi.fn(async () => ok(undefined)) },
+      restart: { run: restartRun },
+      editor: { launch: vi.fn(() => ok(undefined)) },
+      lock: {
+        acquire: vi.fn(async () => ok({ release: async () => ok(undefined) })),
+        peek: vi.fn(async () => ok({ locked: false })),
+      },
+    } as unknown as AppStoreDeps;
+  }
+
+  it('loads the registry actions for a row', async () => {
+    const store = createAppStore(actionDeps());
+    await store.getState().loadDashboardServiceActions('/r/a');
+    expect(store.getState().dashboardServiceActions['/r/a']?.map((a) => a.id)).toEqual(['open-in-ide', 'restart-simple', 'restart-clean']);
+  });
+
+  it('shows recipe progress while a clean restart runs, then the result', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const run = vi.fn(async (_p: string, command: string) => {
+      if (command === 'y') {
+        await gate;
+      }
+      return ok({ output: '' });
+    });
+    const store = createAppStore(actionDeps(run));
+    await store.getState().loadDashboardServiceActions('/r/a');
+    const pending = store.getState().runDashboardServiceAction('/r/a', 'restart-clean');
+    await vi.waitFor(() => expect(store.getState().dashboardActionState['/r/a']?.running?.text).toBe('Clean restart — recipe step 2/2'));
+    // A second run on the same row is ignored while one is in flight.
+    await store.getState().runDashboardServiceAction('/r/a', 'restart-simple');
+    release();
+    await pending;
+    expect(store.getState().dashboardActionState['/r/a']).toEqual({ running: null, result: { ok: true, text: 'Clean restart done' } });
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports a failed restart inline', async () => {
+    const store = createAppStore(actionDeps(vi.fn(async () => err('restart-failed', 'boom'))));
+    await store.getState().loadDashboardServiceActions('/r/a');
+    await store.getState().runDashboardServiceAction('/r/a', 'restart-clean');
+    expect(store.getState().dashboardActionState['/r/a']?.result).toEqual({ ok: false, text: 'Repo /r/a restart "x" failed: boom' });
+  });
+
+  it('does not run an unavailable action', async () => {
+    const deps = actionDeps() as unknown as { lock: { peek: ReturnType<typeof vi.fn> }; container: { restart: ReturnType<typeof vi.fn> } };
+    deps.lock.peek = vi.fn(async (key: string) => ok({ locked: key === 'group-update' }));
+    const store = createAppStore(deps as unknown as AppStoreDeps);
+    await store.getState().loadDashboardServiceActions('/r/a');
+    expect(store.getState().dashboardServiceActions['/r/a']?.[1]?.availability).toEqual({ available: false, reason: 'group update' });
+    await store.getState().runDashboardServiceAction('/r/a', 'restart-simple');
+    expect(deps.container.restart).not.toHaveBeenCalled();
+  });
+
+  it('degrades without restart ports: open reports through the editor, restart errors inline', async () => {
+    const launch = vi.fn(() => err('editor-failed', 'no editor'));
+    const store = createAppStore({ ...(fakeDeps() as unknown as Record<string, unknown>), editor: { launch } } as unknown as AppStoreDeps);
+    await store.getState().runDashboardServiceAction('/r/a', 'open-in-ide');
+    expect(store.getState().dashboardActionState['/r/a']?.result).toEqual({ ok: false, text: 'no editor' });
+    await store.getState().runDashboardServiceAction('/r/a', 'restart-simple');
+    expect(store.getState().dashboardActionState['/r/a']?.result?.ok).toBe(false);
+    await store.getState().loadDashboardServiceActions('/r/a');
+    expect(store.getState().dashboardServiceActions['/r/a']).toBeUndefined();
+  });
+
+  it('openServiceInZone switches to Logs and records the pending focus until cleared', () => {
+    const store = createAppStore(fakeDeps());
+    store.getState().openServiceInZone('/r/a');
+    expect(store.getState().activeZone).toBe('logs');
+    expect(store.getState().pendingServiceFocus).toBe('/r/a');
+    store.getState().clearPendingServiceFocus();
+    expect(store.getState().pendingServiceFocus).toBeNull();
+  });
+});

@@ -635,6 +635,13 @@ it('shouldQuit returns true for q', () => {
         dashboardRegistry: null,
         dashboardUpdatedAt: null,
         loadDashboard: async () => {},
+        dashboardServiceActions: {},
+        dashboardActionState: {},
+        loadDashboardServiceActions: async () => {},
+        runDashboardServiceAction: async () => {},
+        pendingServiceFocus: null,
+        openServiceInZone: () => {},
+        clearPendingServiceFocus: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

@@ -10,7 +10,7 @@ function setup(manifest: Partial<Manifest> | 'broken', opts: { locked?: boolean;
   const release = vi.fn(async () => ok(undefined));
   const lock = {
     acquire: vi.fn(async () => (opts.acquire === 'busy' ? err('action-in-progress', 'busy') : ok({ release }))),
-    peek: vi.fn(async () => ok({ locked: opts.locked === true })),
+    peek: vi.fn(async (_key: string) => ok({ locked: opts.locked === true })),
   };
   const load = vi.fn(async () =>
     manifest === 'broken'
