@@ -126,3 +126,63 @@ export function disableWhileRunning(actions: readonly ServiceAction[], running: 
 export function actionForKey(actions: readonly ServiceAction[], input: string): ServiceAction | undefined {
   return actions.find((action) => action.key.toLowerCase() === `ctrl+${input.toLowerCase()}`);
 }
+
+export type AttentionReason = 'protected-branch' | 'no-upstream' | 'unknown-offline' | 'uncommitted' | 'merging' | 'rebasing' | 'behind' | 'used-by-edt';
+
+export type AttentionItem = { service: string; path: string; reason: AttentionReason; text: string };
+
+// One item per (service, reason), severity-ordered: protected branch, upstream trouble, working
+// tree, behind, then branch shared with another EDT. A failed probe is never an item.
+export function buildAttentionItems(services: readonly DashboardService[]): AttentionItem[] {
+  const items: Array<AttentionItem & { rank: number }> = [];
+  for (const s of services) {
+    const push = (reason: AttentionReason, rank: number, text: string) => items.push({ service: s.service, path: s.path, reason, rank, text });
+    if (s.protectedBranch) {
+      push('protected-branch', 0, `on protected branch${s.branch === null ? '' : ` ${s.branch}`}`);
+    }
+    if (s.divergence.status === 'no-upstream') {
+      push('no-upstream', 1, 'no upstream');
+    } else if (s.divergence.status === 'unknown-offline') {
+      push('unknown-offline', 1, 'divergence unknown (offline)');
+    }
+    if (s.workingTree.ok) {
+      const { uncommitted, mergeInProgress, rebaseInProgress } = s.workingTree.value;
+      if (uncommitted) push('uncommitted', 2, 'uncommitted changes');
+      if (mergeInProgress) push('merging', 2, 'merge in progress');
+      if (rebaseInProgress) push('rebasing', 2, 'rebase in progress');
+    }
+    if (s.divergence.behind !== null && s.divergence.behind > 0) {
+      push('behind', 3, `behind by ${s.divergence.behind}`);
+    }
+    if (s.usedByEdts.length > 0) {
+      push('used-by-edt', 4, `branch also used by EDT ${s.usedByEdts.join(', ')}`);
+    }
+  }
+  // Array.prototype.sort is stable, so services keep their listing order within a severity.
+  return items.sort((a, b) => a.rank - b.rank).map(({ rank: _rank, ...item }) => item);
+}
+
+export function formatAttentionLine(item: AttentionItem): string {
+  return `${item.service} · ${item.text}`;
+}
+
+export function attentionHeader(count: number): string {
+  return `Attention (${count})`;
+}
+
+export function registryAllClear(summary: DashboardRegistrySummary): boolean {
+  return summary.repoCount > 0 && summary.invalidManifests === 0 && summary.unreachable === 0 && summary.listingIssues === 0;
+}
+
+// The next attention line after `current` (none yet = the first), wrapping around; null when empty.
+export function nextAttentionIndex(current: number | null, count: number): number | null {
+  if (count === 0) {
+    return null;
+  }
+  return current === null || current >= count - 1 ? 0 : current + 1;
+}
+
+// Index of the row (in listing order) an attention item points at; -1 when the row is gone.
+export function rowIndexForAttention(rows: readonly DashboardService[], item: AttentionItem): number {
+  return rows.findIndex((row) => row.path === item.path);
+}

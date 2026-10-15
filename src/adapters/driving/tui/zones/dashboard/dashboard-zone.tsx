@@ -2,8 +2,9 @@
 // (checked first) or the snapshot sections. The registry check re-runs on mount and whenever the
 // registry screen's open flag flips (the zone never remounts); the snapshot loads on mount and
 // on `R`, and re-loads when the active EDT changes. Up/Down move the row cursor, Ctrl+O/R/L run
-// the focused row's registry actions, Enter opens it in its zone. Overlays make the zone inert.
-import { useEffect, useState } from 'react';
+// the focused row's registry actions, Enter opens it in its zone, `a` steps through the Attention
+// lines and lands the cursor on the line's service. Overlays make the zone inert.
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -12,7 +13,7 @@ import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js'
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { DashboardBody } from './dashboard-body.js';
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
-import { actionForKey, resolveDashboardBody } from './dashboard.logic.js';
+import { actionForKey, buildAttentionItems, nextAttentionIndex, resolveDashboardBody, rowIndexForAttention } from './dashboard.logic.js';
 import { LaunchBanner } from './launch-banner.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
@@ -43,6 +44,7 @@ export function DashboardZone({
   const runServiceAction = useStore((state) => state.runDashboardServiceAction);
   const openServiceInZone = useStore((state) => state.openServiceInZone);
   const [cursor, setCursor] = useState(0);
+  const [attentionPick, setAttentionPick] = useState<number | null>(null);
   const zoneInputActive = useZoneInputActive(useStore);
 
   useEffect(() => {
@@ -70,6 +72,13 @@ export function DashboardZone({
     setCursor((current) => (rows.length === 0 ? 0 : Math.min(current, rows.length - 1)));
   }, [rows.length]);
   const focusedIndex = rows.length === 0 ? 0 : Math.min(cursor, rows.length - 1);
+  const attentionItems = useMemo(() => buildAttentionItems(rows), [rows]);
+  // The picked line only shows as selected while the cursor still sits on its service.
+  const pickedItem = attentionPick === null ? undefined : attentionItems[attentionPick];
+  const attentionIndex = pickedItem !== undefined && rows[focusedIndex]?.path === pickedItem.path ? attentionPick : null;
+  useEffect(() => {
+    setAttentionPick(null);
+  }, [activeEdt, attentionItems.length]);
   const focusedPath = showSections ? rows[focusedIndex]?.path ?? null : null;
 
   // The focused row's actions (availability, lock names) are re-read when focus moves or the
@@ -102,6 +111,15 @@ export function DashboardZone({
         void loadDashboard();
         return;
       }
+      if (input === 'a') {
+        const pick = nextAttentionIndex(attentionPick, attentionItems.length);
+        const target = pick === null ? -1 : rowIndexForAttention(rows, attentionItems[pick]!);
+        if (pick !== null && target >= 0) {
+          setAttentionPick(pick);
+          setCursor(target);
+        }
+        return;
+      }
       if (focusedPath === null) {
         return;
       }
@@ -119,7 +137,7 @@ export function DashboardZone({
 
 
   return (
-    <Box flexDirection="column" flexGrow={1}>
+    <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
       {/* Rendered unconditionally — the banner is permanent on every Dashboard render, above
           whatever content follows. */}
       <LaunchBanner />
@@ -133,7 +151,7 @@ export function DashboardZone({
           <DimAnnotation text={EMPTY_REGISTRY_HINT} />
         </Box>
       ) : (
-        <DashboardBody useStore={useStore} cursor={focusedIndex} />
+        <DashboardBody useStore={useStore} cursor={focusedIndex} attentionItems={attentionItems} attentionIndex={attentionIndex} />
       )}
     </Box>
   );

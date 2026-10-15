@@ -24,13 +24,25 @@ import {
   formatUpdatedAgo,
   issueMarker,
   reasonLine,
+  attentionHeader,
+  formatAttentionLine,
+  registryAllClear,
+  type AttentionItem,
 } from './dashboard.logic.js';
 
 export const NO_ACTIVE_EDT_MESSAGE = 'No active EDT.';
 export const NO_ACTIVE_EDT_HINT = `Press ${formatHint(['e', 'EDTs'])} to create or choose one.`;
-// Rows the zone prints besides the service rows: banner (2), EDT line, registry line, updated
-// line and one spare for a "more below" indicator.
-const BODY_CHROME_ROWS = 7;
+export const REGISTRY_HINT = formatHint([':registry', 'repo health']);
+export const ATTENTION_CLEAR_MESSAGE = 'Nothing needs attention.';
+export const REGISTRY_CLEAR_MESSAGE = 'Registry healthy.';
+export const ATTENTION_MAX_ROWS = 4;
+// Rows the zone prints besides the service rows: banner (2), EDT line, registry counts and
+// success line, updated line, one spare for a "more below" indicator, the attention header (only
+// with lines, folded into the success line otherwise) and its lines (windowed).
+const BODY_FIXED_ROWS = 2 + 1 + 1 + 1 + 1;
+export function bodyChromeRows(attentionCount: number): number {
+  return BODY_FIXED_ROWS + (attentionCount === 0 ? 1 : 1 + Math.min(ATTENTION_MAX_ROWS, attentionCount));
+}
 
 function ServiceRow({ service, focused }: { service: DashboardService; focused: boolean }) {
   const container = containerLabel(service.container);
@@ -80,7 +92,18 @@ function focusedIndex(cursor: number, length: number): number {
   return Math.min(Math.max(cursor, 0), Math.max(length - 1, 0));
 }
 
-export function DashboardBody({ useStore = useAppStore, cursor = 0 }: { useStore?: AppStore; cursor?: number }) {
+export function DashboardBody({
+  useStore = useAppStore,
+  cursor = 0,
+  attentionItems = [],
+  attentionIndex = null,
+}: {
+  useStore?: AppStore;
+  cursor?: number;
+  attentionItems?: AttentionItem[];
+  // The attention line shown as selected; null when none is.
+  attentionIndex?: number | null;
+}) {
   const servicesStatus = useStore((state) => state.dashboardServicesStatus);
   const services = useStore((state) => state.dashboardServices);
   const registryStatus = useStore((state) => state.dashboardRegistryStatus);
@@ -99,7 +122,7 @@ export function DashboardBody({ useStore = useAppStore, cursor = 0 }: { useStore
 
   const loading = servicesStatus === 'loading' || registryStatus === 'loading';
   return (
-    <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
+    <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
       {servicesStatus === 'idle' || servicesStatus === 'loading' ? (
         <StateLine kind="loading" subject="services" />
       ) : servicesStatus === 'error' || services === null ? (
@@ -111,7 +134,9 @@ export function DashboardBody({ useStore = useAppStore, cursor = 0 }: { useStore
         </Box>
       ) : (
         <Box flexDirection="column" flexGrow={1} minHeight={0}>
-          <TruncatedText color={colors.text}>{`EDT ${services.edt.topic} · ${services.edt.serviceCount} services`}</TruncatedText>
+          <Box flexShrink={0}>
+            <TruncatedText color={colors.text}>{`EDT ${services.edt.topic} · ${services.edt.serviceCount} services`}</TruncatedText>
+          </Box>
           {services.services.length === 0 ? (
             <DimAnnotation text="This EDT has no services." />
           ) : (
@@ -121,7 +146,7 @@ export function DashboardBody({ useStore = useAppStore, cursor = 0 }: { useStore
               first={
                 <BoundedList
                   items={services.services}
-                  chromeRows={BODY_CHROME_ROWS}
+                  chromeRows={bodyChromeRows(attentionItems.length)}
                   cursorIndex={focusedIndex(cursor, services.services.length)}
                   renderItem={(service, index) => (
                     <ServiceRow key={service.path} service={service} focused={index === focusedIndex(cursor, services.services.length)} />
@@ -131,6 +156,33 @@ export function DashboardBody({ useStore = useAppStore, cursor = 0 }: { useStore
               second={<ServiceDetail service={services.services[focusedIndex(cursor, services.services.length)] ?? services.services[0]!} useStore={useStore} />}
             />
           )}
+          <Box flexDirection="column" flexShrink={0}>
+            {attentionItems.length === 0 ? (
+              <Box>
+                <StatusBadge state="done" />
+                <Box marginLeft={spacing['glyph-gap']} flexShrink={1}>
+                  <TruncatedText color={colors['text-dim']}>{`${attentionHeader(0)} · ${ATTENTION_CLEAR_MESSAGE}`}</TruncatedText>
+                </Box>
+              </Box>
+            ) : (
+              <>
+              <TruncatedText color={colors.text} bold>{attentionHeader(attentionItems.length)}</TruncatedText>
+              <BoundedList
+                items={attentionItems}
+                maxVisibleRows={ATTENTION_MAX_ROWS}
+                cursorIndex={attentionIndex ?? 0}
+                renderItem={(item, index) => (
+                  <Box key={`${item.path}:${item.reason}`}>
+                    <StatusBadge state={index === attentionIndex ? 'selection' : item.reason === 'protected-branch' ? 'failed' : 'awaiting'} />
+                    <Box marginLeft={spacing['glyph-gap']} flexShrink={1}>
+                      <TruncatedText color={index === attentionIndex ? colors.accent : colors.text}>{formatAttentionLine(item)}</TruncatedText>
+                    </Box>
+                  </Box>
+                )}
+              />
+              </>
+            )}
+          </Box>
         </Box>
       )}
       {registryStatus === 'idle' || registryStatus === 'loading' ? (
@@ -138,9 +190,17 @@ export function DashboardBody({ useStore = useAppStore, cursor = 0 }: { useStore
       ) : registryStatus === 'error' || registry === null ? (
         <StateLine kind="error" subject="repo health" retry />
       ) : (
-        <TruncatedText color={colors['text-dim']}>{formatRegistrySummary(registry)}</TruncatedText>
+        <Box flexShrink={0}>
+          <TruncatedText color={colors['text-dim']}>
+            {`${registryAllClear(registry) ? `${registry.repoCount} repos · ${REGISTRY_CLEAR_MESSAGE}` : formatRegistrySummary(registry)}  ${REGISTRY_HINT}`}
+          </TruncatedText>
+        </Box>
       )}
-      {!loading && updatedAt !== null ? <TruncatedText color={colors['text-dim']}>{formatUpdatedAgo(now, updatedAt)}</TruncatedText> : null}
+      {!loading && updatedAt !== null ? (
+        <Box flexShrink={0}>
+          <TruncatedText color={colors['text-dim']}>{formatUpdatedAgo(now, updatedAt)}</TruncatedText>
+        </Box>
+      ) : null}
     </Box>
   );
 }

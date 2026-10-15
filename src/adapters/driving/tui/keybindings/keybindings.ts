@@ -183,6 +183,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     footer: { key: 'Enter', verb: 'open', zones: ['dashboard'] },
   },
   {
+    keys: 'a (Dashboard)',
+    description: 'Dashboard: step through the Attention lines, moving the cursor to the line\'s service',
+    footer: { key: 'a', verb: 'attention', zones: ['dashboard'] },
+  },
+  {
     keys: 'Ctrl+O (Dashboard)',
     description: 'Dashboard: open the focused service repo in your editor',
     footer: { key: 'Ctrl+O', verb: 'IDE', zones: ['dashboard'] },

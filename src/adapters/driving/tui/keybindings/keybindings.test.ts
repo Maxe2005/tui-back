@@ -64,6 +64,7 @@ const EXPECTED = [
   ['R (Dashboard)', 'Dashboard: refresh every section (also retries a failed section)'],
   ['↑ / ↓ (Dashboard)', "Dashboard: move the cursor over the active EDT's services"],
   ['Enter (Dashboard)', 'Dashboard: open the focused service in the Logs zone'],
+  ['a (Dashboard)', "Dashboard: step through the Attention lines, moving the cursor to the line's service"],
   ['Ctrl+O (Dashboard)', 'Dashboard: open the focused service repo in your editor'],
   ['Ctrl+R (Dashboard)', 'Dashboard: restart the focused service (R stays refresh)'],
   ['Ctrl+L (Dashboard)', 'Dashboard: clean-restart the focused service through its recipe'],

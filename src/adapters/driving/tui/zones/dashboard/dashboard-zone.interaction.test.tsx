@@ -68,6 +68,23 @@ function seedServices(available = true) {
 }
 
 describe('DashboardZone interaction', () => {
+  it('a steps through the attention lines and moves the cursor to the line service', async () => {
+    const { store, openServiceInZone } = seedServices();
+    const services = store.getState().dashboardServices!;
+    store.setState({
+      dashboardServices: { ...services, services: [serviceRow('a'), { ...serviceRow('b'), divergence: { status: 'current', ahead: 0, behind: 2 } }] },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'a');
+      await press(instance, stdin, '\r');
+      expect(openServiceInZone).toHaveBeenCalledWith('/r/b');
+    } finally {
+      instance.unmount();
+    }
+  });
+
   it('loads on mount and again on R', async () => {
     const { store, loadDashboard } = seed();
     const { instance, stdin } = mount(store);
