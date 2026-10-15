@@ -2,7 +2,7 @@
 title: 'Story 8.1: Dashboard Snapshot Use-Case & CLI'
 type: 'feature'
 created: '2026-10-15'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'fedca18701ccbca761bf62983077e292536c2986'
 review_loop_iteration: 0
 context:
