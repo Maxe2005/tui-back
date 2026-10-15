@@ -2,7 +2,7 @@
 title: 'Story 8.2: Dashboard Shell — States, Fixed Banner & Refresh'
 type: 'feature'
 created: '2026-10-15'
-status: 'in-review'
+status: 'done'
 baseline_commit: '8e15fa7be7e493c49f61c7431b24622018f9810a'
 review_loop_iteration: 0
 context:
@@ -83,3 +83,52 @@ Implementation notes: the section builders are `buildDashboardServices` / `build
 - `npm test` -- expected: all green
 - `npm run typecheck` -- expected: no errors
 - `npm run depcheck` -- expected: no violations
+
+## Suggested Review Order
+
+**Independent section loading**
+
+- Entry point: per-section status, queued reload on EDT change, throwing builders degrade alone.
+  [`dashboard-slice.ts:30`](../../src/adapters/driving/tui/store/slices/dashboard-slice.ts#L30)
+
+- Services half of the snapshot, now exported for the TUI.
+  [`snapshot.ts:70`](../../src/core/dashboard/snapshot.ts#L70)
+
+- Registry-health half, independent of any active EDT.
+  [`snapshot.ts:95`](../../src/core/dashboard/snapshot.ts#L95)
+
+- CLI snapshot composes the two builders; output unchanged.
+  [`snapshot.ts:105`](../../src/core/dashboard/snapshot.ts#L105)
+
+**Zone shell and refresh**
+
+- Precedence, mount/EDT-change load, `R` gated by the overlay predicate.
+  [`dashboard-zone.tsx:23`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L23)
+
+- Pure body precedence: registry error, empty registry, then sections.
+  [`dashboard.logic.ts:9`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L9)
+
+- Sections with their own StateLine; bounded service rows under the banner.
+  [`dashboard-body.tsx:39`](../../src/adapters/driving/tui/zones/dashboard/dashboard-body.tsx#L39)
+
+- Row marks each failed probe explicitly, never hiding the rest.
+  [`dashboard-body.tsx:23`](../../src/adapters/driving/tui/zones/dashboard/dashboard-body.tsx#L23)
+
+- "updated Ns ago" wording.
+  [`dashboard.logic.ts:16`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L16)
+
+**Discoverability**
+
+- `R refresh` footer hint and help row, dashboard only.
+  [`keybindings.ts:171`](../../src/adapters/driving/tui/keybindings/keybindings.ts#L171)
+
+**Tests**
+
+- Section states, minimum-height clipping, nothing probed behind the prompt.
+  [`dashboard-zone.test.tsx:1`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L1)
+
+- Real keypresses: `R`, overlay inertness, EDT change.
+  [`dashboard-zone.interaction.test.tsx:1`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.interaction.test.tsx#L1)
+
+- Slice: independence, queued reload, throwing builder recovery.
+  [`dashboard-slice.test.ts:1`](../../src/adapters/driving/tui/store/slices/dashboard-slice.test.ts#L1)
