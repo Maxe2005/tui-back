@@ -82,9 +82,16 @@ development_status:
   epic-6-retrospective: optional
 
   epic-7: in-progress
-  # Execution order: 7-12 -> 5-7, 7-5 -> 7-6 (7-5 rewritten as services console; 7-10/7-11 done).
+  # 7-5/7-6 (Dashboard) removed 2026-10-15: replaced by epic-8.
   7-9-bounded-rendering-audit-global-fix-regression-guard: done
   7-12-shared-service-actions-open-in-ide-simple-clean-restart: done
-  7-5-dashboard-active-edt-services-console-last-update-persistence: backlog
-  7-6-dashboard-alerts-quick-actions-registry-health-operation-indicator: backlog
   epic-7-retrospective: optional
+
+  epic-8: backlog
+  # Dashboard rewrite (2026-10-15): active-EDT services table + shared service actions + Attention block.
+  8-1-dashboard-snapshot-use-case-and-cli: backlog
+  8-2-dashboard-shell-states-fixed-banner-refresh: backlog
+  8-3-dashboard-active-edt-services-table-service-actions: backlog
+  8-4-dashboard-attention-block-registry-health: backlog
+  8-5-dashboard-edt-actions-visual-finish: backlog
+  epic-8-retrospective: optional

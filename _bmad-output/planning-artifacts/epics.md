@@ -99,7 +99,7 @@ UX-DR15: Implement the dedicated keybinding-palette/help screen — opened via `
 UX-DR16: Implement the canonical keybinding contract — `j`/`k` move, `g`/`G` top/bottom (list-jump only, never zone-switching), `Space` toggle, `Enter` confirm, `Esc` cancel, `Tab` cycle, `Ctrl+W` resize-mode, `/` filter, `:` command entry, `?` help, `q` quit (confirms first if a group update/publish/propagation run is in progress), and single-letter zone mnemonics `d`/`e`/`u`/`l`/`r`/`s`. Amended 2026-08-24 (Sprint Change Proposal, Story 2.12); zone-switching mechanism corrected 2026-08-25 after a review loopback (see Story 2.12): `Left`/`Right`, with no form/overlay capturing input, directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends — always available, no focus mode. `Tab` is unaffected by this story. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): `Ctrl+W` resize-mode is exited by either `Enter` or `Esc`.
 UX-DR17: Implement the two-layer outcome-message voice pattern across every zone — a dry/factual primary line sufficient on its own, with an optional `dim-annotation` wink line that is never required and never folded into the primary line; raw stderr/stack traces always stay one action away, never fully hidden.
 UX-DR18: Implement the resizable list/detail split as the primary content layout within each zone (roughly 2:3 list:detail ratio), per `{components.splitter}`. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the EDT zone becomes the first "multi-splitter zone" (Story 2.7's already-anticipated concept) — 3 internal boundaries (EDT selector/EDT SERVICES/OTHER SERVICES) in addition to the list/detail split.
-UX-DR19: Implement Dashboard zone states — cold-load spinner, populated (active EDT + member health + last group-update timestamp + default "enter last EDT" action), "no EDT yet" first-run prompt, and background-event badge surfacing while on Dashboard.
+UX-DR19: Implement Dashboard zone states (rewritten 2026-10-15, Sprint Change Proposal, Epic 8) — cold-load spinner per section, populated (a fixed, non-compacting banner above the active EDT's services table with per-service actions, an Attention block, a registry-health summary and the EDT actions), "no EDT yet" first-run prompt and "no repos registered" prompt (Story 2.11 keeps precedence), per-field error states. No group-update outcome and no background-event badge on the Dashboard (dropped).
 UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" prompt), populated (list with branch + ahead/behind per service), no-upstream/offline divergence display, duplicate-topic rejection, zero-member-at-creation rejection, per-service branch-creation failure reporting, shared-branch rejection (with explanation before any git write), member added/removed without disturbing others, zero-member EDT display (never an error), member branch change (protected-switch rule), protected-switch-blocked-during-update prompt, interrupted-update recovery offer, and member/non-member service categorization with per-service contextual actions (amended 2026-08-26, Sprint Change Proposal, Story 2.18); fixed, resizable borders between EDT selector/EDT SERVICES/OTHER SERVICES (amended 2026-08-27, Sprint Change Proposal, Story 2.21). Amended 2026-09-16 (Sprint Change Proposal): adds "EDT deleted" (per-service branch-disposition confirmation, active-EDT-blocked, cross-EDT branch-collision-blocked-per-service — Story 2.29), "EDT quick-pick" (filterable list for `edt-switch`/`edt-modify` with no argument, including its own "no matching EDT" state — Story 2.30), and "Create from existing EDT" (member checklist pre-seeded from a root EDT, root-branch-derived base-branch suggestion — Story 2.31) as new named states. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): EDT SERVICES/OTHER SERVICES lists adopt the same bounded/scrollable list primitive as the Logs zone (UX-DR33), for the same reason.
 UX-DR21: Implement Update zone states — idle (last outcome visible), no-op-on-zero-member message, all-repos confirmation gate, second-run-blocked message, in-progress per-service spinner, per-service outcome summary (updated/skipped/failed, none silently absent), assisted-resolution guided menu (stash/open-in-editor/cancel-repo/cancel-run), mid-merge/mid-rebase distinct state, migration-failure detail + re-trigger with re-verify, and quit-mid-run confirmation with next-launch interrupted-run resume offer.
 UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): adds filter-history browsing (arrow-recall and grid-browser, see UX-DR32) as a new named state. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): service lists, the hints panel, and `LogFilterEditor` (including its history-grid browser) now render within a bounded, scrollable window (UX-DR33) rather than unconditionally, preventing terminal-overflow rendering corruption.
@@ -125,7 +125,7 @@ UX-DR36 amended 2026-10-12 (Story 7.11): an open overlay (settings, help, regist
 UX-DR36 (added 2026-10-01, Sprint Change Proposal, Story 7.4): Interaction consistency contract — the same intent uses the same key, wording and component in every zone (list cursor, edit/commit/cancel, confirm dialogs, destructive-action confirmation, filter, footer hint format, modal titles, empty/error/loading states). Recorded as a table in EXPERIENCE.md; deviations require a documented reason. Amended 2026-10-05 (Sprint Change Proposal, Story 7.7): Shift+Tab always reverses Tab; every zone declares focus movement through one shared navigation primitive (H/V arrows, Tab/Shift+Tab, Ctrl+N/P per zone).
 UX-DR37 (added 2026-10-07, Sprint Change Proposal, Story 7.9): Bounded-rendering contract — at every moment, whatever the terminal size, pane ratios, message length or number of accumulated entries, the TUI is legible and coherent: no rendered region (zone body, pane, dialog, row, text) may exceed the space it is given on either axis. Overflow is always resolved by a visible, deliberate treatment (ellipsis truncation, a windowed scroll region with more-above/below indicators, or an explicit "terminal too small" screen) — never by silent clipping or by letting Ink's layout push other lines off-screen. Enforced by shared primitives plus a guard test and a size-matrix render test so the defect class cannot be reintroduced.
 UX-DR10 amended 2026-10-01: resize-mode is available in every zone (UX-DR35), not only the EDTs zone.
-UX-DR19 amended 2026-10-12: Dashboard = active-EDT services console (state + branch + per-service actions, Stories 7.5/7.12). UX-DR19 amended 2026-10-01: see EXPERIENCE.md State Patterns › Dashboard (container status + branches + divergence per member, working-tree alerts, quick actions, registry health, operation in progress).
+UX-DR19 amended 2026-10-15: superseded by the Epic 8 rewrite above (Stories 8.1–8.5 replace 7.5/7.6); see EXPERIENCE.md State Patterns › Dashboard.
 UX-DR21 amended 2026-10-01: adds the merge-source strategy states (FR-28).
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the confirmed-safe keyboard fallback is delivered by Story 2.21 (EDT zone); drag-resize stays out of scope (no mouse support in Ink).
 
@@ -160,7 +160,7 @@ FR-22: Epic 6 - See response and relevant logs together
 FR-23: Epic 6 - Manage the saved-request library across EDTs
 FR-29: Epic 7 - Container-less managed services (added 2026-10-01, Sprint Change Proposal — Story 7.2)
 FR-32: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal — Story 7.8)
-FR-35: Epic 7/5 - Service actions: open IDE, simple/clean restart (added 2026-10-12 — Stories 7.12, 5.7, 7.5)
+FR-35: Epic 7/5 - Service actions: open IDE, simple/clean restart (added 2026-10-12 — Stories 7.12, 5.7, 8.3)
 FR-36: Epics 3/4/5 - Configurable defaults: Update globals, st options, Logs restart mode (added 2026-10-12 — Stories 3.20, 4.7, 5.7)
 FR-37: Epic 2 - Post-switch service restart (none/simple/clean), parallel, verified per-service state; default in settings (added 2026-10-14 — Story 2.44)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
@@ -168,7 +168,16 @@ FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint C
 
 ## Epic List
 
-### Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
+#
+
+### Epic 8: Dashboard
+> Added 2026-10-15 (Sprint Change Proposal `sprint-change-proposal-2026-10-15.md`). Replaces former Stories 7.5/7.6.
+
+A developer lands on a Dashboard that answers "should I worry about anything?" at a glance: the active EDT's services with state, branch and divergence, the shared per-service actions (open in IDE, restart, clean restart), an Attention block and a registry-health summary, under the permanent banner.
+**FRs covered:** none new (draws on FR-9, FR-29, FR-35; completes UX-DR19)
+**Implementation notes:** Prerequisites all done: 7.3 layout contract, 7.7 focus navigation, 7.9 bounded rendering, 7.11 overlay ownership, 7.12 service actions; 2.42 protected branches, 2.43 cross-EDT branch usage. Refresh is on mount and on `R` (no live poll). Execution order: 8.1 → 8.2 → 8.3 / 8.4 (parallelizable) → 8.5. Dropped on purpose: last group-update outcome, background-event badges, operation-in-progress indicator.
+
+## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 A developer can launch the tool, see the full navigation shell (top bar, six zone-tabs, footer, resizable list/detail split, modal-dialog, `?` help screen), register managed repos via a manifest, and run any action identically via the TUI or as a standalone CLI script.
 **FRs covered:** FR-1, FR-2
 **Implementation notes:** Lays the hexagonal foundation (AD-1–AD-6, AD-9, AD-13–AD-15), the Atelier design tokens and cross-cutting components (UX-DR1–UX-DR18, UX-DR25–UX-DR27), the script output envelope (AD-3), XDG state layout (NFR-5), single-instance enforcement (NFR-6), auditability (NFR-3).
@@ -367,9 +376,9 @@ A developer can discover a repo's routes, fire a request with automatic dev-mode
 ### Epic 7: TUI Consistency, Dashboard & Code Hygiene
 > Added 2026-10-01 (Sprint Change Proposal `sprint-change-proposal-2026-10-01.md`).
 
-A developer gets a Dashboard that actually summarizes their workspace, a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary, one focus-navigation primitive with Shift+Tab reversal), per-service last-run transparency in Update, support for services that have no container, and a codebase whose comments explain the code rather than its history.
-**FRs covered:** FR-29, FR-32, FR-33, FR-35 (plus completion of UX-DR10, UX-DR19)
-**Implementation notes:** AD-17 (comment convention), AD-4 amendment, AD-16/GitPort diff capability (7.8), UX-DR35, UX-DR36 (amended 2026-10-05: Shift+Tab rule + nav-component contract). Story 7.1 runs first, while no other story branch is in flight. Execution order: 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.9 (added 2026-10-07: bounded-rendering audit & enforcement, AD-19, UX-DR37) → 7.4 → 7.5/7.6. Amended 2026-10-12: 7.11 (overlay input ownership, bug) goes first; 7.12 (service actions) precedes 7.5/7.6 and Story 5.7.
+A developer gets a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary, one focus-navigation primitive with Shift+Tab reversal), per-service last-run transparency in Update, support for services that have no container, and a codebase whose comments explain the code rather than its history.
+**FRs covered:** FR-29, FR-32, FR-33, FR-35 (plus completion of UX-DR10)
+**Implementation notes:** AD-17 (comment convention), AD-4 amendment, AD-16/GitPort diff capability (7.8), UX-DR35, UX-DR36 (amended 2026-10-05: Shift+Tab rule + nav-component contract). Story 7.1 runs first, while no other story branch is in flight. Execution order: 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.9 (added 2026-10-07: bounded-rendering audit & enforcement, AD-19, UX-DR37) → 7.4. Amended 2026-10-12: 7.11 (overlay input ownership, bug) goes first; 7.12 (service actions) precedes Story 5.7. Amended 2026-10-15: Stories 7.5/7.6 (Dashboard) are removed and replaced by Epic 8.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 
@@ -3285,7 +3294,7 @@ As a developer, I want to resize the panes of whichever zone I'm in with `Ctrl+W
 
 **Given** the EDTs zone **When** migrated **Then** its existing 3-boundary behavior and persisted ratios are preserved (no user-visible change).
 
-**Implementation notes:** Routes and Update already pass `listSplitterTargeted` — fold that into the primitive. The Dashboard's pane spec is defined here as a placeholder and filled by 7.5.
+**Implementation notes:** Routes and Update already pass `listSplitterTargeted` — fold that into the primitive. The Dashboard's pane spec is defined here as a placeholder and filled by Story 8.2.
 
 ### Story 7.4: Interaction Consistency Audit & Alignment (UX-DR36)
 
@@ -3323,52 +3332,6 @@ As a developer, I want the remaining UX-DR36 alignment items finished, so that t
 
 **Given** shared helpers **When** reviewed **Then** settings and registry screens reuse the shared list-cursor reducer and the shared → keybindings → zones type-import layering is clean.
 
-### Story 7.5: Dashboard — Active-EDT Services Console & Last-Update Persistence (UX-DR19)
-
-> Rewritten 2026-10-12 (Sprint Change Proposal `sprint-change-proposal-2026-10-12.md`): the Dashboard is an action console for the active EDT, not a status page. Depends on Story 7.12 (service actions) and 7.11.
-
-As a developer, I want the Dashboard to be the console of my active EDT — every service with its state and branch, and every action I can take on it — so that I can see the workspace and act on a service without leaving the first screen.
-
-**Acceptance Criteria:**
-
-**Given** the app launches **When** the Dashboard renders **Then** the banner stays (Story 2.16), followed by a cold-load spinner per section while data assembles; sections fill independently.
-
-**Given** an active EDT **When** the summary is ready **Then** it lists each member service with: container status (up/down/restarting/no container — glyph + text, FR-29), current branch, and ahead/behind vs. its `sharedBranch` (FR-9's existing computation, reused), plus the EDT name.
-
-**Given** any group update finishes (any scope, TUI or CLI) **When** it ends **Then** its outcome (finished-at timestamp, scope, updated/skipped/failed counts) is persisted through the state port; the Dashboard shows the latest one ("Last update: <relative time> — 3 updated, 1 failed"), or "No update run yet".
-
-**Given** no EDT exists **When** the Dashboard renders **Then** it prompts to create or choose an EDT instead of an empty summary; with an empty registry the Story 2.11 prompt keeps precedence.
-
-**Given** the Dashboard **When** displayed **Then** the default highlighted action is "Enter [last EDT]" (switches to the EDTs zone with that EDT selected).
-
-**Given** docker or git probes fail for a service **When** rendered **Then** that row shows an explicit error state for that field; other rows and sections are unaffected.
-
-**Implementation notes:** uses Story 7.3's layout contract. The container-status poll reuses the Update zone's health-poll slice logic rather than a third copy.
-
-**Given** the active EDT **When** the Dashboard renders **Then** the services list is the main body of the screen, one row per service: state (up / down / restarting / no container — glyph + text), active branch, ahead/behind, and a one-glyph issue marker (dirty / merge in progress, absorbed from 7.6).
-
-**Given** a service row is focused (↑/↓, Story 7.7) **When** shown **Then** its available actions are listed (key + label) from Story 7.12's registry: open in IDE, restart (simple), restart (clean) — each disabled with a reason when unavailable (no container, no recipe); further actions are added by registering them.
-
-**Given** a service action is triggered from the Dashboard **When** it runs **Then** the row shows its progress and result inline; an action that conflicts with a held operation lock (update, migration, switch) is disabled with the lock's name (Story 3.16 semantics).
-
-**Given** the service states **When** displayed **Then** they refresh live with the container-health poll (reusing the Update zone's slice logic) and a `restarting` state caused by Logs or Update shows here too.
-
-**Given** an overlay (settings, help, …) is open over the Dashboard **When** keys are pressed **Then** the services list does not react (Story 7.11).
-
-### Story 7.6: Dashboard — Alerts, Quick Actions, Registry Health & Operation Indicator
-
-As a developer, I want the Dashboard to warn me about anything needing attention and to launch common actions from it, so that it is a real starting point, not just a status page.
-
-**Acceptance Criteria:**
-
-**Given** active-EDT members **When** a member has uncommitted changes or a merge/rebase in progress **Then** the issue marker of its Story 7.5 row is set, and the focused row shows the **reason** line (amended 2026-10-12).
-
-**Given** the Dashboard **When** focused **Then** a quick-action row offers: enter last EDT, start group update (opens Story 3.7's configuration), open Logs, switch EDT (Story 2.30's quick-pick) — each with its key shown in the row and footer, keys consistent with UX-DR36. This is the **EDT-level** row, distinct from Story 7.5's per-service actions; its keys must not collide with Story 7.12's service-action keys (amended 2026-10-12).
-
-**Given** the registry **When** summarized **Then** a section shows registered-repo count and counts of invalid manifests, unreachable repos and listing issues (Story 2.34's classification), with a shortcut to `:registry`; all-clear shows a single success line.
-
-**Given** an operation holds a lock (update, migration, switch, …) **When** the Dashboard renders **Then** a line names the operation and its progress, and quick actions that would conflict are disabled with the reason.
-
 ### Story 7.7: Shared Focus-Navigation Component (FR-33)
 
 > Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Runs before Story 7.4 so the alignment phase consumes its primitive.
@@ -3385,7 +3348,7 @@ As a developer, I want one shared navigation primitive so Tab/Shift+Tab move foc
 
 ### Story 7.8: Update Per-Service Last-Run Detail (FR-32)
 
-> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Parallelizable with the 7.2 graft; session-only, independent of 7.5's persisted datum.
+> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Parallelizable with the 7.2 graft; session-only.
 
 As a developer, after a group update I want the detail pane to report per service what really happened, so I trust the run without re-checking by hand.
 
@@ -3401,11 +3364,10 @@ As a developer, after a group update I want the detail pane to report per servic
 
 **Given** the CLI **When** a run ends **Then** the same details ride the JSON line.
 
-**Given** a zone has a pending background event **When** on the Dashboard **Then** its tab shows the counter badge (UX-DR19 background-event state).
 
 ### Story 7.9: Bounded-Rendering Audit, Global Fix & Regression Guard (UX-DR37)
 
-> Added 2026-10-07 (Sprint Change Proposal `sprint-change-proposal-2026-10-07.md`). Runs after 7.3/7.7 (it builds on `ZoneLayout`, `bounded-list` and the focus primitive) and before 7.4 (the alignment phase then consumes the bounded primitives) and 7.5/7.6 (the Dashboard is built bounded from day one). Generalizes Story 5.5's fix — applied then to Logs/EDTs only — to the whole tool.
+> Added 2026-10-07 (Sprint Change Proposal `sprint-change-proposal-2026-10-07.md`). Runs after 7.3/7.7 (it builds on `ZoneLayout`, `bounded-list` and the focus primitive) and before 7.4 (the alignment phase then consumes the bounded primitives) and the Dashboard (Epic 8, built bounded from day one). Generalizes Story 5.5's fix — applied then to Logs/EDTs only — to the whole tool.
 
 As a developer, I want every region of the TUI — zones, panes, dialogs, rows, error messages — to stay inside the space it is given, whatever the terminal size, pane ratios or volume of messages, and I want that rule enforced so it cannot regress, so that the tool is readable and coherent at all times and lines never silently vanish.
 
@@ -3485,7 +3447,7 @@ As a developer, I want the screen or panel I opened on top of a zone to be the o
 
 ### Story 7.12: Shared Service Actions — Open in IDE, Simple/Clean Restart (AD-21)
 
-> Added 2026-10-12. Foundation for Stories 5.7 and 7.5.
+> Added 2026-10-12. Foundation for Stories 5.7 and 8.3.
 
 As a developer, I want one definition of "what I can do to a service", so that Logs and Dashboard offer the same actions with the same behaviour and new actions are added once.
 
@@ -3502,4 +3464,96 @@ As a developer, I want one definition of "what I can do to a service", so that L
 **Given** the registry **When** a future action is added **Then** it is a new entry, with no change to its consumers' layout logic (consumers render whatever the registry lists for the service, with its key and availability).
 
 **Implementation notes:** the registry lives in `core/` (pure, ports injected: container, restart, manifest); the TUI-side `ServiceActionsRow` component renders the available actions with their keys. Hexagonal rule: no `child_process` in the TUI layer — the editor launcher becomes a driven adapter behind a port (the existing launcher is moved, not rewritten).
+
+## Epic 8: Dashboard
+
+A developer lands on a Dashboard that answers "should I worry about anything?" at a glance: the active EDT's services with state, branch and divergence, the shared per-service actions, an Attention block and a registry-health summary, under the permanent banner. Visual reference: `ux-designs/ux-tui-back-2026-08-10/mockups/key-dashboard.html`.
+
+### Story 8.1: Dashboard Snapshot Use-Case & CLI
+
+As a developer, I want one pure use-case that assembles everything the Dashboard shows, so that the TUI and a standalone script read the same facts.
+
+**Acceptance Criteria:**
+
+**Given** an active EDT **When** the snapshot is requested **Then** it returns, per member service: container state (up / down / restarting / no container, FR-29), current branch, ahead/behind vs. its `sharedBranch` (Story 2.6's computation, reused — including "no upstream" and "unknown (offline)"), and working-tree issues (uncommitted changes, merge/rebase in progress).
+
+**Given** a member service **When** its branch is a manifest-protected branch (Story 2.42) or is also used by another EDT (Story 2.43) **Then** the snapshot carries those flags with the owning EDT name(s).
+
+**Given** the registry **When** summarized **Then** the snapshot carries the registered-repo count and the counts of invalid manifests, unreachable repos and listing issues (Story 2.34's classification).
+
+**Given** a docker or git probe fails for one service or field **When** the snapshot is built **Then** that field carries an explicit error state; other fields, rows and sections are unaffected.
+
+**Given** no active EDT **When** requested **Then** the snapshot says so explicitly (distinct from an empty registry, which Story 2.11 handles first).
+
+**Given** the CLI **When** `dashboard` runs **Then** the same snapshot is emitted as the standard JSON envelope (AD-3).
+
+**Implementation notes:** `core/dashboard`, pure, ports injected (container, git, registry, edt-state); no TUI imports. Container status reuses the Update zone's health logic rather than adding a third copy.
+
+### Story 8.2: Dashboard Shell — States, Fixed Banner & Refresh
+
+As a developer, I want the Dashboard to render coherent states under a permanent banner and refresh when I ask, so that it is always legible and never stale without saying so.
+
+**Acceptance Criteria:**
+
+**Given** the Dashboard renders **When** at any size **Then** the banner (Story 2.16) is fixed and is never compacted or hidden; the content below uses the remaining space through Story 7.3's layout contract and Story 7.9's bounded primitives (scroll region, "terminal too small" screen when even the banner cannot fit).
+
+**Given** the Dashboard mounts **When** the snapshot assembles **Then** each section shows its own spinner and fills independently.
+
+**Given** the registry is empty **When** the Dashboard renders **Then** Story 2.11's prompt keeps precedence; with a registry but no EDT, it prompts to create or choose one (`[e]`); otherwise the populated view shows.
+
+**Given** the Dashboard is shown **When** it loads **Then** it refreshes on mount and on `R`; a dim line shows "updated Ns ago"; a load failure shows `[R] retry` (UX-DR17 state line).
+
+**Given** a probe error **When** rendered **Then** the affected field shows its explicit error state; the rest is unaffected.
+
+**Given** an overlay (settings, help, registry, command bar) is open **When** keys are pressed **Then** the Dashboard does not react (Story 7.11).
+
+### Story 8.3: Dashboard — Active-EDT Services Table & Per-Service Actions
+
+As a developer, I want my active EDT's services listed with their state and the actions I can take on each, so that I can see the workspace and act on a service from the first screen.
+
+**Acceptance Criteria:**
+
+**Given** the active EDT **When** the Dashboard renders **Then** the EDT line (name, service count) and one row per service show: state (glyph + text), issue marker, branch, ahead/behind.
+
+**Given** a service row **When** navigated with ↑/↓ **Then** focus follows Story 7.7's component; the focused row shows a reason line for its anomaly (dirty, merge in progress, error) and the action row from Story 7.12's registry: `[Ctrl+O]` Open in IDE, `[Ctrl+R]` Restart, `[Ctrl+L]` Clean restart — each disabled with its reason when unavailable (no container, no recipe), plus `[Enter]` to open the service in its zone.
+
+**Given** a service action is triggered **When** it runs **Then** the row shows its progress and result inline (e.g. "Clean restart — recipe step 2/3"); the other actions of that row are disabled with "operation in progress"; an action conflicting with a held operation lock (update, migration, switch) is disabled with the lock's name (Story 3.16 semantics).
+
+**Given** a restart happens elsewhere (Logs, Update, switch) **When** the Dashboard is open **Then** its row is only updated on the next refresh (`R`) — no live poll.
+
+**Given** a service row **When** the keys are bound **Then** `Ctrl+R` (restart) and `R` (refresh) are distinct and do not collide, and the footer and `?` help list both from the keybinding declaration list.
+
+**Implementation notes:** actions come exclusively from Story 7.12's registry through `ServiceActionsRow`; a new registered action appears here without layout change.
+
+### Story 8.4: Dashboard — Attention Block & Registry Health
+
+As a developer, I want the Dashboard to list everything that needs my attention and the health of my registry, so that I notice problems without opening each zone.
+
+**Acceptance Criteria:**
+
+**Given** the snapshot **When** the Attention block renders **Then** it lists, ordered by severity: services on a protected branch (Story 2.42), no-upstream or unknown (offline) divergence, uncommitted changes or merge/rebase in progress, and branches also used by another EDT (Story 2.43, naming that EDT); each line names its service and reason; the block header shows the count.
+
+**Given** a shared branch **When** a member is behind it (`behind > 0`) **Then** it is listed; no configurable threshold exists.
+
+**Given** nothing needs attention **When** rendered **Then** the block shows a single success line.
+
+**Given** the registry summary **When** rendered **Then** it shows the repo count and the invalid-manifest, unreachable and listing-issue counts, with `[:registry]` as the shortcut; all clear shows a single success line.
+
+**Given** an attention line **When** `Enter` is pressed on its service **Then** the focus moves to that service's row.
+
+### Story 8.5: Dashboard — EDT Actions & Visual Finish
+
+As a developer, I want the Dashboard's EDT actions and final look to match the approved mockup, so that the first screen feels finished.
+
+**Acceptance Criteria:**
+
+**Given** an active or last-used EDT **When** the Dashboard renders **Then** the default action is "Enter [EDT]" (opens it in the EDTs zone), and `[e]` offers "Choose another EDT / create one" (Story 2.30's quick-pick).
+
+**Given** the three approved states (populated with anomalies, all clear with an action running, no EDT) **When** rendered **Then** they match `mockups/key-dashboard.html` in structure and Atelier tokens (UX-DR1+): one accent colour, status colours only for status, square corners, dim secondary text.
+
+**Given** the terminal size matrix (Story 7.9) **When** the Dashboard renders **Then** no region exceeds its bounds and the banner is intact at every size at which it can fit.
+
+**Given** the Dashboard **When** the footer renders **Then** it lists `[↑/↓] service`, `[Enter] open`, `[Ctrl+O]` `[Ctrl+R]` `[Ctrl+L]` while a service is focused, `[R] refresh`, `[e] EDTs`.
+
+**Implementation notes:** closes the deferred "banner clips on short terminals" entry by guaranteeing the minimum-size screen rather than compacting the banner.
 
