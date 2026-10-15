@@ -17,6 +17,7 @@ import type { MenuItem } from '../../shared/components/menu-list.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
 import type { OverrideBoxState } from './dialogs/create-wizard/override-box.logic.js';
+import type { SwitchRestartRunMode } from '../../../../../core/edt/switch-restart.js';
 import type { SwitchResolutionState } from './dialogs/switch-resolution/switch-resolution.logic.js';
 
 // A fixed max width past which branch names ellipsize — generous enough for most feature-branch
@@ -602,6 +603,14 @@ export type SwitchDialogState = {
   // An ok switch that adopted/discarded/failed anything keeps the dialog open on this per-repo
   // summary (Enter/Esc close it); an all-`switched` run closes.
   results?: SwitchEdtRepoResult[];
+  // This switch's post-switch restart choice (FR-37). Undefined = inherit the
+  // `switch.restartMode` setting (the dialog never writes it back); the create wizard's
+  // "switch now" handoff sets an explicit `'none'` — its Enter was already the confirmation and
+  // no selector is shown there.
+  restartMode?: SwitchRestartRunMode;
+  // True once the dialog is on the post-switch restart report (rows live in the store's
+  // `switchRestart`, so the report survives leaving the zone).
+  restartReport?: boolean;
 };
 
 // A live branch-picker session, opened from any of the 3 non-creation branch-entry points.
@@ -845,8 +854,17 @@ export function initialCreateDialog(seed?: EdtRegistryEntry): CreateDialogState 
   };
 }
 
-export function initialSwitchDialog(target: EdtRegistryEntry): SwitchDialogState {
-  return { kind: 'switch-confirm', target, submitting: false, error: null, failedRows: [], blocked: false, resolution: null };
+export function initialSwitchDialog(target: EdtRegistryEntry, restartMode?: SwitchRestartRunMode): SwitchDialogState {
+  return {
+    kind: 'switch-confirm',
+    target,
+    submitting: false,
+    error: null,
+    failedRows: [],
+    blocked: false,
+    resolution: null,
+    ...(restartMode !== undefined ? { restartMode } : {}),
+  };
 }
 
 export function initialModifyDialog(target: EdtRegistryEntry): ModifyDialogState {

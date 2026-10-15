@@ -194,7 +194,7 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   // ports. Absent when the restart ports are not wired — open-in-IDE then uses the editor alone.
   const serviceActions: ServiceActions | null =
     deps?.container && deps.restart && deps.editor
-      ? createServiceActions({ manifest: deps.manifest, container: deps.container, restart: deps.restart, editor: deps.editor, lock: deps.lock })
+      ? createServiceActions({ manifest: deps.manifest, container: deps.container, restart: deps.restart, editor: deps.editor, lock: deps.lock, docker: deps.docker })
       : null;
 
   // One poll timer per subscribed pane (keyed by repoPath) — started on subscribe,

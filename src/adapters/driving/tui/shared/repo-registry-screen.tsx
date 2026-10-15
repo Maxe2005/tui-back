@@ -39,6 +39,7 @@ export const MANIFEST_GUIDANCE_LINES: readonly string[] = [
   'sharedBranch is optional too, defaults to "development").',
   'protectedBranches (optional list) names the branches no EDT may claim, besides sharedBranch;',
   'omit it and only sharedBranch is protected.',
+  'healthUrl (optional http(s) URL) is probed after a post-switch restart; omit it for no probe.',
   'Create one by hand, or run the /manifest-generator skill inside the target repo.',
 ];
 

@@ -8,6 +8,8 @@ import { err, ok, type Result } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
 import { type DirtyPolicy, switchActiveEdt } from '../../../core/edt/switch.js';
+import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention } from '../../../core/edt/switch-restart.js';
+import { createServiceActions } from '../../../core/service-actions/index.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
@@ -17,6 +19,9 @@ import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core
 import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
+import type { DockerPort } from '../../../core/ports/docker.js';
+import type { EditorPort } from '../../../core/ports/editor.js';
+import type { HealthProbePort } from '../../../core/ports/health-probe.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { ManifestCarryPort } from '../../../core/ports/manifest-carry.js';
@@ -27,7 +32,7 @@ import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { SavedRequestPort } from '../../../core/ports/saved-request.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS, SWITCH_RESTART_MODES, type SettingsPort, type SwitchRestartMode } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
@@ -41,7 +46,9 @@ import type { Subcommand } from './dispatch.js';
 const EDT_CREATE_USAGE =
   'tui-back edt create --topic <topic> --member <path> [--create-branches] ' +
   '[--base <branch>] [--branch-mode grouped|individual] [--branch-name <name>|<path>=<name>]';
-const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force] [--discard-dirty | --adopt-dirty [--adopt-branch <name>]]';
+const EDT_SWITCH_USAGE =
+  'tui-back edt switch --to <topic> [--force] [--discard-dirty | --adopt-dirty [--adopt-branch <name>]] [--restart none|simple|clean]' +
+  ' (--restart defaults to settings.yaml switch.restartMode; exit 1 when a restarted service ends failed, down or unhealthy)';
 const EDT_MODIFY_USAGE =
   'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +
   ' (each --add-member requires a matching --set-branch for that same path — no current-branch default)';
@@ -97,6 +104,11 @@ export function buildSubcommands(deps: {
   state: StatePort;
   // Source of the `update` defaults (runMigrations / cleanRestart); a load failure or warning is reported on stderr and the built-in defaults apply.
   settings: SettingsPort;
+  // The post-switch restart's verification ports (`edt switch --restart`). Optional: without
+  // them a restart request is rejected up front, before anything is touched.
+  editor?: EditorPort;
+  docker?: DockerPort;
+  healthProbe?: HealthProbePort;
   // Gates `registry clean`'s bare-invocation interactive list-then-confirm prompt. Defaults to
   // false (never prompts); only bin/main.ts wires it, and only when BOTH stdout and stdin are
   // real TTYs — a piped stdin must never let `rl.question()` block on or misread a
@@ -792,10 +804,17 @@ async function runEdtSwitch(
     git: GitPort;
     lock: LockPort;
     state: StatePort;
+    settings: SettingsPort;
+    container: ContainerPort;
+    restart: RestartPort;
+    editor?: EditorPort;
+    docker?: DockerPort;
+    healthProbe?: HealthProbePort;
   },
   args: string[],
 ): Promise<Result<unknown>> {
   let topic: string | undefined;
+  let restartFlag: string | undefined;
   let force = false;
   let discardDirty = false;
   let adoptDirty = false;
@@ -819,6 +838,18 @@ async function runEdtSwitch(
           return err('invalid-argument', `--adopt-branch may only be given once. Usage: ${EDT_SWITCH_USAGE}`);
         }
         adoptBranch = value;
+        i += 1;
+        break;
+      }
+      case '--restart': {
+        const value = args[i + 1]?.trim();
+        if (value === undefined || value.startsWith('--')) {
+          return err('invalid-argument', `Missing value for --restart. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        if (restartFlag !== undefined) {
+          return err('invalid-argument', `--restart may only be given once. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        restartFlag = value;
         i += 1;
         break;
       }
@@ -857,13 +888,31 @@ async function runEdtSwitch(
   if (adoptBranch !== undefined && adoptBranch.trim() === '') {
     return err('invalid-argument', '--adopt-branch must not be empty');
   }
+  // An unknown value is rejected before anything is touched; an absent flag falls back to the
+  // setting (a load failure or warning goes to stderr and the built-in default applies).
+  if (restartFlag !== undefined && !(SWITCH_RESTART_MODES as readonly string[]).includes(restartFlag)) {
+    return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected none, simple or clean. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+  let restartMode = restartFlag as SwitchRestartMode | undefined;
+  if (restartMode === undefined) {
+    const loaded = await deps.settings.load();
+    if (!loaded.ok) {
+      console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+    } else if (loaded.data.warning !== null) {
+      console.error(`tui-back: ${loaded.data.warning}`);
+    }
+    restartMode = (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).switch.restartMode;
+  }
+  if (restartMode !== 'none' && (deps.docker === undefined || deps.healthProbe === undefined)) {
+    return err('restart-unavailable', 'Post-switch restart needs the Docker and health-probe ports, which are not wired — nothing was switched');
+  }
   const dirtyPolicy: DirtyPolicy | undefined = discardDirty
     ? { kind: 'discard' }
     : adoptDirty
       ? { kind: 'adopt', branch: adoptBranch }
       : undefined;
 
-  return switchActiveEdt({
+  const switched = await switchActiveEdt({
     edtRegistry: deps.edtRegistry,
     edtRegistryResourceKey: deps.edtRegistryResourceKey,
     registry: deps.registry,
@@ -880,6 +929,48 @@ async function runEdtSwitch(
     dirtyPolicy,
     onDirtyReposBeforeSwitch: undefined,
   });
+  // Mode none (the default): exactly the switch's own output, no restart phase, no new key.
+  if (restartMode === 'none' || !switched.ok) {
+    return switched;
+  }
+
+  // The same core orchestration the TUI runs — a second call after the successful switch.
+  const repos = await listSwitchRestartRepos({ registry: deps.registry, manifest: deps.manifest });
+  if (!repos.ok) {
+    return repos;
+  }
+  const loadedSettings = await deps.settings.load();
+  const concurrency = (loadedSettings.ok ? loadedSettings.data.settings : DEFAULT_SETTINGS).update.concurrency;
+  const serviceActions = createServiceActions({
+    manifest: deps.manifest,
+    container: deps.container,
+    restart: deps.restart,
+    // Never used by restart/verify, but the registry's deps are complete.
+    editor: deps.editor ?? { launch: () => err('editor-launch-failed', 'No editor is wired in the CLI') },
+    lock: deps.lock,
+    docker: deps.docker,
+    healthProbe: deps.healthProbe,
+  });
+  const report = await restartAfterSwitch({
+    results: switched.data.results,
+    repos: repos.data,
+    mode: restartMode,
+    concurrency,
+    serviceActions,
+  });
+  if (!report.ok) {
+    return report;
+  }
+  const restart = report.data.rows.map((row) => ({
+    service: row.service,
+    mode: restartMode,
+    state: row.phase,
+    ...(row.phase === 'skipped' ? { detail: row.skipReason } : row.detail !== undefined ? { detail: row.detail } : {}),
+  }));
+  const data = { ...switched.data, restart };
+  return restartNeedsAttention(report.data.summary)
+    ? err('switch-restart-needs-attention', 'The switch succeeded, but a restarted service ended failed, down or unhealthy', data)
+    : ok(data);
 }
 
 // Hand-rolled flag parsing for `edt modify`: the wrapper owns flag syntax (unknown options,

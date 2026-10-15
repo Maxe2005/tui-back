@@ -4,9 +4,12 @@
 import { Box, Text, type Key } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../core/edt/switch.js';
+import { isChangedSwitchOutcome, restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../core/edt/switch-restart.js';
+import { cycleSwitchRestartMode } from '../../../../../../core/ports/settings.js';
 import type { AppState } from '../../../store/app-store.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
+import { SwitchRestartReport } from './switch-restart-report.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
@@ -36,6 +39,25 @@ export type SwitchDialogDeps = {
   // store action, not this component.
   switchDirtyRepos: AppState['switchDirtyRepos'];
   resolveSwitchDirtyRepos: AppState['resolveSwitchDirtyRepos'];
+  // FR-37: the post-switch restart phase and the `switch.restartMode` setting the selector is
+  // pre-selected from (when the dialog carries no explicit choice).
+  runSwitchRestart: AppState['runSwitchRestart'];
+  clearSwitchRestart: AppState['clearSwitchRestart'];
+  switchRestart: AppState['switchRestart'];
+  defaultRestartMode: SwitchRestartRunMode;
+};
+
+// The selector's current value: this switch's own choice, else the setting.
+export function effectiveRestartMode(dialog: SwitchDialogState, defaultMode: SwitchRestartRunMode): SwitchRestartRunMode {
+  return dialog.restartMode ?? defaultMode;
+}
+
+const RESTART_MODE_ORDER: readonly SwitchRestartRunMode[] = ['none', 'simple', 'clean'];
+
+const RESTART_MODE_LABELS: Record<SwitchRestartRunMode, string> = {
+  none: 'Aucun',
+  simple: 'Redémarrage simple',
+  clean: 'Clean restart',
 };
 
 export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
@@ -58,6 +80,38 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
       // The entry goes to the NEW active EDT's log and records the adopted branches and discarded
       // paths alongside any failure.
       const detail = describeSwitchForLog(current.target.topic, force, results);
+      const restartMode = effectiveRestartMode(current, deps.defaultRestartMode);
+      if (restartMode !== 'none' && results.some((row) => isChangedSwitchOutcome(row.outcome))) {
+        // FR-37: the restart phase is a second call after the (already complete) switch — the
+        // dialog stays open on the report; a restart problem never rolls the switch back.
+        deps.setDialog((prev) =>
+          prev.kind === 'switch-confirm' ? { ...prev, submitting: false, resolution: null, failedRows, results, restartReport: true } : prev,
+        );
+        // A rejected or throwing run never leaves the dialog on an empty report: the reason is
+        // shown inline and the switch (already done) stays untouched.
+        const restarted = await deps
+          .runSwitchRestart({ topic: current.target.topic, mode: restartMode, results })
+          .catch((error: unknown) => ({
+            ok: false as const,
+            error: { code: 'switch-restart-failed', message: error instanceof Error ? error.message : String(error) },
+          }));
+        if (!restarted.ok && deps.switchRestart === null) {
+          deps.setDialog((prev) =>
+            prev.kind === 'switch-confirm' ? { ...prev, restartReport: false, error: restarted.error.message } : prev,
+          );
+        }
+        const restartDetail = restarted.ok
+          ? describeRestartForLog(restartMode, restarted.data.rows)
+          : `restart ${restartMode} not run: ${restarted.error.message}`;
+        const attention = !restarted.ok || restartNeedsAttention(restarted.data.summary);
+        await deps.logEdtAction(
+          result.data.ulid,
+          'switch',
+          failedRows.length > 0 || attention ? 'failed' : 'success',
+          `${detail} — ${restartDetail}`,
+        );
+        return;
+      }
       if (needsResultsView(results)) {
         // Adopted/discarded/failed rows keep the dialog open on the results summary.
         deps.setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, submitting: false, resolution: null, failedRows, results } : prev));
@@ -86,11 +140,16 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   }
 
   function handleSwitchDialogInput(current: SwitchDialogState, input: string, key: Key) {
-    // The results summary is read-only — Enter/Esc close it.
+    // The results summary is read-only — Enter/Esc close it. A restart run still in flight keeps
+    // running in the store when the dialog closes (Esc); Enter waits for it to end.
     if (current.results !== undefined) {
-      if (key.return || key.escape) {
+      const restartRunning = current.restartReport === true && deps.switchRestart?.status === 'running';
+      if (key.escape || (key.return && !restartRunning)) {
         deps.setDialog({ kind: 'none' });
         deps.setCurrentEdtAction(null);
+        if (!restartRunning) {
+          deps.clearSwitchRestart();
+        }
       }
       return;
     }
@@ -121,6 +180,11 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
       }
       return;
     }
+    if (!current.submitting && !current.blocked && (key.leftArrow || key.rightArrow || input === ' ')) {
+      const next = cycleSwitchRestartMode(effectiveRestartMode(current, deps.defaultRestartMode), key.leftArrow ? -1 : 1);
+      deps.setDialog((prev) => (prev.kind === 'switch-confirm' ? { ...prev, restartMode: next } : prev));
+      return;
+    }
     if (key.return) {
       void handleSwitchConfirm(current, current.blocked);
     }
@@ -142,7 +206,9 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   // dialog on `target` and runs the protected switch at once (no extra confirm: the wizard's
   // Enter was it). Its blocked prompt, resolution view, results and logging then apply unchanged.
   function startSwitch(target: EdtRegistryEntry) {
-    const dialog = initialSwitchDialog(target);
+    // The wizard has no selector (its Enter was the confirmation), so it explicitly passes
+    // `none` rather than silently inheriting the setting: a restart is a deliberate act.
+    const dialog = initialSwitchDialog(target, 'none');
     deps.setDialog(dialog);
     void handleSwitchConfirm(dialog, false);
   }
@@ -165,7 +231,17 @@ function resultLabel(row: SwitchEdtRepoResult): string | null {
   }
 }
 
-function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; results: readonly SwitchEdtRepoResult[] }) {
+// The action-log line: the mode and every service's final state.
+export function describeRestartForLog(mode: SwitchRestartRunMode, rows: readonly { service: string; phase: string }[]): string {
+  return `restart ${mode}: ${rows.map((row) => `${row.service}=${row.phase}`).join(', ')}`;
+}
+
+// Rows the restart report leaves for the dialog around its list (modal border, the two
+// SwitchResultsView lines, the report's own header and the hint).
+const RESTART_REPORT_CHROME_ROWS = 14;
+
+// `compact`: the restart report follows, so only the headline and any failures are shown here.
+function SwitchResultsView({ dialog, results, compact = false }: { dialog: SwitchDialogState; results: readonly SwitchEdtRepoResult[]; compact?: boolean }) {
   return (
     <>
       {results.some((row) => row.outcome === 'failed') ? (
@@ -174,7 +250,7 @@ function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; res
         <ClampedParagraph color={colors.text} maxLines={4}>{`Switch to “${dialog.target.topic}” finished.`}</ClampedParagraph>
       )}
       <BoundedList
-        items={results.filter((row) => resultLabel(row) !== null)}
+        items={compact ? [] : results.filter((row) => resultLabel(row) !== null)}
         chromeRows={14}
         renderItem={(row, index) => (
           <Text key={`${row.service}:${index}`} color={row.outcome === 'switched' ? colors['text-dim'] : colors.success} wrap="truncate-end">
@@ -188,13 +264,36 @@ function SwitchResultsView({ dialog, results }: { dialog: SwitchDialogState; res
   );
 }
 
+// "Redémarrer les services après le switch" — a three-way radio. ←/→/Space change it for this
+// switch only; the setting is never written back.
+function RestartModeSelector({ mode }: { mode: SwitchRestartRunMode }) {
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text color={colors.text} wrap="truncate-end">Redémarrer les services après le switch</Text>
+      <Text wrap="truncate-end">
+        {RESTART_MODE_ORDER.map((value) => (
+          <Text key={value} color={value === mode ? colors.accent : colors['text-dim']}>
+            {value === mode ? '(•)' : '( )'} {RESTART_MODE_LABELS[value]}
+            {'   '}
+          </Text>
+        ))}
+      </Text>
+      <DimAnnotation text="←/→ ou Espace pour changer. Le clean restart retombe sur un redémarrage simple là où aucune recette n'existe." />
+    </Box>
+  );
+}
+
 export function SwitchDialogView({
   dialog,
   switchDirtyRepos,
   maxVisibleRows,
+  defaultRestartMode = 'none',
+  switchRestart = null,
 }: {
   dialog: SwitchDialogState;
   switchDirtyRepos: SwitchDirtyRepo[] | null;
+  defaultRestartMode?: SwitchRestartRunMode;
+  switchRestart?: AppState['switchRestart'];
   // The resolution view's table / file-list height budget (NFR-7).
   maxVisibleRows: number;
 }) {
@@ -202,7 +301,8 @@ export function SwitchDialogView({
     return (
       <ModalDialog title="SWITCH EDT" open={true}>
         <Box flexDirection="column">
-          <SwitchResultsView dialog={dialog} results={dialog.results} />
+          <SwitchResultsView dialog={dialog} results={dialog.results} compact={dialog.restartReport === true && switchRestart !== null} />
+          {dialog.restartReport === true && switchRestart !== null ? <SwitchRestartReport state={switchRestart} chromeRows={RESTART_REPORT_CHROME_ROWS} /> : null}
         </Box>
       </ModalDialog>
     );
@@ -223,6 +323,7 @@ export function SwitchDialogView({
         ) : (
           <>
             <ClampedParagraph color={colors.text} maxLines={4}>{`Switch to "${dialog.target.topic}"?`}</ClampedParagraph>
+            <RestartModeSelector mode={effectiveRestartMode(dialog, defaultRestartMode)} />
           </>
         )}
         {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}

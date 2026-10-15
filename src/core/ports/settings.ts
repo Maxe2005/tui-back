@@ -7,6 +7,18 @@ import type { Result } from '../result.js';
 export const UPDATE_MERGE_SOURCES = ['shared', 'edt-pending'] as const;
 export type UpdateMergeSourceDefault = (typeof UPDATE_MERGE_SOURCES)[number];
 
+// Post-switch service restart (FR-37): `none` is today's behaviour, `simple` a plain container
+// restart, `clean` the manifest's clean-restart recipe (simple when none is declared).
+export const SWITCH_RESTART_MODES = ['none', 'simple', 'clean'] as const;
+export type SwitchRestartMode = (typeof SWITCH_RESTART_MODES)[number];
+
+// none → simple → clean → none (direction -1 goes back) — shared by the :settings control and
+// the switch dialog's selector so the two always cycle the same way.
+export function cycleSwitchRestartMode(current: SwitchRestartMode, direction: 1 | -1): SwitchRestartMode {
+  const index = SWITCH_RESTART_MODES.indexOf(current);
+  return SWITCH_RESTART_MODES[(index + direction + SWITCH_RESTART_MODES.length) % SWITCH_RESTART_MODES.length] ?? 'none';
+}
+
 export interface Settings {
   // The `q` keybinding (quit the app) is global, so it lives on the General tab. Only the raw
   // `q` keypress is gated by this flag; the `:quit` command always works.
@@ -62,6 +74,12 @@ export interface Settings {
     historyDepth: number;
     maxCommitsScanned: number;
   };
+  // The EDT switch's optional post-switch restart. `restartMode` pre-selects the switch
+  // dialog's selector and is the CLI's default when `--restart` is absent; never written back
+  // from a single switch. Read when a switch starts, so a change applies live.
+  switch: {
+    restartMode: SwitchRestartMode;
+  };
   logs: {
     bufferSize: number;
     // When true, subscribing to a service's logs immediately loads its most recent history
@@ -103,6 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
   update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const },
   sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
+  switch: { restartMode: 'none' },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' },
 };
 

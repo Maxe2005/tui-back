@@ -798,3 +798,16 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
   summary: Tab toggles the History search mode while the branch autocomplete dropdown may be open, instead of letting the autocomplete consume it; it also conflicts with the Tab-moves-focus convention.
   evidence: `shared-types-history.logic.ts` was added to the focus-navigation guard allowlist.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
+  summary: The post-switch restart has no cancel and no timeout on `ServiceActions.restart` / `docker.getContainerHealth`; a hung call keeps the run `running` and blocks switches, updates and standalone restarts.
+  evidence: `verifyService` only budgets its own poll loop (30 s); a hung `docker restart` or recipe command never resolves, and the TUI offers no escape hatch.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
+  summary: With a restart mode set, the switch's action-log entry is written only after the whole restart run, so quitting mid-run loses the switch entry.
+  evidence: `handleSwitchConfirm` awaits `runSwitchRestart` before `logEdtAction`; log the switch first and the restart outcome separately.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
+  summary: A repo with an unreadable manifest, or two repos sharing a service name, is matched by service name only and may be reported `skipped (unchanged)` instead of surfacing the manifest error.
+  evidence: `listSwitchRestartRepos` falls back to `service: repoPath` and `restartAfterSwitch` maps switch rows by `service` string (`SwitchEdtRepoResult` carries no repoPath).
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
+  summary: The EDTs zone's restart-report reopen effect reads `dialog`/`edtsRows` without listing them as dependencies, and the CLI gives no progress output during a long `--restart` run.
+  evidence: `edts-zone.tsx` effect deps are `[switchRestart, edts]`; `runEdtSwitch` passes no `onPhase`.

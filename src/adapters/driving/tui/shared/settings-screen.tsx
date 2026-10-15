@@ -35,7 +35,9 @@ import {
   MIN_LOG_BUFFER_SIZE,
   MAX_UPDATE_CONCURRENCY,
   MIN_UPDATE_CONCURRENCY,
+  cycleSwitchRestartMode,
   type Settings,
+  type SwitchRestartMode,
   type UpdateMergeSourceDefault,
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
@@ -389,7 +391,7 @@ export function parseBranchDropdownMaxRowsDigit(input: string): number | null {
   return clampBranchDropdownMaxRows(Number(input));
 }
 
-export type SettingsGroupId = 'hint-visibility' | 'action-types' | 'branch-dropdown-rows';
+export type SettingsGroupId = 'hint-visibility' | 'action-types' | 'branch-dropdown-rows' | 'switch-restart';
 
 export type SettingsGroup = { id: SettingsGroupId; label: string };
 
@@ -397,7 +399,13 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'hint-visibility', label: 'Hint visibility' },
   { id: 'action-types', label: 'Recent action types' },
   { id: 'branch-dropdown-rows', label: 'Branch dropdown rows' },
+  { id: 'switch-restart', label: 'Post-switch restart' },
 ];
+
+const SWITCH_RESTART_LABELS: Record<SwitchRestartMode, string> = { none: 'None', simple: 'Simple restart', clean: 'Clean restart' };
+
+// Left/Right/Space cycle none → simple → clean (Left goes back).
+export { cycleSwitchRestartMode };
 
 // The Logs tab's group list: one field (or a small related cluster) per group, so no screen
 // renders more than a handful of lines. ModalDialog has no height cap, and a flat list of every
@@ -444,6 +452,7 @@ const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | Pale
   'hint-visibility': 'settings-toggle',
   'action-types': 'settings-toggle',
   'branch-dropdown-rows': 'settings-adjust',
+  'switch-restart': 'settings-toggle',
   'buffer-size': 'settings-adjust',
   'start-with-history': 'settings-toggle',
   'filter-history-size': 'settings-adjust',
@@ -930,6 +939,15 @@ export function SettingsScreen({
       return;
     }
 
+    if (edtsGroup === 'switch-restart') {
+      if (key.leftArrow) {
+        void updateSettings({ switch: { restartMode: cycleSwitchRestartMode(settings.switch.restartMode, -1) } });
+      } else if (key.rightArrow || input === ' ') {
+        void updateSettings({ switch: { restartMode: cycleSwitchRestartMode(settings.switch.restartMode, 1) } });
+      }
+      return;
+    }
+
     // edtsGroup === 'action-types'
     const moved = nextCursorForKey(key, actionTypeCursor, HIDEABLE_ACTION_TYPES.length);
     if (moved !== null) {
@@ -1275,6 +1293,15 @@ export function SettingsScreen({
               );
             })}
             <DimAnnotation text="Checked hides that action type from the Recent actions log." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'switch-restart' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Restart services after an EDT switch: <Text color={colors.accent}>{SWITCH_RESTART_LABELS[settings.switch.restartMode]}</Text>
+            </Text>
+            <DimAnnotation text="Default for the switch dialog and `edt switch --restart`. Clean restart falls back to a simple restart where no recipe exists." />
           </Box>
         ) : null}
 

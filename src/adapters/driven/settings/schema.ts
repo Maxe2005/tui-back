@@ -21,6 +21,7 @@ import {
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
   MIN_UPDATE_CONCURRENCY,
+  SWITCH_RESTART_MODES,
   UPDATE_MERGE_SOURCES,
   type Settings,
 } from '../../../core/ports/settings.js';
@@ -119,6 +120,15 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.sharedTypes),
+    // Optional-with-default: a settings.yaml written before this group existed has no `switch:`.
+    switch: z
+      .object({
+        // An unknown value falls back to `none` (today's behaviour) rather than invalidating the file.
+        restartMode: z.enum(SWITCH_RESTART_MODES).catch('none').optional().default(DEFAULT_SETTINGS.switch.restartMode),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.switch),
     // An invalid `logs.bufferSize` does not just reset this `logs` block: the whole top-level
     // `.strict()` object fails validation as one unit, so *every* top-level key falls back to
     // DEFAULT_SETTINGS, like any other invalid field in this schema (index.test.ts's

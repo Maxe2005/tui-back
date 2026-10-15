@@ -9,6 +9,9 @@ import { createManifestCarryPort } from '../adapters/driven/manifest/carry.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createContainerPort } from '../adapters/driven/container/index.js';
 import { createMigrationPort } from '../adapters/driven/migration/index.js';
+import { createDockerPort } from '../adapters/driven/docker/index.js';
+import { createEditorPort } from '../adapters/driven/editor/index.js';
+import { createHttpHealthProbe } from '../adapters/driven/health/http-probe.js';
 import { createRestartPort } from '../adapters/driven/restart/index.js';
 import { createLockPort } from '../adapters/driven/lock/index.js';
 import { createGitPort } from '../adapters/driven/git/index.js';
@@ -84,6 +87,9 @@ const subcommands = buildSubcommands({
   restart,
   state,
   settings: createSettingsPort(resolveSettingsFile(xdg)),
+  editor: createEditorPort(),
+  docker: createDockerPort(),
+  healthProbe: createHttpHealthProbe(),
   isTTY: interactiveIsTTY,
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,

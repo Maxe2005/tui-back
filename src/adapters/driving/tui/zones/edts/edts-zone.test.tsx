@@ -1245,6 +1245,55 @@ describe('EdtsZone', () => {
     expect(output).toContain('other-work');
   });
 
+  it('the switch-confirm dialog shows the post-switch restart selector, pre-selected from switch.restartMode', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const byDefault = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-confirm" />);
+    expect(byDefault).toContain('Redémarrer les services après le switch');
+    expect(byDefault).toContain('(•) Aucun');
+    expect(byDefault).toContain('( ) Redémarrage simple');
+    expect(byDefault).toContain('( ) Clean restart');
+    expect(byDefault).toContain('retombe sur un redémarrage simple');
+
+    store.setState({ settings: { ...store.getState().settings, switch: { restartMode: 'clean' } } });
+    const preselected = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-confirm" />);
+    expect(preselected).toContain('(•) Clean restart');
+    expect(preselected).toContain('( ) Aucun');
+  });
+
+  it('reopens a post-switch restart report kept in the store when the zone mounts again', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+      switchRestart: {
+        topic: 'other-work',
+        mode: 'simple',
+        status: 'running',
+        error: null,
+        report: null,
+        rows: [{ service: 'api', repoPath: '/r/api', phase: 'verifying' }],
+      },
+    });
+    const output = await renderToString(<EdtsZone useStore={store} />);
+    expect(output).toContain('SWITCH EDT');
+    expect(output).toContain('Restarting services (simple)');
+    expect(output).toContain('api — verifying');
+  });
+
   it('switch-blocked-action-in-progress surfaces an explicit force-or-cancel prompt', async () => {
     const store = createAppStore();
     store.setState({
@@ -1711,7 +1760,7 @@ describe('EdtsZone', () => {
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        switch: { restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       },
     });
 
@@ -1759,7 +1808,7 @@ describe('EdtsZone', () => {
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        switch: { restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       },
     });
 

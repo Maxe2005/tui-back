@@ -3,7 +3,9 @@
 // (Logs, Dashboard, Update) lists and runs the same actions. Ports are injected.
 import { withActionLock } from '../locking.js';
 import type { ContainerPort } from '../ports/container.js';
+import type { DockerPort } from '../ports/docker.js';
 import type { EditorPort } from '../ports/editor.js';
+import type { HealthProbePort } from '../ports/health-probe.js';
 import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RestartPort } from '../ports/restart.js';
@@ -28,12 +30,33 @@ export interface ServiceActionContext {
   editorCommand: string;
 }
 
+// Verification polls the container every second and gives up after 30 s (FR-37).
+export const VERIFY_POLL_INTERVAL_MS = 1000;
+export const VERIFY_TIMEOUT_MS = 30_000;
+// One health GET never waits longer than this, whatever time the overall budget has left.
+export const HEALTH_PROBE_TIMEOUT_MS = 5000;
+
+// The closed set of per-service states a post-restart run ends on. `failed` is assigned by the
+// caller when the restart itself errored — verifyService never returns it.
+export type ServiceFinalState = 'functional' | 'up-unverified' | 'unhealthy' | 'restarting' | 'down' | 'failed';
+
+export interface VerifyOutcome {
+  state: Exclude<ServiceFinalState, 'failed'>;
+  // Why the state is not green (last probe reason, `still restarting`, ...).
+  detail?: string;
+}
+
 export interface ServiceActionsDeps {
   manifest: ManifestPort;
   container: ContainerPort;
   restart: RestartPort;
   editor: EditorPort;
   lock: LockPort;
+  // Only `verifyService` needs these two; a consumer that never verifies may omit them.
+  docker?: DockerPort;
+  healthProbe?: HealthProbePort;
+  // Test seams for the verification poll: defaults are the wall clock and a real timer.
+  clock?: { now(): number; sleep(ms: number): Promise<void> };
 }
 
 export interface RestartOutcome {
@@ -44,6 +67,9 @@ export interface ServiceActions {
   list(repoPath: string): Promise<Result<ServiceAction[]>>;
   openInIde(repoPath: string, ctx: ServiceActionContext): Result<void>;
   restart(repoPath: string, mode: RestartMode): Promise<Result<RestartOutcome>>;
+  // Settles on the first definitive state of the service's container (and `healthUrl`, when
+  // declared) after a restart. Never rejects.
+  verifyService(repoPath: string): Promise<Result<VerifyOutcome>>;
 }
 
 export const NO_CLEAN_RECIPE_NOTICE = 'no clean-restart recipe — simple restart';
@@ -71,6 +97,7 @@ export function openInIde(editor: EditorPort, repoPath: string, ctx: ServiceActi
 
 export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
   const { manifest, container, restart, editor, lock } = deps;
+  const clock = deps.clock ?? { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) };
 
   async function restartAvailability(repoPath: string): Promise<ServiceActionAvailability> {
     const loaded = await manifest.load(repoPath);
@@ -147,6 +174,65 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
         );
       }
       return run;
+    },
+
+    async verifyService(repoPath) {
+      const invalid = rejectBlankRepoPath(repoPath);
+      if (invalid !== null) {
+        return invalid;
+      }
+      const { docker, healthProbe } = deps;
+      if (docker === undefined) {
+        return err('verification-unavailable', 'No Docker port is wired — cannot verify the service');
+      }
+      const loaded = await manifest.load(repoPath);
+      if (!loaded.ok) {
+        return loaded;
+      }
+      const { container: containerName, healthUrl } = loaded.data;
+      if (!hasContainer(loaded.data) || containerName === undefined) {
+        return err('no-container', `Repo ${repoPath} declares no container — nothing to verify`);
+      }
+      if (healthUrl !== undefined && healthProbe === undefined) {
+        return err('verification-unavailable', 'No health probe is wired — cannot verify the declared healthUrl');
+      }
+      const deadline = clock.now() + VERIFY_TIMEOUT_MS;
+      let lastDockerError: Result<never> | null = null;
+      let lastProbeReason: string | undefined;
+      let sawRestarting = false;
+      for (;;) {
+        const health = await docker.getContainerHealth(containerName);
+        if (!health.ok) {
+          lastDockerError = health;
+        } else if (health.data === 'down') {
+          return ok({ state: 'down', detail: 'container is not running' });
+        } else if (health.data === 'restarting') {
+          sawRestarting = true;
+          lastProbeReason = undefined;
+        } else {
+          sawRestarting = false;
+          if (healthUrl === undefined || healthProbe === undefined) {
+            return ok({ state: 'up-unverified' });
+          }
+          const remaining = Math.max(1, deadline - clock.now());
+          const probed = await healthProbe.probe(healthUrl, Math.min(HEALTH_PROBE_TIMEOUT_MS, remaining));
+          if (probed.ok && probed.data.healthy) {
+            return ok({ state: 'functional' });
+          }
+          lastProbeReason = probed.ok ? probed.data.reason : probed.error.message;
+        }
+        if (clock.now() + VERIFY_POLL_INTERVAL_MS > deadline) {
+          break;
+        }
+        await clock.sleep(VERIFY_POLL_INTERVAL_MS);
+      }
+      if (sawRestarting) {
+        return ok({ state: 'restarting', detail: 'still restarting after the verification timeout' });
+      }
+      if (lastProbeReason !== undefined) {
+        return ok({ state: 'unhealthy', detail: lastProbeReason });
+      }
+      return lastDockerError ?? err('verification-timeout', `Could not verify ${repoPath} within the verification timeout`);
     },
   };
 }

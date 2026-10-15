@@ -415,3 +415,119 @@ describe('edt slice — create never activates, activateEdt does', () => {
     });
   });
 });
+
+describe('edt slice — post-switch restart (FR-37)', () => {
+  const rows = [
+    { service: 'svc-a', outcome: 'switched' as const },
+    { service: 'svc-b', outcome: 'switched' as const },
+  ];
+
+  function restartDeps(overrides: Partial<AppStoreDeps> = {}) {
+    const healthProbe = { probe: vi.fn(async () => ok({ healthy: true, status: 200 })) };
+    const deps = fakeDeps({
+      container: { restart: vi.fn(async () => ok(undefined)) } as never,
+      restart: { run: vi.fn(async () => ok({ output: '' })) } as never,
+      editor: { launch: vi.fn(() => ok(undefined)) },
+      healthProbe,
+      ...overrides,
+    });
+    return { deps, healthProbe };
+  }
+
+  it('starts null, runs the restart phase and keeps the sorted report in the store', async () => {
+    const { deps } = restartDeps();
+    const store = createAppStore(deps);
+    expect(store.getState().switchRestart).toBeNull();
+
+    const result = await store.getState().runSwitchRestart({ topic: 'target-topic', mode: 'simple', results: rows });
+
+    expect(result.ok).toBe(true);
+    const state = store.getState().switchRestart;
+    expect(state).toMatchObject({ topic: 'target-topic', mode: 'simple', status: 'done', error: null });
+    // svc-a / svc-b changed and declare a container (no healthUrl in the fake manifest → up-unverified);
+    // svc-c did not change → skipped, never failed.
+    expect(state?.rows.map((row) => [row.service, row.phase])).toEqual([
+      ['svc-a', 'up-unverified'],
+      ['svc-b', 'up-unverified'],
+      ['svc-c', 'skipped'],
+    ]);
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('publishes live rows while running and marks the targets in flight', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    const { deps } = restartDeps({
+      container: { restart: vi.fn(async () => { await gate; return ok(undefined); }) } as never,
+    });
+    const store = createAppStore(deps);
+
+    const run = store.getState().runSwitchRestart({ topic: 'target-topic', mode: 'simple', results: rows });
+    await vi.waitFor(() => expect(store.getState().switchRestart?.rows.some((row) => row.phase === 'restarting')).toBe(true));
+    expect(store.getState().switchRestart?.status).toBe('running');
+    expect(Object.keys(store.getState().serviceRestartInFlight).sort()).toEqual(['/repo/a', '/repo/b']);
+
+    // Both directions: another restart run, a switch and clearSwitchRestart are refused/ignored.
+    expect(await store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows })).toMatchObject({
+      ok: false,
+      error: { code: 'switch-restart-in-progress' },
+    });
+    expect(await store.getState().switchEdt({ topic: 'target-topic' })).toMatchObject({ ok: false, error: { code: 'switch-restart-in-progress' } });
+    store.getState().clearSwitchRestart();
+    expect(store.getState().switchRestart?.status).toBe('running');
+
+    release();
+    await run;
+    expect(store.getState().switchRestart?.status).toBe('done');
+    store.getState().clearSwitchRestart();
+    expect(store.getState().switchRestart).toBeNull();
+  });
+
+  it('is refused while a group update or a standalone restart is in flight', async () => {
+    const { deps } = restartDeps();
+    const store = createAppStore(deps);
+    store.setState({ updateStatus: 'running' });
+    expect(await store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows })).toMatchObject({
+      ok: false,
+      error: { code: 'switch-restart-in-progress' },
+    });
+    store.setState({ updateStatus: 'idle', serviceRestartInFlight: { '/repo/a': 'restart' } });
+    expect(await store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows })).toMatchObject({ ok: false });
+    expect(deps.container?.restart).not.toHaveBeenCalled();
+  });
+
+  it('claims the run synchronously: two interleaved starts cannot both pass the guards', async () => {
+    const { deps } = restartDeps();
+    const store = createAppStore(deps);
+    const first = store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows });
+    const second = await store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows });
+    expect(second).toMatchObject({ ok: false, error: { code: 'switch-restart-in-progress' } });
+    expect((await first).ok).toBe(true);
+  });
+
+  it('updateSettings applies and persists switch.restartMode', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().updateSettings({ switch: { restartMode: 'clean' } });
+    expect(store.getState().settings.switch.restartMode).toBe('clean');
+    expect(deps.settings.save).toHaveBeenCalledWith(expect.objectContaining({ switch: { restartMode: 'clean' } }));
+  });
+
+  it('reports an explicit error when the restart ports are not wired', async () => {
+    const store = createAppStore(fakeDeps());
+    expect(await store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows })).toMatchObject({
+      ok: false,
+      error: { code: 'store-not-wired' },
+    });
+  });
+
+  it('a failing restart ends as a failed row — the run itself still completes', async () => {
+    const { deps } = restartDeps({ container: { restart: vi.fn(async () => err('docker-failed', 'no such container')) } as never });
+    const store = createAppStore(deps);
+    const result = await store.getState().runSwitchRestart({ topic: 'target-topic', mode: 'simple', results: rows });
+    expect(result.ok && result.data.summary.failed).toBe(2);
+    expect(store.getState().switchRestart?.rows[0]).toMatchObject({ phase: 'failed', detail: 'no such container' });
+  });
+});
