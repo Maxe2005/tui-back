@@ -17,42 +17,60 @@ export type DashboardSlice = {
   dashboardServices: DashboardServicesSection | null;
   dashboardRegistryStatus: DashboardSectionStatus;
   dashboardRegistry: DashboardRegistrySummary | null;
-  // Epoch ms of the last load that finished (either section); null before the first one.
+  // Epoch ms of the last section that loaded successfully; null before the first one.
   dashboardUpdatedAt: number | null;
-  loadDashboard: () => Promise<void>;
+  loadDashboard: (options?: LoadDashboardOptions) => Promise<void>;
+};
+
+export type LoadDashboardOptions = {
+  // Re-run once the in-flight load settles instead of dropping the call (an EDT switch).
+  queueIfBusy?: boolean;
 };
 
 export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], DashboardSlice> {
-  return (set, get) => ({
-    dashboardServicesStatus: 'idle',
-    dashboardServices: null,
-    dashboardRegistryStatus: 'idle',
-    dashboardRegistry: null,
-    dashboardUpdatedAt: null,
-    loadDashboard: async () => {
-      if (get().dashboardServicesStatus === 'loading' || get().dashboardRegistryStatus === 'loading') {
-        return;
-      }
-      if (deps === undefined) {
-        set({ dashboardServicesStatus: 'error', dashboardRegistryStatus: 'error', dashboardUpdatedAt: Date.now() });
-        return;
-      }
-      set({ dashboardServicesStatus: 'loading', dashboardRegistryStatus: 'loading' });
-      const services = buildDashboardServices(deps).then((result) =>
-        set({
-          dashboardServicesStatus: result.ok ? 'ready' : 'error',
-          dashboardServices: result.ok ? result.data : null,
-          dashboardUpdatedAt: Date.now(),
-        }),
-      );
-      const registry = buildDashboardRegistrySummary(deps).then((result) =>
-        set({
-          dashboardRegistryStatus: result.ok ? 'ready' : 'error',
-          dashboardRegistry: result.ok ? result.data : null,
-          dashboardUpdatedAt: Date.now(),
-        }),
-      );
-      await Promise.all([services, registry]);
-    },
-  });
+  return (set, get) => {
+    let reloadQueued = false;
+    return {
+      dashboardServicesStatus: 'idle',
+      dashboardServices: null,
+      dashboardRegistryStatus: 'idle',
+      dashboardRegistry: null,
+      dashboardUpdatedAt: null,
+      loadDashboard: async (options) => {
+        if (get().dashboardServicesStatus === 'loading' || get().dashboardRegistryStatus === 'loading') {
+          reloadQueued = reloadQueued || options?.queueIfBusy === true;
+          return;
+        }
+        if (deps === undefined) {
+          set({ dashboardServicesStatus: 'error', dashboardRegistryStatus: 'error' });
+          return;
+        }
+        set({ dashboardServicesStatus: 'loading', dashboardRegistryStatus: 'loading' });
+        // A builder that throws degrades its own section; the other one is untouched.
+        const services = buildDashboardServices(deps).then(
+          (result) =>
+            set({
+              dashboardServicesStatus: result.ok ? 'ready' : 'error',
+              dashboardServices: result.ok ? result.data : null,
+              ...(result.ok ? { dashboardUpdatedAt: Date.now() } : {}),
+            }),
+          () => set({ dashboardServicesStatus: 'error', dashboardServices: null }),
+        );
+        const registry = buildDashboardRegistrySummary(deps).then(
+          (result) =>
+            set({
+              dashboardRegistryStatus: result.ok ? 'ready' : 'error',
+              dashboardRegistry: result.ok ? result.data : null,
+              ...(result.ok ? { dashboardUpdatedAt: Date.now() } : {}),
+            }),
+          () => set({ dashboardRegistryStatus: 'error', dashboardRegistry: null }),
+        );
+        await Promise.all([services, registry]);
+        if (reloadQueued) {
+          reloadQueued = false;
+          await get().loadDashboard();
+        }
+      },
+    };
+  };
 }

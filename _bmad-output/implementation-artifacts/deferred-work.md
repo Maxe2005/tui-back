@@ -798,3 +798,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-8-1-dashboard-snapshot-use-case-and-cli.md`
   summary: Bound the dashboard snapshot's parallelism and add per-probe timeouts.
   evidence: buildDashboardSnapshot runs exists/manifest.load for every registered repo and 3 git calls + 1 docker call per member through unbounded Promise.all; a hung docker/git call blocks the whole snapshot.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
+  summary: Keep the previous Dashboard data on screen (with a dim "refreshing" cue) while a refresh runs, instead of swapping it for a spinner.
+  evidence: `DashboardBody` renders the spinner whenever a section status is `loading`, so every `R` blanks the sections briefly; the spec only requires per-section spinners.
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
+  summary: Surface the cause (error code/message) of a failed Dashboard section load instead of a bare "Failed to load".
+  evidence: `dashboard-slice.ts` drops the `Result` error on failure, so unwired ports, docker and registry errors look identical.

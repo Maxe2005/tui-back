@@ -12,7 +12,7 @@ import { StateLine } from '../../shared/components/state-line.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { TruncatedText } from '../../shared/components/truncated-text.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { branchLabel, containerLabel, formatRegistrySummary, formatUpdatedAgo, workingTreeLabel } from './dashboard.logic.js';
+import { branchLabel, containerLabel, manifestLabel, formatRegistrySummary, formatUpdatedAgo, workingTreeLabel } from './dashboard.logic.js';
 
 export const NO_ACTIVE_EDT_MESSAGE = 'No active EDT.';
 export const NO_ACTIVE_EDT_HINT = `Press ${formatHint(['e', 'EDTs'])} to create or choose one.`;
@@ -23,12 +23,13 @@ const BODY_CHROME_ROWS = 7;
 function ServiceRow({ service }: { service: DashboardService }) {
   const container = containerLabel(service.container);
   const tree = workingTreeLabel(service.workingTree);
+  const manifest = manifestLabel(service.manifest);
   return (
     <Box>
       <StatusBadge state={container.badge} />
       <Box marginLeft={spacing['glyph-gap']} flexShrink={1}>
         <TruncatedText color={colors.text}>
-          {[service.service, container.text, branchLabel(service), ...(tree === null ? [] : [tree])].join(' · ')}
+          {[service.service, container.text, branchLabel(service), ...(tree === null ? [] : [tree]), ...(manifest === null ? [] : [manifest])].join(' · ')}
         </TruncatedText>
       </Box>
     </Box>
@@ -43,10 +44,14 @@ export function DashboardBody({ useStore = useAppStore }: { useStore?: AppStore 
   const updatedAt = useStore((state) => state.dashboardUpdatedAt);
   // The clock only re-renders the "updated Ns ago" line; it never reloads data.
   const [now, setNow] = useState(() => Date.now());
+  const ticking = updatedAt !== null;
   useEffect(() => {
+    if (!ticking) {
+      return undefined;
+    }
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [ticking]);
 
   const loading = servicesStatus === 'loading' || registryStatus === 'loading';
   return (
@@ -63,6 +68,7 @@ export function DashboardBody({ useStore = useAppStore }: { useStore?: AppStore 
       ) : (
         <Box flexDirection="column">
           <TruncatedText color={colors.text}>{`EDT ${services.edt.topic} · ${services.edt.serviceCount} services`}</TruncatedText>
+          {services.services.length === 0 ? <DimAnnotation text="This EDT has no services." /> : null}
           <BoundedList
             items={services.services}
             chromeRows={BODY_CHROME_ROWS}

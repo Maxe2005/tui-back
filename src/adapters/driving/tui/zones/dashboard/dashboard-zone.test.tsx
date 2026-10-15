@@ -9,6 +9,7 @@ import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
+import { BoundsProvider } from '../../shared/bounds/bounds-context.js';
 import { BANNER_LINES } from './launch-banner.js';
 import {
   DashboardZone,
@@ -253,5 +254,46 @@ describe('DashboardZone snapshot sections', () => {
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).toContain(EMPTY_REGISTRY_MESSAGE);
     expect(output).not.toContain('svc-a');
+  });
+
+  it('says so when the active EDT has no services', async () => {
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { status: 'active', edt: { ulid: 'e1', topic: 'topic-a', serviceCount: 0 }, services: [] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('This EDT has no services.');
+  });
+
+  it('keeps the banner and clips the service list at the minimum terminal height', async () => {
+    const many = Array.from({ length: 20 }, (_, index) => ({ ...ACTIVE.services[0], service: `svc-${index}`, path: `/r/${index}` }));
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { ...ACTIVE, edt: { ulid: 'e1', topic: 'topic-a', serviceCount: 20 }, services: many },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+      dashboardUpdatedAt: Date.now(),
+    });
+    const output = await renderToString(
+      <BoundsProvider columns={80} rows={9}>
+        <DashboardZone useStore={store} />
+      </BoundsProvider>,
+    );
+    for (const line of BANNER_LINES) {
+      expect(output).toContain(line);
+    }
+    expect(output).toContain('svc-0');
+    expect(output).not.toContain('svc-19');
+    expect(output).toContain('more below');
+  });
+
+  it('probes nothing behind the empty-registry prompt', async () => {
+    const calls: string[] = [];
+    const store = createAppStore();
+    store.setState({ registryEmpty: true, checkRegistryEmpty: noopCheck, loadDashboard: async () => void calls.push('load') });
+    await renderToString(<DashboardZone useStore={store} />);
+    expect(calls).toEqual([]);
   });
 });

@@ -37,9 +37,15 @@ export function DashboardZone({
     void checkRegistryEmpty();
   }, [registryScreenOpen, checkRegistryEmpty]);
 
+  const body = resolveDashboardBody(registryEmpty, registryEmptyStatus);
+  const showSections = body === 'sections';
+
+  // Nothing is probed behind the registry-error / empty-registry prompt.
   useEffect(() => {
-    void loadDashboard();
-  }, [activeEdt, loadDashboard]);
+    if (showSections) {
+      void loadDashboard({ queueIfBusy: true });
+    }
+  }, [activeEdt, loadDashboard, showSections]);
 
   useInput(
     (input) => {
@@ -50,7 +56,6 @@ export function DashboardZone({
     { isActive: zoneInputActive },
   );
 
-  const body = resolveDashboardBody(registryEmpty, registryEmptyStatus);
 
   return (
     <Box flexDirection="column" flexGrow={1}>

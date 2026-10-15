@@ -38,6 +38,10 @@ export function containerLabel(container: DashboardService['container']): { text
   }
 }
 
+export function manifestLabel(manifest: DashboardService['manifest']): string | null {
+  return manifest.ok ? null : 'manifest error';
+}
+
 export function branchLabel(service: DashboardService): string {
   return service.branch ?? (service.divergence.detail === undefined ? 'branch unknown' : 'branch error');
 }

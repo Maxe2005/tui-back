@@ -75,6 +75,8 @@ context:
 
 Sections load in parallel from one `loadDashboard()`; the snapshot CLI keeps calling the composed `buildDashboardSnapshot`, so TUI and script share the same builders. "no-active-edt" is read from the services section result, not from `activeEdt` in the store, so the Dashboard never contradicts the snapshot.
 
+Implementation notes: the section builders are `buildDashboardServices` / `buildDashboardRegistrySummary`; `zone-layouts.ts` is left unchanged because existing guards require a boundary per zone (Story 8.3 decides); no `bounds`/`app-shell` change was needed since the 2-row banner fits the 9 content rows of the minimum terminal.
+
 ## Verification
 
 **Commands:**

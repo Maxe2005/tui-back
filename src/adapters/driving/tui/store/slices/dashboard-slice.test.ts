@@ -58,6 +58,46 @@ describe('dashboard slice', () => {
     expect(deps.registry.list).toHaveBeenCalledTimes(1);
   });
 
+  it('re-runs once after a queued call when the active EDT changes mid-load', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    const first = store.getState().loadDashboard();
+    await store.getState().loadDashboard({ queueIfBusy: true });
+    await first;
+    expect(deps.registry.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('turns a throwing builder into a section error instead of a stuck spinner, then recovers on reload', async () => {
+    let fail = true;
+    const store = createAppStore(
+      fakeDeps({
+        edtRegistry: {
+          list: async () => {
+            if (fail) {
+              throw new Error('boom');
+            }
+            return ok([]);
+          },
+        },
+      }),
+    );
+    await store.getState().loadDashboard();
+    expect(store.getState().dashboardServicesStatus).toBe('error');
+    expect(store.getState().dashboardRegistryStatus).toBe('ready');
+    fail = false;
+    await store.getState().loadDashboard();
+    expect(store.getState().dashboardServicesStatus).toBe('ready');
+  });
+
+  it('stamps the update time only for sections that loaded', async () => {
+    const failing = createAppStore(fakeDeps({ edtRegistry: { list: async () => err('edt-error', 'x') }, registry: { list: async () => err('registry-error', 'x'), exists: async () => ok(true) } }));
+    await failing.getState().loadDashboard();
+    expect(failing.getState().dashboardUpdatedAt).toBeNull();
+    const unwired = createAppStore();
+    await unwired.getState().loadDashboard();
+    expect(unwired.getState().dashboardUpdatedAt).toBeNull();
+  });
+
   it('degrades to an error state when the ports are unwired', async () => {
     const store = createAppStore();
     await store.getState().loadDashboard();
