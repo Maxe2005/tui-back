@@ -1,12 +1,8 @@
-// tui/zones/edts/dialogs/branch-plan-table: the per-service branch-plan table shared by the
-// create wizard's Step 3 (Story 2.37) and the switch resolution dialog (Story 2.41) — extracted
-// from step-branches.tsx without behavior change so both dialogs render one table.
-//   - `PanelTitle`: a panel heading, accent + `▶` when focused.
-//   - `BranchPlanTable<Row>`: a dim column header, then a height-bounded (NFR-7) `BoundedList`,
-//     one line per row: `› ` cursor marker, cells joined by ` │ `. Every cell is capped with
-//     truncateBranchLabel/BRANCH_MAX_WIDTH, so no column can push the table past the modal;
-//     every column but the last is padded to its widest value (header included).
-// A cell without its own color takes the row color (accent under the focused cursor).
+// tui/zones/edts/dialogs/branch-plan-table: the per-service branch-plan table shared by the create
+// wizard's Step 3 and the switch resolution dialog — `PanelTitle` (accent + `▶` when focused) and
+// `BranchPlanTable<Row>`, a dim header then a height-bounded BoundedList, one line per row with
+// cells joined by ` │ `. Every cell is capped to BRANCH_MAX_WIDTH so no column can push the table
+// past the modal; a cell without its own color takes the row color.
 import { Box, Text } from 'ink';
 import { BoundedList } from '../../../shared/components/bounded-list.js';
 import { colors } from '../../../shared/theme/theme.js';
@@ -14,7 +10,7 @@ import { BRANCH_MAX_WIDTH, truncateBranchLabel } from '../edts-zone.logic.js';
 
 export function PanelTitle({ text, focused }: { text: string; focused: boolean }) {
   return (
-    <Text color={focused ? colors.accent : colors.text} bold={focused}>
+    <Text color={focused ? colors.accent : colors.text} bold={focused} wrap="truncate-end">
       {focused ? '▶ ' : '  '}
       {text}
     </Text>
@@ -40,6 +36,9 @@ export interface BranchPlanTableProps<Row> {
 export function truncateCell(text: string): string {
   return truncateBranchLabel(text, BRANCH_MAX_WIDTH);
 }
+
+// Base, target and status: the table never has more columns than its headers.
+const MAX_TABLE_COLUMNS = 6;
 
 export function BranchPlanTable<Row>({ headers, rows, rowKey, cells, cursor, focused, maxVisibleRows, labels }: BranchPlanTableProps<Row>) {
   const rendered = rows.map((row) => cells(row).map((entry) => ({ ...entry, text: truncateCell(entry.text) })));
@@ -68,10 +67,10 @@ export function BranchPlanTable<Row>({ headers, rows, rowKey, cells, cursor, foc
           return (
             <Text key={rowKey(row)} wrap="truncate-end">
               <Text color={colors.accent}>{selected ? '› ' : '  '}</Text>
-              {rowCells.map((entry, column) => (
-                <Text key={column}>
+              {rowCells.slice(0, MAX_TABLE_COLUMNS).map((entry, column) => (
+                <Text key={column} wrap="truncate-end">
                   {column > 0 ? <Text color={rowColor}> │ </Text> : null}
-                  <Text color={entry.color ?? rowColor}>{pad(entry.text, column)}</Text>
+                  <Text color={entry.color ?? rowColor} wrap="truncate-end">{pad(entry.text, column)}</Text>
                 </Text>
               ))}
             </Text>

@@ -1,9 +1,7 @@
-// tui/zones/logs: docker-subscription lifecycle — extracted from logs-zone.tsx (refactor).
-// Reconciles docker subscriptions with whichever repoPaths are currently "active" (selected in
-// either list, or the ad hoc fullscreen preview target) — I/O matrix SELECTION_CHANGE: "that
-// stream stops"; FULLSCREEN_PREVIEW: "stream started ad hoc" / "Escape stops that ad hoc
-// stream". A key both selected and previewed (Enter on an already-selected row) is only ever
-// subscribed once (subscribeLogsPane/LogsManager.subscribe are both idempotent).
+// tui/zones/logs: docker-subscription lifecycle — reconciles subscriptions with the repoPaths
+// currently "active" (selected in either list, or the ad hoc fullscreen preview target): a
+// deselected or closed preview's stream stops. A key both selected and previewed is subscribed
+// once (subscribeLogsPane/LogsManager.subscribe are idempotent).
 import { useEffect, useRef } from 'react';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 

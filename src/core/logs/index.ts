@@ -1,19 +1,8 @@
-// core/logs: story 5.1's LogsManager — the per-service in-memory ring-buffer engine every
-// log-stream subscription flows through (AD-1: never imports adapters(/|$), only the
-// DockerPort type + core/result). Framework-agnostic and stateful (unlike most of core/,
-// which is pure functions over ports) because the ring buffer itself — "log lines live only
-// in memory" (AD-11) — has nowhere else to live: never written to disk, never cached in a
-// port's own adapter.
-//
-// One LogsManager instance is created once per TUI store (adapters/driving/tui/store/slices/
-// logs-slice.ts), closing over a single DockerPort. Every subscription is keyed by an
-// arbitrary caller-chosen string (the TUI slice uses a service's manifest repoPath) — the
-// manager itself has no opinion on what that key means.
-//
-// bufferSize is captured per-subscription, not once for the whole manager: "a new stream
-// starts afterward uses the new buffer size; already-running streams are unaffected until
-// restarted" (Acceptance Criteria) — a later settings.logs.bufferSize change can never resize
-// a buffer already in flight.
+// core/logs: LogsManager — the per-service in-memory ring buffer every log-stream subscription
+// flows through. Stateful, unlike most of core, because log lines live only in memory (AD-11).
+// One instance per TUI store; subscriptions are keyed by a caller-chosen string (the TUI uses
+// the service's repoPath). bufferSize is captured per subscription, so a settings change never
+// resizes a buffer already in flight.
 import { err, ok, type Result } from '../result.js';
 import type { DockerErrorLike, DockerPort, LogLine } from '../ports/docker.js';
 
@@ -22,10 +11,8 @@ export interface LogsManagerEntry {
   // Set the moment the stream reports a failure (start failure, or dying mid-flight) — never
   // cleared automatically; a fresh `subscribe()` call clears it again before trying.
   streamError: DockerErrorLike | null;
-  // Set once a `loadOlder` fetch comes back empty or itself fails (I/O matrix
-  // SCROLLBACK_RELOAD: "If the fetch fails, pane shows a dim 'no more history' annotation and
-  // scrolling stops at the edge" — a failed fetch and a genuinely-exhausted history render
-  // identically, both are "there is nothing more to load").
+  // Set once a `loadOlder` fetch comes back empty or itself fails — a failed fetch and a
+  // genuinely-exhausted history render identically: there is nothing more to load.
   noMoreHistory: boolean;
 }
 
@@ -43,16 +30,13 @@ export interface LogsManager {
   // Starts (or, if already subscribed, no-ops on) a live stream for `key`/`container`.
   // `onUpdate` fires synchronously every time this entry's own state changes (a new line, a
   // stream error) — the caller re-reads `getEntry(key)` from it to mirror the new state into
-  // its own reactive store (Zustand, in the TUI slice). Returns `err('docker-unavailable', ...)`
-  // when the very first attempt to start the stream fails (I/O matrix DOCKER_UNAVAILABLE);
-  // a failure that happens later, once the subscription is already running, is reported only
-  // through `onUpdate`/`getEntry`, never by rejecting a still-pending promise (there isn't one
-  // — `subscribe` itself returns synchronously).
+  // its own reactive store. Returns `err('docker-unavailable', ...)` when the very first
+  // attempt to start the stream fails; a later failure is reported only through
+  // `onUpdate`/`getEntry` (`subscribe` itself returns synchronously).
   subscribe(key: string, container: string, bufferSize: number, onUpdate: () => void): Result<void>;
   // Tears down key's subscription (idempotent — a key that was never subscribed, or already
-  // unsubscribed, is a no-op) and discards its buffered lines: the ring buffer only ever
-  // exists while something is actually watching it (Design Notes: no persistence, no
-  // background retention once a pane is gone).
+  // unsubscribed, is a no-op) and discards its buffered lines: the ring buffer only exists
+  // while something is actually watching it.
   unsubscribe(key: string): void;
   isSubscribed(key: string): boolean;
   // A snapshot copy — never the live internal array — so a caller can freely hold onto it
@@ -104,9 +88,8 @@ export function createLogsManager(docker: DockerPort): LogsManager {
     subscribe(key, container, bufferSize, onUpdate) {
       const existing = entries.get(key);
       if (existing?.stop) {
-        // Already streaming — idempotent (Design Notes: re-selecting an already-selected
-        // service, or a fullscreen preview opened on an already-selected row, must never spawn
-        // a second child process for the same key).
+        // Already streaming — idempotent: re-selecting a service, or a fullscreen preview on
+        // an already-selected row, must never spawn a second child process for the same key.
         return ok(undefined);
       }
       const entry = ensure(key, bufferSize);
@@ -126,13 +109,11 @@ export function createLogsManager(docker: DockerPort): LogsManager {
       entry.stop = stop;
       // A failure the adapter can detect immediately (docker binary missing, daemon
       // unreachable, container not found) calls `onError` synchronously, before `streamLogs`
-      // returns — `entry.streamError` is already set by the time we get here in that case,
-      // letting this first attempt surface it as a real Result rather than only through
-      // onUpdate (I/O matrix DOCKER_UNAVAILABLE: "Core returns Result.error code
-      // docker-unavailable"). Read through a helper (rather than `entry.streamError` inline)
-      // so TS doesn't (unsoundly) keep narrowing this property to the `null` literal it was
-      // assigned a few lines above, ignoring that the intervening `docker.streamLogs` call may
-      // have synchronously reassigned it via the `onError` callback.
+      // returns — `entry.streamError` is already set here in that case, so this first attempt
+      // surfaces it as a real Result. Read through a helper (rather than `entry.streamError`
+      // inline) so TS doesn't (unsoundly) keep narrowing this property to the `null` literal it
+      // was assigned above, ignoring that `docker.streamLogs` may have reassigned it via the
+      // `onError` callback.
       const streamError = readStreamError(entry);
       if (streamError !== null) {
         entry.stop = null;
@@ -174,7 +155,7 @@ export function createLogsManager(docker: DockerPort): LogsManager {
       // `beforeCursor` is exclusive in intent, but the adapter's own `--until` is not
       // guaranteed to exclude a line sharing the exact same timestamp as the current oldest
       // buffered line — without this filter, that line could be re-fetched and re-prepended as
-      // a visible duplicate on a later scrollback call (review fix).
+      // a visible duplicate on a later scrollback call.
       const newLines = fetched.data.filter((line) => line.timestamp < cursor);
       if (newLines.length === 0) {
         entry.noMoreHistory = true;

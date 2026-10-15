@@ -1,28 +1,13 @@
-// adapters/driven/docker: the driven implementation of core's DockerPort (story 5.1) — the
-// currently-empty src/adapters/driven/docker/ dir this story fills. Shells the `docker`
-// binary via node:child_process, the same convention as adapters/driven/git/index.ts: `spawn`
-// for the long-lived `-f` tail (Design Notes: "one long-lived spawn... child process per
-// active pane"), `spawnSync` for the one-shot older-lines fetch — never a new dependency (no
-// dockerode).
-//
-// Availability check: `spawn`'s own 'error' event (the binary missing) fires asynchronously,
-// one tick after `streamLogs` already returned — too late to turn into this call's own
-// synchronous-looking Result the way core/logs/index.ts's `subscribe` wants for the
-// DOCKER_UNAVAILABLE case. So `streamLogs` runs one quick `spawnSync('docker', ['inspect',
-// ...])` reachability probe first — the same kind of quick, synchronous pre-check
-// `assertAllowedBranch`/`showRef` already run before every git write in this codebase — and
-// only spawns the real `-f` tail once that probe succeeds. This is a deliberate, bounded
-// exception to "never perform a synchronous/blocking Docker call on the Ink render loop"
-// (Boundaries): `streamLogs` itself is only ever invoked from an async store action reacting
-// to a keypress (never from React's render pass), exactly like every spawnSync git call in
-// this codebase already runs from an async store action, never from a render.
-//
-// Line-parsing/merge logic (createLineSplitter, splitTimestampedLine, parseTimestampedOutput,
-// mergeSortAndTrimLogs) lives in ./index.logic.ts, extracted so it's directly unit-testable
-// without a live docker daemon (review fix — see that file's own header).
-import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process';
+// adapters/driven/docker: the driven implementation of core's DockerPort. Shells the `docker`
+// binary (no dockerode): `spawn` for the long-lived `-f` tail, one per active pane, and
+// bounded one-shot calls: the reachability probe (the only `spawnSync`, since streamLogs must
+// report an unavailable container synchronously) and the asynchronous older-lines fetch,
+// health and restart.
+// Pure line parsing lives in ./index.logic.ts.
+import { spawn, spawnSync } from 'node:child_process';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { DockerErrorLike, DockerPort, HealthState, LogLine } from '../../../core/ports/docker.js';
+import { runProcess, type ProcessResult } from '../process.js';
 import { createLineSplitter, mergeSortAndTrimLogs, parseHealthInspectOutput, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
 
 // A hung/unresponsive docker daemon must never freeze the whole TUI process — `spawnSync`
@@ -33,12 +18,12 @@ import { createLineSplitter, mergeSortAndTrimLogs, parseHealthInspectOutput, par
 // `status === null` branch already surfaces it (as `docker-unavailable`) without special-casing.
 const DOCKER_SPAWN_TIMEOUT_MS = 5000;
 
-// Story 5.3: `docker restart` is inherently slower than a probe or a log fetch — the daemon
-// first stops the container (up to its `--time` grace period, 10s by default; a PID 1 that
-// ignores SIGTERM, e.g. `sh -c 'sleep …'`, burns the whole grace) and only then starts it
-// again. Sharing the 5s probe timeout would misreport a healthy-but-slow restart as a
-// failure, so the restart call gets its own bound — still finite, so a hung daemon can never
-// freeze the TUI's event loop forever (same rationale as DOCKER_SPAWN_TIMEOUT_MS above).
+// `docker restart` is inherently slower than a probe or a log fetch — the daemon first stops
+// the container (up to its `--time` grace period, 10s by default; a PID 1 that ignores
+// SIGTERM, e.g. `sh -c 'sleep …'`, burns the whole grace) and only then starts it again.
+// Sharing the 5s probe timeout would misreport a healthy-but-slow restart as a failure, so the
+// restart call gets its own bound — still finite, so a hung daemon can never freeze the TUI's
+// event loop forever (same rationale as DOCKER_SPAWN_TIMEOUT_MS above).
 const DOCKER_RESTART_TIMEOUT_MS = 30000;
 
 export function createDockerPort(): DockerPort {
@@ -60,9 +45,8 @@ function checkContainerAvailable(container: string): DockerErrorLike | null {
   }
   if (result.status === 0) {
     // `docker inspect` exits 0 for a stopped/exited container too — only the printed
-    // "true"/"false" value actually tells us whether it's running. Treating a bare exit-0 as
-    // "available" let `docker logs -f` get spawned against a stopped container, which hangs
-    // silently forever (no line, no error) rather than surfacing anything (review fix).
+    // "true"/"false" value tells whether it's running. `docker logs -f` spawned against a
+    // stopped container hangs silently forever (no line, no error).
     return { code: 'docker-unavailable', message: `Docker is unavailable for container "${container}": container is not running` };
   }
   return { code: 'docker-unavailable', message: `Docker is unavailable for container "${container}": ${spawnFailureDetail(result)}` };
@@ -73,6 +57,9 @@ function streamLogs(
   onLine: (line: LogLine) => void,
   onError: (error: DockerErrorLike) => void,
 ): () => void {
+  // A synchronous probe first: spawn's own 'error' event (binary missing) fires a tick after
+  // streamLogs returns — too late for core's `subscribe` to report docker-unavailable as its
+  // Result.
   const unavailable = checkContainerAvailable(container);
   if (unavailable) {
     onError(unavailable);
@@ -89,10 +76,9 @@ function streamLogs(
 
   const stdoutSplitter = createLineSplitter((line) => onLine(splitTimestampedLine(line, 'stdout')));
   const stderrSplitter = createLineSplitter((line) => onLine(splitTimestampedLine(line, 'stderr')));
-  // Guarded by `stopped` — unlike the `error`/`exit` handlers below, `data` had no such guard
-  // before this fix: a `data` event already queued in Node's event loop when `stop()` calls
-  // `child.kill()` can still fire afterward, which would call `onLine` on a subscription the
-  // caller just tore down (review fix).
+  // Guarded by `stopped`: a `data` event already queued in Node's event loop when `stop()`
+  // calls `child.kill()` can still fire afterward, and must not call `onLine` on a
+  // subscription the caller just tore down.
   child.stdout?.on('data', (chunk) => {
     if (stopped) {
       return;
@@ -125,8 +111,8 @@ function streamLogs(
     }
     if (code === 0) {
       // A clean exit the caller never asked for (e.g. the watched container stopped normally)
-      // used to be silently swallowed here, leaving the pane frozen forever with no error and
-      // no further lines. Reported the same way as any other unrequested exit (review fix).
+      // is reported like any other unrequested exit — otherwise the pane would freeze with no
+      // error and no further lines.
       onError({ code: 'docker-unavailable', message: `log stream ended for "${container}"` });
       return;
     }
@@ -142,15 +128,13 @@ function streamLogs(
   };
 }
 
-// Story 5.3: live health via `docker inspect --format '{{.State.Running}}
-// {{.State.Restarting}}'` (spawnSync, same bounded-timeout idiom as fetchLogsBefore — never
-// from the Ink render loop, only from an async store poll action). A spawn-level failure
+// Live health via `docker inspect --format '{{.State.Running}} {{.State.Restarting}}'`
+// (bounded spawnSync, only from an async store poll action). A spawn-level failure
 // (status === null: binary missing, timeout) is `err('docker-unavailable', ...)` so the
 // slice's poll keeps last-known health; a definitive non-zero inspect (container missing,
 // daemon reporting an error for this name) is `ok('down')`, never thrown.
 async function getContainerHealth(container: string): Promise<Result<HealthState>> {
-  const result = spawnSync('docker', ['inspect', '--format', '{{.State.Running}} {{.State.Restarting}}', '--', container], {
-    encoding: 'utf8',
+  const result = await runProcess('docker', ['inspect', '--format', '{{.State.Running}} {{.State.Restarting}}', '--', container], {
     timeout: DOCKER_SPAWN_TIMEOUT_MS,
   });
   if (result.status === null) {
@@ -162,12 +146,11 @@ async function getContainerHealth(container: string): Promise<Result<HealthState
   return ok(parseHealthInspectOutput(String(result.stdout)));
 }
 
-// Story 5.3: developer-triggered restart only (replaces check_health.sh's auto-restart —
-// never called automatically). One-shot `docker restart` via spawnSync; any failure is
-// `err('docker-unavailable', ...)` so the slice surfaces it inline on the pane.
+// Developer-triggered restart only, never called automatically. One-shot `docker restart` via
+// spawnSync; any failure is `err('docker-unavailable', ...)` so the slice surfaces it inline
+// on the pane.
 async function restartContainer(container: string): Promise<Result<void>> {
-  const result = spawnSync('docker', ['restart', '--', container], {
-    encoding: 'utf8',
+  const result = await runProcess('docker', ['restart', '--', container], {
     timeout: DOCKER_RESTART_TIMEOUT_MS,
   });
   if (result.status !== 0) {
@@ -177,10 +160,10 @@ async function restartContainer(container: string): Promise<Result<void>> {
 }
 
 async function fetchLogsBefore(container: string, beforeCursor: string, count: number): Promise<Result<LogLine[]>> {
-  const result = spawnSync(
+  const result = await runProcess(
     'docker',
     ['logs', '--until', beforeCursor, '--tail', String(count), '--timestamps', '--', container],
-    { encoding: 'utf8', timeout: DOCKER_SPAWN_TIMEOUT_MS },
+    { timeout: DOCKER_SPAWN_TIMEOUT_MS },
   );
   if (result.status !== 0) {
     return err('docker-unavailable', `"docker logs --until" failed for "${container}": ${spawnFailureDetail(result)}`);
@@ -188,14 +171,14 @@ async function fetchLogsBefore(container: string, beforeCursor: string, count: n
   const stdoutLines = parseTimestampedOutput(result.stdout, 'stdout');
   const stderrLines = parseTimestampedOutput(result.stderr, 'stderr');
   // `--tail <count>` is applied independently to each demuxed pipe, so the merged result can
-  // hold up to 2x count lines before this trim — never left over-count (review fix).
+  // hold up to 2x count lines before this trim.
   return ok(mergeSortAndTrimLogs(stdoutLines, stderrLines, count));
 }
 
-// Mirrors adapters/driven/git/index.ts's own spawnFailureDetail exactly: when the binary
-// itself cannot be spawned (status === null — e.g. docker missing from PATH, or the call timed
-// out), stderr is undefined, so the message must come from the spawn error's own fields.
-function spawnFailureDetail(result: SpawnSyncReturns<string>): string {
+// Same as the git adapter's spawnFailureDetail: when the binary itself cannot be spawned
+// (status === null — e.g. docker missing from PATH, or the call timed out), stderr is
+// undefined, so the message must come from the spawn error's own fields.
+function spawnFailureDetail(result: Pick<ProcessResult, 'status' | 'stderr' | 'error'>): string {
   if (result.status === null) {
     const spawnError = result.error as (NodeJS.ErrnoException & Error) | undefined;
     const message = spawnError?.message;
@@ -203,8 +186,8 @@ function spawnFailureDetail(result: SpawnSyncReturns<string>): string {
     return typeof message === 'string' && message !== '' ? message : typeof code === 'string' ? code : 'unknown error';
   }
   const stderr = String(result.stderr).trim();
-  // A non-zero exit with an empty stderr buffer previously rendered as a bare trailing colon
-  // with no detail at all (e.g. `Docker is unavailable for container "x": `) — fall back to a
-  // non-empty placeholder, matching the status === null branch just above (review fix).
+  // A non-zero exit with an empty stderr buffer would render as a bare trailing colon (e.g.
+  // `Docker is unavailable for container "x": `) — fall back to a non-empty placeholder,
+  // matching the status === null branch just above.
   return stderr !== '' ? stderr : 'unknown error';
 }

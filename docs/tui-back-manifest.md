@@ -20,10 +20,15 @@ Le chargement/parsing est fait par
 ```yaml
 # Obligatoire
 service: <chaîne non vide>
+
+# Optionnel — absent = service sans conteneur (pas de redémarrage simple, de santé ni de logs)
 container: <chaîne non vide>
 
 # Optionnel
 migrationCommand: <chaîne non vide>   # omettre la clé si aucune commande
+
+# Optionnel — recette de « clean restart » (commandes shell exécutées dans l'ordre)
+restartCommands: [<chaîne non vide>, ...]
 
 # Optionnel — valeur par défaut "development" si la clé est absente
 sharedBranch: <chaîne non vide>
@@ -48,10 +53,13 @@ modules:
 - **Rôle** : identifiant du service, utilisé pour l'affichage et le
   repérage du dépôt géré.
 
-### `container` (obligatoire)
+### `container` (optionnel)
 
 - **Type** : `string`
 - **Validation** : `trim().min(1)` — mêmes règles que `service`.
+- **Comportement si absent** : le service n'a pas de runtime Docker (pas de
+  redémarrage simple, de santé ni de flux de logs). Il reste un membre valide
+  d'un EDT. Omettre la clé : `null` ou une chaîne vide sont rejetés.
 - **Rôle** : nom du conteneur Docker associé au service (généralement le
   premier service déclaré dans `docker-compose.yml`).
 
@@ -66,6 +74,43 @@ modules:
   données (ex. `docker exec my-service npx prisma migrate deploy`).
 - **Note** : la valeur `null` n'est **pas** acceptée par le schéma ; pour
   indiquer l'absence de commande, il faut omettre entièrement la clé.
+
+### `restartCommands` (optionnel)
+
+- **Type** : `string[]`
+- **Validation** : tableau de `trim().min(1)` — chaque entrée est rognée et
+  doit être non vide. Une valeur qui n'est pas une liste (ex.
+  `restartCommands: "make restart"`) ou une entrée vide/blanche provoque un
+  échec `manifest-validation-failed`.
+- **Comportement si absent** : `undefined` (un tableau vide `[]` est accepté et
+  équivaut à l'absence de recette).
+- **Rôle** : recette de **clean restart** du service. Au lieu du simple
+  redémarrage du conteneur (`container`), `tui-back` exécute ces commandes
+  l'une après l'autre (ex. `docker compose down`, `docker compose up -d --build`).
+- **Exécution** : chaque commande est passée à `sh -c "<commande>"`, avec le
+  **dépôt du service comme répertoire courant**. Elle est non interactive (pas
+  de TTY ni de stdin, sortie capturée) et peut donc contenir des pipes, `&&`,
+  des variables, etc. Les commandes tournent dans l'ordre déclaré et
+  l'exécution **s'arrête à la première qui échoue** (code de sortie ≠ 0) : les
+  suivantes ne sont pas lancées et l'erreur `restart-failed` nomme le dépôt, la
+  commande et sa sortie d'erreur.
+- **Quand la recette est-elle utilisée ?**
+
+  | Contexte | Comportement |
+  |-----------|----------------|
+  | Mise à jour d'un groupe (EDT) dans le TUI, option **Clean restart** cochée (paramètre global, initialisé depuis `update.cleanRestart` de `settings.yaml`, surchargeable par service dans le tableau) | La recette s'exécute à la place du redémarrage simple du conteneur. |
+  | Même mise à jour, **Clean restart** décoché | Redémarrage simple du conteneur ; `restartCommands` est ignoré. |
+  | Menu d'un service (zone Update) → **Clean restart** (restart standalone d'un seul service) | La recette s'exécute toujours (le mode clean est implicite). |
+  | Mise à jour via la CLI (`tui-back update …`) | Clean restart selon `update.cleanRestart` de `settings.yaml` (désactivé par défaut) ; `--clean-restart` / `--no-clean-restart` l'emportent. Désactivé : `restartCommands` est ignoré, redémarrage simple du conteneur. |
+
+- **Repli** : si le clean restart est demandé mais que `restartCommands` est
+  absent ou vide, `tui-back` retombe **silencieusement** sur le redémarrage
+  simple du conteneur. Dans le tableau de configuration du TUI, la colonne
+  *Restart* affiche alors `basic (no recipe)` au lieu de `clean`.
+- **Exclusivité** : pour un même service et une même action, soit la recette
+  s'exécute, soit le redémarrage du conteneur — jamais les deux.
+- **Sécurité** : ce sont des commandes shell arbitraires lues dans le
+  dépôt ; ne les ajouter que dans des manifestes de confiance.
 
 ### `sharedBranch` (optionnel, avec valeur par défaut)
 
@@ -127,11 +172,13 @@ modules:
 
 Défini dans
 [`src/adapters/driven/modules/module-registry.ts`](../src/adapters/driven/modules/module-registry.ts).
-À ce jour, le seul id de module compilé en dur est :
+Les ids de modules compilés en dur sont :
 
-| Id de module     | Description                                            |
-|-------------------|----------------------------------------------------------|
-| `route-explorer`  | Explorateur de routes basé sur une spécification OpenAPI |
+| Id de module            | Description                                                                 |
+|--------------------------|------------------------------------------------------------------------------|
+| `route-explorer`         | Explorateur de routes basé sur une spécification OpenAPI                     |
+| `shared-types-source`    | Dépôt qui publie le paquet `shared-types`                                    |
+| `shared-types-consumer`  | Service qui dépend du paquet `shared-types` (cible de la propagation de version) |
 
 Toute autre clé sous `modules` échoue la validation avec l'erreur
 `unknown-module`.
@@ -162,8 +209,17 @@ Définie dans
 [`src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`](../src/adapters/driven/modules/route-explorer/cookie-session-auth.ts),
 consommée par le use-case
 [`src/core/routes/fire-request.ts`](../src/core/routes/fire-request.ts)
-(commande `tui-back fire-request <repoPath> <METHOD> <path>`, touche `Entrée`
-dans la zone Routes).
+(commande `tui-back fire-request <repoPath> <METHOD> <path> [--body <json>]
+[--query name=value]... [--header 'Name: value']...` ; dans la zone Routes,
+`Entrée` ouvre l'onglet **Request** — Params, Query, Headers, Body — et
+`Ctrl+R` tire la requête, la réponse s'affichant dans l'onglet **Response**).
+
+Côté CLI : `--body` n'accepte que du JSON (envoyé avec
+`Content-Type: application/json` sauf en-tête `content-type` explicite) et est
+refusé sur `GET`/`HEAD` ; un nom de `--query` ou de `--header` répété est
+refusé ; un en-tête `cookie` fourni est ignoré (la session d'auth prime). Le
+chemin peut être concret (`/users/42` pour la route `/users/{id}`) mais ne
+doit contenir ni `?` ni `#` — la query passe par `--query`.
 
 L'auth est une **session cookie** : le module appelle
 `GET {baseUrl}{authPath}`, stocke la valeur `Set-Cookie` et l'envoie comme
@@ -189,9 +245,59 @@ Comportement du tir :
 - `403` → erreur distincte `auth-forbidden` (mismatch de permission), sans
   nouvel essai.
 
+##### Configuration des modules `shared-types-source` et `shared-types-consumer`
+
+Définies dans
+[`src/adapters/driven/modules/shared-types/config.ts`](../src/adapters/driven/modules/shared-types/config.ts).
+Contrairement à `route-explorer`, ces deux modules ont un schéma **strict** :
+toutes les clés sont optionnelles (valeur par défaut ci-dessous), une clé
+inconnue ou une valeur vide/blanche fait échouer le chargement avec
+`manifest-validation-failed` (le message nomme le module et le paramètre). Une
+entrée `{}` est valide et prend les valeurs par défaut.
+
+| Module                  | Clé               | Défaut                  | Rôle                                                            |
+|--------------------------|--------------------|---------------------------|------------------------------------------------------------------|
+| `shared-types-source`    | `publishCommand`  | `npm run v`             | Commande de publication du paquet (utilisée par les stories de publication) |
+| `shared-types-source`    | `packageName`     | `@ianord/shared-types`  | Nom du paquet, utilisé pour vérifier une version sur le registre npm |
+| `shared-types-source`    | `registry`        | `https://npm.ianord.fr` | URL du registre npm qui sert le scope du paquet (passée à `npm view` via `--@scope:registry=…`, `--registry=…` si le paquet n'a pas de scope). Sans elle, npm interroge npmjs.org et ne trouve jamais un paquet privé |
+| `shared-types-consumer`  | `dependency`      | `@ianord/shared-types`  | Dépendance dont la ligne de version est lue/réécrite dans `package.json` |
+| `shared-types-consumer`  | `packageJsonPath` | `package.json`          | Chemin du `package.json` du service, relatif à son dépôt        |
+
+Déclarer l'un ou l'autre module active l'onglet `shared-types` du TUI (affiché,
+masqué ou grisé selon l'appartenance à l'EDT actif). Les opérations
+elles-mêmes (lire la version déclarée, réécrire uniquement la ligne de
+dépendance, vérifier la publication sur le registre) passent par le port
+`SharedTypesPort` ([`src/core/ports/shared-types.ts`](../src/core/ports/shared-types.ts)).
+
+**Mise à jour de groupe « shared-types d'abord »** : lorsque l'EDT actif contient
+exactement un dépôt `shared-types-source` (parmi les services de la mise à jour),
+l'écran de configuration de la mise à jour (zone Update) affiche une ligne
+globale `shared-types` (barre d'espace pour changer) : `off` (défaut), `publish if the
+merge changed something` ou `always publish`. Le choix vaut pour le run en cours
+uniquement (jamais persisté, aucun changement de manifeste). Dépôt source mis à jour
+seul d'abord, puis publication, propagation (avec commit, sans `npm i` ni clean restart,
+jamais de push) vers tous les consommateurs de l'EDT, puis mise à jour des autres
+services. Un échec met le run en pause (réessayer / ignorer `shared-types` / abandonner).
+
 > Note : toute autre clé sous une entrée de module est acceptée par le
 > schéma (les valeurs de `modules.<id>` sont un `Record<string, unknown>`
 > libre) mais n'a d'effet que si le code du module correspondant la lit.
+
+## Valeurs par défaut des mises à jour (`settings.yaml`) et flags CLI
+
+Ces réglages ne font pas partie du manifeste : ils vivent dans `settings.yaml` (éditables dans `:settings`, onglet **Update**) et fixent les valeurs de départ globales d'une mise à jour de groupe.
+
+```yaml
+update:
+  concurrency: 3        # services traités en parallèle (1-8)
+  runMigrations: true   # défaut : migrations activées
+  cleanRestart: false   # défaut : clean restart désactivé
+  mergeSource: shared   # shared | edt-pending
+```
+
+- Toutes les clés sont optionnelles ; une valeur invalide fait retomber **tout** le fichier sur les défauts, avec un avertissement.
+- Le TUI initialise l'écran de configuration pré-run avec ces valeurs ; les changements faits dans l'écran ne sont jamais réécrits dans `settings.yaml`. `mergeSource: edt-pending` ouvre la source de merge sur « From EDT » (aucun EDT choisi) uniquement dans l'écran EDT.
+- La CLI (`tui-back update`) utilise `runMigrations` et `cleanRestart` de `settings.yaml` ; **elle ignore `mergeSource`** (utiliser `--from-edt <topic>`). Les flags explicites l'emportent : `--migrations` / `--no-migrations` et `--clean-restart` / `--no-clean-restart` (un flag et sa négation ensemble : `invalid-argument`). Si `settings.yaml` est illisible ou invalide, un avertissement est écrit sur stderr et les défauts intégrés s'appliquent.
 
 ## Exemple complet — service `api-gateway` avec `route-explorer`
 
@@ -199,6 +305,9 @@ Comportement du tir :
 service: api-gateway
 container: api-gateway
 migrationCommand: docker exec api-gateway npx prisma migrate deploy
+restartCommands:
+  - docker compose down
+  - docker compose up -d --build
 sharedBranch: development
 protectedBranches: [development, preprod, prod]
 modules:
@@ -215,6 +324,24 @@ modules:
 `/auth/me` et `300` s'appliqueraient. `baseUrl` est en revanche obligatoire
 dès qu'on veut tirer des requêtes.)
 
+## Exemple — service consommateur de `shared-types`
+
+```yaml
+service: orders-api
+container: orders-api
+sharedBranch: development
+modules:
+  shared-types-consumer: {}   # défauts : @ianord/shared-types, package.json
+```
+
+Le dépôt source, lui, déclare `shared-types-source: {}` (ou surcharge
+`publishCommand` / `packageName`) — il peut ne pas avoir de `container`.
+
+L'onglet `shared-types` est piloté par `shared-types-source` uniquement, comme l'onglet Routes
+l'est par `route-explorer` : il est masqué tant qu'aucun dépôt enregistré ne déclare
+`shared-types-source`, grisé si le service source n'est pas membre de l'EDT actif, et actif
+sinon. `shared-types-consumer` ne dépend que de lui et n'influence jamais l'onglet.
+
 ## Exemple minimal
 
 ```yaml
@@ -224,7 +351,8 @@ sharedBranch: master
 modules: {}
 ```
 
-(`migrationCommand` omis, `sharedBranch` explicite ici mais pourrait aussi
+(`migrationCommand` et `restartCommands` omis — le clean restart retombe alors
+sur le redémarrage simple du conteneur —, `sharedBranch` explicite ici mais pourrait aussi
 être omis pour hériter de `"development"`. `protectedBranches` omis : seule
 `master` est protégée.)
 
@@ -237,15 +365,25 @@ Le loader (`loadManifest`) peut renvoyer les codes d'erreur suivants :
 | `manifest-not-found`          | Le fichier `.tui-back.yaml` n'existe pas à la racine du dépôt (le dépôt est alors considéré comme non géré, ce n'est pas un crash). |
 | `manifest-read-error`         | Erreur de lecture du fichier (droits, etc.).                        |
 | `manifest-invalid-yaml`       | Le contenu n'est pas un YAML valide.                                 |
-| `manifest-validation-failed`  | Le document ne respecte pas le schéma (champ manquant, type invalide, clé inconnue au niveau racine, valeur de module non-objet, etc.). Le message précise le chemin du premier problème rencontré. |
+| `manifest-validation-failed`  | Le document ne respecte pas le schéma (champ manquant, type invalide, clé inconnue au niveau racine, valeur de module non-objet, paramètre inconnu ou vide d'un module `shared-types-*`, etc.). Le message précise le chemin du premier problème rencontré. |
 | `unknown-module`               | Une clé sous `modules` ne correspond à aucun id de module connu (registre `knownModuleIds`). |
+
+## Comportement lors d'un switch d'EDT
+
+Un `.tui-back.yaml` modifié (non commité) n'est jamais mis en stash, adopté ni abandonné lors d'un
+`edt switch` : il est retrouvé tel quel après le switch, quelle que soit la version (ou l'absence)
+du fichier sur la branche cible. Il apparaît alors modifié par rapport à cette branche.
 
 ## Sources
 
 - Schéma Zod : `src/adapters/driven/manifest/schema.ts`
 - Type `Manifest` : `src/core/ports/manifest.ts`
 - Loader : `src/adapters/driven/manifest/index.ts`
+- Clean restart (recette `restartCommands`) : `src/core/scripts/group-update.ts` (`runRestartStep`),
+  `src/core/scripts/service-restart.ts`, `src/core/ports/restart.ts`,
+  `src/adapters/driven/restart/index.ts`
 - Registre des modules : `src/adapters/driven/modules/module-registry.ts`
+- Modules `shared-types` : `src/adapters/driven/modules/shared-types/config.ts`, `src/adapters/driven/modules/shared-types/npm-package.ts`, `src/core/ports/shared-types.ts`
 - Scanner `route-explorer` : `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts`
 - Auth session cookie : `src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`
 - Tir de requête : `src/core/routes/fire-request.ts`

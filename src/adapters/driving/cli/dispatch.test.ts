@@ -10,15 +10,15 @@ import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
+import type { SavedRequest, SavedRequestPort } from '../../../core/ports/saved-request.js';
+import { DEFAULT_SETTINGS, type Settings, type SettingsPort } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
 
-// Story 2.33 review fix: `registry clean`'s interactive TTY branch (subcommands.ts's
-// runRegistryClean) drives a real `node:readline/promises` prompt — mocked here so the
-// list-then-confirm flow itself is exercised under test instead of only ever being covered
-// manually (the e2e suite's spawnSync stdin is never a real TTY, same limitation this file's
-// own header already notes for the fullscreen TUI).
+// `registry clean`'s interactive TTY branch drives a real `node:readline/promises` prompt —
+// mocked here so the list-then-confirm flow is exercised under test (the e2e suite's
+// spawnSync stdin is never a real TTY).
 vi.mock('node:readline/promises', () => ({
   createInterface: vi.fn(),
 }));
@@ -39,6 +39,8 @@ function fakeState(): StatePort {
     writeSplitterRatios: async () => ok(undefined),
     readFilterHistory: async () => ok(null),
     writeFilterHistory: async () => ok(undefined),
+    readCommandHistory: async () => ok(null),
+    writeCommandHistory: async () => ok(undefined),
   };
 }
 
@@ -179,22 +181,18 @@ describe('subcommand registry guards', () => {
     };
   }
 
-  function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
-    const registry: RegistryPort = {
+  function fakeSavedRequests(): SavedRequestPort {
+    return {
+      save: async (request) => ok(request),
+      overwrite: async (_name, request) => ok(request),
+      get: async (name) => err('saved-request-not-found', `No saved request named "${name}"`),
       list: async () => ok([]),
-      add: async () => ok(undefined),
-      exists: async () => ok(false),
-      scan: async () => ok({ candidates: [], skipped: [] }),
-      reset: async () => ok({ path: '/p', backupPath: null }),
-      remove: async () => ok(undefined),
+      remove: async (name) => err('saved-request-not-found', `No saved request named "${name}"`),
     };
-    const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
-    const container: ContainerPort = { restart: async () => ok(undefined) };
-    const migration: MigrationPort = { run: async () => ok({ output: '' }) };
-    const restart: RestartPort = { run: async () => ok({ output: '' }) };
-    const scanner: RouteScannerPort = { scan: async () => ok([]) };
-    const auth: DevAuthPort = { getSession: async () => ok({ cookie: 'sid=abc' }) };
-    const git: GitPort = {
+  }
+
+  function fakeGitPort(overrides: Partial<GitPort> = {}): GitPort {
+    return {
       assertAllowedBranch: async () => ok(undefined),
       createBranch: async () => ok(undefined),
       deleteBranch: async () => ok(undefined),
@@ -214,21 +212,53 @@ describe('subcommand registry guards', () => {
       discardPaths: async () => ok(undefined),
       discardAll: async () => ok(undefined),
       diffNameOnly: async () => ok([]),
+      headRevision: async () => ok('head-a'),
+      diffStat: async () => ok({ files: 0, insertions: 0, deletions: 0 }),
       discardPathsToHead: async () => ok(undefined),
       isRebaseInProgress: async () => ok(false),
       hasUnmergedPaths: async () => ok(false),
+      listUnmergedPaths: async () => ok([] as string[]),
+      readWorktreeFile: async () => ok(""),
+      writeResolvedFile: async () => ok(undefined),
+      checkoutSide: async () => ok(undefined),
       finalizeMerge: async () => ok(undefined),
       listBranches: async () => ok([]),
       renameBranch: async () => ok(undefined),
       listRemoteBranches: async () => ok([]),
       createTrackingBranch: async () => ok(undefined),
+      stagePaths: async () => ok(undefined),
+      commit: async () => ok(undefined),
       isBranchMerged: async () => ok(true),
       hasStash: async () => ok(false),
+      fetchRemote: async () => ok(undefined),
+      listUnpushedCommits: async () => ok([] as string[]),
+      listVersionBumpCommits: async () => ok({ endedBy: "exhausted" as const, scanned: 0 }),
+      listBranchesContaining: async () => ok([] as string[]),
+      ...overrides,
     };
+  }
+
+  function buildTestSubcommands(overrides: Partial<Parameters<typeof buildSubcommands>[0]> = {}) {
+    const registry: RegistryPort = {
+      list: async () => ok([]),
+      add: async () => ok(undefined),
+      exists: async () => ok(false),
+      scan: async () => ok({ candidates: [], skipped: [] }),
+      reset: async () => ok({ path: '/p', backupPath: null }),
+      remove: async () => ok(undefined),
+    };
+    const manifest: ManifestPort = { load: async () => err('manifest-not-found', 'none') };
+    const container: ContainerPort = { restart: async () => ok(undefined) };
+    const migration: MigrationPort = { run: async () => ok({ output: '' }) };
+    const restart: RestartPort = { run: async () => ok({ output: '' }) };
+    const scanner: RouteScannerPort = { scan: async () => ok([]) };
+    const auth: DevAuthPort = { getSession: async () => ok({ cookie: 'sid=abc' }) };
+    const git: GitPort = fakeGitPort();
 
     return buildSubcommands({
       registry,
       manifest,
+      manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
       lock: fakeLock(),
       registryResourceKey: '/cfg/registry.yaml',
       edtsBaseDir: '/data/edts',
@@ -239,8 +269,10 @@ describe('subcommand registry guards', () => {
       migration,
       restart,
       state: fakeState(),
+      settings: { load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }), save: async () => ok(undefined) },
       scanner,
       auth,
+      savedRequests: fakeSavedRequests(),
       ...overrides,
     });
   }
@@ -259,11 +291,14 @@ describe('subcommand registry guards', () => {
       'registry',
       'list-routes',
       'fire-request',
+      'request-list',
+      'request-fire',
+      'request-delete',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
   });
 
-  it('edts (story 2.6) rejects excess arguments and otherwise runs the divergence use-case', async () => {
+  it('edts rejects excess arguments and otherwise runs the divergence use-case', async () => {
     const subcommands = buildTestSubcommands();
     const edts = subcommands.find((subcommand) => subcommand.name === 'edts');
     if (!edts) throw new Error('expected edts subcommand');
@@ -275,7 +310,7 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: true, data: { services: [], unreachable: [], errors: [] } });
   });
 
-  it('list-routes (story 6.1) rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
+  it('list-routes rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
     const subcommands = buildTestSubcommands();
     const listRoutesCmd = subcommands.find((subcommand) => subcommand.name === 'list-routes');
     if (!listRoutesCmd) throw new Error('expected list-routes subcommand');
@@ -294,12 +329,14 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 
-  it('fire-request (story 6.2) rejects missing/bad-arity/blank arguments and otherwise delegates to the use-case', async () => {
+  it('fire-request rejects missing/bad-arity/blank arguments and otherwise delegates to the use-case', async () => {
     const subcommands = buildTestSubcommands();
     const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
     if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
 
-    expect(fireRequestCmd.usage).toBe('tui-back fire-request <repoPath> <METHOD> <path>');
+    expect(fireRequestCmd.usage).toBe(
+      "tui-back fire-request <repoPath> <METHOD> <path> [--body <json>] [--query name=value]... [--header 'Name: value']... [--save <name>]",
+    );
 
     const missing = await fireRequestCmd.run([]);
     expect(missing).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
@@ -313,6 +350,288 @@ describe('subcommand registry guards', () => {
     // proving the wrapper reached the use-case itself rather than rejecting locally.
     const result = await fireRequestCmd.run(['/repos/gateway', 'GET', '/users']);
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+
+  it('fire-request parses --body/--query/--header and rejects malformed flags', async () => {
+    const subcommands = buildTestSubcommands();
+    const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
+    if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
+
+    for (const args of [
+      ['/a', 'POST', '/x', '--body', '{oops'],
+      ['/a', 'POST', '/x', '--body'],
+      ['/a', 'POST', '/x', '--body', '{}', '--body', '{}'],
+      ['/a', 'GET', '/x', '--query', 'novalue'],
+      ['/a', 'GET', '/x', '--query', '=v'],
+      ['/a', 'GET', '/x', '--header', 'NoColon'],
+      ['/a', 'GET', '/x', '--bogus', 'v'],
+      ['/a', '--body', '{}'],
+      ['/a', 'GET', '/x', '--header', '--body'],
+      ['/a', 'GET', '/x', '--query', 'q=1', '--query', 'q=2'],
+      ['/a', 'GET', '/x', '--header', 'X-A: 1', '--header', 'x-a: 2'],
+    ]) {
+      const rejected = await fireRequestCmd.run(args);
+      expect(rejected).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+
+    // Well-formed flags reach the use-case (manifest-not-found from the fixture).
+    const result = await fireRequestCmd.run([
+      '/repos/gateway', 'POST', '/users', '--body', '{"a":1}', '--query', 'q=a=b', '--header', 'X-Trace: t1',
+    ]);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
+  });
+
+  it('fire-request sends the parsed flags as the request body, query and headers', async () => {
+    const fetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const subcommands = buildTestSubcommands({
+        manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': { baseUrl: 'http://localhost:3000' } } }) },
+        scanner: { scan: async () => ok([{ method: 'POST', path: '/users/{id}' }]) },
+        auth: { getSession: async () => ok({ cookie: 'sid=abc' }) },
+      });
+      const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
+      if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
+
+      const result = await fireRequestCmd.run([
+        '/repos/gateway', 'POST', '/users/7', '--body', '{"a":1}', '--query', 'q=a=b', '--header', 'X-Trace:  t1 ',
+      ]);
+
+      expect(result).toMatchObject({ ok: true, data: { status: 200 } });
+      const [url, init] = fetch.mock.calls[0] ?? [];
+      expect(url).toBe('http://localhost:3000/users/7?q=a%3Db');
+      expect(init?.body).toBe('{"a":1}');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('x-trace')).toBe('t1');
+      expect(headers.get('content-type')).toBe('application/json');
+      expect(headers.get('cookie')).toBe('sid=abc');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fire-request --save persists the fired request and rejects a colliding name with duplicate-request-name', async () => {
+    const fetch = vi.fn(async () => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const saved: SavedRequest[] = [];
+      const subcommands = buildTestSubcommands({
+        manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': { baseUrl: 'http://localhost:3000' } } }) },
+        scanner: { scan: async () => ok([{ method: 'POST', path: '/users' }]) },
+        auth: { getSession: async () => ok({ cookie: 'sid=abc' }) },
+        savedRequests: {
+          ...fakeSavedRequests(),
+          get: async (name) => {
+            const found = saved.find((item) => item.name === name);
+            return found === undefined ? err('saved-request-not-found', `No saved request named "${name}"`) : ok({ ...found });
+          },
+          save: async (request) => {
+            if (saved.some((item) => item.name === request.name)) {
+              return err('duplicate-request-name', `A request named "${request.name}" already exists`);
+            }
+            saved.push({ ...request });
+            return ok(request);
+          },
+        },
+      });
+      const fireRequestCmd = subcommands.find((subcommand) => subcommand.name === 'fire-request');
+      if (!fireRequestCmd) throw new Error('expected fire-request subcommand');
+
+      const first = await fireRequestCmd.run([
+        '/repos/gateway',
+        'POST',
+        '/users',
+        '--query',
+        'q=1',
+        '--header',
+        'X-Trace: t1',
+        '--body',
+        '{"a":1}',
+        '--save',
+        'create-user',
+      ]);
+      expect(first).toMatchObject({ ok: true, data: { status: 200 } });
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({
+        name: 'create-user',
+        repoPath: '/repos/gateway',
+        method: 'POST',
+        path: '/users',
+        query: { q: '1' },
+        headers: { 'X-Trace': 't1' },
+        bodyText: '{"a":1}',
+        contentType: 'application/json',
+      });
+
+      // A colliding name is rejected before anything is fired: no second fetch, same record kept.
+      const callsBefore = fetch.mock.calls.length;
+      const second = await fireRequestCmd.run(['/repos/gateway', 'POST', '/users', '--save', 'create-user']);
+      expect(second).toMatchObject({ ok: false, error: { code: 'duplicate-request-name' } });
+      expect(fetch.mock.calls.length).toBe(callsBefore);
+      expect(saved).toHaveLength(1);
+
+      expect(await fireRequestCmd.run(['/repos/gateway', 'GET', '/users', '--save'])).toMatchObject({
+        ok: false,
+        error: { code: 'invalid-argument' },
+      });
+      expect(await fireRequestCmd.run(['/repos/gateway', 'GET', '/users', '--save', 'a', '--save', 'b'])).toMatchObject({
+        ok: false,
+        error: { code: 'invalid-argument' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('request-list shows stale flags and narrows with --repo', async () => {
+    const subcommands = buildTestSubcommands({
+      manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': {} } }) },
+      scanner: { scan: async () => ok([{ method: 'GET', path: '/users' }]) },
+      savedRequests: {
+        ...fakeSavedRequests(),
+        list: async () =>
+          ok([
+            { id: 'id-1', name: 'kept', repoPath: '/repos/gateway', method: 'GET', path: '/users', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' },
+            { id: 'id-2', name: 'gone', repoPath: '/repos/gateway', method: 'GET', path: '/vanished', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' },
+          ]),
+      },
+    });
+    const requestList = subcommands.find((subcommand) => subcommand.name === 'request-list');
+    if (!requestList) throw new Error('expected request-list subcommand');
+
+    const listed = await requestList.run([]);
+    expect(listed).toMatchObject({
+      ok: true,
+      data: { requests: [{ name: 'kept', stale: false }, { name: 'gone', stale: true }] },
+    });
+
+    const narrowed = await requestList.run(['--repo', '/repos/other']);
+    expect(narrowed).toMatchObject({ ok: true, data: { requests: [] } });
+
+    expect(await requestList.run(['--bogus'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await requestList.run(['--repo'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('request-fire re-fires by name with overrides, persistence flags and the stale hard gate', async () => {
+    const fetch = vi.fn(async () => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const subcommands = buildTestSubcommands({
+        manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': { baseUrl: 'http://localhost:3000' } } }) },
+        scanner: { scan: async () => ok([{ method: 'GET', path: '/users' }]) },
+        auth: { getSession: async () => ok({ cookie: 'sid=abc' }) },
+        savedRequests: {
+          ...fakeSavedRequests(),
+          get: async (name) =>
+            name === 'list-users'
+              ? ok({ id: 'id-1', name, repoPath: '/repos/gateway', method: 'GET', path: '/users', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' })
+              : name === 'stale-one'
+                ? ok({ id: 'id-2', name, repoPath: '/repos/gateway', method: 'GET', path: '/vanished', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' })
+                : err('saved-request-not-found', `No saved request named "${name}"`),
+        },
+      });
+      const requestFire = subcommands.find((subcommand) => subcommand.name === 'request-fire');
+      if (!requestFire) throw new Error('expected request-fire subcommand');
+
+      expect(await requestFire.run([])).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+      expect(await requestFire.run(['missing'])).toMatchObject({ ok: false, error: { code: 'saved-request-not-found' } });
+      expect(fetch).not.toHaveBeenCalled();
+
+      const fired = await requestFire.run(['list-users', '--query', 'q=1']);
+      expect(fired).toMatchObject({ ok: true, data: { status: 200 } });
+
+      const stale = await requestFire.run(['stale-one']);
+      expect(stale).toMatchObject({ ok: false, error: { code: 'unknown-route' } });
+
+      expect(await requestFire.run(['list-users', '--overwrite', '--save-as', 'other'])).toMatchObject({
+        ok: false,
+        error: { code: 'invalid-argument' },
+      });
+      expect(await requestFire.run(['list-users', '--bogus', 'v'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('request-fire --overwrite updates the original and --save-as stores a new record', async () => {
+    const fetch = vi.fn(async () => new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const rows = new Map<string, SavedRequest>([
+        ['base', { id: 'id-1', name: 'base', repoPath: '/repos/gateway', method: 'GET', path: '/users', query: { q: '1' }, createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' }],
+        ['taken', { id: 'id-2', name: 'taken', repoPath: '/repos/gateway', method: 'GET', path: '/users', createdAt: '2026-10-06T00:00:00.000Z', updatedAt: '2026-10-06T00:00:00.000Z' }],
+      ]);
+      const overwritten: string[] = [];
+      const created: string[] = [];
+      const subcommands = buildTestSubcommands({
+        manifest: { load: async () => ok({ service: 'gw', container: 'gw', sharedBranch: 'development', modules: { 'route-explorer': { baseUrl: 'http://localhost:3000' } } }) },
+        scanner: { scan: async () => ok([{ method: 'GET', path: '/users' }]) },
+        auth: { getSession: async () => ok({ cookie: 'sid=abc' }) },
+        savedRequests: {
+          ...fakeSavedRequests(),
+          save: async (request) => {
+            created.push(request.name);
+            const record = { ...request };
+            rows.set(request.name, record);
+            return ok(record);
+          },
+          overwrite: async (name, request) => {
+            overwritten.push(name);
+            const existing = rows.get(name);
+            if (existing === undefined) {
+              return err('saved-request-not-found', `No saved request named "${name}"`);
+            }
+            const next = { ...request, id: existing.id, createdAt: existing.createdAt, name };
+            rows.set(name, next);
+            return ok(next);
+          },
+          get: async (name) => {
+            const found = rows.get(name);
+            return found === undefined ? err('saved-request-not-found', `No saved request named "${name}"`) : ok({ ...found });
+          },
+        },
+      });
+      const requestFire = subcommands.find((subcommand) => subcommand.name === 'request-fire');
+      if (!requestFire) throw new Error('expected request-fire subcommand');
+
+      const updated = await requestFire.run(['base', '--query', 'q=2', '--overwrite']);
+      expect(updated).toMatchObject({ ok: true, data: { status: 200 } });
+      expect(overwritten).toEqual(['base']);
+      expect(rows.get('base')).toMatchObject({ query: { q: '2' } });
+
+      const forked = await requestFire.run(['base', '--query', 'q=3', '--save-as', 'copy']);
+      expect(forked).toMatchObject({ ok: true, data: { status: 200 } });
+      expect(created).toEqual(['copy']);
+      expect(rows.get('copy')).toMatchObject({ name: 'copy', query: { q: '3' } });
+      expect(rows.get('base')).toMatchObject({ query: { q: '2' } });
+
+      const callsBefore = fetch.mock.calls.length;
+      const collision = await requestFire.run(['base', '--save-as', 'taken']);
+      expect(collision).toMatchObject({ ok: false, error: { code: 'duplicate-request-name' } });
+      expect(fetch.mock.calls.length).toBe(callsBefore);
+      expect(created).toEqual(['copy']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('request-delete removes by exact name and reports unknown names', async () => {
+    const removed: string[] = [];
+    const subcommands = buildTestSubcommands({
+      savedRequests: {
+        ...fakeSavedRequests(),
+        remove: async (name) =>
+          name === 'list-users' ? (removed.push(name), ok(undefined)) : err('saved-request-not-found', `No saved request named "${name}"`),
+      },
+    });
+    const requestDelete = subcommands.find((subcommand) => subcommand.name === 'request-delete');
+    if (!requestDelete) throw new Error('expected request-delete subcommand');
+
+    expect(await requestDelete.run([])).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+    expect(await requestDelete.run(['a', 'b'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await requestDelete.run(['missing'])).toMatchObject({ ok: false, error: { code: 'saved-request-not-found' } });
+    expect(await requestDelete.run(['list-users'])).toEqual({ ok: true, data: { name: 'list-users' } });
+    expect(removed).toEqual(['list-users']);
   });
 
   it('edt rejects an unknown action and excess arguments with invalid-argument', async () => {
@@ -353,9 +672,9 @@ describe('subcommand registry guards', () => {
     expect(notFound).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
   });
 
-  // Review fix (story 2.29): three previously-silent --branches mistakes now reject with
-  // invalid-argument instead of resolving to a surprising default.
-  describe('edt delete --branches validation (story 2.29 review fixes)', () => {
+  // --branches mistakes reject with invalid-argument instead of resolving to a surprising
+  // default.
+  describe('edt delete --branches validation', () => {
     function fakeEdtRegistryWithTarget(): EdtRegistryPort {
       const target = {
         ulid: 'ulid-1',
@@ -471,7 +790,7 @@ describe('subcommand registry guards', () => {
     }
   });
 
-  it('update (story 3.3) gates the all-repos mode behind confirmation, rejecting unknown flags', async () => {
+  it('update gates the all-repos mode behind confirmation, rejecting unknown flags', async () => {
     const subcommands = buildTestSubcommands();
     const update = subcommands.find((subcommand) => subcommand.name === 'update');
     if (!update) throw new Error('expected update subcommand');
@@ -490,7 +809,7 @@ describe('subcommand registry guards', () => {
     }
   });
 
-  it('update (story 3.3) runs the all-repos scope with --all --yes in any order', async () => {
+  it('update runs the all-repos scope with --all --yes in any order', async () => {
     const subcommands = buildTestSubcommands();
     const update = subcommands.find((subcommand) => subcommand.name === 'update');
     if (!update) throw new Error('expected update subcommand');
@@ -505,7 +824,163 @@ describe('subcommand registry guards', () => {
     }
   });
 
-  it('update (story 3.1) fails with no-active-edt when no EDT is active', async () => {
+  it('update carries the per-service run detail additively on each result row', async () => {
+    const registry: RegistryPort = {
+      list: async () => ok(['/repo/a']),
+      add: async () => ok(undefined),
+      exists: async () => ok(false),
+      scan: async () => ok({ candidates: [], skipped: [] }),
+      reset: async () => ok({ path: '/p', backupPath: null }),
+      remove: async () => ok(undefined),
+    };
+    const manifest: ManifestPort = {
+      load: async () => ok({ service: 'svc-a', container: 'ctr-a', migrationCommand: 'npm run m', sharedBranch: 'main', modules: {} }),
+    };
+    const migration: MigrationPort = { run: async () => ok({ output: 'migrated\n' }) };
+    const subcommands = buildTestSubcommands({ registry, manifest, migration });
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    const result = await update.run(['--all', '--yes']);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          {
+            service: 'svc-a',
+            outcome: 'updated',
+            run: { merge: { kind: 'up-to-date' }, migrations: { kind: 'ran', command: 'npm run m', outputExcerpt: 'migrated' } },
+          },
+        ],
+      },
+    });
+  });
+
+  describe('update settings defaults and override flags', () => {
+    function wiredUpdate(update: Partial<Settings['update']>) {
+      const registry: RegistryPort = {
+        list: async () => ok(['/repo/a']),
+        add: async () => ok(undefined),
+        exists: async () => ok(false),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const manifest: ManifestPort = {
+        load: async () => ok({ service: 'svc-a', container: 'ctr-a', migrationCommand: 'npm run m', sharedBranch: 'main', modules: {} }),
+      };
+      const migrationRun = vi.fn(async () => ok({ output: 'migrated\n' }));
+      const settings: SettingsPort = {
+        load: async () => ok({ settings: { ...DEFAULT_SETTINGS, update: { ...DEFAULT_SETTINGS.update, ...update } }, warning: null }),
+        save: async () => ok(undefined),
+      };
+      const subcommands = buildTestSubcommands({ registry, manifest, migration: { run: migrationRun }, settings });
+      const run = subcommands.find((subcommand) => subcommand.name === 'update')?.run;
+      if (!run) throw new Error('expected update subcommand');
+      return { run, migrationRun };
+    }
+
+    it('runs migrations by default and skips them when settings turn them off', async () => {
+      const on = wiredUpdate({});
+      await on.run(['--all', '--yes']);
+      expect(on.migrationRun).toHaveBeenCalledTimes(1);
+
+      const off = wiredUpdate({ runMigrations: false });
+      await off.run(['--all', '--yes']);
+      expect(off.migrationRun).not.toHaveBeenCalled();
+    });
+
+    it('explicit flags win over the settings defaults, in any position', async () => {
+      const forcedOn = wiredUpdate({ runMigrations: false });
+      await forcedOn.run(['--migrations', '--all', '--yes']);
+      expect(forcedOn.migrationRun).toHaveBeenCalledTimes(1);
+
+      const forcedOff = wiredUpdate({ runMigrations: true });
+      await forcedOff.run(['--all', '--no-migrations', '--yes']);
+      expect(forcedOff.migrationRun).not.toHaveBeenCalled();
+    });
+
+    it('rejects a flag together with its negation as invalid-argument', async () => {
+      const { run } = wiredUpdate({});
+      expect(await run(['--migrations', '--no-migrations'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(await run(['--clean-restart', '--no-clean-restart', '--all', '--yes'])).toMatchObject({
+        ok: false,
+        error: { code: 'invalid-argument' },
+      });
+    });
+
+    it('rejects an unknown flag alongside the override flags', async () => {
+      const { run } = wiredUpdate({});
+      expect(await run(['--all', '--yes', '--no-migrations', '--bogus'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('falls back to defaults and reports on stderr when settings fail to load or carry a warning', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        for (const load of [
+          async () => err('io-error', 'disk on fire'),
+          async () => ok({ settings: { ...DEFAULT_SETTINGS, update: { ...DEFAULT_SETTINGS.update, runMigrations: false } }, warning: 'Invalid settings: update.cleanRestart' }),
+        ]) {
+          errorSpy.mockClear();
+          const migrationRun = vi.fn(async () => ok({ output: '' }));
+          const subcommands = buildTestSubcommands({
+            registry: { list: async () => ok(['/repo/a']), add: async () => ok(undefined), exists: async () => ok(false), scan: async () => ok({ candidates: [], skipped: [] }), reset: async () => ok({ path: '/p', backupPath: null }), remove: async () => ok(undefined) },
+            manifest: { load: async () => ok({ service: 'svc-a', container: 'ctr-a', migrationCommand: 'npm run m', sharedBranch: 'main', modules: {} }) },
+            migration: { run: migrationRun },
+            settings: { load: load as never, save: async () => ok(undefined) },
+          });
+          const run = subcommands.find((subcommand) => subcommand.name === 'update')!.run;
+          await run(['--all', '--yes']);
+          expect(errorSpy).toHaveBeenCalledTimes(1);
+          // The failing load uses the built-in defaults (migrations on); the warned load keeps its parsed settings.
+          expect(migrationRun).toHaveBeenCalledTimes(load.toString().includes('io-error') ? 1 : 0);
+        }
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    describe('clean restart wiring', () => {
+      function wiredRestart(update: Partial<Settings['update']>) {
+        const restartRun = vi.fn(async () => ok({ output: '' }));
+        const containerRestart = vi.fn(async () => ok(undefined));
+        const subcommands = buildTestSubcommands({
+          registry: { list: async () => ok(['/repo/a']), add: async () => ok(undefined), exists: async () => ok(false), scan: async () => ok({ candidates: [], skipped: [] }), reset: async () => ok({ path: '/p', backupPath: null }), remove: async () => ok(undefined) },
+          manifest: { load: async () => ok({ service: 'svc-a', container: 'ctr-a', sharedBranch: 'main', restartCommands: ['npm run clean'], modules: {} }) },
+          restart: { run: restartRun },
+          container: { restart: containerRestart },
+          settings: {
+            load: async () => ok({ settings: { ...DEFAULT_SETTINGS, update: { ...DEFAULT_SETTINGS.update, ...update } }, warning: null }),
+            save: async () => ok(undefined),
+          },
+        });
+        const run = subcommands.find((subcommand) => subcommand.name === 'update')!.run;
+        return { run, restartRun, containerRestart };
+      }
+
+      it('settings cleanRestart: true runs the recipe; --no-clean-restart overrides it; --clean-restart forces it', async () => {
+        const fromSettings = wiredRestart({ cleanRestart: true });
+        await fromSettings.run(['--all', '--yes']);
+        expect(fromSettings.restartRun).toHaveBeenCalled();
+
+        const overridden = wiredRestart({ cleanRestart: true });
+        await overridden.run(['--all', '--yes', '--no-clean-restart']);
+        expect(overridden.restartRun).not.toHaveBeenCalled();
+
+        const forced = wiredRestart({});
+        await forced.run(['--clean-restart', '--all', '--yes']);
+        expect(forced.restartRun).toHaveBeenCalled();
+      });
+    });
+
+    it('still gates --all behind --yes when only override flags are added', async () => {
+      const { run } = wiredUpdate({});
+      expect(await run(['--all', '--no-clean-restart'])).toMatchObject({ ok: false, error: { code: 'confirmation-required' } });
+    });
+  });
+
+  it('update fails with no-active-edt when no EDT is active', async () => {
     const subcommands = buildTestSubcommands();
     const update = subcommands.find((subcommand) => subcommand.name === 'update');
     if (!update) throw new Error('expected update subcommand');
@@ -515,7 +990,119 @@ describe('subcommand registry guards', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'no-active-edt' } });
   });
 
-  describe('registry clean (story 2.33)', () => {
+  it('update --from-edt without a topic is rejected and the flag is documented', async () => {
+    const subcommands = buildTestSubcommands();
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    expect(update.usage).toContain('--from-edt <topic>');
+    expect(await update.run(['--from-edt'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await update.run(['--from-edt', 'a', '--all'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('update --from-edt fails with no-active-edt when no EDT is active', async () => {
+    const subcommands = buildTestSubcommands();
+    const update = subcommands.find((subcommand) => subcommand.name === 'update');
+    if (!update) throw new Error('expected update subcommand');
+
+    expect(await update.run(['--from-edt', 'sibling'])).toMatchObject({ ok: false, error: { code: 'no-active-edt' } });
+  });
+
+  describe('update --from-edt', () => {
+    const entry = (ulid: string, topic: string, branch: string) => ({
+      ulid,
+      topic,
+      createdAt: '2026-10-01T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch }],
+    });
+
+    function wired(localBranches: string[], update: Partial<Settings['update']> = {}) {
+      const merges: [string, string][] = [];
+      const restartRun = vi.fn(async () => ok({ output: '' }));
+      const migrationRun = vi.fn(async () => ok({ output: '' }));
+      // Every GitPort method answers ok(undefined) unless overridden below.
+      const git = new Proxy(
+        {
+          currentBranch: async () => ok('feat/mine'),
+          branchExistsLocally: async () => ok(true),
+          hasUncommittedChanges: async () => ok(false),
+          isMergeInProgress: async () => ok(false),
+          isRebaseInProgress: async () => ok(false),
+          listDirtyPaths: async () => ok([]),
+          listBranches: async () => ok(localBranches),
+          mergeBranch: async (path: string, branch: string) => {
+            merges.push([path, branch]);
+            return ok(undefined);
+          },
+        } as Record<string, unknown>,
+        { get: (target, key: string) => target[key] ?? (async () => ok(undefined)) },
+      ) as unknown as GitPort;
+      const subcommands = buildTestSubcommands({
+        git,
+        edtRegistry: {
+          add: async () => ok(undefined),
+          list: async () => ok([entry('A', 'mine', 'feat/mine'), entry('B', 'sibling', 'feat/x')]),
+          setStatus: async () => ok(undefined),
+          update: async () => ok(undefined),
+          remove: async () => ok(undefined),
+        },
+        state: { ...fakeState(), readActiveEdt: async () => ok('A') },
+        manifest: {
+          load: async () =>
+            ok({ service: 'svc-a', container: 'ctr-a', migrationCommand: 'npm run m', restartCommands: ['npm run clean'], sharedBranch: 'development', modules: {} }),
+        },
+        restart: { run: restartRun },
+        migration: { run: migrationRun },
+        settings: {
+          load: async () => ok({ settings: { ...DEFAULT_SETTINGS, update: { ...DEFAULT_SETTINGS.update, ...update } }, warning: null }),
+          save: async () => ok(undefined),
+        },
+      });
+      const updateCommand = subcommands.find((subcommand) => subcommand.name === 'update');
+      if (!updateCommand) throw new Error('expected update subcommand');
+      return { update: updateCommand, merges, restartRun, migrationRun };
+    }
+
+    it('applies the settings defaults and explicit override flags to the toggles', async () => {
+      const fromSettings = wired(['feat/x'], { cleanRestart: true, runMigrations: false });
+      await fromSettings.update.run(['--from-edt', 'sibling']);
+      expect(fromSettings.restartRun).toHaveBeenCalled();
+      expect(fromSettings.migrationRun).not.toHaveBeenCalled();
+
+      const overridden = wired(['feat/x'], { cleanRestart: true, runMigrations: false });
+      await overridden.update.run(['--from-edt', 'sibling', '--no-clean-restart', '--migrations']);
+      expect(overridden.restartRun).not.toHaveBeenCalled();
+      expect(overridden.migrationRun).toHaveBeenCalled();
+    });
+
+    it('merges the sibling EDT branch instead of the shared branch', async () => {
+      const { update, merges } = wired(['feat/x']);
+
+      const result = await update.run(['--from-edt', ' sibling ']);
+
+      expect(result).toMatchObject({ ok: true, data: { scope: 'edt', results: [{ service: 'svc-a', outcome: 'updated' }] } });
+      expect(merges).toEqual([['/repo/a', 'feat/x']]);
+    });
+
+    it('fails update-source-unresolved with no git write when a member has no branch', async () => {
+      const { update, merges } = wired(['development']);
+
+      const result = await update.run(['--from-edt', 'sibling']);
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'update-source-unresolved' } });
+      expect(merges).toEqual([]);
+    });
+
+    it('rejects an unknown topic and the active EDT own topic', async () => {
+      const { update } = wired(['feat/x']);
+
+      expect(await update.run(['--from-edt', 'nope'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(await update.run(['--from-edt', 'mine'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+  });
+
+  describe('registry clean', () => {
     function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
       const registry = subcommands.find((subcommand) => subcommand.name === 'registry');
       if (!registry) throw new Error('expected registry subcommand');
@@ -556,7 +1143,7 @@ describe('subcommand registry guards', () => {
       expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     });
 
-    it('rejects a --path value that looks like another flag instead of silently consuming it as a literal path (review fix)', async () => {
+    it('rejects a --path value that looks like another flag instead of silently consuming it as a literal path', async () => {
       const registry = findRegistry(buildTestSubcommands());
 
       const looksLikeYes = await registry.run(['clean', '--yes', '--path', '--yes']);
@@ -566,7 +1153,7 @@ describe('subcommand registry guards', () => {
       expect(looksLikePath).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     });
 
-    it('rejects an empty-string --path value instead of silently resolving it to cwd (review fix)', async () => {
+    it('rejects an empty-string --path value instead of silently resolving it to cwd', async () => {
       const registry = findRegistry(buildTestSubcommands());
 
       const empty = await registry.run(['clean', '--yes', '--path', '']);
@@ -576,7 +1163,7 @@ describe('subcommand registry guards', () => {
       expect(blank).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     });
 
-    it('de-duplicates the same resolved path given via multiple --path flags, never a duplicate outcome row (review fix)', async () => {
+    it('de-duplicates the same resolved path given via multiple --path flags, never a duplicate outcome row', async () => {
       const remove = vi.fn(async () => ok(undefined));
       const registryPort: RegistryPort = {
         list: async () => ok([]),
@@ -594,7 +1181,7 @@ describe('subcommand registry guards', () => {
       expect(remove).toHaveBeenCalledTimes(1);
     });
 
-    it('AC4: --yes --path <p1> --path <p2> removes each path via RegistryPort.remove, one path failing never blocking the other', async () => {
+    it('--yes --path <p1> --path <p2> removes each path via RegistryPort.remove, one path failing never blocking the other', async () => {
       const remove = vi.fn(async (path: string) =>
         path === '/repo/bad' ? err('registry-write-error', 'disk full') : ok(undefined),
       );
@@ -674,7 +1261,7 @@ describe('subcommand registry guards', () => {
       }
     });
 
-    it('surfaces a path that could not even be checked in `errors`, never silently dropped (review fix)', async () => {
+    it('surfaces a path that could not even be checked in `errors`, never silently dropped', async () => {
       const registryPort: RegistryPort = {
         list: async () => ok(['/repo/gone', '/repo/unknown']),
         add: async () => ok(undefined),
@@ -700,7 +1287,7 @@ describe('subcommand registry guards', () => {
     });
   });
 
-  describe('registry validate (story 2.28)', () => {
+  describe('registry validate', () => {
     function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
       const registry = subcommands.find((subcommand) => subcommand.name === 'registry');
       if (!registry) throw new Error('expected registry subcommand');
@@ -745,37 +1332,7 @@ describe('subcommand registry guards', () => {
       const subcommands = buildTestSubcommands({
         registry: registryPort,
         manifest,
-        git: {
-          assertAllowedBranch: async () => ok(undefined),
-          createBranch: async () => ok(undefined),
-          deleteBranch: async () => ok(undefined),
-          currentBranch: async () => ok('development'),
-          aheadBehind: async () => ok({ ahead: 0, behind: 0 }),
-          checkout: async () => ok(undefined),
-          hasUncommittedChanges: async () => ok(false),
-          stashSave: async () => ok(undefined),
-          restoreStash: async () => ok(undefined),
-          branchExistsLocally: async () => ok(false),
-          fetch: async () => ok(undefined),
-          pull: async () => ok(undefined),
-          mergeBranch: async () => ok(undefined),
-          abortMerge: async () => ok(undefined),
-          isMergeInProgress: async () => ok(false),
-          listDirtyPaths: async () => ok([]),
-          discardPaths: async () => ok(undefined),
-          discardAll: async () => ok(undefined),
-          diffNameOnly: async () => ok([]),
-          discardPathsToHead: async () => ok(undefined),
-          isRebaseInProgress: async () => ok(false),
-          hasUnmergedPaths: async () => ok(false),
-          finalizeMerge: async () => ok(undefined),
-          listBranches: async () => ok([]),
-          renameBranch: async () => ok(undefined),
-          listRemoteBranches: async () => ok([]),
-          createTrackingBranch: async () => ok(undefined),
-          isBranchMerged: async () => ok(true),
-          hasStash: async () => ok(false),
-        },
+        git: fakeGitPort({ branchExistsLocally: async () => ok(false) }),
       });
       const validate = subcommands.find((subcommand) => subcommand.name === 'registry');
       if (!validate) throw new Error('expected registry subcommand');
@@ -836,37 +1393,9 @@ describe('subcommand registry guards', () => {
       const manifest: ManifestPort = {
         load: async () => ok({ service: 'svc', container: 'ctr', sharedBranch: 'development', modules: {} }),
       };
-      const git: GitPort = {
-        assertAllowedBranch: async () => ok(undefined),
-        createBranch: async () => ok(undefined),
-        deleteBranch: async () => ok(undefined),
-        currentBranch: async () => ok('development'),
-        aheadBehind: async () => ok({ ahead: 0, behind: 0 }),
-        checkout: async () => ok(undefined),
-        hasUncommittedChanges: async () => ok(false),
-        stashSave: async () => ok(undefined),
-        restoreStash: async () => ok(undefined),
+      const git = fakeGitPort({
         branchExistsLocally: async () => err('git-branch-check-error', 'Cannot verify branch state'),
-        fetch: async () => ok(undefined),
-        pull: async () => ok(undefined),
-        mergeBranch: async () => ok(undefined),
-        abortMerge: async () => ok(undefined),
-        isMergeInProgress: async () => ok(false),
-        listDirtyPaths: async () => ok([]),
-        discardPaths: async () => ok(undefined),
-        discardAll: async () => ok(undefined),
-        diffNameOnly: async () => ok([]),
-        discardPathsToHead: async () => ok(undefined),
-        isRebaseInProgress: async () => ok(false),
-        hasUnmergedPaths: async () => ok(false),
-        finalizeMerge: async () => ok(undefined),
-        listBranches: async () => ok([]),
-        renameBranch: async () => ok(undefined),
-        listRemoteBranches: async () => ok([]),
-        createTrackingBranch: async () => ok(undefined),
-        isBranchMerged: async () => ok(true),
-        hasStash: async () => ok(false),
-      };
+      });
       const registry = findRegistry(buildTestSubcommands({ registry: registryPort, manifest, git }));
 
       const result = await registry.run(['validate']);
@@ -897,7 +1426,7 @@ describe('subcommand registry guards', () => {
     });
   });
 
-  describe('registry clean — interactive TTY flow (story 2.33 review fix)', () => {
+  describe('registry clean — interactive TTY flow', () => {
     function findRegistry(subcommands: ReturnType<typeof buildTestSubcommands>) {
       const registry = subcommands.find((subcommand) => subcommand.name === 'registry');
       if (!registry) throw new Error('expected registry subcommand');

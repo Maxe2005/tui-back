@@ -1,6 +1,5 @@
-// core/scripts/reset-tool: unit tests against fake ports (AD-13) and a real tmp edtsBaseDir —
-// I/O matrix rows ALL, HISTORY_ONLY, EMPTY_STATE, LOCK_HELD of spec-reset-command.md, plus the
-// services ⇒ edts rule.
+// core/scripts/reset-tool: unit tests against fake ports and a real tmp edtsBaseDir — the
+// all-categories, history-only, empty-state and lock-held cases, plus the services ⇒ edts rule.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
@@ -63,6 +62,7 @@ type StateData = {
   activeEdt: string | null;
   splitterRatios: Record<string, number[]> | null;
   filterHistory: Record<string, string[]> | null;
+  commandHistory?: string[] | null;
 };
 
 function fakeState(initial: StateData): StatePort & { data: StateData } {
@@ -81,6 +81,11 @@ function fakeState(initial: StateData): StatePort & { data: StateData } {
     readFilterHistory: vi.fn(async () => ok(port.data.filterHistory)),
     writeFilterHistory: vi.fn(async (history: Record<string, string[]>) => {
       port.data.filterHistory = history;
+      return ok(undefined);
+    }),
+    readCommandHistory: vi.fn(async () => ok(port.data.commandHistory ?? null)),
+    writeCommandHistory: vi.fn(async (history: string[]) => {
+      port.data.commandHistory = history;
       return ok(undefined);
     }),
   };
@@ -164,6 +169,25 @@ describe('resetTool', () => {
       { topic: 'feature-a', service: 'web', repoPath: '/repos/web', branch: 'feat/a' },
       { topic: 'feature-b', service: 'api', repoPath: '/repos/api', branch: 'feat/b' },
     ]);
+  });
+
+  it('HISTORY_ONLY: also clears commandHistory, leaving everything else', async () => {
+    const { edtRegistry, registry, state } = fullSetup();
+    state.data.commandHistory = ['settings', 'registry'];
+
+    const result = await resetTool({
+      categories: ['histories'],
+      edtRegistry,
+      registry,
+      state,
+      lock: fakeLock(),
+      keys: KEYS,
+      edtsBaseDir,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(state.data.commandHistory).toEqual([]);
+    expect(state.data.activeEdt).toBe('ULID1');
   });
 
   it('HISTORY_ONLY: clears only filterHistory', async () => {
@@ -324,6 +348,32 @@ describe('resetTool', () => {
 
     expect(result.ok && result.data.outcomes.histories).toEqual({ outcome: 'failed', error: { code: 'state-read-error', message: 'EIO' } });
     expect(state.writeFilterHistory).not.toHaveBeenCalled();
+  });
+
+  it('a failed readCommandHistory fails the histories category without writing either history', async () => {
+    const { edtRegistry, registry, state } = fullSetup();
+    state.readCommandHistory = vi.fn(async () => err('state-invalid-format', 'bad commandHistory'));
+
+    const result = await resetTool({ categories: ['histories'], edtRegistry, registry, state, lock: fakeLock(), keys: KEYS, edtsBaseDir });
+
+    expect(result.ok && result.data.outcomes.histories?.outcome).toBe('failed');
+    expect(state.writeFilterHistory).not.toHaveBeenCalled();
+    expect(state.writeCommandHistory).not.toHaveBeenCalled();
+  });
+
+  it('clears commandHistory even when no filterHistory was ever persisted, and vice versa', async () => {
+    const onlyCommand = fullSetup();
+    onlyCommand.state.data.filterHistory = null;
+    onlyCommand.state.data.commandHistory = ['settings'];
+    await resetTool({ categories: ['histories'], ...onlyCommand, lock: fakeLock(), keys: KEYS, edtsBaseDir });
+    expect(onlyCommand.state.data.commandHistory).toEqual([]);
+    expect(onlyCommand.state.writeFilterHistory).not.toHaveBeenCalled();
+
+    const onlyFilter = fullSetup();
+    onlyFilter.state.data.commandHistory = null;
+    await resetTool({ categories: ['histories'], ...onlyFilter, lock: fakeLock(), keys: KEYS, edtsBaseDir });
+    expect(onlyFilter.state.data.filterHistory).toEqual({});
+    expect(onlyFilter.state.writeCommandHistory).not.toHaveBeenCalled();
   });
 
   it.each(['', 'relative/edts'])('refuses to wipe a non-absolute edtsBaseDir (%j)', async (dir) => {

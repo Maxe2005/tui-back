@@ -1,6 +1,6 @@
-// tui/zones/edts/dialogs/create-wizard: Step 2 "Services" (Story 2.36) — every registered
-// managed repo as a checkbox-list-item (Space toggles, ↑/↓/Home/End move), with the existing
-// loading/error/empty candidate states.
+// tui/zones/edts/dialogs/create-wizard: Step 2 "Services" — every registered managed repo as a
+// checkbox-list-item (Space toggles, ↑/↓/Home/End move), with the loading/error/empty candidate
+// states.
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import { CheckboxListItem } from '../../../../shared/components/checkbox-list-item.js';
@@ -9,13 +9,12 @@ import {
   type CandidateListState,
   type CreateDialogState,
   type EdtDialogState,
-  jumpSelection,
-  moveSelection,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   toggleMemberSelection,
 } from '../../edts-zone.logic.js';
 import { missingSeedMembers } from './wizard.logic.js';
+import { StateLine } from '../../../../shared/components/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../../shared/keys/list-cursor.js';
+import { BoundedList } from '../../../../shared/components/bounded-list.js';
 
 export function handleServicesStepInput(
   setDialog: (updater: (prev: EdtDialogState) => EdtDialogState) => void,
@@ -45,7 +44,7 @@ export function handleServicesStepInput(
     if (prev.kind !== 'create') {
       return prev;
     }
-    // Story 2.37: Step 3 seeds itself on entry (enterBranchStep) — nothing to prefill here.
+    // Step 3 seeds itself on entry (enterBranchStep) — nothing to prefill here.
     const nextSelected = toggleMemberSelection(prev.selectedMembers, path);
     return { ...prev, selectedMembers: nextSelected, error: nextSelected.length > 0 ? null : prev.error };
   });
@@ -60,23 +59,30 @@ export function ServicesStepView({
   candidates: readonly ServiceBranchDivergence[];
   candidateState: CandidateListState;
 }) {
-  // Story 2.31: root members no longer in the pool (pruned on entering Step 3).
+  // Root members no longer in the pool (pruned on entering Step 3).
   const missing = candidateState === 'ready' ? missingSeedMembers(dialog.seedFromEdt, candidates) : [];
   return (
     <Box flexDirection="column">
-      {candidateState === 'loading' ? <Text color={colors['text-dim']}>Loading services…</Text> : null}
-      {candidateState === 'error' ? <Text color={colors.error}>Failed to load services — cannot show candidates.</Text> : null}
-      {candidateState === 'empty' ? <Text color={colors['text-dim']}>No registered services available.</Text> : null}
+      {candidateState === 'loading' ? <StateLine kind="loading" subject="services" /> : null}
+      {candidateState === 'error' ? <StateLine kind="error" subject="services" /> : null}
+      {candidateState === 'empty' ? <StateLine kind="empty" subject="registered services" text="No registered services available." /> : null}
       {candidateState === 'ready'
-        ? candidates.map((candidate, index) => (
-            <Box key={candidate.path}>
-              <Text color={colors.accent}>{index === dialog.memberCursor ? '›' : ' '}</Text>
-              <CheckboxListItem label={candidate.service} state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'} />
-            </Box>
-          ))
+        ? (
+          <BoundedList
+            items={candidates}
+            chromeRows={14}
+            cursorIndex={dialog.memberCursor}
+            renderItem={(candidate, index) => (
+              <Box key={candidate.path}>
+                <Text color={colors.accent} wrap="truncate-end">{index === dialog.memberCursor ? '›' : ' '}</Text>
+                <CheckboxListItem label={candidate.service} state={dialog.selectedMembers.includes(candidate.path) ? 'checked' : 'unchecked'} />
+              </Box>
+            )}
+          />
+          )
         : null}
       {missing.length > 0 ? (
-        <Text color={colors['text-dim']}>Services de l'EDT source introuvables (ignorés) : {missing.join(', ')}</Text>
+        <Text color={colors['text-dim']} wrap="truncate-end">Source EDT services not found (ignored): {missing.join(', ')}</Text>
       ) : null}
     </Box>
   );

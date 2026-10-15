@@ -1,37 +1,28 @@
 // tui/store/slices: the `:settings` screen's live, applied settings — persisted to
-// settings.yaml, optimistic-applied to the live store immediately (Boundaries: "no separate
-// save step"). Extracted from app-store.ts (see that file's header for why) — a StateCreator
-// factory combined with the other slices into one Zustand store (AD-10: still exactly one
-// store/one hook).
+// settings.yaml and applied to the live store immediately, with no separate save step.
 import type { StateCreator } from 'zustand';
 import { DEFAULT_SETTINGS, type Settings } from '../../../../../core/ports/settings.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
-// Story 2.19: a partial update accepted by updateSettings — each present top-level key
-// shallow-merges into that whole sub-object's existing fields, e.g.
-// `{ commandPalette: { gridMaxRows: 10 } }` or `{ edts: { hiddenActionHints: [...] } }` (the
-// latter leaves `edts.hiddenActionTypes` untouched, and vice versa) — see updateSettings'
-// `{ ...current.edts, ...partial.edts }` spread below. Deliberately `Partial` one level deeper
-// than a plain `Partial<Settings>` would give (each sub-object's own fields are individually
-// optional too) — that's the whole point: a caller only ever supplies the one field it's
-// changing, never the sub-object's other, untouched field. Never a deep-merge below this one
-// level, though — the two sub-objects each stay flat.
+// A partial update accepted by updateSettings — each present top-level key shallow-merges
+// into that sub-object's existing fields, e.g. `{ edts: { hiddenActionHints: [...] } }` leaves
+// `edts.hiddenActionTypes` untouched. `Partial` one level deeper than `Partial<Settings>`, so a
+// caller supplies only the field it changes — never a deep merge below that level.
 export type SettingsUpdate = {
   general?: Partial<Settings['general']>;
   commandPalette?: Partial<Settings['commandPalette']>;
   edts?: Partial<Settings['edts']>;
-  // Story 5.1: same shallow-merge convention as the two fields above.
+  // Same shallow-merge convention as the two fields above.
   logs?: Partial<Settings['logs']>;
+  update?: Partial<Settings['update']>;
+  sharedTypes?: Partial<Settings['sharedTypes']>;
 };
 
 export type SettingsSlice = {
-  // Story 2.19: the `:settings` screen — reachable exclusively via the `settings` command
-  // inside the `:` command bar (mirrors registryScreenOpen's triplet exactly; never a raw
-  // keypress). `settings` is the live, applied value every consumer (command-bar.tsx,
-  // edts-zone.tsx) reads — seeded with DEFAULT_SETTINGS until loadSettings() resolves, so an
-  // unwired store (every pre-2.19 `createAppStore()` test call) stays usable. `settingsWarning`
-  // carries a corrupt/invalid settings.yaml's non-blocking field-naming message, cleared once
-  // the screen closes.
+  // The `:settings` screen — reachable only via the `settings` command, never a raw keypress.
+  // `settings` is the live, applied value every consumer reads — seeded with DEFAULT_SETTINGS
+  // until loadSettings() resolves, so an unwired store stays usable. `settingsWarning` carries
+  // a corrupt/invalid settings.yaml's non-blocking field-naming message, cleared on close.
   settings: Settings;
   settingsWarning: string | null;
   settingsScreenOpen: boolean;
@@ -42,10 +33,9 @@ export type SettingsSlice = {
 };
 
 export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], SettingsSlice> {
-  // Story 2.19 patch: settingsSaveChain serializes updateSettings' persistence calls so
-  // concurrent updates hit disk in the order they were requested (each save chains onto the
-  // previous one) rather than racing; settingsVersion is a monotonic counter bumped on every
-  // updateSettings call so a slower, in-flight loadSettings can detect a newer update has
+  // settingsSaveChain serializes updateSettings' persistence calls so concurrent updates hit
+  // disk in request order rather than racing; settingsVersion is a monotonic counter bumped on
+  // every updateSettings call so a slower, in-flight loadSettings can detect a newer update
   // landed since it started and skip clobbering it.
   let settingsSaveChain: Promise<void> = Promise.resolve();
   let settingsVersion = 0;
@@ -83,10 +73,11 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
         commandPalette: { ...current.commandPalette, ...partial.commandPalette },
         edts: { ...current.edts, ...partial.edts },
         logs: { ...current.logs, ...partial.logs },
+        update: { ...current.update, ...partial.update },
+        sharedTypes: { ...current.sharedTypes, ...partial.sharedTypes },
       };
-      // Optimistic: applies to the live store immediately, before persistence even starts
-      // (Boundaries: "every change applies to the live store and persists to disk
-      // immediately, no separate save step").
+      // Optimistic: applies to the live store immediately, before persistence even starts —
+      // no separate save step.
       set({ settings: next });
       if (!deps) {
         return;

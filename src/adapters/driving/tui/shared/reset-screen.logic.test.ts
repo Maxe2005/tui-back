@@ -1,5 +1,5 @@
-// tui/shared/reset-screen.logic: I/O matrix rows SERVICES_FORCES_EDTS, NOTHING_CHECKED,
-// WRONG_WORD and ESC of spec-reset-command.md, against the pure state machine.
+// tui/shared/reset-screen.logic: the pure state machine — Services forcing EDTs, nothing
+// checked, a wrong confirmation word, and Esc.
 import { describe, expect, it } from 'vitest';
 import {
   createResetScreenState,
@@ -41,6 +41,11 @@ describe('reset screen state machine', () => {
     const state = createResetScreenState();
     expect(state.step).toBe('select');
     expect(state.checked).toEqual({ edts: false, histories: false, services: false });
+  });
+
+  it('Home/End jump to the first and last category', () => {
+    expect(press(createResetScreenState(), '', { end: true }).state.cursor).toBe(2);
+    expect(press(press(createResetScreenState(), '', { end: true }).state, '', { home: true }).state.cursor).toBe(0);
   });
 
   it('NOTHING_CHECKED: Enter on step 1 stays on step 1', () => {

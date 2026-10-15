@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-visibility.js';
 import {
   AppShell,
@@ -7,7 +7,6 @@ import {
   shouldQuit,
   shouldSwitchZone,
   shouldOpenCommand,
-  shouldOpenFilter,
   resolveZoneArrowSwitch,
   shouldFallbackToDashboard,
   shouldEnterResizeMode,
@@ -21,7 +20,7 @@ import { ZONES, type ZoneId } from './zones/zones.js';
 import { BANNER_LINES } from './zones/dashboard/launch-banner.js';
 import { renderToString } from './shared/components/render-to-string.js';
 
-describe('help-open decision helpers (AC2, AC3)', () => {
+describe('help-open decision helpers', () => {
   it('opens help on ? only', () => {
     expect(shouldOpenHelp('?')).toBe(true);
     expect(shouldOpenHelp('j')).toBe(false);
@@ -36,26 +35,62 @@ describe('help-open decision helpers (AC2, AC3)', () => {
   });
 });
 
+describe('AppShell tab bar busy badges', () => {
+  const render = async (state: Partial<AppState>) => {
+    const store = createAppStore();
+    store.setState(state);
+    return renderToString(<AppShell useStore={store} onQuit={() => {}} />);
+  };
+
+  it('shows the updating badge on a running shared-types run and nothing when idle', async () => {
+    const running = await render({ sharedTypesRun: { ...createAppStore().getState().sharedTypesRun, status: 'running' } });
+    expect(running).toContain('⇄ updating');
+    expect(await render({})).not.toContain('⇄ updating');
+  });
+
+  it('shows the awaiting badge when a publish is blocked', async () => {
+    const output = await render({ sharedTypesPublish: { ...createAppStore().getState().sharedTypesPublish, status: 'blocked' } });
+    expect(output).toContain('1 awaiting you');
+  });
+
+  it('keeps the Update tab badge while a group update runs', async () => {
+    expect(await render({ updateStatus: 'running' })).toContain('⇄ updating');
+  });
+});
+
 describe('AppShell', () => {
+  it('advertises W wrap-all and [Ctrl+W] resize in the Logs footer, and no [W] hint in another zone', async () => {
+    const store = createAppStore();
+    const onQuit = vi.fn();
+    store.getState().setActiveZone('logs');
+    const logsOutput = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(logsOutput).toContain('[W] wrap all');
+    expect(logsOutput).toContain('[Ctrl+W] resize');
+
+    store.getState().setActiveZone('edts');
+    const edtsOutput = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
+    expect(edtsOutput).toContain('[Ctrl+W] resize');
+    expect(edtsOutput).not.toContain('[W] wrap all');
+  });
+
   const onQuit = () => {};
 
-  it('shows the top bar, six-zone tab bar, and footer simultaneously (AC1)', async () => {
+  it('shows the top bar, six-zone tab bar, and footer simultaneously', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).toContain('tui-back');
     for (const zone of ZONES) {
       expect(output).toContain(`[${zone.mnemonic}] ${zone.label}`);
     }
-    expect(output).toContain('[/] filter');
   });
 
-  it('never mounts the command bar on initial render — commandBarOpen defaults closed (story 2.14)', async () => {
+  it('never mounts the command bar on initial render — commandBarOpen defaults closed', async () => {
     const store = createAppStore();
     const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('COMMAND');
   });
 
-  it('still renders its full chrome (top bar, zone tabs, footer) once the root height is bound to the terminal rows (story 2.8)', async () => {
+  it('still renders its full chrome (top bar, zone tabs, footer) once the root height is bound to the terminal rows', async () => {
     // render-to-string.ts pins the test harness's stdout to a fixed 40-row size, mirroring
     // Ink's own useWindowSize() height binding on AppShell's root Box — this guards against
     // that height binding clipping content off the bottom of a real, shorter terminal.
@@ -65,11 +100,10 @@ describe('AppShell', () => {
     for (const zone of ZONES) {
       expect(output).toContain(`[${zone.mnemonic}] ${zone.label}`);
     }
-    expect(output).toContain('[/] filter');
     expect(output).toContain('[q] quit');
   });
 
-  it('shows a glyph+counter badge while the developer is elsewhere and clears it once the zone is visited (AC3)', async () => {
+  it('shows a glyph+counter badge while the developer is elsewhere and clears it once the zone is visited', async () => {
     const store = createAppStore();
     store.getState().addZoneEvent('logs');
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
@@ -80,26 +114,22 @@ describe('AppShell', () => {
     expect(output).not.toContain('●1');
   });
 
-  it('mounts a placeholder screen for every zone at its tab — none missing or unreachable (AC6)', async () => {
+  it('mounts a placeholder screen for every zone at its tab — none missing or unreachable', async () => {
     const store = createAppStore();
     for (const zone of ZONES) {
       store.getState().setActiveZone(zone.id);
       const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
       expect(output).toContain(zone.label.toUpperCase());
-      // Story 2.6: EDTs is no longer a ZonePlaceholder stub — it renders real content
-      // (see edts-zone.test.tsx for its own coverage). Story 3.1: same for Update
-      // (see update-zone.test.tsx). Story 5.1: Logs is likewise real content now (see
-      // logs-zone.test.tsx). Story 6.1: Routes is likewise real content now (see
-      // routes-zone.test.tsx) — every other zone is still the placeholder these two
-      // literal strings come from.
-      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs' && zone.id !== 'routes') {
+      // EDTs, Update, Logs, Routes and shared-types render real content (covered by their own zone tests);
+      // every other zone is still the placeholder these two literal strings come from.
+      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs' && zone.id !== 'routes' && zone.id !== 'shared-types') {
         expect(output).toContain('list pane');
         expect(output).toContain('detail pane');
       }
     }
   });
 
-  it('opens the repo registry screen from the store (reachable only via the `registry` command inside the `:` command bar, story 2.14) and hides it again', async () => {
+  it('opens the repo registry screen from the store (reachable only via the `registry` command inside the `:` command bar) and hides it again', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('REPO REGISTRY');
@@ -114,7 +144,7 @@ describe('AppShell', () => {
     expect(output).not.toContain('REPO REGISTRY');
   });
 
-  it('opens the keybinding-help modal from the store and hides it again (AC2, AC3)', async () => {
+  it('opens the keybinding-help modal from the store and hides it again', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     expect(output).not.toContain('KEYBINDINGS');
@@ -130,7 +160,7 @@ describe('AppShell', () => {
     expect(output).not.toContain('KEYBINDINGS');
   });
 
-  it('shows the launch banner on every Dashboard visit, including after switching away and back (story 2.16)', async () => {
+  it('shows the launch banner on every Dashboard visit, including after switching away and back', async () => {
     const store = createAppStore();
     let output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
     for (const line of BANNER_LINES) {
@@ -162,7 +192,7 @@ describe('AppShell', () => {
       expect(shouldSwitchZone('x')).toBeNull();
     });
 
-    describe('reachable-set gating (story 2.13)', () => {
+    describe('reachable-set gating', () => {
       it('shouldSwitchZone returns null for an omitted zone\'s mnemonic — never lands on it', () => {
         const reachable: ReadonlySet<ZoneId> = new Set(['dashboard', 'edts', 'update', 'logs', 'shared-types']);
         expect(shouldSwitchZone('r', reachable)).toBeNull();
@@ -184,7 +214,7 @@ describe('AppShell', () => {
       });
     });
 
-    describe('shouldFallbackToDashboard (story 2.13)', () => {
+    describe('shouldFallbackToDashboard', () => {
       function tabVisibility(overrides: Partial<ResolveTabVisibilityData> = {}): ResolveTabVisibilityData {
         return {
           routes: { status: 'enabled', carryingServices: [] },
@@ -218,12 +248,7 @@ describe('AppShell', () => {
       });
     });
 
-    it('shouldOpenFilter returns true for /', () => {
-      expect(shouldOpenFilter('/')).toBe(true);
-      expect(shouldOpenFilter('j')).toBe(false);
-    });
-
-    describe('resolveZoneArrowSwitch (story 2.12)', () => {
+    describe('resolveZoneArrowSwitch', () => {
       it('resolves rightArrow to the next zone in ZONES order', () => {
         expect(resolveZoneArrowSwitch({ rightArrow: true }, 'dashboard')).toBe('edts');
         expect(resolveZoneArrowSwitch({ rightArrow: true }, 'edts')).toBe('update');
@@ -247,9 +272,9 @@ describe('AppShell', () => {
       });
     });
 
-    describe('resize-mode dispatch helpers (story 2.21, Ctrl+W)', () => {
+    describe('resize-mode dispatch helpers (Ctrl+W)', () => {
       describe('shouldEnterResizeMode', () => {
-        it('is true for ctrl+w while the EDTs zone is active', () => {
+        it('is true for ctrl+w in every zone declaring a boundary', () => {
           expect(shouldEnterResizeMode('w', { ctrl: true }, 'edts')).toBe(true);
         });
 
@@ -261,42 +286,40 @@ describe('AppShell', () => {
           expect(shouldEnterResizeMode('q', { ctrl: true }, 'edts')).toBe(false);
         });
 
-        it('is false while any other zone is active (Boundaries: "a no-op elsewhere")', () => {
+        it('is true in every zone, each declaring at least one boundary', () => {
           for (const zone of ZONES) {
-            if (zone.id === 'edts') {
-              continue;
-            }
-            expect(shouldEnterResizeMode('w', { ctrl: true }, zone.id)).toBe(false);
+            expect(shouldEnterResizeMode('w', { ctrl: true }, zone.id)).toBe(true);
           }
         });
       });
 
       describe('isVerticalResizeBoundary', () => {
-        it('is true only for boundary 0', () => {
-          expect(isVerticalResizeBoundary(0)).toBe(true);
-          expect(isVerticalResizeBoundary(1)).toBe(false);
-          expect(isVerticalResizeBoundary(2)).toBe(false);
+        it('follows the zone spec: EDTs boundary 0 vertical, 1/2 horizontal; Logs boundary 0 vertical', () => {
+          expect(isVerticalResizeBoundary('edts', 0)).toBe(true);
+          expect(isVerticalResizeBoundary('edts', 1)).toBe(false);
+          expect(isVerticalResizeBoundary('edts', 2)).toBe(false);
+          expect(isVerticalResizeBoundary('logs', 0)).toBe(true);
         });
       });
 
       describe('resolveResizeStep', () => {
         it('boundary 0 (vertical): leftArrow/rightArrow move it, upArrow/downArrow do not', () => {
-          expect(resolveResizeStep({ leftArrow: true }, 0)).toBe(-RESIZE_STEP);
-          expect(resolveResizeStep({ rightArrow: true }, 0)).toBe(RESIZE_STEP);
-          expect(resolveResizeStep({ upArrow: true }, 0)).toBeNull();
-          expect(resolveResizeStep({ downArrow: true }, 0)).toBeNull();
+          expect(resolveResizeStep({ leftArrow: true }, 'edts', 0)).toBe(-RESIZE_STEP);
+          expect(resolveResizeStep({ rightArrow: true }, 'edts', 0)).toBe(RESIZE_STEP);
+          expect(resolveResizeStep({ upArrow: true }, 'edts', 0)).toBeNull();
+          expect(resolveResizeStep({ downArrow: true }, 'edts', 0)).toBeNull();
         });
 
         it('boundary 1/2 (horizontal): upArrow/downArrow move it, leftArrow/rightArrow do not', () => {
-          expect(resolveResizeStep({ upArrow: true }, 1)).toBe(-RESIZE_STEP);
-          expect(resolveResizeStep({ downArrow: true }, 1)).toBe(RESIZE_STEP);
-          expect(resolveResizeStep({ leftArrow: true }, 2)).toBeNull();
-          expect(resolveResizeStep({ rightArrow: true }, 2)).toBeNull();
+          expect(resolveResizeStep({ upArrow: true }, 'edts', 1)).toBe(-RESIZE_STEP);
+          expect(resolveResizeStep({ downArrow: true }, 'edts', 1)).toBe(RESIZE_STEP);
+          expect(resolveResizeStep({ leftArrow: true }, 'edts', 2)).toBeNull();
+          expect(resolveResizeStep({ rightArrow: true }, 'edts', 2)).toBeNull();
         });
 
         it('returns null for a non-arrow key', () => {
-          expect(resolveResizeStep({}, 0)).toBeNull();
-          expect(resolveResizeStep({}, 1)).toBeNull();
+          expect(resolveResizeStep({}, 'edts', 0)).toBeNull();
+          expect(resolveResizeStep({}, 'edts', 1)).toBeNull();
         });
       });
 
@@ -356,8 +379,10 @@ it('shouldQuit returns true for q', () => {
         commandBarOpen: false,
         openCommandBar: () => {},
         closeCommandBar: () => {},
-        // Story 2.19
-        settings: { general: { quitShortcutEnabled: true }, commandPalette: { gridMaxRows: 8 }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true } },
+        footerContexts: [],
+        setFooterContext: () => {},
+        // Settings
+        settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -410,7 +435,7 @@ it('shouldQuit returns true for q', () => {
         setLogsPaneGridArrowsActive: () => {},
         quitRequested: false,
         requestQuit: () => {},
-        // Story 2.15: EDT action state
+        // EDT action state
         currentEdtAction: null,
         setCurrentEdtAction: () => {},
         edtActionLog: [],
@@ -422,7 +447,7 @@ it('shouldQuit returns true for q', () => {
         openEdtDeleteDialog: () => {},
         openEdtCreateFromDialog: () => {},
         logEdtAction: async () => {},
-        // Story 3.1: Update zone run state
+        // Update zone run state
         updateStatus: 'idle',
         updateResults: [],
         updateNote: null,
@@ -431,13 +456,19 @@ it('shouldQuit returns true for q', () => {
         updateErrorCode: null,
         updateUlid: null,
         updateScope: null,
-        updateBlocker: null,
-        resolveUpdateBlocker: () => {},
+        updateSelection: null,
+        incidents: [],
+        incidentPopupOpen: false,
+        incidentToast: null,
+        resolveUpdateIncident: () => {},
+        openIncidentPopup: () => {},
+        closeIncidentPopup: () => {},
+        clearIncidentToast: () => {},
         runGroupUpdate: async () => {},
-        // Story 3.7: pre-run configuration screen state
+        // Pre-run configuration screen state
         updateConfig: null,
         openUpdateConfig: async () => {},
-        // Story 3.11: single-service command entry point + service quick-pick state
+        // Single-service command entry point + service quick-pick state
         openUpdateServiceDialog: async () => {},
         updateServiceSelectRequest: false,
         clearUpdateServiceSelectionRequest: () => {},
@@ -446,46 +477,78 @@ it('shouldQuit returns true for q', () => {
         closeUpdateServicePick: () => {},
         setUpdateConfig: () => {},
         closeUpdateConfig: () => {},
+        listMergeSourceEdts: async () => [],
+        chooseMergeSourceEdt: async () => {},
         confirmUpdateConfig: async () => {},
-        // Story 3.9: per-service standalone restart in-flight map + runner
+        // Per-service standalone restart in-flight map + runner
         serviceRestartInFlight: {},
         runServiceRestart: async () => {},
+        describeServiceRestart: async () => ({ restartAvailable: true }),
+        openInIde: () => ({ ok: true, data: undefined }),
         markUpdateInterrupted: async () => {},
         clearUpdate: () => {},
-        // Story 3.6: Update zone service-list health poll + last-outcome map
+        // Update zone service-list health poll + last-outcome map
         updateServiceHealth: {},
         lastServiceOutcomes: {},
         startUpdateHealthPolling: () => {},
         stopUpdateHealthPolling: () => {},
-        // Story 3.10: live per-service run tracking + issue log
+        // Live per-service run tracking + issue log
         liveServicePhase: {},
+    liveSharedTypesPhase: {},
         liveServiceIssues: {},
-        // Story 5.1: Logs zone state
+        liveServiceSteps: {},
+        liveServiceDone: {},
+        updateNotice: null,
+        lastServiceRuns: {},
+        // Logs zone state
         logsEdtSelected: [],
         logsOtherSelected: [],
         logsFullscreenTarget: null,
         logsFullscreenServiceName: null,
         logsPanes: {},
+        logsVisibility: { showTimestamps: true, showStdout: true, showStderr: true },
+        logsGlobalFilter: { mode: 'text', query: '', level: null },
+        logsPaneWrap: {},
+        logsPaneFilterEngaged: {},
+        logsPaneFilters: {},
+        setLogsVisibility: () => {},
+        setLogsGlobalFilter: () => {},
+        setLogsPaneWrap: () => {},
+        setLogsPaneFilterEngaged: () => {},
+        setLogsPaneFilters: () => {},
         toggleLogsEdtSelection: () => {},
         toggleLogsOtherSelection: () => {},
         selectAllLogsEdtServices: () => {},
         deselectAllLogsEdtServices: () => {},
+        selectAllLogsOtherServices: () => {},
+        deselectAllLogsOtherServices: () => {},
+        logsNoContainer: {},
+        resolveLogsContainerPresence: () => {},
+        logsListedHealth: {},
+        startLogsListedHealthPolling: () => {},
+        stopLogsListedHealthPolling: () => {},
         openLogsFullscreen: () => {},
         closeLogsFullscreen: () => {},
         subscribeLogsPane: async () => {},
         unsubscribeLogsPane: () => {},
         restartLogsPane: async () => {},
+        openLogsPaneInIde: () => {},
         loadOlderLogsPane: async () => {},
         clearLogsPane: () => {},
         setLogsPaneScrollOffset: () => {},
         stopAllLogsPanes: () => {},
-        // Story 5.4: filter-history state
+        // Filter-history state
         filterHistory: {},
         loadFilterHistory: async () => {},
         commitFilterHistoryEntry: () => {},
         clearGlobalFilterHistory: () => {},
         clearServiceFilterHistory: () => {},
         clearFilterHistoryAndDrainSaves: async () => {},
+        commandHistory: [],
+        loadCommandHistory: async () => {},
+        commitCommandHistoryEntry: () => {},
+        clearCommandHistory: () => {},
+        clearCommandHistoryAndDrainSaves: async () => {},
         resetScreenOpen: false,
         resetNotice: null,
         resetPreview: null,
@@ -496,23 +559,75 @@ it('shouldQuit returns true for q', () => {
         closeResetScreen: () => {},
         dismissResetNotice: () => {},
         runReset: async () => {},
-        // Story 6.1: Routes zone state
+        // Routes zone state
         routesRepoPath: null,
         routes: null,
         routesStatus: 'idle',
         routesError: null,
         loadRoutes: async () => {},
-        // Story 6.2: Routes zone fire state
-        fireStatus: 'idle',
-        fireResult: null,
-        fireError: null,
+        // Routes zone fire state (per route) and right-pane focus/tab
         fireRoute: async () => {},
+        requestDrafts: {},
+        responses: {},
+        ensureRequestDraft: () => {},
+        updateRequestDraft: () => {},
+        routesPaneFocus: 'list',
+        routesPaneTab: 'request',
+        setRoutesPaneFocus: () => {},
+        setRoutesPaneTab: () => {},
+        routesFilter: { value: '', cursor: 0 },
+        setRoutesFilter: () => {},
+        routesSelected: 0,
+        setRoutesSelected: () => {},
+        // JsonTree session state
+        jsonTreeStates: {},
+        updateJsonTreeState: () => {},
+        // Body-draft session state
+        bodyDrafts: {},
+        bodyEditErrors: {},
+        ensureBodyDraft: () => {},
+        updateBodyDraft: () => {},
+        setBodyEditError: () => {},
+        setBodyEditErrors: () => {},
+        // Saved-request library state
+        draftOrigins: {},
+        savedRequests: null,
+        savedRequestsError: null,
+        refreshSavedRequests: async () => {},
+        saveRequestDraft: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        loadSavedRequest: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        deleteSavedRequest: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        sharedTypesConsumers: [],
+        sharedTypesIssues: [],
+        sharedTypesConsumersStatus: 'idle',
+        sharedTypesConsumersError: null,
+        sharedTypesRun: { status: 'idle', version: '', options: { install: false, cleanRestart: false, commit: false }, blocked: null, results: [], live: null },
+        sharedTypesSources: [],
+        sharedTypesSourceIssues: [],
+        sharedTypesSourcesStatus: 'idle',
+        sharedTypesSourcesError: null,
+        sharedTypesPublish: { status: 'idle', version: null, output: null, error: null, notice: null },
+        loadSharedTypesConsumers: async () => {},
+        runSharedTypesPropagation: async () => {},
+        retrySharedTypesService: async () => {},
+        resetSharedTypesRun: () => {},
+        loadSharedTypesSource: async () => {},
+        runSharedTypesPublish: async () => {},
+        retrySharedTypesPublish: async () => {},
+        resetSharedTypesPublish: () => {},
+        sharedTypesHistory: { mode: 'branch', status: 'idle', query: '', entries: [], hits: [], found: null, truncated: false, earliestBranch: null, endedBy: null, scanned: 0, error: null, depth: 0, maxScanned: 0 },
+        sharedTypesHistoryBranches: [],
+        sharedTypesHistoryBranchesStatus: 'idle',
+        startSharedTypesHistorySearch: async () => {},
+        cancelSharedTypesHistorySearch: () => {},
+        resetSharedTypesHistory: () => {},
+        loadSharedTypesHistoryBranches: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
       expect(shouldQuit('j', {}, minimalState)).toBe(false);
       expect(
-        shouldQuit('q', {}, { ...minimalState, settings: { ...minimalState.settings, general: { quitShortcutEnabled: false } } }),
+        shouldQuit('q', {}, { ...minimalState, settings: { ...minimalState.settings, general: { quitShortcutEnabled: false, editorCommand: '' } } }),
       ).toBe(false);
     });
   });

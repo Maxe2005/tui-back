@@ -1,13 +1,9 @@
-// adapters/driven/migration: the driven implementation of core's MigrationPort (story
-// 3.2). A manifest `migrationCommand` is an arbitrary shell string, so it runs via
-// `sh -c <command>` with the member repo as its working directory — a non-interactive
-// child_process spawn with captured stdout/stderr (the spec's Ask-First baseline: no TTY
-// passthrough, no interactive stdin). `GIT_TERMINAL_PROMPT=0` keeps a
-// credential-requiring remote from hanging on an interactive prompt (the git adapter's
-// own pullBranch precedent). The shell is injectable so integration tests can stub it
-// with a script on PATH (the container adapter's executable-injection precedent). Core
-// never imports this adapter (AD-1).
-import { spawnSync } from 'node:child_process';
+// adapters/driven/migration: the driven implementation of core's MigrationPort. A manifest
+// `migrationCommand` is an arbitrary shell string, so it runs via `sh -c <command>` in the
+// member repo — non-interactive, output captured, no TTY or stdin. `GIT_TERMINAL_PROMPT=0`
+// keeps a credential-requiring remote from hanging on a prompt. The shell is injectable so
+// integration tests can stub it.
+import { runProcess } from '../process.js';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
 
@@ -18,8 +14,7 @@ export function createMigrationPort(shell = 'sh'): MigrationPort {
 }
 
 // The command arrives as `sh -c`'s operand (never a flag position), so a command value
-// starting with `-` is never parsed as a shell flag — the same leading-dash class the
-// git/container adapters close with trailing `--`. An empty command is rejected upfront:
+// starting with `-` is never parsed as a shell flag. An empty command is rejected upfront:
 // it can never be a real migration, so spawning a shell with it would only produce a
 // confusing no-op success.
 export async function runMigration(
@@ -34,9 +29,8 @@ export async function runMigration(
   // result, but invalid arguments throw synchronously — never let that escape the
   // Result envelope (the core never-throw invariant).
   try {
-    const result = spawnSync(shell, ['-c', command], {
+    const result = await runProcess(shell, ['-c', command], {
       cwd: repoPath,
-      encoding: 'utf8',
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     });
     if (result.status !== 0) {

@@ -1,7 +1,6 @@
-// adapters/driven/modules/route-explorer/cookie-session-auth: unit tests against a stub
-// fetch (AD-13) — no live auth route. Covers Set-Cookie parsing, the TTL-minus-skew cache,
-// and every auth-endpoint-failed row. The cookie value itself is asserted only inside the
-// in-memory Result, never logged anywhere.
+// adapters/driven/modules/route-explorer/cookie-session-auth: unit tests against a stub fetch
+// — no live auth route. Covers Set-Cookie parsing, the TTL-minus-skew cache, and every
+// auth-endpoint-failed row. The cookie value is asserted only inside the in-memory Result.
 import { describe, expect, it, vi } from 'vitest';
 import { createCookieSessionAuth } from './cookie-session-auth.js';
 
@@ -33,7 +32,7 @@ function stubFetch(responses: Array<Response | Error>): {
   return { fetchFn, urls };
 }
 
-describe('cookie-session-auth (story 6.2)', () => {
+describe('cookie-session-auth', () => {
   it('calls GET {baseUrl}{authPath} and carries the Set-Cookie pair as the Cookie value', async () => {
     const { fetchFn, urls } = stubFetch([authResponse(['sid=abc; Path=/; HttpOnly'])]);
     const auth = createCookieSessionAuth({ fetchFn });

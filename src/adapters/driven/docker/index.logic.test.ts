@@ -1,8 +1,5 @@
-// adapters/driven/docker/index.logic: direct unit tests for the pure line-parsing/merge logic
-// extracted from index.ts (review fix). Before this split, this logic was only exercised by
-// index.test.ts's `describe.skipIf(!dockerAvailable)` real-docker suite — meaning it had zero
-// executed coverage in any environment without a reachable docker daemon (e.g. sandboxed CI).
-// These tests need no docker daemon at all.
+// adapters/driven/docker/index.logic: unit tests for the pure line-parsing/merge logic. They
+// need no docker daemon, unlike index.test.ts's real-docker suite, which skips without one.
 import { describe, expect, it } from 'vitest';
 import { createLineSplitter, mapInspectToHealthState, mergeSortAndTrimLogs, parseHealthInspectOutput, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
 import type { LogLine } from '../../../core/ports/docker.js';
@@ -105,7 +102,7 @@ describe('mergeSortAndTrimLogs', () => {
   });
 });
 
-describe('mapInspectToHealthState (story 5.3)', () => {
+describe('mapInspectToHealthState', () => {
   it('maps Restarting=true to restarting, even when Running is also true', () => {
     expect(mapInspectToHealthState(true, true)).toBe('restarting');
     expect(mapInspectToHealthState(false, true)).toBe('restarting');
@@ -120,7 +117,7 @@ describe('mapInspectToHealthState (story 5.3)', () => {
   });
 });
 
-describe('parseHealthInspectOutput (story 5.3)', () => {
+describe('parseHealthInspectOutput', () => {
   it('parses the "{{.State.Running}} {{.State.Restarting}}" inspect string', () => {
     expect(parseHealthInspectOutput('true false\n')).toBe('up');
     expect(parseHealthInspectOutput('false false\n')).toBe('down');

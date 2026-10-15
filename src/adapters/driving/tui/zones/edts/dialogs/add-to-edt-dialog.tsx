@@ -1,5 +1,4 @@
-// tui/zones/edts/dialogs: the OTHER SERVICES row's Add-to-EDT dialog opened by Enter —
-// extracted from edts-zone.tsx (see that file's header for why).
+// tui/zones/edts/dialogs: the OTHER SERVICES row's Add-to-EDT dialog, opened by Enter.
 import { Box, Text, type Key } from 'ink';
 import type { AppState } from '../../../store/app-store.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
@@ -20,9 +19,9 @@ export type AddToEdtDialogDeps = {
 };
 
 export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
-  // Story 2.26: never a member yet, so a 'rename' outcome can never route through modifyEdt's
-  // own renameBranches param (nothing there to resolve `oldName` from) — it always takes the
-  // direct renameMemberBranch pre-step instead, mirroring 'create's own eager pre-step.
+  // Never a member yet, so a 'rename' outcome can never route through modifyEdt's
+  // renameBranches param (nothing to resolve `oldName` from) — it always takes the direct
+  // renameMemberBranch pre-step instead, like 'create's eager pre-step.
   async function submitAddToEdtOutcome(current: AddToEdtDialogState, outcome: BranchPickerOutcome) {
     if (current.submitting) {
       return;
@@ -42,7 +41,7 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
       }
       branch = outcome.branchName;
     } else {
-      const renamed = await deps.renameBranchAction(current.repoPath, outcome.oldName, outcome.newName);
+      const renamed = await deps.renameBranchAction(current.repoPath, outcome.oldName, outcome.newName, current.edt.ulid);
       if (!renamed.ok) {
         const failedRows: FailedResultRow[] = [{ service: current.serviceName, code: renamed.error.code, message: renamed.error.message }];
         deps.setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
@@ -79,15 +78,15 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
     if (current.submitting) {
       return;
     }
-    // Story 2.25/2.26: "try a different branch"/"try a different name" — the picker's own
-    // field is never cleared on failure (createPickerSession's suggestion/retry-prefill
-    // persist across a failed submit), so retrying here is just the normal picker Enter flow;
-    // nothing extra to wire, unlike Modify/service-actions (which reopen a fresh session).
+    // "Try a different branch"/"try a different name": the picker's field is never cleared on
+    // failure (createPickerSession's suggestion/retry-prefill persist across a failed submit), so
+    // retrying is just the normal picker Enter flow — unlike Modify/service-actions, which
+    // reopen a fresh session.
     if (current.branchPicker === null) {
       return;
     }
     const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key, current.branchPicker.branchesStatus, current.branchPicker.owners);
     if (result.type === 'cancel') {
       deps.setDialog({ kind: 'none' });
       return;
@@ -106,9 +105,9 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
 
 export function AddToEdtDialogView({ dialog, maxRows }: { dialog: AddToEdtDialogState; maxRows: number }) {
   return (
-    <ModalDialog title="ADD TO EDT" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="ADD TO EDT" open={true}>
       <Box flexDirection="column">
-        <Text color={colors.text}>
+        <Text color={colors.text} wrap="truncate-end">
           Add {dialog.serviceName} to "{dialog.edt.topic}"
         </Text>
         {dialog.branchPicker !== null ? (
@@ -116,6 +115,7 @@ export function AddToEdtDialogView({ dialog, maxRows }: { dialog: AddToEdtDialog
             state={dialog.branchPicker.state}
             branches={dialog.branchPicker.branches}
             branchesStatus={dialog.branchPicker.branchesStatus}
+            owners={dialog.branchPicker.owners}
             otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
             maxRows={maxRows}
           />

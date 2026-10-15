@@ -1,6 +1,5 @@
-// adapters/driven/state: integration tests against real temp files (AD-13 driven layer).
-// Mirrors adapters/driven/edt-registry/index.test.ts's shape, but JSON rather than YAML —
-// story 2.4's Code Map calls this out explicitly.
+// adapters/driven/state: integration tests against real temp files — like the edt-registry
+// tests, but JSON rather than YAML.
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,14 +7,12 @@ import { join } from 'node:path';
 import { createStatePort, resolveStateFile } from './index.js';
 import type { XdgPaths } from '../xdg/index.js';
 
-// Review-fix tests (story 2.21, findings 1/2) need to intercept `index.ts`'s own internal
-// readFile/writeFile calls (to force a specific interleaving, or a genuine I/O failure) — a
-// direct `vi.spyOn(fsPromisesNamespace, 'readFile')` can't redefine a real ESM module's
-// (non-configurable) named exports, so this uses vi.mock's module-registry-level replacement
-// instead. Every call defaults straight through to the real implementation (`actual.readFile`/
-// `actual.writeFile`), so this is a no-op for every other test in this file unless a test
-// explicitly layers a `mockImplementation`/`mockImplementationOnce` on top (always restored to
-// the real implementation before the test ends).
+// Some tests need to intercept `index.ts`'s own internal readFile/writeFile calls (to force a
+// specific interleaving, or a genuine I/O failure) — `vi.spyOn` can't redefine a real ESM
+// module's (non-configurable) named exports, so this uses vi.mock's module-level replacement.
+// Every call defaults straight through to the real implementation, so this is a no-op unless a
+// test layers a `mockImplementation`/`mockImplementationOnce` on top (always restored before
+// the test ends).
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
@@ -128,8 +125,8 @@ describe('state writeActiveEdt()', () => {
     expect(await port.readActiveEdt()).toEqual({ ok: true, data: '01JYYYYY1BBBBBBBBBBBBBBBBB' });
   });
 
-  // Story 2.21: writeActiveEdt must read-merge-write, never clobber a sibling
-  // splitterRatios already on disk.
+  // writeActiveEdt must read-merge-write, never clobber a sibling splitterRatios already on
+  // disk.
   it('preserves a previously written splitterRatios when writing activeEdt', async () => {
     const file = await makeStateFile();
     const port = createStatePort(file);
@@ -173,7 +170,7 @@ describe('state readSplitterRatios()', () => {
     expect(await port.readSplitterRatios()).toEqual({ ok: true, data: null });
   });
 
-  it('reads null for a pre-2.21 state.json ({ activeEdt } only)', async () => {
+  it('reads null for a state.json without splitterRatios ({ activeEdt } only)', async () => {
     const file = await makeStateFile();
     await writeFile(file, JSON.stringify({ activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA' }));
     const port = createStatePort(file);
@@ -242,8 +239,8 @@ describe('state writeSplitterRatios()', () => {
     expect(await port.readSplitterRatios()).toEqual({ ok: true, data: { edts: [0.2, 0.2, 0.2] } });
   });
 
-  // Story 2.21: writeSplitterRatios must read-merge-write, never clobber a sibling activeEdt
-  // already on disk.
+  // writeSplitterRatios must read-merge-write, never clobber a sibling activeEdt already on
+  // disk.
   it('preserves a previously written activeEdt when writing splitterRatios', async () => {
     const file = await makeStateFile();
     const port = createStatePort(file);
@@ -259,11 +256,11 @@ describe('state writeSplitterRatios()', () => {
   });
 });
 
-// Review fix (story 2.21, finding 1): writeActiveEdt/writeSplitterRatios each independently
-// read-merge-write the same file — without serialization, a slower writer's read (taken
-// *before* a faster concurrent writer's own write lands) would still win the final write,
-// silently discarding the faster writer's field.
-describe('state write serialization across fields (story 2.21 review fix)', () => {
+// writeActiveEdt/writeSplitterRatios each independently read-merge-write the same file —
+// without serialization, a slower writer's read (taken *before* a faster concurrent writer's
+// own write lands) would still win the final write, silently discarding the faster writer's
+// field.
+describe('state write serialization across fields', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -318,11 +315,11 @@ describe('state write serialization across fields (story 2.21 review fix)', () =
   });
 });
 
-// Review fix (story 2.21, finding 2): a genuine I/O error reading the existing file inside a
-// write's read-merge-write step must never be silently treated as "nothing there yet" —
-// unlike real corruption (state-invalid-json/state-invalid-format), a transient read failure
-// says nothing about whether good data still exists on disk.
-describe('state write propagates a genuine read I/O error rather than writing blind (story 2.21 review fix)', () => {
+// A genuine I/O error reading the existing file inside a write's read-merge-write step must
+// never be silently treated as "nothing there yet" — unlike real corruption
+// (state-invalid-json/state-invalid-format), a transient read failure says nothing about
+// whether good data still exists on disk.
+describe('state write propagates a genuine read I/O error rather than writing blind', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -366,8 +363,8 @@ describe('state write propagates a genuine read I/O error rather than writing bl
   });
 });
 
-// Story 5.4: filterHistory read/write, mirroring splitterRatios' own coverage shape exactly
-// (serialization, per-field isolation on sibling corruption) — see that describe block above.
+// filterHistory read/write, mirroring splitterRatios' coverage shape (serialization, per-field
+// isolation on sibling corruption) — see that describe block above.
 describe('state readFilterHistory()', () => {
   it('reads null (nothing persisted yet) when the file does not exist (ENOENT)', async () => {
     const file = await makeStateFile();
@@ -376,7 +373,7 @@ describe('state readFilterHistory()', () => {
     expect(await port.readFilterHistory()).toEqual({ ok: true, data: null });
   });
 
-  it('reads null for a pre-5.4 state.json ({ activeEdt, splitterRatios } only)', async () => {
+  it('reads null for a state.json without filterHistory ({ activeEdt, splitterRatios } only)', async () => {
     const file = await makeStateFile();
     await writeFile(file, JSON.stringify({ activeEdt: null, splitterRatios: { edts: [0.4, 0.5, 0.6] } }));
     const port = createStatePort(file);
@@ -481,7 +478,7 @@ describe('state writeFilterHistory()', () => {
   });
 });
 
-describe('state per-field read isolation on a sibling-field validation failure (story 5.4)', () => {
+describe('state per-field read isolation on a sibling-field validation failure (filterHistory)', () => {
   it('readActiveEdt still succeeds when filterHistory alone is shape-invalid', async () => {
     const file = await makeStateFile();
     await writeFile(
@@ -517,11 +514,10 @@ describe('state per-field read isolation on a sibling-field validation failure (
   });
 });
 
-// Review fix (story 2.21, finding 3): a shape-invalid `splitterRatios` (a UI-only preference)
-// must never break reading `activeEdt`, and vice versa — core use-cases (switch.ts, list.ts,
-// resolve-tab-visibility.ts) only ever call readActiveEdt and have nothing to do with layout
-// state.
-describe('state per-field read isolation on a sibling-field validation failure (story 2.21 review fix)', () => {
+// A shape-invalid `splitterRatios` (a UI-only preference) must never break reading
+// `activeEdt`, and vice versa — core use-cases (switch.ts, list.ts, resolve-tab-visibility.ts)
+// only ever call readActiveEdt and have nothing to do with layout state.
+describe('state per-field read isolation on a sibling-field validation failure (activeEdt/splitterRatios)', () => {
   it('readActiveEdt still succeeds when splitterRatios alone is shape-invalid', async () => {
     const file = await makeStateFile();
     await writeFile(
@@ -583,5 +579,49 @@ describe('state per-field read isolation on a sibling-field validation failure (
     if (!ratiosResult.ok) {
       expect(ratiosResult.error.code).toBe('state-invalid-json');
     }
+  });
+});
+
+describe('state readCommandHistory()/writeCommandHistory()', () => {
+  it('reads null when nothing was ever persisted', async () => {
+    const file = await makeStateFile();
+    expect(await createStatePort(file).readCommandHistory()).toEqual({ ok: true, data: null });
+  });
+
+  it('round-trips a written command history', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+    expect(await port.writeCommandHistory(['update-all', 'settings'])).toEqual({ ok: true, data: undefined });
+    expect(await port.readCommandHistory()).toEqual({ ok: true, data: ['update-all', 'settings'] });
+  });
+
+  it('never clobbers sibling fields, and siblings never clobber it', async () => {
+    const file = await makeStateFile();
+    const port = createStatePort(file);
+    await port.writeActiveEdt('01JXXXXX1AAAAAAAAAAAAAAAAA');
+    await port.writeFilterHistory({ 'global:text': ['boom'] });
+    await port.writeCommandHistory(['settings']);
+    await port.writeSplitterRatios({ logs: [1, 2] });
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({
+      activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+      splitterRatios: { logs: [1, 2] },
+      filterHistory: { 'global:text': ['boom'] },
+      commandHistory: ['settings'],
+    });
+  });
+
+  it('isolates a corrupt commandHistory: other fields still read, and it alone fails', async () => {
+    const file = await makeStateFile();
+    await writeFile(file, JSON.stringify({ activeEdt: '01JXXXXX1AAAAAAAAAAAAAAAAA', commandHistory: [1, 2] }));
+    const port = createStatePort(file);
+    expect(await port.readActiveEdt()).toEqual({ ok: true, data: '01JXXXXX1AAAAAAAAAAAAAAAAA' });
+    const result = await port.readCommandHistory();
+    expect(result.ok).toBe(false);
+  });
+
+  it('recovers commandHistory when only a sibling field is invalid', async () => {
+    const file = await makeStateFile();
+    await writeFile(file, JSON.stringify({ activeEdt: 42, commandHistory: ['settings'] }));
+    expect(await createStatePort(file).readCommandHistory()).toEqual({ ok: true, data: ['settings'] });
   });
 });

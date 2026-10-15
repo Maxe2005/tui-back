@@ -75,7 +75,7 @@ describe('createLogsManager', () => {
     expect(docker.streamLogs).toHaveBeenCalledTimes(1);
   });
 
-  it('subscribe() returns err("docker-unavailable", ...) when the adapter calls onError synchronously (I/O matrix DOCKER_UNAVAILABLE)', () => {
+  it('subscribe() returns err("docker-unavailable", ...) when the adapter calls onError synchronously', () => {
     const docker = fakeDocker({
       streamLogs: vi.fn((_container, _onLine, onError) => {
         onError({ code: 'docker-unavailable', message: 'docker is not running' });
@@ -137,7 +137,7 @@ describe('createLogsManager', () => {
     expect(docker.fetchLogsBefore).toHaveBeenCalledWith('ctr-a', line('recent').timestamp, 500);
   });
 
-  it('loadOlder() drops any returned line whose timestamp is not strictly older than the current oldest buffered line (review fix: no re-fetched duplicate)', async () => {
+  it('loadOlder() drops any returned line whose timestamp is not strictly older than the current oldest buffered line (no re-fetched duplicate)', async () => {
     const cursorTimestamp = line('recent').timestamp;
     const duplicateLine = line('recent-duplicate', 'stdout', cursorTimestamp);
     const genuinelyOlderLine = line('older', 'stdout', '2025-12-31T23:59:00.000Z');
@@ -163,7 +163,7 @@ describe('createLogsManager', () => {
     expect(manager.getEntry('svc-a').noMoreHistory).toBe(true);
   });
 
-  it('loadOlder() folds an adapter failure into noMoreHistory too (I/O matrix: "fetch fails -> ... scrolling stops at the edge")', async () => {
+  it('loadOlder() folds an adapter failure into noMoreHistory too (scrolling stops at the edge)', async () => {
     const docker = fakeDocker({ fetchLogsBefore: vi.fn(async () => err('docker-unavailable', 'daemon down')) });
     const manager = createLogsManager(docker);
     manager.subscribe('svc-a', 'ctr-a', 500, () => {});

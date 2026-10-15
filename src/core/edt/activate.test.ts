@@ -1,7 +1,6 @@
-// core/edt/activate: unit tests against fake ports (AD-13 core layer) — every core-level row of
-// story 2.38's I/O matrix: clean first activation, harmless dirt, at-risk pause with zero
-// checkouts, retry, confirmed overwrite (and a new at-risk path re-blocking), per-repo failure
-// isolation, and the refusal when an active EDT already exists.
+// core/edt/activate: unit tests against fake ports — clean first activation, harmless dirt,
+// at-risk pause with zero checkouts, retry, confirmed overwrite (and a new at-risk path
+// re-blocking), per-repo failure isolation, and the refusal when an active EDT already exists.
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { err, ok } from '../result.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
@@ -67,6 +66,8 @@ function fakeState(active: string | null = null, overrides: Partial<StatePort> =
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -92,16 +93,28 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
+    stagePaths: vi.fn(async () => ok(undefined)),
+    commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+    listBranchesContaining: vi.fn(async () => ok([] as string[])),
     ...overrides,
   };
 }
@@ -124,6 +137,7 @@ function makeParams(overrides: Partial<ActivateEdtParams> = {}): ActivateEdtPara
     edtRegistry: fakeEdtRegistry([NEW_EDT]),
     registry: fakeRegistry(REPOS),
     manifest: fakeManifest(),
+    manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
     git: fakeGit(),
     lock: fakeLock(),
     state: fakeState(),
@@ -210,7 +224,10 @@ describe('activateEdt — clean first activation', () => {
 
     expect(result.ok && result.data.status).toBe('activated');
     expect(calls(git.checkout)).toEqual([['/repo/a', 'feat/a']]);
-    expect(calls(git.listDirtyPaths).map((call) => call[0])).toEqual(['/repo/a']);
+    // Only /repo/a is read by the pre-flight (b is already on its target); the bare read is the
+    // manifest-carry check run just before its checkout.
+    const preflightReads = calls(git.listDirtyPaths).filter((call) => call[1] !== undefined);
+    expect(preflightReads.map((call) => call[0])).toEqual(['/repo/a']);
   });
 
   it('does not block on dirt that is not in the branch diff', async () => {
@@ -368,5 +385,25 @@ describe('activateEdt — per-repo isolation', () => {
     });
     expect(calls(state.writeActiveEdt)).toHaveLength(0);
     expect(calls(edtRegistry.setStatus)).toHaveLength(0);
+  });
+});
+
+describe('activateEdt — dirty .tui-back.yaml', () => {
+  it('never counts the manifest as at risk and carries it across the checkout', async () => {
+    const dirty = vi.fn(async (_repoPath: string, opts?: { excludePaths?: string[] }) =>
+      ok(opts?.excludePaths?.includes('.tui-back.yaml') === true ? [] : ['.tui-back.yaml']),
+    );
+    const git = atRiskGit({ listDirtyPaths: dirty, diffNameOnly: vi.fn(async () => ok(['.tui-back.yaml'])) });
+    const manifestCarry = {
+      capture: vi.fn(async () => ok({ kind: 'absent' } as const)),
+      restore: vi.fn(async () => ok(undefined)),
+    };
+
+    const result = await activateEdt(makeParams({ git, manifestCarry }));
+
+    expect(result.ok && result.data.status).toBe('activated');
+    expect(calls(manifestCarry.capture)).toEqual([['/repo/a'], ['/repo/b']]);
+    expect(calls(git.discardPathsToHead)).toEqual([['/repo/a', ['.tui-back.yaml']], ['/repo/b', ['.tui-back.yaml']]]);
+    expect(calls(manifestCarry.restore)).toHaveLength(2);
   });
 });

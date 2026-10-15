@@ -1,25 +1,18 @@
-// tui/shared/repo-registry-screen: story 2.11 — a TUI overlay front-end over Story 1.5's
-// existing scan/register use-cases (AD-6). Not a 7th ZoneId/tab (zones/zones.ts's closed
-// union stays unchanged) — an overlay in the same family as the command/filter/help
-// ModalDialog overlays, opened/closed via app-store's registryScreenOpen flag so both the
-// `registry` command inside Story 2.14's `:` command bar and Dashboard's empty-registry
-// prompt can trigger it (`:` itself never opens this screen directly, story 2.14).
-// Story 2.33 adds "Clean stale entries" (Ctrl+L from the root-input screen): classify
-// unreachable/manifest-not-found registry entries and, list-then-confirm, remove the
-// confirmed ones — reusing this same screen's checkbox-list/results rendering pattern
-// rather than a new component (Boundaries).
-//
-// Testability convention (render-to-string.tsx): the shared renderToString harness's fake
-// stdin never emits data, so a useInput callback itself is never invoked by any test in this
-// repo — every key-handling decision below is a pure, directly-testable function; useInput
-// only interprets the raw Ink Key and dispatches the pure result (mirrors edts-zone.tsx's
-// resolveSelectionDirection/moveSelection and keybinding-help.tsx's resolveHelpScroll).
+// tui/shared/repo-registry-screen: an overlay (not a zone tab) over the scan/register
+// use-cases, opened via the store's registryScreenOpen flag by the `registry` command or
+// Dashboard's empty-registry prompt. Ctrl+L opens "Clean stale entries": classify
+// unreachable/manifest-not-found entries and remove the confirmed ones. Every key decision is a
+// pure function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
-import { Box, Text, useInput, type Key } from 'ink';
+import { Box, Text, type Key } from 'ink';
+import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
-import { Spinner } from './components/spinner.js';
+import { StateLine } from './components/state-line.js';
+import { nextCursorForKey } from './keys/list-cursor.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
+import type { FooterContextId } from '../keybindings/index.js';
 import { colors } from './theme/theme.js';
 import {
   useAppStore,
@@ -33,12 +26,13 @@ import {
   type ValidateRegistryOutcome,
 } from '../store/app-store.js';
 import type { ScanResult } from '../../../../core/ports/registry.js';
+import { BoundedBlocks, BoundedList } from './components/bounded-list.js';
 
-// Static manifest-creation guidance (Boundaries & Constraints: "always shown alongside
-// scan/register controls — never gated to first launch only"). Field names mirror Story
-// 1.4's zod schema (adapters/driven/manifest/schema.ts): service, container, modules,
-// optional migrationCommand (absent = no migrations to run), optional sharedBranch
-// (default development), optional protectedBranches (Story 2.42).
+// Static manifest-creation guidance, always shown alongside the scan/register controls — never
+// gated to first launch only. Field names mirror the manifest zod schema
+// (adapters/driven/manifest/schema.ts): service, container, modules, optional migrationCommand
+// (absent = no migrations to run), optional sharedBranch (default development), optional
+// protectedBranches.
 export const MANIFEST_GUIDANCE_LINES: readonly string[] = [
   'A repo is managed once it has a root .tui-back.yaml declaring service, container,',
   'and modules (migrationCommand is optional — omit it if the service has no migrations;',
@@ -56,25 +50,23 @@ export type RegistryScreenPhase =
   | 'candidates'
   | 'registering'
   | 'results'
-  // Story 2.33: mirrors scanning/candidates/results above, but for the "Clean stale
-  // entries" action — deliberately three states, not the scan flow's five, since
-  // classifyStaleRegistry never walks a filesystem tree (a quick registry/manifest read, not
-  // a scan) so loading/error/empty all fold into the single 'clean-candidates' phase and are
-  // told apart inside its own render block instead.
+  // The "Clean stale entries" action's phases — three, not the scan flow's five:
+  // classifyStaleRegistry is a quick registry/manifest read, not a filesystem walk, so
+  // loading/error/empty all fold into 'clean-candidates' and are told apart inside its render
+  // block.
   | 'clean-candidates'
   | 'cleaning'
   | 'clean-results'
-  // Story 2.28: mirrors cleaning/clean-results above, but for the "Validate registered
+  // mirrors cleaning/clean-results above, but for the "Validate registered
   // repos" action — a one-shot read-only run (no list-then-confirm), so loading and
   // results are its only two states; a use-case failure folds into 'validate-results' and
   // is told apart inside its own render block.
   | 'validating'
   | 'validate-results';
 
-// Pure phase derivation from the store's registry-screen fields — the I/O matrix's states
-// (scanning, distinct empty-vs-error, candidates, registering, results, and story 2.33's
-// clean-candidates/cleaning/clean-results) read off store data alone, never off transient
-// local component state.
+// Pure phase derivation from the store's registry-screen fields — scanning, distinct
+// empty-vs-error, candidates, registering, results, and the clean-candidates/cleaning/
+// clean-results phases read off store data alone, never off transient component state.
 export function resolveRegistryScreenPhase(store: {
   registryScanStatus: 'idle' | 'loading' | 'error';
   registryScanResult: ScanResult | null;
@@ -93,7 +85,7 @@ export function resolveRegistryScreenPhase(store: {
   if (store.registryCleanStatus === 'loading') {
     return 'cleaning';
   }
-  // Story 2.28: validate slots below cleaning, above results — clean's locked priority
+  // validate slots below cleaning, above results — clean's locked priority
   // (clean-results > cleaning > results) never moves.
   if (store.registryValidateResults !== null || store.registryValidateStatus === 'error') {
     return 'validate-results';
@@ -127,6 +119,18 @@ export function resolveRegistryScreenPhase(store: {
   return 'root-input';
 }
 
+// The footer context of a phase: only the three interactive phases advertise their own keys, every
+// other one just closes with Esc.
+export function registryFooterContext(phase: RegistryScreenPhase, hasStaleCandidates: boolean): FooterContextId {
+  if (phase === 'root-input') {
+    return 'registry-path';
+  }
+  if (phase === 'candidates') {
+    return 'registry-candidates';
+  }
+  return phase === 'clean-candidates' && hasStaleCandidates ? 'registry-stale' : 'dismiss';
+}
+
 // Root-path free-text entry. Ctrl/meta combos (e.g. Ctrl+W resize-mode, reserved elsewhere
 // in the app) and empty-input control keys (arrows, Enter, Esc — all handled separately by
 // their own key flags) are never appended as literal characters.
@@ -141,20 +145,8 @@ export function backspaceRootInput(current: string): string {
   return current.slice(0, -1);
 }
 
-// Candidate-list cursor movement (Story 1.9's checkbox-list-item is a static row; the
-// screen owns which row is currently highlighted for Space/navigation).
-export type CandidateDirection = 'up' | 'down';
-
-export function moveCandidateCursor(current: number, direction: CandidateDirection, length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  const next = direction === 'down' ? current + 1 : current - 1;
-  return Math.min(Math.max(next, 0), length - 1);
-}
-
-// Space toggles the highlighted candidate's checked state — checkbox-list-item's existing
-// semantics (keybindings.ts:26-33): Space toggles, Enter confirms the whole selection.
+// Space toggles the highlighted candidate's checked state — checkbox-list-item's semantics:
+// Space toggles, Enter confirms the whole selection.
 export function toggleCandidateSelection(selected: ReadonlySet<string>, path: string): Set<string> {
   const next = new Set(selected);
   if (next.has(path)) {
@@ -165,10 +157,9 @@ export function toggleCandidateSelection(selected: ReadonlySet<string>, path: st
   return next;
 }
 
-// Story 2.33: clean candidates render pre-checked (Design Notes/sprint-change-proposal —
-// unlike scan/register's own candidates, which start unchecked). Tracking the *excluded*
-// set rather than the *selected* one gives that "everything checked by default" behavior
-// for free, with no seed/effect needed: an empty exclusion set already means "all selected".
+// Clean candidates render pre-checked (unlike scan/register's candidates, which start
+// unchecked). Tracking the *excluded* set rather than the *selected* one gives "everything
+// checked by default" for free: an empty exclusion set already means "all selected".
 export function toggleCleanCandidateExclusion(excluded: ReadonlySet<string>, path: string): Set<string> {
   const next = new Set(excluded);
   if (next.has(path)) {
@@ -194,6 +185,11 @@ function outcomeColor(outcome: RegistryOutcome): string {
 function staleOutcomeColor(outcome: RemoveStaleRegistryOutcome): string {
   return outcome === 'removed' ? colors.success : colors.error;
 }
+
+// Rows the screen keeps around its list: frame, guidance lines, heading, hint.
+const REGISTRY_CHROME_ROWS = 14;
+// A result's path line plus up to three annotation lines.
+const DETAIL_BLOCK_ROWS = 4;
 
 function validateOutcomeColor(outcome: ValidateRegistryOutcome): string {
   switch (outcome) {
@@ -252,6 +248,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const [cleanCursor, setCleanCursor] = useState(0);
   const [cleanExcluded, setCleanExcluded] = useState<Set<string>>(new Set());
 
+  const rootLabel = root.trim() === '' ? 'the root path' : root;
   const candidates = registryScanResult?.candidates ?? [];
   const clampedCursor = candidates.length === 0 ? 0 : Math.min(cursor, candidates.length - 1);
 
@@ -259,16 +256,17 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   const clampedCleanCursor = staleCandidates.length === 0 ? 0 : Math.min(cleanCursor, staleCandidates.length - 1);
   const selectedStalePaths = staleCandidates.map((candidate) => candidate.path).filter((path) => !cleanExcluded.has(path));
 
+  useFooterContext('registry', registryFooterContext(phase, staleCandidates.length > 0), useStore);
+
   useInput((input, key) => {
     if (phase === 'root-input') {
-      // Ctrl+L: "Clean stale entries" (Boundaries — story 2.33) — never a plain "l"
-      // keypress, which must stay available as ordinary root-path text (mirrors
-      // branch-picker.tsx's own Ctrl+R precedent).
+      // Ctrl+L: "Clean stale entries" — never a plain "l" keypress, which must stay available
+      // as ordinary root-path text (like branch-picker.tsx's Ctrl+T).
       if (key.ctrl && input.toLowerCase() === 'l') {
         void scanRegistryStaleEntries();
         return;
       }
-      // Ctrl+V: "Validate registered repos" (story 2.28) — same root-input-only
+      // Ctrl+V: "Validate registered repos" — same root-input-only
       // convention as Ctrl+L above; verified free (no other screen claims it).
       if (key.ctrl && input.toLowerCase() === 'v') {
         void runRegistryValidate();
@@ -290,12 +288,9 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'candidates') {
-      if (key.downArrow) {
-        setCursor((current) => moveCandidateCursor(current, 'down', candidates.length));
-        return;
-      }
-      if (key.upArrow) {
-        setCursor((current) => moveCandidateCursor(current, 'up', candidates.length));
+      const moved = nextCursorForKey(key, clampedCursor, candidates.length);
+      if (moved !== null) {
+        setCursor(moved);
         return;
       }
       if (input === ' ') {
@@ -314,12 +309,9 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
     }
 
     if (phase === 'clean-candidates' && staleCandidates.length > 0) {
-      if (key.downArrow) {
-        setCleanCursor((current) => moveCandidateCursor(current, 'down', staleCandidates.length));
-        return;
-      }
-      if (key.upArrow) {
-        setCleanCursor((current) => moveCandidateCursor(current, 'up', staleCandidates.length));
+      const moved = nextCursorForKey(key, clampedCleanCursor, staleCandidates.length);
+      if (moved !== null) {
+        setCleanCursor(moved);
         return;
       }
       if (input === ' ') {
@@ -339,7 +331,7 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
   });
 
   return (
-    <ModalDialog title="REPO REGISTRY" open onConfirm={() => {}} onCancel={() => {}}>
+    <ModalDialog title="REPO REGISTRY" open>
       <Box flexDirection="column">
         <Box flexDirection="column">
           {MANIFEST_GUIDANCE_LINES.map((line) => (
@@ -349,48 +341,46 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
 
         {phase === 'root-input' ? (
           <Box flexDirection="column">
-            <Text color={colors.text}>
+            <Text color={colors.text} wrap="truncate-start">
               Root path: <Text color={colors.accent}>{root}</Text>
               <Text color={colors['text-dim']}>█</Text>
             </Text>
-            <DimAnnotation text="Type a path, then Enter to scan." />
-            <DimAnnotation text="Ctrl+L to clean stale registry entries (unreachable or unmanaged)." />
+            <DimAnnotation text="Type a path. Stale registry entries (unreachable or unmanaged) can be cleaned too." />
             <DimAnnotation text="Ctrl+V to validate registered repos (shared branch exists locally or on origin)." />
           </Box>
         ) : null}
 
         {phase === 'scanning' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Scanning {root}…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Scanning" subject={rootLabel} />
         ) : null}
 
         {phase === 'scan-error' ? (
           <Box flexDirection="column">
-            <Text color={colors.error}>Scan failed.</Text>
+            <StateLine kind="error" verb="Failed to scan" subject={rootLabel} />
             {registryScanError ? <DimAnnotation text={registryScanError} /> : null}
           </Box>
         ) : null}
 
         {phase === 'empty' ? (
-          <Text color={colors['text-dim']}>No manifest-carrying repos found here.</Text>
+          <StateLine kind="empty" subject="manifest-carrying repos" text="No manifest-carrying repos found here." />
         ) : null}
 
         {phase === 'candidates' ? (
           <Box flexDirection="column">
             <Text color={colors['text-dim']}>CANDIDATES</Text>
-            {candidates.map((path, index) => {
+            <BoundedList
+              items={candidates}
+              chromeRows={REGISTRY_CHROME_ROWS}
+              cursorIndex={clampedCursor}
+              renderItem={(path, index) => {
               const highlighted = index === clampedCursor;
               return (
-                // review patch: checkbox-list-item.tsx's own `selected` prop is accepted but
-                // never read by its layout function, so it has no visible effect on its own —
-                // the highlighted (arrow-navigable) row must still be visually distinguishable
-                // without modifying that shared component (spec boundary: reuse as-is). A
-                // `›` cursor glyph, matching list-row.tsx's own selection-marker convention,
-                // is rendered here as a sibling column instead.
+                // checkbox-list-item.tsx's own `selected` prop has no visible effect, so the
+                // highlighted (arrow-navigable) row gets a `›` cursor glyph as a sibling column,
+                // matching list-row.tsx's selection marker, without modifying the shared
+                // component.
                 <Box key={path} flexDirection="row">
-                  <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
                   <CheckboxListItem
                     label={path}
                     selected={highlighted}
@@ -398,50 +388,50 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                   />
                 </Box>
               );
-            })}
-            <DimAnnotation text="Space to toggle, Enter to register the selection." />
+              }}
+            />
           </Box>
         ) : null}
 
         {phase === 'registering' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Registering…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Registering" subject="" />
         ) : null}
 
         {phase === 'results' ? (
           <Box flexDirection="column">
             <Text color={colors['text-dim']}>RESULTS</Text>
-            {(registryRegisterResults ?? []).map((result) => (
-              <Box key={result.path} flexDirection="column">
-                <Text color={colors.text}>
-                  {result.path} — <Text color={outcomeColor(result.outcome)}>{result.outcome}</Text>
-                </Text>
-                {result.detail ? <DimAnnotation text={result.detail} /> : null}
-              </Box>
-            ))}
-            <DimAnnotation text="Esc to close." />
+            <BoundedBlocks
+              chromeRows={REGISTRY_CHROME_ROWS}
+              blocks={(registryRegisterResults ?? []).map((result) => ({
+                key: result.path,
+                rows: result.detail ? DETAIL_BLOCK_ROWS : 1,
+                node: (
+                  <Box flexDirection="column">
+                    <Text color={colors.text} wrap="truncate-end">
+                      {result.path} — <Text color={outcomeColor(result.outcome)}>{result.outcome}</Text>
+                    </Text>
+                    {result.detail ? <DimAnnotation text={result.detail} /> : null}
+                  </Box>
+                ),
+              }))}
+            />
           </Box>
         ) : null}
 
         {phase === 'clean-candidates' ? (
           <Box flexDirection="column">
             {registryCleanScanStatus === 'loading' ? (
-              <Box>
-                <Spinner />
-                <Text color={colors.text}> Scanning the registry for stale entries…</Text>
-              </Box>
+              <StateLine kind="loading" verb="Scanning" subject="the registry for stale entries" />
             ) : registryCleanScanStatus === 'error' ? (
               <Box flexDirection="column">
-                <Text color={colors.error}>Scan failed.</Text>
+                <StateLine kind="error" verb="Failed to scan" subject="the registry for stale entries" />
                 {registryCleanScanError ? <DimAnnotation text={registryCleanScanError} /> : null}
               </Box>
             ) : staleCandidates.length === 0 ? (
-              // Matrix: "No candidates ... explicit result, never silent" — a distinct,
-              // visible state, same convention as the scan flow's own 'empty' phase.
+              // Zero candidates is an explicit, visible state, never silent — same convention
+              // as the scan flow's own 'empty' phase.
               <Box flexDirection="column">
-                <Text color={colors['text-dim']}>No stale registry entries found.</Text>
+                <StateLine kind="empty" subject="stale registry entries" text="No stale registry entries found." />
                 {registryCleanErrors.length > 0 ? (
                   <DimAnnotation
                     text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
@@ -449,18 +439,21 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       .join(', ')}`}
                   />
                 ) : null}
-                <DimAnnotation text="Esc to close." />
               </Box>
             ) : (
               <Box flexDirection="column">
                 <Text color={colors['text-dim']}>STALE ENTRIES</Text>
-                {staleCandidates.map((candidate, index) => {
+                <BoundedList
+                  items={staleCandidates}
+                  chromeRows={REGISTRY_CHROME_ROWS + 2}
+                  cursorIndex={clampedCleanCursor}
+                  renderItem={(candidate, index) => {
                   const highlighted = index === clampedCleanCursor;
                   const memberNote =
                     candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
                   return (
                     <Box key={candidate.path} flexDirection="row">
-                      <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+                      <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
                       <CheckboxListItem
                         label={`${candidate.path} — ${candidate.reason}${memberNote}`}
                         selected={highlighted}
@@ -468,73 +461,79 @@ export function RepoRegistryScreen({ useStore = useAppStore }: { useStore?: AppS
                       />
                     </Box>
                   );
-                })}
+                  }}
+                />
                 {registryCleanErrors.length > 0 ? (
-                  // Review fix: a path that couldn't even be checked (registry.exists()
-                  // errored) is never silently dropped — reported here, distinct from the
-                  // removable candidate list above, never gating or blocking it.
+                  // A path that couldn't even be checked (registry.exists() errored) is never
+                  // silently dropped — reported here, distinct from the removable candidate list
+                  // above, never gating or blocking it.
                   <DimAnnotation
                     text={`${registryCleanErrors.length} path(s) could not be checked and were left alone: ${registryCleanErrors
                       .map((error) => `${error.path} (${error.code})`)
                       .join(', ')}`}
                   />
                 ) : null}
-                <DimAnnotation text="Space to toggle, Enter to remove the selection." />
               </Box>
             )}
           </Box>
         ) : null}
 
         {phase === 'cleaning' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Removing stale entries…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Removing" subject="stale entries" />
         ) : null}
 
         {phase === 'clean-results' ? (
           <Box flexDirection="column">
             <Text color={colors['text-dim']}>RESULTS</Text>
-            {(registryCleanResults ?? []).map((result) => (
-              <Box key={result.path} flexDirection="column">
-                <Text color={colors.text}>
-                  {result.path} — <Text color={staleOutcomeColor(result.outcome)}>{result.outcome}</Text>
-                </Text>
-                {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
-              </Box>
-            ))}
-            <DimAnnotation text="Esc to close." />
+            <BoundedBlocks
+              chromeRows={REGISTRY_CHROME_ROWS}
+              blocks={(registryCleanResults ?? []).map((result) => ({
+                key: result.path,
+                rows: result.detail ? DETAIL_BLOCK_ROWS : 1,
+                node: (
+                  <Box flexDirection="column">
+                    <Text color={colors.text} wrap="truncate-end">
+                      {result.path} — <Text color={staleOutcomeColor(result.outcome)}>{result.outcome}</Text>
+                    </Text>
+                    {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
+                  </Box>
+                ),
+              }))}
+            />
           </Box>
         ) : null}
 
         {phase === 'validating' ? (
-          <Box>
-            <Spinner />
-            <Text color={colors.text}> Validating registered repos…</Text>
-          </Box>
+          <StateLine kind="loading" verb="Validating" subject="registered repos" />
         ) : null}
 
         {phase === 'validate-results' ? (
           <Box flexDirection="column">
             {registryValidateStatus === 'error' ? (
               <Box flexDirection="column">
-                <Text color={colors.error}>Validation failed.</Text>
+                <StateLine kind="error" verb="Failed to validate" subject="registered repos" />
                 {registryValidateError ? <DimAnnotation text={registryValidateError} /> : null}
               </Box>
             ) : (registryValidateResults ?? []).length === 0 ? (
-              <Text color={colors['text-dim']}>No registered repos.</Text>
+              <StateLine kind="empty" subject="registered repos" text="No registered repos." />
             ) : (
               <Box flexDirection="column">
                 <Text color={colors['text-dim']}>VALIDATION RESULTS</Text>
-                {(registryValidateResults ?? []).map((result) => (
-                  <Box key={result.path} flexDirection="column">
-                    <Text color={colors.text}>
-                      {result.path} — <Text color={validateOutcomeColor(result.outcome)}>{result.outcome}</Text>
-                    </Text>
-                    {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
-                  </Box>
-                ))}
-                <DimAnnotation text="Esc to close." />
+                <BoundedBlocks
+                  chromeRows={REGISTRY_CHROME_ROWS}
+                  blocks={(registryValidateResults ?? []).map((result) => ({
+                    key: result.path,
+                    rows: result.detail ? DETAIL_BLOCK_ROWS : 1,
+                    node: (
+                      <Box flexDirection="column">
+                        <Text color={colors.text} wrap="truncate-end">
+                          {result.path} — <Text color={validateOutcomeColor(result.outcome)}>{result.outcome}</Text>
+                        </Text>
+                        {result.detail ? <DimAnnotation text={result.detail.message} /> : null}
+                      </Box>
+                    ),
+                  }))}
+                />
               </Box>
             )}
           </Box>

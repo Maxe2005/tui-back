@@ -5,7 +5,7 @@ beforeAll(() => {
   process.env.FORCE_COLOR = '1';
 });
 
-describe('TextInputLine focused styling (story 2.23, AC: inverse cursor when focused)', () => {
+describe('TextInputLine focused styling (inverse cursor when focused)', () => {
   it('renders inverse code when focused', async () => {
     const { renderToString } = await import('./render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
@@ -32,7 +32,7 @@ describe('TextInputLine focused styling (story 2.23, AC: inverse cursor when foc
   });
 });
 
-describe('TextInputLine cursor placement styling (story 2.32, AC: inverse glyph tracks cursor)', () => {
+describe('TextInputLine cursor placement styling (inverse glyph tracks cursor)', () => {
   it('wraps the character at `cursor` in the inverse code, not the trailing character', async () => {
     const { renderToString } = await import('./render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
@@ -51,7 +51,7 @@ describe('TextInputLine cursor placement styling (story 2.32, AC: inverse glyph 
     expect(output).toContain('\u001b[7m \u001b[27m');
   });
 
-  it("wraps the character at cursor:2 in the inverse code (code review: matches the plain-text test's mid-string scenario)", async () => {
+  it("wraps the character at cursor:2 in the inverse code (matches the plain-text test's mid-string scenario)", async () => {
     const { renderToString } = await import('./render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
 

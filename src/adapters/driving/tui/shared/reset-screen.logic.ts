@@ -1,18 +1,10 @@
-// tui/shared/reset-screen.logic: the `:reset` overlay's pure key-handling state machine —
-// every decision lives here so it's directly unit-testable (render-to-string.ts's fake stdin
-// never drives a useInput callback; see settings-screen.tsx's own testability note). The
-// component only interprets the raw Ink key and applies the returned state/action.
-//
-// Three steps (spec-reset-command.md, Boundaries):
-//   1. select  — checkboxes, all unchecked on open; Up/Down moves, Space toggles, Enter
-//                advances only when at least one box is checked. Checking Services
-//                force-checks EDTs, and EDTs stays locked checked while Services is checked.
-//   2. summary — read-only review of exactly what goes; Enter advances.
-//   3. confirm — a text input; Enter executes only when the value is exactly `reset`
-//                (case-sensitive, no trim). Any other Enter is a no-op.
-// Esc cancels from any step (the caller closes the overlay; nothing was written yet).
+// tui/shared/reset-screen.logic: the `:reset` overlay's pure key-handling state machine. Three
+// steps: select (checkboxes; Services force-checks and locks EDTs; Enter needs one checked),
+// summary (read-only review; Enter advances once the preview loaded), confirm (Enter executes
+// only on exactly `reset`). Esc cancels from any step — nothing was written yet.
 import { resolveResetCategories, type ResetCategory } from '../../../../core/scripts/reset-tool.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
+import { nextCursorForKey } from './keys/list-cursor.js';
 
 export type ResetScreenStep = 'select' | 'summary' | 'confirm';
 
@@ -93,11 +85,9 @@ export function handleResetScreenKey(
   }
 
   if (state.step === 'select') {
-    if (key.upArrow) {
-      return { state: { ...state, cursor: Math.max(0, state.cursor - 1) }, action: NONE };
-    }
-    if (key.downArrow) {
-      return { state: { ...state, cursor: Math.min(RESET_SCREEN_ROWS.length - 1, state.cursor + 1) }, action: NONE };
+    const cursor = nextCursorForKey(key, state.cursor, RESET_SCREEN_ROWS.length);
+    if (cursor !== null) {
+      return { state: { ...state, cursor }, action: NONE };
     }
     if (input === ' ') {
       const category = RESET_SCREEN_ROWS[state.cursor];
@@ -162,8 +152,9 @@ export function buildResetSummaryLines(categories: readonly ResetCategory[], pre
     lines.push({ text: '  state.json — activeEdt set to null', tone: 'text' });
   }
   if (effective.includes('histories')) {
-    lines.push({ text: 'Histories — every Logs filter history', tone: 'error' });
+    lines.push({ text: 'Histories — every Logs filter history and the command history', tone: 'error' });
     lines.push({ text: '  state.json — filterHistory emptied', tone: 'text' });
+    lines.push({ text: '  state.json — commandHistory emptied', tone: 'text' });
   }
   if (effective.includes('services')) {
     const count = preview.serviceCount;

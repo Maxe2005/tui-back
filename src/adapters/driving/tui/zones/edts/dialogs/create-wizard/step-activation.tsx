@@ -1,22 +1,14 @@
-// tui/zones/edts/dialogs/create-wizard: Step 4 "Activation" (Story 2.38). Below the read-only
-// recap (Story 2.37: rebuilt from Step 3's row views, so it shows exactly what the submit's
-// memberPlans are built from):
-//   - a first EDT: the activation option, visually locked on "Oui", with why (no outgoing EDT);
-//   - a later EDT: the radio (switch now / create without switching) and, under the switch
-//     option, the info block — auto-stash, dirty-service resolution, members to their branches,
-//     non-members back to their own shared branch (listed by name);
-//   - once created: the pause panel (files at risk per service), the overwrite confirmation
-//     (every file, scrollable), or the terminal "created but not active" message.
+// tui/zones/edts/dialogs/create-wizard: Step 4 "Activation". Below a read-only recap (built from
+// Step 3's row views, so it shows exactly what the submit sends): the locked activation option
+// for a first EDT, else the switch-now / create-without-switching radio with its info block; once
+// created, the pause panel, the overwrite confirmation, or the "created but not active" message.
 // Key handling lives in activation.logic.ts.
 import { Box, Text } from 'ink';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 import { BoundedList } from '../../../../shared/components/bounded-list.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { CreateDialogState } from '../../edts-zone.logic.js';
 import {
-  ACTIVATION_FIRST_FOOTER,
-  ACTIVATION_PAUSE_FOOTER,
-  ACTIVATION_RADIO_FOOTER,
-  OVERWRITE_CONFIRM_FOOTER,
   overwriteConfirmLines,
 } from './activation.logic.js';
 import { ACTIVATION_LABELS, activateLaterHint, buildStep3Rows, nonMemberReturns, type BranchCandidate, type RowView } from './wizard.logic.js';
@@ -32,18 +24,26 @@ export function recapBranches(row: RowView): string {
   return `${row.base} → ${row.target}`;
 }
 
+// Rows the wizard frame, breadcrumb and prompts keep around the recap / the returns list.
+const RECAP_CHROME_ROWS = 16;
+const RETURNS_CHROME_ROWS = 22;
+
 function Recap({ dialog, candidates }: { dialog: CreateDialogState; candidates: readonly BranchCandidate[] }) {
   const rows = buildStep3Rows(dialog, candidates);
   return (
     <>
-      <Text color={colors.text}>Nom : {dialog.topic.trim()}</Text>
-      <Text color={colors.text}>Services : {rows.map((row) => row.service).join(', ')}</Text>
-      {rows.map((row) => (
-        <Text key={row.path} color={colors['text-dim']}>
-          {'  '}
-          {row.service} : {row.modeLabel} {recapBranches(row)}
-        </Text>
-      ))}
+      <Text color={colors.text} wrap="truncate-end">Name: {dialog.topic.trim()}</Text>
+      <Text color={colors.text} wrap="truncate-end">Services: {rows.map((row) => row.service).join(', ')}</Text>
+      <BoundedList
+        items={rows}
+        chromeRows={RECAP_CHROME_ROWS}
+        renderItem={(row) => (
+          <Text key={row.path} color={colors['text-dim']} wrap="truncate-end">
+            {'  '}
+            {row.service} : {row.modeLabel} {recapBranches(row)}
+          </Text>
+        )}
+      />
     </>
   );
 }
@@ -53,22 +53,21 @@ function PausePanel({ dialog, maxVisibleRows }: { dialog: CreateDialogState; max
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.warning} paddingX={1}>
       <Text color={colors.warning} bold>
-        ACTIVATION EN PAUSE
+        ACTIVATION PAUSED
       </Text>
       <Text color={colors.text}>
-        L'EDT est créé. Ces fichiers non commités seraient écrasés par le passage sur la branche cible — aucune bascule n'a encore eu lieu :
+        The EDT is created. These uncommitted files would be overwritten by the move to the target branch — no switch has happened yet:
       </Text>
       <BoundedList
         items={lines}
         maxVisibleRows={maxVisibleRows}
-        moreBelowLabel="fichiers en dessous"
+        moreBelowLabel="files below"
         renderItem={(line) => (
           <Text key={line.key} color={line.kind === 'head' ? colors.warning : colors.text} wrap="truncate-end">
             {line.text}
           </Text>
         )}
       />
-      <Text color={colors['text-dim']}>{ACTIVATION_PAUSE_FOOTER}</Text>
     </Box>
   );
 }
@@ -79,24 +78,23 @@ function OverwriteConfirm({ dialog, maxVisibleRows }: { dialog: CreateDialogStat
   return (
     <Box flexDirection="column">
       <Text color={colors.error} bold>
-        CONFIRMER L'ÉCRASEMENT
+        CONFIRM OVERWRITE
       </Text>
       <Text color={colors.text}>
-        Les modifications non commitées de ces fichiers (suivis, indexés ou non suivis) seront définitivement détruites, puis l'activation reprendra. Cette action est irréversible.
+        Uncommitted changes in these files (tracked, staged or untracked) will be permanently destroyed, then activation resumes. This cannot be undone.
       </Text>
       <BoundedList
         items={lines}
         maxVisibleRows={maxVisibleRows}
         cursorIndex={cursor}
-        moreAboveLabel="fichiers au-dessus"
-        moreBelowLabel="fichiers en dessous"
+        moreAboveLabel="files above"
+        moreBelowLabel="files below"
         renderItem={(line) => (
           <Text key={line.key} color={line.kind === 'head' ? colors.warning : colors.text} wrap="truncate-end">
             {line.text}
           </Text>
         )}
       />
-      <Text color={colors['text-dim']}>{OVERWRITE_CONFIRM_FOOTER}</Text>
     </Box>
   );
 }
@@ -106,9 +104,8 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
   if (activation.firstEdt) {
     return (
       <>
-        <Text color={colors.accent}>(•) {ACTIVATION_LABELS.firstEdt} — Oui (verrouillé)</Text>
-        <Text color={colors['text-dim']}>{'    '}{ACTIVATION_LABELS.firstEdtExplanation}</Text>
-        <Text color={colors.accent}>{ACTIVATION_FIRST_FOOTER}</Text>
+        <Text color={colors.accent} wrap="truncate-end">(•) {ACTIVATION_LABELS.firstEdt} — Yes (locked)</Text>
+        <ClampedParagraph color={colors['text-dim']} maxLines={3}>{'    ' + ACTIVATION_LABELS.firstEdtExplanation}</ClampedParagraph>
       </>
     );
   }
@@ -117,29 +114,32 @@ function ChoiceView({ dialog, candidates }: { dialog: CreateDialogState; candida
   const info = colors['text-dim'];
   return (
     <>
-      <Text color={switching ? colors.accent : colors.text}>
+      <Text color={switching ? colors.accent : colors.text} wrap="truncate-end">
         {switching ? '(•)' : '( )'} {ACTIVATION_LABELS.switchNow}
       </Text>
       <Box flexDirection="column" paddingLeft={4}>
-        <Text color={info} dimColor={!switching}>• {ACTIVATION_LABELS.stashInfo}</Text>
-        <Text color={info} dimColor={!switching}>• {ACTIVATION_LABELS.otherDirtyInfo}</Text>
-        <Text color={info} dimColor={!switching}>• {ACTIVATION_LABELS.membersInfo}</Text>
+        <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.stashInfo}`}</ClampedParagraph>
+        <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.otherDirtyInfo}`}</ClampedParagraph>
+        <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.membersInfo}`}</ClampedParagraph>
         {returns.length > 0 ? (
           <>
-            <Text color={info} dimColor={!switching}>• {ACTIVATION_LABELS.nonMembersInfo}</Text>
-            {returns.map((entry) => (
-              <Text key={entry.service} color={info} dimColor={!switching} wrap="truncate-end">
-                {'    '}
-                {entry.service} → {entry.sharedBranch}
-              </Text>
-            ))}
+            <ClampedParagraph color={info} dimColor={!switching} maxLines={3}>{`• ${ACTIVATION_LABELS.nonMembersInfo}`}</ClampedParagraph>
+            <BoundedList
+              items={returns}
+              chromeRows={RETURNS_CHROME_ROWS}
+              renderItem={(entry) => (
+                <Text key={entry.service} color={info} dimColor={!switching} wrap="truncate-end">
+                  {'    '}
+                  {entry.service} → {entry.sharedBranch}
+                </Text>
+              )}
+            />
           </>
         ) : null}
       </Box>
-      <Text color={switching ? colors.text : colors.accent}>
+      <Text color={switching ? colors.text : colors.accent} wrap="truncate-end">
         {switching ? '( )' : '(•)'} {ACTIVATION_LABELS.stay}
       </Text>
-      <Text color={colors.accent}>{ACTIVATION_RADIO_FOOTER}</Text>
     </>
   );
 }
@@ -159,8 +159,8 @@ export function ActivationStepView({
   if (activation.outcome !== null) {
     body = (
       <>
-        <Text color={colors.warning}>{activation.outcome === 'stopped' ? ACTIVATION_LABELS.stopped : ACTIVATION_LABELS.notActivated}</Text>
-        <Text color={colors['text-dim']}>{activateLaterHint(activation.created?.topic ?? dialog.topic)}</Text>
+        <Text color={colors.warning} wrap="truncate-end">{activation.outcome === 'stopped' ? ACTIVATION_LABELS.stopped : ACTIVATION_LABELS.notActivated}</Text>
+        <Text color={colors['text-dim']} wrap="truncate-end">{activateLaterHint(activation.created?.topic ?? dialog.topic)}</Text>
       </>
     );
   } else if (activation.confirm !== null) {

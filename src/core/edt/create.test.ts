@@ -1,10 +1,7 @@
-// core/edt/create: unit tests against fake ports (AD-13 core layer) — every I/O-matrix row
-// of story 2.2 plus the validation-ordering guarantees. Real git/filesystem behavior lives
-// in adapters/driven/git/index.test.ts and the black-box e2e; here only the use-case's
-// orchestration is exercised: validation order (topic/membership/duplicate-topic before any
-// write), the per-member branch loop, failure isolation, and the registry write under the
-// per-resource lock. createEdt still performs its own real EDT-dir/db writes (pre-existing
-// Story 2.1 behavior), so edtsBaseDir points at a per-test temp dir.
+// core/edt/create: unit tests against fake ports — validation order (topic, membership,
+// duplicate topic before any write), the per-member branch loop, failure isolation, and the
+// registry write under the per-resource lock. createEdt performs real EDT-dir/db writes, so
+// edtsBaseDir points at a per-test temp dir.
 import { describe, expect, it, vi, afterEach, type Mock } from 'vitest';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -84,9 +81,9 @@ function fakeLock(): LockPort {
   };
 }
 
-// Story 2.42: a manifest fixture — the protected set these fakes emulate, as if every repo's
-// manifest declared `sharedBranch: development` and `protectedBranches: [preprod, prod]`. The
-// real gate resolves it from each repo's own manifest (core/edt/shared-branches.ts).
+// A manifest fixture — the protected set these fakes emulate, as if every repo's manifest
+// declared `sharedBranch: development` and `protectedBranches: [preprod, prod]`. The real gate
+// resolves it from each repo's own manifest (core/edt/shared-branches.ts).
 const MANIFEST_PROTECTED_BRANCHES = ['development', 'preprod', 'prod'];
 
 function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
@@ -114,16 +111,28 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
+    stagePaths: vi.fn(async () => ok(undefined)),
+    commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+    listBranchesContaining: vi.fn(async () => ok([] as string[])),
     ...overrides,
   };
 }
@@ -179,7 +188,7 @@ describe('createEdt — validation before any write', () => {
     expect(calls(params.git.createBranch)).toHaveLength(0);
   });
 
-  it('rejects a member that is not a registered managed repo with invalid-member (matrix)', async () => {
+  it('rejects a member that is not a registered managed repo with invalid-member', async () => {
     const params = await makeParams({ members: ['/repo/a', '/not/registered'], registry: fakeRegistry(['/repo/a']) });
 
     const result = await createEdt(params);
@@ -188,7 +197,7 @@ describe('createEdt — validation before any write', () => {
     expect(calls(params.edtRegistry.add)).toHaveLength(0);
   });
 
-  it('rejects a duplicate topic with edt-topic-exists before any write (AC2)', async () => {
+  it('rejects a duplicate topic with edt-topic-exists before any write', async () => {
     const edtRegistry = fakeEdtRegistry({ list: async () => ok([entry('other-ulid', 'demo')]) });
     const params = await makeParams({ edtRegistry });
 
@@ -264,7 +273,7 @@ describe('createEdt — branch creation disabled', () => {
     }
   });
 
-  it('rejects and excludes a member whose current branch is shared, without any git write (story 2.3 matrix)', async () => {
+  it('rejects and excludes a member whose current branch is shared, without any git write', async () => {
     const git = fakeGit({
       currentBranch: vi.fn(async (path: string) => ok(path === '/repo/a' ? 'development' : 'feature-x')),
     });
@@ -294,7 +303,7 @@ describe('createEdt — branch creation disabled', () => {
     ]);
   });
 
-  it('excludes a member when assertAllowedBranch fails for a reason other than shared-branch-rejected (matrix edge case)', async () => {
+  it('excludes a member when assertAllowedBranch fails for a reason other than shared-branch-rejected (edge case)', async () => {
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('feature-x')),
       assertAllowedBranch: vi.fn(async (path: string) =>
@@ -334,7 +343,7 @@ describe('createEdt — branch creation disabled', () => {
 });
 
 describe('createEdt — branch creation enabled', () => {
-  it('creates one shared branch in every member and registers it (grouped, AC1)', async () => {
+  it('creates one shared branch in every member and registers it (grouped)', async () => {
     const params = await makeParams({ branchOptions: GROUPED });
 
     const result = await createEdt(params);
@@ -360,7 +369,7 @@ describe('createEdt — branch creation enabled', () => {
     ]);
   });
 
-  it('creates one branch per member by name map (individual, AC1)', async () => {
+  it('creates one branch per member by name map (individual)', async () => {
     const params = await makeParams({
       branchOptions: {
         create: true,
@@ -394,9 +403,8 @@ describe('createEdt — branch creation enabled', () => {
     ]);
   });
 
-  // Story 2.27: `bases[member]` overrides the top-level `base` for that member only — the
-  // per-member base-branch shape the EDT-creation TUI now feeds when selected members'
-  // manifest-declared sharedBranch values diverge (edts-zone.logic.ts's buildCreateBranchOptions).
+  // `bases[member]` overrides the top-level `base` for that member only — what the creation
+  // TUI sends when the selected members' manifest sharedBranch values diverge.
   it('a per-member `bases` entry wins over the top-level `base` for that member, leaving others on `base`', async () => {
     const params = await makeParams({
       branchOptions: { ...GROUPED, base: 'main', bases: { '/repo/a': 'master' } },
@@ -411,7 +419,7 @@ describe('createEdt — branch creation enabled', () => {
   });
 });
 
-describe('createEdt — per-service failure isolation (AC3)', () => {
+describe('createEdt — per-service failure isolation', () => {
   it('reports a branch-exists failure for one member without aborting the others or EDT creation', async () => {
     const git = fakeGit({
       createBranch: vi.fn(async (path: string) =>
@@ -431,8 +439,8 @@ describe('createEdt — per-service failure isolation (AC3)', () => {
         ],
       },
     });
-    // A does not join the EDT: a failed member is never registered (story 2.3), even
-    // though its current branch could have been read as a fallback.
+    // A does not join the EDT: a failed member is never registered, even though its current
+    // branch could have been read as a fallback.
     const added = calls(params.edtRegistry.add);
     expect(added).toHaveLength(1);
     expect((added[0][0] as EdtRegistryEntry).members).toEqual([
@@ -492,7 +500,7 @@ describe('createEdt — per-service failure isolation (AC3)', () => {
     expect((added[0][0] as EdtRegistryEntry).members.find((m) => m.service === 'svc-/repo/a')).toBeUndefined();
   });
 
-  it('excludes a member when createBranch fails and the fallback current branch is shared (story 2.3 matrix)', async () => {
+  it('excludes a member when createBranch fails and the fallback current branch is shared', async () => {
     const git = fakeGit({
       createBranch: vi.fn(async () => err('base-branch-missing', 'base missing')),
       currentBranch: vi.fn(async () => ok('development')),
@@ -554,7 +562,7 @@ describe('createEdt — registry write under lock (AD-9)', () => {
     expect(await readdir(params.edtsBaseDir)).toEqual([]);
   });
 
-  it('rolls back the created branches when the registry write fails (branch rollback, review)', async () => {
+  it('rolls back the created branches when the registry write fails (branch rollback)', async () => {
     const edtRegistry = fakeEdtRegistry({ add: async () => err('edt-registry-write-error', 'disk full') });
     const git = fakeGit();
     const params = await makeParams({ edtRegistry, git, branchOptions: GROUPED });
@@ -581,7 +589,7 @@ describe('createEdt — registry write under lock (AD-9)', () => {
     expect(calls(params.git.deleteBranch)).toHaveLength(0);
   });
 
-  it('re-checks topic uniqueness inside the lock and rejects a same-topic entry added meanwhile (race, review)', async () => {
+  it('re-checks topic uniqueness inside the lock and rejects a same-topic entry added meanwhile (race)', async () => {
     // Simulates the authoritative in-lock check: the pre-lock fast-fail saw an empty
     // registry, but by the time the lock is held another run has registered the topic.
     const edtRegistry = fakeEdtRegistry({
@@ -606,8 +614,7 @@ describe('createEdt — registry write under lock (AD-9)', () => {
   });
 });
 
-// Story 2.35 — per-member branch plans (`memberPlans`), authoritative when present.
-describe('createEdt — per-member branch plans (story 2.35)', () => {
+describe('createEdt — per-member branch plans', () => {
   // A git fake whose local/remote branch state is declared per repo: branchExistsLocally and
   // listRemoteBranches answer from these tables instead of fakeGit's blanket defaults.
   function planGit(
@@ -870,7 +877,7 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.results[0]).toEqual({ service: 'svc-/repo/a', outcome: 'renamed' });
-    expect(calls(git.renameBranch)).toEqual([['/repo/a', 'feat/y', 'feat/z']]);
+    expect(calls(git.renameBranch)).toEqual([['/repo/a', 'feat/y', 'feat/z', result.data.ulid]]);
     expect(registeredMembers(params)).toEqual([
       { service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'feat/z' },
       { service: 'svc-/repo/b', repoPath: '/repo/b', branch: 'feat/w' },
@@ -927,7 +934,7 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
     expect(registeredMembers(params)).toContainEqual({ service: 'svc-/repo/a', repoPath: '/repo/a', branch: 'feat/y' });
   });
 
-  describe('cross-EDT gate on existing local branches (AD-8, review)', () => {
+  describe('cross-EDT gate on existing local branches (AD-8)', () => {
     // Rejects feat/owned as another EDT's own branch whenever an edtId is passed.
     function crossEdtGit(): GitPort {
       return planGit(
@@ -1139,8 +1146,8 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
       ['/repo/b', 'feat/q', true],
     ]);
     expect(calls(git.renameBranch)).toEqual([
-      ['/repo/c', 'feat/y', 'feat/z'],
-      ['/repo/c', 'feat/z', 'feat/y'],
+      ['/repo/c', 'feat/y', 'feat/z', expect.any(String)],
+      ['/repo/c', 'feat/z', 'feat/y', expect.any(String)],
     ]);
   });
 
@@ -1178,7 +1185,7 @@ describe('createEdt — per-member branch plans (story 2.35)', () => {
   });
 });
 
-describe('listCreateCandidateBranches (story 2.37)', () => {
+describe('listCreateCandidateBranches', () => {
   it('returns the local and remote-tracking lists side by side, never fetching', async () => {
     const git = fakeGit({
       listBranches: vi.fn(async () => ok(['main', 'rel'])),

@@ -1,7 +1,6 @@
-// core/edt/resolve-tab-visibility: unit tests against fake ports (AD-13 core layer) —
-// every I/O-matrix row of story 2.13: registry-wide omission, active-EDT-scoped disable,
-// enablement, either shared-types module id counting, and error propagation from the two
-// reused resolution paths (listRepos, active-EDT-member resolution).
+// core/edt/resolve-tab-visibility: unit tests against fake ports — registry-wide omission,
+// active-EDT-scoped disable, enablement, the shared-types tab gated by shared-types-source alone, and error
+// propagation from the two reused resolution paths (listRepos, active-EDT-member resolution).
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
@@ -62,6 +61,8 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -71,7 +72,7 @@ function edtEntry(ulid: string, topic: string, members: EdtRegistryEntry['member
 }
 
 describe('resolveTabVisibility', () => {
-  it('module ids: gates Routes on route-explorer, shared-types on either source or consumer', () => {
+  it('module ids: gates Routes on route-explorer, shared-types on the source alone', () => {
     expect(ROUTES_MODULE_ID).toBe('route-explorer');
     expect(SHARED_TYPES_MODULE_IDS).toEqual(['shared-types-source', 'shared-types-consumer']);
   });
@@ -129,26 +130,25 @@ describe('resolveTabVisibility', () => {
     expect(result.data.routes).toEqual({ status: 'enabled', carryingServices: ['svc-api-gateway'] });
   });
 
-  it('counts either shared-types-source or shared-types-consumer for omission and disabled', async () => {
-    const registry = fakeRegistry(['/repo/shared-types', '/repo/consumer-app']);
-    const manifest = fakeManifest({
-      '/repo/shared-types': ['shared-types-source'],
-      '/repo/consumer-app': ['shared-types-consumer'],
-    });
+  it('gates shared-types on shared-types-source alone: consumers without a source omit the tab', async () => {
+    const registry = fakeRegistry(['/repo/consumer-app']);
+    const manifest = fakeManifest({ '/repo/consumer-app': ['shared-types-consumer'] });
+    const edtRegistry = fakeEdtRegistry([
+      edtEntry('edt-1', 'topic-1', [{ service: 'svc-consumer-app', repoPath: '/repo/consumer-app', branch: 'feat/x' }]),
+    ]);
 
     const result = await resolveTabVisibility({
       registry,
       manifest,
-      edtRegistry: fakeEdtRegistry(),
-      state: fakeState(),
+      edtRegistry,
+      state: fakeState({ readActiveEdt: vi.fn(async () => ok('edt-1')) }),
     });
 
     if (!result.ok) throw new Error('expected ok');
-    expect(result.data.sharedTypes.status).toBe('disabled');
-    expect(result.data.sharedTypes.carryingServices).toEqual(['svc-shared-types', 'svc-consumer-app']);
+    expect(result.data.sharedTypes).toEqual({ status: 'omitted', carryingServices: [] });
   });
 
-  it('shows shared-types enabled when a shared-types-consumer carrier is an active-EDT member (source itself absent from the EDT)', async () => {
+  it('disables shared-types when the source service is not in the active EDT, even if a consumer is', async () => {
     const registry = fakeRegistry(['/repo/shared-types', '/repo/consumer-app']);
     const manifest = fakeManifest({
       '/repo/shared-types': ['shared-types-source'],
@@ -166,10 +166,28 @@ describe('resolveTabVisibility', () => {
     });
 
     if (!result.ok) throw new Error('expected ok');
-    expect(result.data.sharedTypes).toEqual({
-      status: 'enabled',
-      carryingServices: ['svc-shared-types', 'svc-consumer-app'],
+    expect(result.data.sharedTypes).toEqual({ status: 'disabled', carryingServices: ['svc-shared-types'] });
+  });
+
+  it('enables shared-types when the source service is an active-EDT member', async () => {
+    const registry = fakeRegistry(['/repo/shared-types', '/repo/consumer-app']);
+    const manifest = fakeManifest({
+      '/repo/shared-types': ['shared-types-source'],
+      '/repo/consumer-app': ['shared-types-consumer'],
     });
+    const edtRegistry = fakeEdtRegistry([
+      edtEntry('edt-1', 'topic-1', [{ service: 'svc-shared-types', repoPath: '/repo/shared-types', branch: 'feat/x' }]),
+    ]);
+
+    const result = await resolveTabVisibility({
+      registry,
+      manifest,
+      edtRegistry,
+      state: fakeState({ readActiveEdt: vi.fn(async () => ok('edt-1')) }),
+    });
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.sharedTypes).toEqual({ status: 'enabled', carryingServices: ['svc-shared-types'] });
   });
 
   it('leaves both tabs unaffected by no active EDT (disabled, never enabled) when a carrying repo exists', async () => {

@@ -1,22 +1,17 @@
 // tui/zones/edts/dialogs: the EDT SERVICES row contextual menu ("Remove from EDT" / "Change
-// branch for this EDT" / disabled "Restart") opened by Enter — extracted from edts-zone.tsx
-// (see that file's header for why).
+// branch for this EDT" / disabled "Restart"), opened by Enter.
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
 import type { AppState } from '../../../store/app-store.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList, type FailedResultRow } from '../../../shared/components/failed-result-list.js';
-import { ListRow } from '../../../shared/components/list-row.js';
+import { MenuList, resolveMenuKey } from '../../../shared/components/menu-list.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   createPickerSession,
   findRetryableFailedRow,
-  jumpSelection,
-  moveSelection,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   SERVICE_ACTION_MENU_ITEMS,
   summarizeFailedResults,
   type EdtDialogState,
@@ -30,13 +25,13 @@ export type ServiceActionsDialogDeps = {
   loadEdtsBranches: AppState['loadEdtsBranches'];
   logEdtAction: AppState['logEdtAction'];
   createMemberBranchAction: AppState['createMemberBranch'];
-  // Story 2.27: needed to look up this repoPath's own manifest-declared sharedBranch, used as
-  // the picker's "Create new" default base branch (never DEFAULT_BASE_BRANCH).
+  // Needed to look up this repoPath's manifest sharedBranch, the picker's "Create new" default
+  // base branch (never DEFAULT_BASE_BRANCH).
   candidates: readonly ServiceBranchDivergence[];
 };
 
 export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDeps) {
-  // Story 2.18: EDT SERVICES row contextual menu — "Remove from EDT" ------------------------
+  // "Remove from EDT" ------------------------------------------------------------------------
   async function submitRemoveFromEdt(current: ServiceActionsDialogState) {
     if (current.submitting) {
       return;
@@ -46,9 +41,8 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
     if (result.ok) {
       void deps.loadEdts();
       void deps.loadEdtsBranches();
-      // Story 2.25: structured rows — Never boundary: remove-from-edt never touches a
-      // branch, so a row here never carries branch-owned-by-other-edt in practice (and even
-      // if it somehow did, this call site never wires a retry action for it).
+      // Structured rows — remove-from-edt never touches a branch, so a row here never carries
+      // branch-owned-by-other-edt in practice, and this call site wires no retry action for it.
       const failedRows = summarizeFailedResults(result.data.results);
       if (failedRows.length > 0) {
         deps.setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, submitting: false, failedRows } : prev));
@@ -63,14 +57,12 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
     await deps.logEdtAction(current.edt.ulid, 'modify', 'failed', result.error.message);
   }
 
-  // Story 2.18: EDT SERVICES row contextual menu — "Change branch for this EDT" -------------
-  // Story 2.26: applies a confirmed BranchPickerOutcome for Service-actions' "Change branch for
-  // this EDT" — always an *existing* member (this menu only opens from an EDT-services row), so
-  // a 'rename' outcome always routes through modifyEdt's own renameBranches param, never a
-  // direct pre-step. 'create' still needs its own eager pre-step (branch creation has no
-  // membership semantics of its own — Design Notes) before the usual setBranches submit; a
-  // pre-step failure folds into this same failedRows/FailedResultList display, never a second
-  // error UI (Boundaries), by synthesizing the row directly instead of calling modifyEdtAction.
+  // "Change branch for this EDT" ------------------------------------------------------------
+  // Applies a confirmed BranchPickerOutcome — always an *existing* member (this menu only opens
+  // from an EDT-services row), so a 'rename' outcome always routes through modifyEdt's
+  // renameBranches param. 'create' still needs its own eager pre-step (branch creation has no
+  // membership semantics) before the usual setBranches submit; a pre-step failure is synthesized
+  // into the same failedRows/FailedResultList display, never a second error UI.
   async function submitServiceActionsBranchOutcome(current: ServiceActionsDialogState, outcome: BranchPickerOutcome) {
     if (current.submitting) {
       return;
@@ -122,9 +114,8 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
     options: { retry?: { field: 'create-name' | 'rename'; value: string; oldName?: string } } = {},
   ) {
     const currentBranch = current.edt.members.find((member) => member.repoPath === current.repoPath)?.branch ?? '';
-    // Code review (story 2.27): fall back to this member's own current branch, not '', if the
-    // candidate lookup misses — never DEFAULT_BASE_BRANCH, but never blank either (this
-    // dialog's "Create new" confirm performs a real git write).
+    // Fall back to this member's current branch, not '', if the candidate lookup misses — never
+    // DEFAULT_BASE_BRANCH, but never blank either (this "Create new" performs a real git write).
     const defaultBaseBranch = deps.candidates.find((candidate) => candidate.path === current.repoPath)?.sharedBranch || currentBranch;
     const session = createPickerSession(current.repoPath, {
       suggestedName: currentBranch,
@@ -141,12 +132,11 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
       return;
     }
     if (key.escape && current.submitting) {
-      // Review fix (story 2.18, carried over): never tear down the picker while a submit is
-      // in flight.
+      // Never tear down the picker while a submit is in flight.
       return;
     }
     const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key, session.branchesStatus, session.owners);
     if (result.type === 'cancel') {
       deps.setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchPicker: null } : prev));
       return;
@@ -160,12 +150,10 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
     );
   }
 
-  // Boundary/Design Notes: the two new direct-action flows (this contextual menu's "Change
-  // branch" and the Add-to-EDT dialog) open the branch picker straight from the row-level
-  // Enter handler — they never route through resolveModifyEnterAction/canEditMemberBranch (the
-  // big Modify dialog's own member-checklist Enter dispatch), so that check's existing
-  // restriction (member of target EDT AND currently checked) simply doesn't apply here: it's
-  // bypassed, not loosened.
+  // This menu and the Add-to-EDT dialog open the branch picker straight from the row-level Enter
+  // handler — never through resolveModifyEnterAction/canEditMemberBranch (the Modify dialog's
+  // checklist dispatch), so that check's restriction (member of target EDT AND currently
+  // checked) doesn't apply here.
   function handleServiceActionsInput(current: ServiceActionsDialogState, input: string, key: Key) {
     if (current.branchPicker !== null) {
       handleServiceActionsBranchPickerInput(current, current.branchPicker, input, key);
@@ -177,13 +165,12 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
       }
       return;
     }
-    // Story 2.25/2.26: "try a different branch"/"try a different name" — reopens the branch
-    // picker pre-filled with `lastAttemptedBranch` (the value that just got rejected, tracked
-    // separately since this dialog's own branchPicker sub-state is cleared once a submit is in
-    // flight), rather than openServiceActionsBranchPicker's normal "still-current member
-    // branch" pre-fill. Confirming it re-runs submitServiceActionsBranchOutcome via the same
-    // picker dispatch above, unchanged — never a full-dialog restart. Takes priority over the
-    // SERVICE_ACTION_MENU_ITEMS dispatch below whenever a resolvable failure is showing.
+    // "Try a different branch"/"try a different name": reopens the branch picker pre-filled with
+    // `lastAttemptedBranch` (the rejected value, tracked separately since the branchPicker
+    // sub-state is cleared once a submit is in flight), rather than the normal "current member
+    // branch" pre-fill. Confirming re-runs submitServiceActionsBranchOutcome through the picker
+    // dispatch above, never a full-dialog restart. Takes priority over the menu dispatch below
+    // whenever a resolvable failure is showing.
     if (key.return && !current.submitting) {
       const retryRow = findRetryableFailedRow(current.failedRows);
       if (retryRow !== undefined) {
@@ -195,27 +182,16 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
         return;
       }
     }
-    const jump = resolveSelectionJump(key);
-    if (jump !== null) {
-      deps.setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, cursor: jumpSelection(jump, SERVICE_ACTION_MENU_ITEMS.length) } : prev));
+    // Restart is a disabled row — Enter on it never chooses; Esc was handled above.
+    const step = resolveMenuKey(key, current.cursor, SERVICE_ACTION_MENU_ITEMS, 'close');
+    if (step.type === 'move') {
+      deps.setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, cursor: step.cursor } : prev));
       return;
     }
-    const direction = resolveSelectionDirection(key);
-    if (direction !== null) {
-      deps.setDialog((prev) =>
-        prev.kind === 'service-actions' ? { ...prev, cursor: moveSelection(prev.cursor, direction, SERVICE_ACTION_MENU_ITEMS.length) } : prev,
-      );
-      return;
-    }
-    if (key.return) {
-      const item = SERVICE_ACTION_MENU_ITEMS[current.cursor];
-      if (item === undefined || item.disabled) {
-        // Restart is rendered disabled — Enter on it never dispatches (Boundaries).
-        return;
-      }
-      if (current.cursor === 0) {
+    if (step.type === 'choose') {
+      if (step.choice === 'remove') {
         void submitRemoveFromEdt(current);
-      } else {
+      } else if (step.choice === 'change-branch') {
         openServiceActionsBranchPicker(current);
       }
     }
@@ -226,15 +202,16 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
 
 export function ServiceActionsDialogView({ dialog, maxRows }: { dialog: ServiceActionsDialogState; maxRows: number }) {
   return (
-    <ModalDialog title="SERVICE ACTIONS" onConfirm={() => {}} onCancel={() => {}} open={true}>
+    <ModalDialog title="SERVICE ACTIONS" open={true}>
       <Box flexDirection="column">
-        <Text color={colors.text}>{dialog.serviceName}</Text>
+        <Text color={colors.text} wrap="truncate-end">{dialog.serviceName}</Text>
         {dialog.branchPicker !== null ? (
           <>
             <BranchPicker
               state={dialog.branchPicker.state}
               branches={dialog.branchPicker.branches}
               branchesStatus={dialog.branchPicker.branchesStatus}
+              owners={dialog.branchPicker.owners}
               otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
               maxRows={maxRows}
             />
@@ -243,9 +220,7 @@ export function ServiceActionsDialogView({ dialog, maxRows }: { dialog: ServiceA
           </>
         ) : (
           <>
-            {SERVICE_ACTION_MENU_ITEMS.map((item, index) => (
-              <ListRow key={item.label} label={item.label} meta={item.disabled ? 'Available with Epic 5' : undefined} selected={index === dialog.cursor} />
-            ))}
+            <MenuList items={SERVICE_ACTION_MENU_ITEMS} cursor={dialog.cursor} />
             {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : dialog.error ? <DimAnnotation text={dialog.error} /> : null}
             {dialog.submitting ? <DimAnnotation text="Working…" /> : null}
           </>

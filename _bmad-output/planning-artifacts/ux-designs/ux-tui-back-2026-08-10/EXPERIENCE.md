@@ -24,12 +24,12 @@ Six permanent zones, always reachable from the top bar:
 
 | Zone | Purpose | FR range |
 |---|---|---|
-| Dashboard | Landing surface on launch: summarizes the active EDT, service health, and the last group-update outcome; offers to enter an EDT with the last-used one pre-selected as default. | (summary surface; draws on FR-9's branch/health visibility) |
+| Dashboard | Landing surface on launch: summarizes the active EDT — each member service's container status (up/down/restarting/no container), active branch and divergence from its shared branch, working-tree alerts (uncommitted changes, merge/rebase in progress) — the last group-update outcome, registry health, and any operation in progress; offers keyboard quick actions (enter last EDT, start group update, open Logs, switch EDT). (Amended 2026-10-01, Sprint Change Proposal.) **Amended 2026-10-12:** the Dashboard's main body is the active EDT's services list — state, branch and every per-service action (open IDE, simple/clean restart, extensible); the EDT-level quick actions are secondary. | (summary surface; draws on FR-9, FR-18, FR-27, FR-29) |
 | EDTs | Create, modify, and protected-switch EDTs; membership and per-service working branches. | FR-3–FR-9 |
 | Update | A permanent left-hand service list with live status (up/down/restarting/updating/migrating/error); a shared configuration screen (service selection, per-service source branch, migrate/clean-restart toggles) gates every run — EDT-scoped, all-repos, or single-service — followed by live per-service tracking, assisted resolution of conflicts, and migration-failure handling. Per-service quick actions (clean restart, single-service update) are available from the list at any time. | FR-10–FR-12, FR-25–FR-27 |
 | Logs | Aggregated live log stream across the active EDT's services (or a chosen subset), filterable, with inline health and developer-triggered restart. | FR-16–FR-18 |
 | Routes | Route-explorer module: discover routes, fire requests with automatic dev-mode auth, save/customize/re-fire, response + correlated logs together, global saved-request library. | FR-19–FR-23 |
-| shared-types | Publish a new `shared-types` version, see Propagation status for the active EDT's member services, propagate to chosen ones. | FR-13–FR-15 |
+| shared-types | Propagate a `shared-types` version to chosen consuming services, publish a new version, see declared-version drift; the smart update is configured from the Update zone. | FR-13–FR-15, FR-30, FR-31 |
 
 Routes and shared-types are gated at two levels (amended 2026-08-24, Sprint Change Proposal — supersedes the original "always-present, never hidden" decision): fully omitted from the tab bar only when *no repo in the entire registry* (across every EDT, or none) ever activates the relevant module (`route-explorer` for Routes; `shared-types-source`/`shared-types-consumer` for shared-types) — but when the module exists somewhere in the registry and just isn't present on an active-EDT member, the tab stays visible in a disabled state (dimmed/strikethrough) and, when selected, shows an explanatory message naming which registered repos do carry the module. What's manifest-gated at the *content* level (which services/repos appear inside an enabled zone) is unchanged.
 
@@ -69,9 +69,11 @@ Behavioral. Visual specs live in `DESIGN.md.Components`.
 | list-row | Every list/detail split, including bmad-loop-style single-activation lists (OptionList) | Arrow keys move the highlight; `Home`/`End` jump to top/bottom; `Enter` (or a click) activates the highlighted row — same effect regardless of trigger method. |
 | detail-pane | Right-hand pane of a list/detail split | Read-focused; content follows the left list's current selection. Becomes its own scrollable/selectable list only where the zone calls for it (e.g. the Logs stream). |
 | footer-hint | Bottom row, always present | Passive; always reflects the current context's live keybindings — never stale after a zone or mode change. |
-| modal-dialog | Confirmations, guided-resolution menus, any interrupting decision, and the keybinding-help screen (`?`) | `Escape` always cancels/closes; `Enter` always confirms — regardless of whether the modal was opened by mouse or keyboard. Explicit fix for a friction point in bmad-loop, where trigger method and confirm binding could mismatch. The help-screen instance is read-only (no confirm action, `Esc` or `?` again closes it) and scrolls with `j`/`k` when its content exceeds the visible height. See `mockups/key-assisted-resolution-modal.html` for the FR-11 guided-menu instance at 1:1 fidelity. |
+| modal-dialog | Confirmations, guided-resolution menus, any interrupting decision, and the keybinding-help screen (`?`) | `Escape` always cancels/closes; `Enter` always confirms — regardless of whether the modal was opened by mouse or keyboard. Explicit fix for a friction point in bmad-loop, where trigger method and confirm binding could mismatch. The help-screen instance is read-only (no confirm action, `Esc` or `?` again closes it) and scrolls with `j`/`k` when its content exceeds the visible height. See `mockups/key-assisted-resolution-modal.html` for the FR-11 guided-menu instance at 1:1 fidelity. The FR-11 guided-menu instance is hosted by `incident-queue` since Story 3.18 (amended 2026-10-08). |
+| incident-queue | Update zone, when a run raises incidents (Story 3.18, added 2026-10-08) | Two-column `modal-dialog`: left a bounded list of pending incidents (service, kind, age, "still blocked" marker), right the selected incident's guided menu (stash / edited / cancel repo / cancel run). `↑/↓` select, `Enter` act, `Esc` closes without resolving (incidents stay queued, services stay paused), reopened via a footer-hinted key. Auto-opens only on the first incident; later ones notify through the Update tab badge and a toast without stealing focus. Services awaiting the developer carry an `awaiting you` status (glyph + color) in the closed service-status set. |
+| fullscreen-report | Update zone, from a focused service or a recap row (Story 3.19, added 2026-10-08) | Same chrome as the Logs fullscreen: title bar, scroll indicator, footer hints. Complete step details and issue log, scrollable (`↑/↓`, `PgUp/PgDn`, `Home/End`), `w` toggles wrap/truncate, `n`/`p` jump between failed steps, `f` opens, `Esc` closes. Live while a run is in progress. |
 | checkbox-list-item | Multi-select: EDT member selection, log-view service filter, saved-request batch actions | `Space` toggles the highlighted item; `Enter` confirms the whole selection and proceeds. Modeled on the Claude Code / BMad-installer selection UI. |
-| splitter | Divider between a list pane and a detail pane (or any two resizable regions) | Mouse-drag resizes directly. `Ctrl+W` enters keyboard resize-mode: arrow keys resize the active boundary, `Tab` cycles which boundary is active (in a zone with more than one), `Enter` or `Esc` exits resize-mode. Pane sizes persist across sessions, per zone independently — not one global size — mirroring bmad-loop's own per-pane persistence (e.g. its `left_width`/`runs_height`/`deferred_height`/`tasks_height` each tracked separately). |
+| splitter | Divider between a list pane and a detail pane (or any two resizable regions) | Mouse-drag resizes directly. `Ctrl+W` enters keyboard resize-mode: arrow keys resize the active boundary, `Tab` cycles which boundary is active (in a zone with more than one), `Enter` or `Esc` exits resize-mode. Pane sizes persist across sessions, per zone independently — not one global size — mirroring bmad-loop's own per-pane persistence (e.g. its `left_width`/`runs_height`/`deferred_height`/`tasks_height` each tracked separately). Available in **every** zone (amended 2026-10-01, Sprint Change Proposal): each zone declares its panes and boundaries through one shared zone-layout contract (UX-DR35); `Ctrl+W` engages resize-mode in whichever zone is active. The Logs zone's former `Ctrl+W` "wrap all panes" is remapped (key chosen in Story 7.3, listed in the footer and `?` help). |
 | spinner | Any in-progress action (pull, publish step, propagation) | Purely a running-state indicator — no interaction. |
 | dim-annotation | The optional wink line under a factual message | Not focusable, not required reading; purely visual, always attached to the factual line above it. |
 | command-bar | Top-level `:` action (Story 2.14, amended 2026-08-25 Sprint Change Proposal — corrects Story 2.11, which had bound `:` directly to one screen instead of this generic input; reveal mechanism amended 2026-08-26 Sprint Change Proposal, Story 2.17) | A `modal-dialog` instance (text input, no command list shown on open). Typing filters matching commands by name-prefix, case-insensitive, but nothing is displayed until `Tab` is pressed: on an empty input `Tab` shows the full `command-grid`; on a non-empty input `Tab` completes on exactly one match, completes to the longest shared prefix when several matches share one, or — once already at that prefix — needs a second `Tab` within a short window to reveal the `command-grid` of matches. `Enter` runs an exact match and closes the bar; `Esc` cancels without executing; an unmatched `Enter` shows an inline "unknown command" message rather than doing nothing silently. Never opens on top of another overlay, and consumes `Tab` itself while open — `Tab` has no zone-switching role to conflict with (Story 2.12 uses `Left`/`Right`, not `Tab`). |
@@ -89,9 +91,14 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 **Dashboard**
 | State | Treatment |
 |---|---|
-| Cold load | Brief spinner while the active-EDT/health/last-update summary assembles. |
-| Populated | Active EDT + member services' health + last group-update timestamp; default action highlighted is "enter [last EDT]". |
+| Cold load | Spinner while the summary assembles; each section fills independently (a slow docker probe never blocks the git sections). |
+| Populated | Active EDT name + one row per member service: container status (glyph + text: up/down/restarting/no container), active branch, ahead/behind vs. its shared branch. Last group-update outcome (timestamp + updated/skipped/failed counts). Default highlighted action "enter [last EDT]". (Amended 2026-10-01.) |
+| Working-tree alerts | Member services with uncommitted changes or a merge/rebase in progress are flagged inline (warning glyph + reason). (Added 2026-10-01.) |
+| Quick actions | Keyboard action row: enter last EDT, start group update, open Logs, switch EDT (quick-pick) — each with its key shown. (Added 2026-10-01.) |
+| Registry health | Counts of registered repos, invalid manifests, unreachable repos and listing issues; shortcut to `:registry`. (Added 2026-10-01.) |
+| Operation in progress | When an update/migration/switch holds a lock, a line names it and its progress; quick actions it would conflict with are disabled with the reason. (Added 2026-10-01.) |
 | No EDT yet (first run) | Prompts to choose or create an EDT instead of showing a stale/empty summary. |
+| No repos registered | Unchanged (Story 2.11) — takes precedence over every other Dashboard content state. |
 | Background-event badge | A zone with a pending background event (e.g. Logs) shows its counter badge on its tab while Max is on Dashboard. |
 
 **EDTs**
@@ -118,6 +125,8 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Service list (always visible) | Left-hand list — active EDT members then other managed services — each carrying a status glyph from the closed set up / down / restarting / updating / migrating / error, visible whether or not a run is in progress (FR-27). |
 | Idle | No run in progress; selecting a service shows its last outcome in the detail pane. |
 | Configuration screen | Opens before any of the three triggers (main, all-repos, single-service) runs anything: per-service checkbox + source-branch field (defaulting to the manifest's `sharedBranch`), plus two run-wide toggles — run migrations, clean restart. Confirming with zero services selected is rejected the same way a zero-member EDT is (FR-25). |
+| Merge source: shared branches | EDT-scoped configuration only — the default global strategy: every row's source is its manifest `sharedBranch` (FR-28, added 2026-10-01). |
+| Merge source: from EDT | The global strategy names another EDT (never the one being updated); rows resolved from it show `← <edt>` next to the branch; rows not in that EDT show `✖ not in <edt>` (or `✖ branch not found` when the recorded branch no longer exists) in error color + glyph and block the run until set by hand (editor pre-filled with the `sharedBranch`) or deselected. Manual rows keep their branch across strategy changes until reset (FR-28, added 2026-10-01). |
 | No-op | A group update triggered on a zero-member EDT, or confirmed from the configuration screen with nothing selected, shows an explicit message, never silent success (FR-10, FR-25). |
 | All-repos confirmation gate | The configuration screen opens first, pre-selecting every managed repo; maintenance-mode's own explicit confirmation step follows it before anything starts, since the blast radius exceeds the active EDT (FR-10). |
 | Second-run blocked | A second group update is rejected while one is already running, in any scope — including a single-service run already in flight for that same service (FR-10). |
@@ -128,6 +137,7 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Mid-merge/mid-rebase | Detected as its own distinct state — surfaced explicitly before the guided menu applies, separate from an ordinary dirty-lockfile state (FR-11). |
 | Migration failure (Assisted resolution) | An instance of the glossary's Assisted resolution mechanic (detect → auto-fix-known-safe-or-guided-menu → re-verify): per-service failure detail (service, migration, error output), marked unresolved until re-verified (FR-27), with a re-trigger action that re-verifies success before the service is marked caught up; doesn't block other services' already-succeeded updates in the same run (FR-12). |
 | Per-service quick actions | From any service's row, independent of any run: a clean-restart trigger (FR-26), or an update-this-service trigger that opens the same configuration screen pre-scoped to that one service (FR-25). Rejected if that service already has an action running (FR-10's second-run rule, applied per-service). |
+| Last-run detail | After a run, each service's detail reports what really happened: an advancing merge shows +N/−M lines and F files, an unchanged HEAD shows "already up to date", the migrate phase shows "ran (<command>)" with an output excerpt or "none" when absent/disabled — session-only, replaced by the next run (FR-30, added 2026-10-05). |
 | Quit mid-run | Pressing `q` while a group update is in progress requires explicit confirmation before quitting, consistent with FR-6's EDT-switch-blocked-during-update precedent; if confirmed, the next launch surfaces that run as interrupted and offers to resume it, mirroring the EDTs zone's "Interrupted update" state above. Applies equally to shared-types publish/propagation (see shared-types below). |
 
 **Logs**
@@ -138,8 +148,9 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Filtered | Service / free-text-regex / level filter applied without interrupting the stream (FR-17). |
 | Invalid filter | A regex that doesn't compile is rejected with an inline error, never silently ignored (FR-17). |
 | Service down / crashed mid-stream | Shown as such inline; the tool attempts automatic reconnection when the service returns (FR-16). |
-| Health: up / down / restarting | Visible inline with the log view itself — no separate health check step (FR-18). |
+| Health: up / down / restarting | Visible inline with the log view itself — no separate health check step (FR-18). Every row carries its badge, cursor or not; a restarting service states explicitly that a restart was requested and the container state is being re-verified (amended 2026-10-05). |
 | Restart in progress | The restart control disables itself on the already-restarting service — never triggers a second concurrent restart (FR-18). |
+| Without-container group | Every container-less registry service (members included) in an info-only section: greyed, unselectable, skipped by Tab and Ctrl+A; Ctrl+A toggles the focused list only (FR-29, added 2026-10-05). |
 
 **Routes**
 | State | Treatment |
@@ -153,15 +164,20 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Save-as-new name collision | Saving a customized re-fire as a new request is rejected on a name collision with an existing saved request, prompting for a different name (FR-21). |
 | Library hide / favorite | Hiding a saved request in one EDT doesn't remove it from the global library or other EDTs; favoriting is independently per-EDT and global (FR-23). |
 
-**shared-types**
+**shared-types** *(rewritten 2026-10-05)*
 | State | Treatment |
 |---|---|
-| No members | The active EDT has zero member services — nothing to publish against or propagate to; shown explicitly, not a bare empty list (mirrors EDTs' "Zero-member EDT display"). |
+| No members | The active EDT has zero member services — shown explicitly, not a bare empty list. |
+| Version entry | A text field pre-filled with `0.1.`, always editable, followed by the consumer checklist (`checkbox-list-item`); the version's existence on the registry is verified before execution (FR-15). |
+| Options | Independent toggles: `npm i`, clean restart, commit (`package.json`/`package-lock.json` only, never a push) (FR-15). |
+| Propagation in progress / per-service result | Per-service status (rewritten / installed / restarted / committed / skipped with reason / failed); each failure independently retriable (FR-15). A consumer with a dirty `package.json`/lockfile is skipped with an explicit reason. |
 | Publish in progress | Per-step (bump → build → publish → push) status, spinner on the running step (FR-13). |
-| Publish step failure (Assisted resolution) | An instance of the glossary's Assisted resolution mechanic (detect → auto-fix-known-safe-or-guided-menu → re-verify): names which step failed; a re-trigger resumes from that step rather than restarting from bump, re-verifying before the version is marked published (FR-13). |
-| Propagation status | Per active-EDT member service that declares itself a consumer: on-latest vs. behind, reflecting the latest published version at view time, not a cache (FR-14). |
-| Propagation in progress / per-service failure | Independently retriable per service; one failure doesn't block the others (FR-15). |
-| Quit mid-run | Pressing `q` while a publish or propagation run is in progress requires explicit confirmation before quitting, same rule as the Update zone's quit-mid-run state above (FR-6 precedent); if confirmed, the next launch surfaces the run as interrupted and offers to resume it. |
+| Publish step failure (Assisted resolution) | Names the failed step; a re-trigger resumes from it, and the version is verified on the registry before being marked published (FR-13). |
+| Publish success | Offers to chain into propagation with the version pre-filled, or to stop (FR-13). |
+| Drift view *(niche)* | Per consumer: declared version vs. the source repo's version on the EDT branch, in-sync or not, with a one-key jump into propagation (FR-14). |
+| Quit mid-run | Pressing `q` while a publish or propagation run is in progress requires explicit confirmation, same rule as the Update zone; if confirmed, the next launch surfaces the run as interrupted and offers to resume it. |
+
+**Update zone — smart update row** *(added 2026-10-05)*: when the EDT contains the `shared-types-source` repo, the update configuration offers a `shared-types` row: *off / publish if the merge changed something / always publish* (FR-30). The run tracking shows the `shared-types` phase first, then per-consumer auto-resolution outcomes (FR-31).
 
 **Cross-cutting, every zone**
 | State | Treatment |
@@ -180,8 +196,9 @@ The canonical keybinding contract for downstream implementation:
 - `Space` — toggle (multi-select / checkbox-list-item).
 - `Enter` — confirm, always — opens a row, confirms a modal, confirms a multi-select — identical effect regardless of whether the action was reached by keyboard or mouse.
 - `Esc` — cancel, always — closes a modal, exits splitter resize-mode, clears an active filter.
-- `Tab` — cycle — between fields in a form, or between resizable boundaries in a multi-splitter zone.
+- `Tab` — cycle — between fields in a form, or between resizable boundaries in a multi-splitter zone. `Shift+Tab` always moves back wherever `Tab` moves forward (added 2026-10-05, FR-31).
 - `Ctrl+W` — enter keyboard resize-mode on the active splitter; arrow keys resize; `Tab` cycles the active boundary; `Enter`/`Esc` exits.
+- Focus navigation (added 2026-10-05, FR-33) — every zone declares its focus movement through one shared primitive (configurable per zone: H/V arrows, Tab/Shift+Tab, Ctrl+N/P) instead of hand-rolled handlers; the footer and `?` help are generated from those declarations.
 - `/` — open filter within the current zone.
 - `:` — open the command-entry bar (Story 2.14, amended 2026-08-25 Sprint Change Proposal): type a registered command name, `Tab` autocompletes on a single match, `Enter` runs an exact match, `Esc` cancels.
 - `?` — open the dedicated keybinding-palette/help screen: every key in the app plus its description, beyond what the contextual footer-hint shows.
@@ -191,7 +208,51 @@ The canonical keybinding contract for downstream implementation:
 - `Ctrl+R` (Story 2.37) — scoped to the create-EDT wizard's Step 3 "Configurer <service>" box: "Revenir à la stratégie globale" (the row goes back to `[Créer (Global)]`, the box closes). No collision: the `BranchPicker`'s own `Ctrl+R` (rename a row) lives in other modals, and the wizard no longer hosts one.
 - `Space`/`↑↓`, `R`, `E`, `Ctrl+E` (Story 2.38) — scoped to the create-EDT wizard's Step 4 (see `wizard-activation`): the switch/stay radio; on the first-EDT pause panel, Retry and open the overwrite confirmation (`Esc` stops, leaving the EDT inactive); in that confirmation, `Ctrl+E` discards the listed files and activates (`Enter`/`Esc` go back — the same explicit-confirm convention as the switch discard confirmation).
 - `Left` / `Right` (added 2026-08-24, Sprint Change Proposal, Story 2.12; mechanism corrected 2026-08-25 after a review loopback) — with nothing capturing input, directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends — an always-available alternative to the mnemonics above, with no separate focus mode.
+- `PgUp` / `PgDn` (Story 7.9, UX-DR37) — scroll the body of a dialog taller than the window; the title and footer stay put and a `▲▼ PgUp/PgDn scroll` line appears. Bounded rendering applies everywhere: dynamic text is truncated or clamped, growing lists show `▲`/`▼` or `N older hidden`, and below 40×12 a single "Terminal too small" screen replaces the app until the window grows back.
 - Mouse (optional) — click to select/activate, mirroring the keyboard equivalent; drag on a splitter resizes it directly, mirroring `Ctrl+W` mode.
+
+### Interaction consistency contract (UX-DR36, Story 7.4) — validated 2026-10-07
+
+The same intent uses the same key, wording and component in every zone and dialog. Source: `_bmad-output/implementation-artifacts/epic-7/interaction-inventory-7-4.md`. Any deviation must be listed in the last table with its reason.
+
+| Intent | Canonical choice |
+|---|---|
+| List cursor / jump | `↑`/`↓` move (clamped), `Home`/`End` jump, in every list. No vim keys; `g`/`G` stay reserved for top/bottom and are bound to nothing else. One shared cursor module. |
+| Activate | `Enter` confirms or opens, never toggles. |
+| Toggle | `Space` toggles only. |
+| Focus movement | `Tab`/`Shift+Tab` through the shared focus-navigation primitive; no raw `key.tab` handling. |
+| Edit / commit / cancel | `Enter` commits, `Esc` cancels and restores the previous value (filter editors included). |
+| Dialog confirm / cancel | `Enter` confirms, `Esc` cancels, closing the innermost layer first. `y`/`n` confirmations and `y` as a start key are removed. |
+| Destructive action | Reversible: modal + `Enter`. Irreversible file loss: second step `Ctrl+E`. Data reset: typed word. Clearing a view: no confirmation, but labelled. |
+| Filter | `/` opens, `Esc` clears. |
+| Refresh / retry | `R` retries or refreshes in the current context; load errors show `[R] retry`. |
+| Footer and `?` help | Both generated from one keybinding declaration list. The footer takes its context (zone, dialog, pane, screen) from the store: the layer that owns the keyboard registers a declared context (`keybindings/footer-contexts.ts`), the footer shows exactly that context's hints, and the zone hints return when it closes. The `?` help lists the same context rows. |
+| Hint format | `[Key] verb`, entries joined by two spaces, English, `Esc`/`Enter` capitalised, `↑/↓`, `Ctrl+W`. Built only through `formatHint(s)`; a guard test fails any literal written by hand. |
+| Modal title | UPPERCASE English noun phrase, no suffix punctuation. |
+| Loading / empty / error | One shared `StateLine`: spinner + "Loading X…", dim "No X yet.", error colour "Failed to load X. [R] retry". |
+| Text input | `nextTextInputValue` + `TextInputLine` everywhere. |
+| Pick list | `FilterablePickList` when filterable; `MenuList` (one reducer, one view) for fixed menus: service actions, Update service menu, blocker menu. |
+| Branch input | One `BranchAutocompleteInput` for every suggestion field (branches, EDT topics): substring suggestions in a window that follows the highlight inside a line budget (`↑/↓ N more` indicators count), `✔`/`✖` validity mark, optional dim placeholder for "use the default", loading/error through `StateLine`. `Enter` fills in the highlighted suggestion, then accepts a listed value. BranchPicker's create-new base-branch field uses it too (arrows highlight instead of overwriting the text). The `branchDropdownMaxRows` setting is now the line budget, indicators included. |
+| UI language | English for every label, hint, title and error, with strings kept easy to extract; the French Voice examples above are superseded. A fr/en setting is a separate future story. |
+| Retry / restart | `R` = retry or refresh (create-wizard activation pause, load errors). Logs `R` = restart the focused service (documented deviation, same "run again" family). A bare `R` is never active while a text field is focused. |
+| Back to global | `Ctrl+R` in every per-service parameter box and table (Update config, wizard override box, switch-resolution box). |
+| Rename branch | `Ctrl+T` in `BranchPicker` (replaces `Ctrl+R`). `F2` was validated first but Ink 7.1.1 `useInput` exposes no function-key flag (empty input), so it cannot be bound; `Ctrl+T` is the documented fallback. |
+
+| Deviation | Reason |
+|---|---|
+| Routes: `Ctrl+R` = fire request | Routes has text fields, so a bare letter cannot be used; `Ctrl+Enter` is not distinguishable from `Enter` on common terminals. |
+| Logs: `R` = restart service | Same "run again" family as retry; letter already established. |
+| Two-panel screens (wizard step 3, switch resolution): `Ctrl+N` confirms | `Enter` opens or edits the focused row there, so it cannot also confirm; the same chord is the wizard's next-step key. |
+| Update config: the run starts only from the `[ Start run ]` line (`Enter` on it) | One dialog for every scope (the plain list is gone); `Enter` on a table row opens the per-service box, so the start action is an explicit last stop of the global panel instead of a chord. |
+| `FilterablePickList`: `Home`/`End` move the text caret | The filter text field has focus, so the keys belong to the caret; `↑`/`↓` move the cursor. |
+| Routes raw body editor: `Esc` closes and keeps the text, `Enter` is a newline | A multi-line editor needs `Enter` for newlines; discarding a hand-typed body on `Esc` would lose work. |
+| Branch lists: no `[R] retry` hint | A bare letter would type into the focused text field; branch lists reload on reopening the field. |
+| Clearing views (Logs `c`/`Ctrl+C`) and Routes row `d` act without confirmation | Reversible or trivially re-creatable data; labelled in the hints, per the destructive-action rule. |
+| Registry stale-entry cleaning: selection + `Enter`, no second step | The registry entries only point at paths that are gone; nothing on disk is destroyed. |
+| Dashboard empty-registry sentence (`Press [:] ...`) stays hand-written | The Dashboard belongs to stories 7.5/7.6; it is the one allowlisted literal in the hint guard test. |
+| Action-progress labels (`Saving…`, `Deleting…`, `Switching…`, `Creating…`) are plain annotations, not `StateLine` | They report an action in flight, not a list being loaded; `StateLine` covers loading, empty and error states. |
+| Detail-pane action hints (`[Enter] Switch`, `[Enter] Remove / Change branch`) and the `[i] details` suffix stay inline | They are zone content the settings screen lets the user hide; they are built with `formatHint` and keep their capitalised verbs. |
+| A dialog with no key to press (creating, activating, preparing the switch resolution) registers no footer context | The footer falls back to the zone hints for that moment; a context would only advertise keys that do nothing. |
 
 ## Accessibility Floor
 
@@ -246,13 +307,14 @@ Edge case: if this is the first time this exact route has been fired, the tool p
 ### UJ-3 — Max publishes and propagates a new `shared-types` version
 
 1. With the EDT active whose member services consume the changed type, Max opens the shared-types zone.
-2. He triggers publish; the tool runs `shared-types`'s own `npm run v` (bump → build → publish → push), showing per-step progress with a spinner on the running step (FR-13).
-3. The zone's list pane shows, for each EDT-member service that declares itself a `shared-types` consumer, whether it's already on the newly published version (FR-14).
-4. Max selects the services that aren't yet on it via the `checkbox-list-item` pattern and triggers propagation for just those (FR-15).
-5. **Climax:** without checking a single `package.json` by hand, Max sees every relevant service now flagged on the new version in the same list pane.
-6. **Resolution:** Max reviews and commits the staged dependency bump per service himself — the tool staged the bump and install, but never committed or pushed on his behalf.
+2. He either types the version to propagate (field pre-filled with `0.1.`), or triggers publish: the tool runs `shared-types`'s publish command (bump → build → publish → push), with per-step progress and a spinner, verifies the version on the registry and offers to chain into propagation (FR-13).
+3. He selects the consuming services via the `checkbox-list-item` pattern and ticks the options: `npm i`, clean restart, commit (FR-15).
+4. **Climax:** without editing a single `package.json`, Max sees every selected service rewritten, installed and committed in the same list pane.
+5. **Resolution:** the commits contain only `package.json`/`package-lock.json`; nothing was pushed.
 
-Failure path: if a publish step fails partway (e.g. after bump and build already succeeded), the tool names which step failed and a re-trigger resumes from that step rather than restarting from bump, avoiding a duplicate version bump (FR-13); a per-service propagation failure (e.g. an install error) is independently retriable and doesn't block the others (FR-15).
+Smart-update path: during a group update with the `shared-types` row enabled, steps 2–4 happen automatically before the other services are updated, and `shared-types`-only merge conflicts in consumers resolve by themselves (FR-30, FR-31).
+
+Failure path: a publish step failure names the step and a re-trigger resumes from it (FR-13); a per-service failure is independently retriable (FR-15).
 
 ### UJ-4 — Max hits a merge conflict during a group update
 

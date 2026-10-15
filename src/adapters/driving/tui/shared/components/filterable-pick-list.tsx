@@ -1,25 +1,8 @@
 // shared/components/filterable-pick-list: the single "filter field + navigable list + Enter
-// selects + Esc cancels" implementation behind every quick-pick dialog (the EDT pick opened
-// by a no-argument `edt-switch`/`edt-modify`/`edt-delete`, the service pick opened by a
-// no-argument `update-service`). Stories 2.30 and 3.11 each grew their own copy on diverged
-// epics; this component replaces both so filtering, highlight movement and filter-text
-// editing can never drift between them again.
-//
-// Split convention (branch-autocomplete-input.tsx's own precedent): every keystroke behavior
-// is a standalone pure function, unit-tested directly — `handleFilterablePickListKey` is this
-// component's single reducer, called from the host zone's own `useInput` dispatcher (never a
-// component-owned `useInput`). `FilterablePickList` itself only ever renders.
-//
-// The host stays in charge of everything that isn't the pick interaction itself: where the
-// state lives (a zone dialog union, a `useState`), the surrounding `ModalDialog` and its
-// title, the candidate pool, and what `select`/`cancel` actually do. Candidates arrive as
-// `FilterablePickItem<T>` — a label, an optional secondary text, and the host's own payload
-// handed back untouched on `select`.
-//
-// Text editing reuses shared/components/text-edit.ts's `nextTextInputValue` interpreter (never
-// a forked copy): `Left`/`Right`/`Home`/`End`/typing/`Backspace`/`Delete` move or edit the
-// caret through it, and the highlight resets to the top only when the filter value actually
-// changed. `Up`/`Down` never touch the caret; Ctrl/Meta combos stay inert.
+// selects + Esc cancels" implementation behind every quick-pick dialog, so filtering and
+// highlight movement never drift between them. `handleFilterablePickListKey` is the pure
+// reducer the host zone's useInput calls; the host owns where the state lives, the dialog
+// chrome, the candidates and what `select`/`cancel` do.
 import { Box } from 'ink';
 import { BoundedList } from './bounded-list.js';
 import { DimAnnotation } from './dim-annotation.js';
@@ -154,8 +137,6 @@ export function FilterablePickList<T>(props: FilterablePickListProps<T>) {
   const highlight = clampPickListCursor(state.cursor, matches.length);
   return (
     <Box flexDirection="column">
-      {/* TextInputLine ships its own "[Enter] confirm  [Esc] cancel" hint line while focused —
-          the pick's one and only hint, never duplicated below the list. */}
       <TextInputLine label={label} value={state.query} cursor={state.queryCursor} focused />
       {matches.length === 0 ? (
         <DimAnnotation text={items.length === 0 ? emptyText : noMatchText} />

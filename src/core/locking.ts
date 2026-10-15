@@ -1,3 +1,4 @@
+// core/locking: withActionLock, the per-resource advisory lock wrapper state-mutating use-cases run under.
 import type { Result } from './result.js';
 import type { LockHandle, LockPort } from './ports/lock.js';
 

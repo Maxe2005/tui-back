@@ -4,6 +4,7 @@
 // interrupted marking + edts refresh) rather than re-testing the use-case matrix.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err, type Result } from '../../../../../core/result.js';
+import { toggleMergeSource } from '../../zones/update/update-config-panels.logic.js';
 import type { ContainerPort } from '../../../../../core/ports/container.js';
 import type { DockerPort } from '../../../../../core/ports/docker.js';
 import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
@@ -64,16 +65,28 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
+    stagePaths: vi.fn(async () => ok(undefined)),
+    commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+    listBranchesContaining: vi.fn(async () => ok([] as string[])),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),
@@ -99,6 +112,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
@@ -126,6 +141,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   return {
     registry,
     manifest,
+    manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
     git,
     container,
     migration,
@@ -151,7 +167,7 @@ describe('update slice', () => {
     expect(store.getState().updateNote).toBeNull();
     expect(store.getState().updateError).toBeNull();
     expect(store.getState().updateUlid).toBeNull();
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().incidents).toEqual([]);
   });
 
   it('runGroupUpdate runs the core use-case in-process and lands done with per-service rows', async () => {
@@ -163,17 +179,15 @@ describe('update slice', () => {
     expect(store.getState().updateTopic).toBe('demo');
     expect(store.getState().updateUlid).toBe('edt-1');
     expect(store.getState().updateResults).toEqual([
-      { service: 'svc-a', outcome: 'updated' },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(store.getState().runInProgress).toBe(false);
   });
 
-  // Review fix (story 3.6): exercises the real `set((state) => ({ ..., lastServiceOutcomes:
-  // mergeLastServiceOutcomes(...) }))` wiring through the actual runGroupUpdate flow —
-  // pure mergeLastServiceOutcomes unit tests and hand-seeded store.setState calls in zone
-  // render tests don't catch a bug in that wiring itself (e.g. the merge call dropped, or
-  // given the wrong arguments).
+  // Exercises the real `lastServiceOutcomes: mergeLastServiceOutcomes(...)` wiring through the
+  // actual runGroupUpdate flow — pure merge unit tests and hand-seeded zone render tests don't
+  // catch a bug in that wiring itself (e.g. the merge call dropped, or given wrong arguments).
   it('runGroupUpdate populates lastServiceOutcomes with the run\'s own per-service outcomes', async () => {
     const store = createAppStore(fakeDeps());
     expect(store.getState().lastServiceOutcomes).toEqual({});
@@ -181,8 +195,8 @@ describe('update slice', () => {
     await store.getState().runGroupUpdate();
 
     expect(store.getState().lastServiceOutcomes).toEqual({
-      'svc-a': { service: 'svc-a', outcome: 'updated' },
-      'svc-b': { service: 'svc-b', outcome: 'updated' },
+      'svc-a': { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      'svc-b': { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     });
   });
 
@@ -212,20 +226,34 @@ describe('update slice', () => {
     // 'all' never reads edtRegistry, so this run is unaffected by the EDT override above.
     await store.getState().runGroupUpdate('all');
     expect(store.getState().lastServiceOutcomes).toEqual({
-      'svc-a': { service: 'svc-a', outcome: 'updated' },
-      'svc-b': { service: 'svc-b', outcome: 'updated' },
+      'svc-a': { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      'svc-b': { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     });
 
     // Second run: the default EDT-scoped run, targeting only svc-a (the sole member above).
     await store.getState().runGroupUpdate();
-    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated', run: expect.anything() }]);
 
     // svc-b sat outside this second run's scope entirely — its earlier outcome must survive
     // the merge, never be dropped by a wholesale replace.
     expect(store.getState().lastServiceOutcomes).toEqual({
-      'svc-a': { service: 'svc-a', outcome: 'updated' },
-      'svc-b': { service: 'svc-b', outcome: 'updated' },
+      'svc-a': { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      'svc-b': { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     });
+  });
+
+  it('a run ending off the Update zone badges its tab, cleared on visiting it', async () => {
+    const store = createAppStore(fakeDeps());
+    store.getState().setActiveZone('dashboard');
+
+    await store.getState().runGroupUpdate();
+
+    expect(store.getState().zoneEvents.update).toBe(1);
+    store.getState().setActiveZone('update');
+    expect(store.getState().zoneEvents.update).toBe(0);
+
+    await store.getState().runGroupUpdate();
+    expect(store.getState().zoneEvents.update).toBe(0);
   });
 
   it('runGroupUpdate threads the scope: runGroupUpdate(all) lands done on the all-repos outcome', async () => {
@@ -238,8 +266,8 @@ describe('update slice', () => {
     expect(store.getState().updateUlid).toBe('all');
     expect(store.getState().updateScope).toBe('all');
     expect(store.getState().updateResults).toEqual([
-      { service: 'svc-a', outcome: 'updated' },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(store.getState().runInProgress).toBe(false);
   });
@@ -252,6 +280,8 @@ describe('update slice', () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -326,8 +356,8 @@ describe('update slice', () => {
     // Double-Enter feedback instead of silence: the second call is rejected with the
     // run-in-flight code while the first run continues underneath.
     await store.getState().runGroupUpdate();
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
 
     resolveFetch?.();
     await first;
@@ -337,7 +367,7 @@ describe('update slice', () => {
     expect(git.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('runGroupUpdate surfaces a throwing use-case as internal-error and always clears runInProgress', async () => {
+  it('runGroupUpdate turns a throwing worker into failed rows and always clears runInProgress', async () => {
     const manifest: ManifestPort = {
       load: vi.fn(async () => {
         throw new Error('boom');
@@ -347,9 +377,11 @@ describe('update slice', () => {
 
     await store.getState().runGroupUpdate();
 
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('internal-error');
-    expect(store.getState().updateError).toContain('boom');
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults).toEqual([
+      { service: 'svc-a', outcome: 'failed', detail: { code: 'internal-error', message: expect.stringContaining('boom') } },
+      { service: 'svc-b', outcome: 'failed', detail: { code: 'internal-error', message: expect.stringContaining('boom') } },
+    ]);
     expect(store.getState().runInProgress).toBe(false);
   });
 
@@ -459,7 +491,7 @@ describe('update slice', () => {
 
     await store.getState().runGroupUpdate();
     expect(store.getState().updateStatus).toBe('done');
-    store.setState({ updateBlocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' } });
+    store.setState({ incidents: [{ id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }, raisedAt: 0 }] });
     store.getState().clearUpdate();
 
     expect(store.getState().updateStatus).toBe('idle');
@@ -469,10 +501,10 @@ describe('update slice', () => {
     expect(store.getState().updateError).toBeNull();
     expect(store.getState().updateUlid).toBeNull();
     expect(store.getState().updateScope).toBeNull();
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().incidents).toEqual([]);
   });
 
-  it('runGroupUpdate raises the blocker on a dirty repo and resumes on resolveUpdateBlocker (story 3.4)', async () => {
+  it('runGroupUpdate raises an incident on a dirty repo and resumes on resolveUpdateIncident', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
@@ -481,7 +513,7 @@ describe('update slice', () => {
 
     const run = store.getState().runGroupUpdate();
     await vi.waitFor(() => {
-      expect(store.getState().updateBlocker).toEqual({
+      expect(store.getState().incidents[0]?.blocker).toEqual({
         service: 'svc-a',
         repoPath: '/repo/a',
         kind: 'dirty-worktree',
@@ -489,28 +521,123 @@ describe('update slice', () => {
     });
     expect(store.getState().updateStatus).toBe('running');
 
-    store.getState().resolveUpdateBlocker('cancel-repo');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
     await run;
 
     expect(store.getState().updateStatus).toBe('done');
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().incidents).toEqual([]);
     expect(store.getState().updateResults).toEqual([
       { service: 'svc-a', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(store.getState().runInProgress).toBe(false);
   });
 
-  it('resolveUpdateBlocker with no raised blocker is a no-op, never a throw (story 3.4)', () => {
+  it('runs services in parallel up to update.concurrency read from the settings', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const migration = {
+      run: vi.fn(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolveWait) => setTimeout(resolveWait, 5));
+        inFlight -= 1;
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration } as never));
+    store.setState({ settings: { ...store.getState().settings, update: { concurrency: 2, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const } } });
+
+    await store.getState().runGroupUpdate();
+
+    expect(peak).toBe(2);
+    expect(store.getState().updateResults.map((row) => row.service)).toEqual(['svc-a', 'svc-b']);
+  });
+
+  function dirtyGit(): GitPort {
+    return {
+      ...(fakeDeps().git as GitPort),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    };
+  }
+
+  it('the first incident opens the popup in the Update zone; esc-close keeps the incident queued', async () => {
+    const store = createAppStore(fakeDeps({ git: dirtyGit() }));
+    store.setState({ activeZone: 'update' });
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidentPopupOpen).toBe(true);
+    expect(store.getState().incidentToast).toBeNull();
+
+    store.getState().closeIncidentPopup();
+    expect(store.getState().incidentPopupOpen).toBe(false);
+    expect(store.getState().incidents).toHaveLength(1);
+    store.getState().openIncidentPopup();
+    expect(store.getState().incidentPopupOpen).toBe(true);
+
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+    await run;
+    expect(store.getState().incidents).toEqual([]);
+    expect(store.getState().incidentPopupOpen).toBe(false);
+  });
+
+  it('an incident raised outside the Update zone never opens the popup and raises a toast', async () => {
+    const store = createAppStore(fakeDeps({ git: dirtyGit() }));
+    store.setState({ activeZone: 'dashboard' });
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidentPopupOpen).toBe(false);
+    expect(store.getState().incidentToast).toContain('svc-a');
+
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+    await run;
+  });
+
+  it('cancel-run from one incident answers every other pending incident and the run settles', async () => {
+    const git: GitPort = {
+      ...(fakeDeps().git as GitPort),
+      listDirtyPaths: vi.fn(async () => ok(['wip.txt'])),
+    };
+    const store = createAppStore(fakeDeps({ git }));
+    store.setState({ activeZone: 'update', settings: { ...store.getState().settings, update: { concurrency: 2, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const } } });
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(2));
+
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-run');
+    expect(store.getState().incidents).toEqual([]);
+    expect(store.getState().incidentPopupOpen).toBe(false);
+    await run;
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults.map((row) => row.outcome)).toEqual(['skipped', 'skipped']);
+    expect(store.getState().runInProgress).toBe(false);
+  });
+
+  it('an incident re-raised after a failed re-verification is marked still blocked', async () => {
+    const store = createAppStore(fakeDeps({ git: dirtyGit() }));
+
+    const run = store.getState().runGroupUpdate();
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidents[0]?.stillBlocked).toBeUndefined();
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'edited');
+    await vi.waitFor(() => expect(store.getState().incidents[0]?.stillBlocked).toBeDefined());
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+    await run;
+  });
+
+  it('resolveUpdateIncident with no raised incident is a no-op, never a throw', () => {
     const store = createAppStore(fakeDeps());
 
-    store.getState().resolveUpdateBlocker('cancel-repo');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
 
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().incidents).toEqual([]);
     expect(store.getState().updateStatus).toBe('idle');
   });
 
-  it('a throwing git write under a raised blocker settles as internal-error with the menu cleared (story 3.4)', async () => {
+  it('a throwing git write under a raised incident fails that service with the queue cleared', async () => {
     const git: GitPort = {
       ...(fakeDeps().git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
@@ -522,26 +649,27 @@ describe('update slice', () => {
 
     const run = store.getState().runGroupUpdate();
     await vi.waitFor(() => {
-      expect(store.getState().updateBlocker).not.toBeNull();
+      expect(store.getState().incidents).not.toEqual([]);
     });
-    store.getState().resolveUpdateBlocker('stash');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'stash');
     await run;
 
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('internal-error');
-    expect(store.getState().updateError).toContain('stash exploded');
-    expect(store.getState().updateBlocker).toBeNull();
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults[0]).toMatchObject({
+      service: 'svc-a',
+      outcome: 'failed',
+      detail: { code: 'internal-error', message: expect.stringContaining('stash exploded') },
+    });
+    expect(store.getState().incidents).toEqual([]);
     expect(store.getState().runInProgress).toBe(false);
   });
 });
 
-// Story 3.6: the Update zone's own service-list health poll — mirrors app-store.test.ts's
-// "logs slice: inline service health & restart (story 5.3)" describe block (that story's own
-// precedent for testing a slice's fire-and-forget poll-timer behavior against fake ports),
-// but against startUpdateHealthPolling/stopUpdateHealthPolling/updateServiceHealth instead of
-// subscribeLogsPane/logsPanes — this poll is Update-zone-owned and independent (Never: "no
-// shared subscription" with Logs zone's own poll).
-describe('update slice: service health polling (story 3.6)', () => {
+// The Update zone's own service-list health poll, tested against fake ports like the logs
+// slice's poll, but through startUpdateHealthPolling/stopUpdateHealthPolling/
+// updateServiceHealth — this poll is owned by the Update zone and shares nothing with the
+// Logs zone's.
+describe('update slice: service health polling', () => {
   // A real setTimeout macrotask flush, not fake timers — lets every pending microtask from
   // startUpdateHealthPolling's fire-and-forget pollServiceHealth chain (manifest.load then
   // getContainerHealth, each a resolved-async mock) settle before assertions run.
@@ -580,7 +708,7 @@ describe('update slice: service health polling (story 3.6)', () => {
     expect(store.getState().updateServiceHealth['/repo/b']).toBe('down');
   });
 
-  it('I/O matrix "Manifest load fails during health poll for a service": manifest.load failing leaves updateServiceHealth untouched (silent no-op)', async () => {
+  it('manifest.load failing during a health poll leaves updateServiceHealth untouched (silent no-op)', async () => {
     vi.useFakeTimers();
     try {
       const manifestLoad = vi.fn(async (repoPath: string) =>
@@ -665,6 +793,26 @@ describe('update slice: service health polling (story 3.6)', () => {
     }
   });
 
+  it('a manifest without container records no-container and never polls docker for the service', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const getContainerHealth = vi.fn(async () => ok('up' as const));
+    const store = createAppStore(fakeDeps({ docker: fakeDocker(getContainerHealth), manifest }));
+
+    store.getState().startUpdateHealthPolling(['/repo/a']);
+    await flushPolls();
+
+    expect(getContainerHealth).not.toHaveBeenCalled();
+    expect(store.getState().updateServiceHealth['/repo/a']).toBe('no-container');
+  });
+
   it('startUpdateHealthPolling on an unwired store is a no-op, never a throw', () => {
     const store = createAppStore();
 
@@ -673,10 +821,25 @@ describe('update slice: service health polling (story 3.6)', () => {
   });
 });
 
-// Story 3.7: the pre-run configuration screen's store state — opening pre-scoped to the
-// trigger, confirming with exactly the confirmed configuration, and rejecting while a run
-// is in flight.
-describe('update slice: pre-run configuration screen (story 3.7)', () => {
+// The pre-run configuration screen's store state — opening pre-scoped to the trigger,
+// confirming with exactly the confirmed configuration, and rejecting while a run is in flight.
+describe('update slice: pre-run configuration screen', () => {
+  it('a confirmed single-service config records its selection on the run; an unconfigured run records none', async () => {
+    const store = createAppStore(fakeDeps());
+
+    await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
+    await store.getState().confirmUpdateConfig();
+
+    // The zone reads this to mark only the selected row `updating` — the scope alone
+    // (`edt`) would mark every member.
+    expect(store.getState().updateScope).toBe('edt');
+    expect(store.getState().updateSelection).toEqual([{ service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development' }]);
+
+    await store.getState().runGroupUpdate('edt');
+
+    expect(store.getState().updateSelection).toBeNull();
+  });
+
   it('openUpdateConfig(edt) pre-selects every member with the manifest sharedBranch default', async () => {
     const store = createAppStore(fakeDeps());
 
@@ -685,15 +848,42 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     expect(store.getState().updateConfig).toEqual({
       scope: 'edt',
       rows: [
-        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', selected: true },
-        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', selected: true },
+        { service: 'svc-a', repoPath: '/repo/a', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true, migrationDeclared: true, recipeDeclared: false, migrations: 'follow', cleanRestart: 'follow' },
+        { service: 'svc-b', repoPath: '/repo/b', sourceBranch: 'development', sharedBranch: 'development', origin: 'shared', selected: true, migrationDeclared: true, recipeDeclared: false, migrations: 'follow', cleanRestart: 'follow' },
       ],
       runMigrations: true,
       cleanRestart: false,
       error: null,
+      layout: 'edt-panels',
+      strategy: { kind: 'shared' },
+      sharedTypes: 'off',
+      sharedTypesSource: null,
     });
     // Opening the screen runs no git/docker action and starts no run.
     expect(store.getState().updateStatus).toBe('idle');
+  });
+
+  it('openUpdateConfig seeds the run-wide globals from settings.update and never writes them back', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    const savesBefore = vi.mocked(deps.settings!.save).mock.calls.length;
+    store.setState({
+      settings: { ...store.getState().settings, update: { concurrency: 3, runMigrations: false, cleanRestart: true, mergeSource: 'edt-pending' as const } },
+    });
+
+    await store.getState().openUpdateConfig('edt');
+
+    const draft = store.getState().updateConfig;
+    expect(draft).toMatchObject({ runMigrations: false, cleanRestart: true, strategy: { kind: 'edt-pending' } });
+    expect(draft?.rows.every((row) => row.migrations === 'follow' && row.cleanRestart === 'follow')).toBe(true);
+
+    // The all-repos screen has no merge-source line: it opens on shared regardless.
+    await store.getState().openUpdateConfig('all');
+    expect(store.getState().updateConfig).toMatchObject({ runMigrations: false, cleanRestart: true, strategy: { kind: 'shared' } });
+
+    // Per-run edits stay in the draft: settings in the store and on disk are untouched.
+    expect(store.getState().settings.update.runMigrations).toBe(false);
+    expect(vi.mocked(deps.settings!.save).mock.calls.length).toBe(savesBefore);
   });
 
   it('openUpdateConfig(all) lists every managed repo pre-selected', async () => {
@@ -724,7 +914,7 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     });
   });
 
-  it('openUpdateConfig({service, repoPath}) opens a one-row draft for the pinned repo (story 3.9)', async () => {
+  it('openUpdateConfig({service, repoPath}) opens a one-row draft for the pinned repo', async () => {
     const store = createAppStore(fakeDeps());
 
     await store.getState().openUpdateConfig({ service: 'svc-b', repoPath: '/repo/b' });
@@ -747,6 +937,8 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -777,6 +969,8 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -794,8 +988,8 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     await store.getState().openUpdateConfig('edt');
 
     expect(store.getState().updateConfig).toBeNull();
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
   });
 
   it('openUpdateConfig(edt) on a zero-member EDT fails no-services-selected with no screen', async () => {
@@ -823,6 +1017,8 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ edtRegistry, state }));
 
@@ -937,7 +1133,7 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     // The screen closed and the run landed with only the selected service reported.
     expect(store.getState().updateConfig).toBeNull();
     expect(store.getState().updateStatus).toBe('done');
-    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated' }]);
+    expect(store.getState().updateResults).toEqual([{ service: 'svc-a', outcome: 'updated', run: expect.anything() }]);
     expect(deps.container!.restart).toHaveBeenCalledTimes(1);
     expect(deps.container!.restart).toHaveBeenCalledWith('ctr-a');
   });
@@ -954,8 +1150,8 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
 
     expect(store.getState().updateStatus).toBe('done');
     expect(store.getState().updateResults).toEqual([
-      { service: 'svc-a', outcome: 'updated' },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(deps.migration!.run).not.toHaveBeenCalled();
     expect(deps.container!.restart).toHaveBeenCalledTimes(2);
@@ -1155,9 +1351,13 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     expect(() => store.getState().setUpdateConfig({
       scope: 'edt',
       rows: [],
+      sharedTypes: 'off',
+      sharedTypesSource: null,
       runMigrations: true,
       cleanRestart: false,
       error: null,
+      layout: 'service-panels',
+      strategy: { kind: 'shared' },
     })).not.toThrow();
     expect(store.getState().updateConfig).toBeNull();
   });
@@ -1223,6 +1423,61 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
 
     expect(store.getState().lastServiceOutcomes['svc-b']).toMatchObject({ service: 'svc-b', outcome: 'failed' });
     expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({ service: 'svc-a', outcome: 'failed' });
+  });
+
+  it('runServiceRestart on a container-less service without a recipe merges the no-container row and touches neither restart path', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: `svc-${repoPath.split('/').pop()}`,
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+    const container: ContainerPort = { restart: vi.fn(async () => ok(undefined)) };
+    const restart: RestartPort = { run: vi.fn(async () => ok({ output: '' })) };
+    const store = createAppStore(fakeDeps({ manifest, container, restart }));
+
+    await store.getState().runServiceRestart('/repo/a');
+
+    expect(store.getState().lastServiceOutcomes['svc-a']).toMatchObject({
+      service: 'svc-a',
+      outcome: 'failed',
+      detail: { code: 'no-container' },
+    });
+    expect(container.restart).not.toHaveBeenCalled();
+    expect(restart.run).not.toHaveBeenCalled();
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+  });
+
+  it('describeServiceRestart offers the restart for a container-less service only with a declared recipe', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/plain') {
+          return ok({ service: 'plain', container: 'ctr-plain', sharedBranch: 'development', modules: {} });
+        }
+        if (repoPath === '/repo/recipe') {
+          return ok({ service: 'recipe', restartCommands: ['npm ci'], sharedBranch: 'development', modules: {} });
+        }
+        if (repoPath === '/repo/bare') {
+          return ok({ service: 'bare', sharedBranch: 'development', modules: {} });
+        }
+        return err('manifest-not-found', 'gone');
+      }),
+    };
+    const store = createAppStore(fakeDeps({ manifest }));
+
+    await expect(store.getState().describeServiceRestart('/repo/plain')).resolves.toEqual({ restartAvailable: true });
+    await expect(store.getState().describeServiceRestart('/repo/recipe')).resolves.toEqual({ restartAvailable: true });
+    await expect(store.getState().describeServiceRestart('/repo/bare')).resolves.toEqual({ restartAvailable: false });
+    await expect(store.getState().describeServiceRestart('/repo/gone')).resolves.toEqual({ restartAvailable: true });
+  });
+
+  it('describeServiceRestart on an unwired store offers the restart, never a throw', async () => {
+    const store = createAppStore();
+
+    await expect(store.getState().describeServiceRestart('/repo/a')).resolves.toEqual({ restartAvailable: true });
   });
 
   it('a second trigger on the same service while its restart runs is rejected update-already-running', async () => {
@@ -1324,8 +1579,8 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
 
     await store.getState().runServiceRestart('/repo/a');
 
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
     expect(deps.container!.restart).not.toHaveBeenCalled();
 
     resolveFetch?.();
@@ -1414,7 +1669,7 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
     expect(store.getState().serviceRestartInFlight).toEqual({});
   });
 
-  it('confirmUpdateConfig while a standalone restart is in flight stays open with the inline error (story 3.9)', async () => {
+  it('confirmUpdateConfig while a standalone restart is in flight stays open with the inline error', async () => {
     const deps = fakeDeps();
     const store = createAppStore(deps);
     await store.getState().openUpdateConfig('edt');
@@ -1434,7 +1689,7 @@ describe('update slice: pre-run configuration screen (story 3.7)', () => {
   });
 });
 
-describe('live per-service run tracking (story 3.10)', () => {
+describe('live per-service run tracking', () => {
   async function waitForCondition(condition: () => boolean): Promise<void> {
     for (let i = 0; i < 200 && !condition(); i++) {
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -1466,13 +1721,67 @@ describe('live per-service run tracking (story 3.10)', () => {
     // observable while the run is still in flight (default fakes take the merge path).
     await waitForCondition(() => store.getState().liveServicePhase['svc-a'] === 'migrating');
     expect(store.getState().updateStatus).toBe('running');
-    expect(store.getState().liveServicePhase).toEqual({ 'svc-a': 'migrating' });
+    // The default pool runs both services at once: each one is in its migrate step.
+    await waitForCondition(() => store.getState().liveServicePhase['svc-b'] === 'migrating');
+    expect(store.getState().liveServicePhase).toEqual({ 'svc-a': 'migrating', 'svc-b': 'migrating' });
 
     releaseMigration?.();
     await run;
 
     expect(store.getState().updateStatus).toBe('done');
     expect(store.getState().liveServicePhase).toEqual({});
+  });
+
+  it('steps advance live and settle into the last-run snapshot', async () => {
+    let releaseMigration: (() => void) | undefined;
+    const migrationGate = new Promise<void>((resolve) => {
+      releaseMigration = resolve;
+    });
+    const migration: MigrationPort = {
+      run: vi.fn(async () => {
+        await migrationGate;
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration }));
+
+    const run = store.getState().runGroupUpdate();
+    await waitForCondition(() => store.getState().liveServicePhase['svc-a'] === 'migrating');
+    expect(store.getState().liveServiceSteps['svc-a']).toEqual({ merge: 'done', migration: 'running', restart: 'pending' });
+
+    releaseMigration?.();
+    await run;
+
+    expect(store.getState().liveServiceSteps).toEqual({});
+    expect(store.getState().lastServiceRuns['svc-a']?.steps).toEqual({ merge: 'done', migration: 'done', restart: 'done' });
+  });
+
+  it('a finished service flips to its last-run view while another is still running', async () => {
+    let releaseB: (() => void) | undefined;
+    const gateB = new Promise<void>((resolve) => {
+      releaseB = resolve;
+    });
+    const migration: MigrationPort = {
+      run: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/b') {
+          await gateB;
+        }
+        return ok({ output: '' });
+      }),
+    };
+    const store = createAppStore(fakeDeps({ migration }));
+
+    const run = store.getState().runGroupUpdate();
+    await waitForCondition(() => store.getState().liveServiceDone['svc-a'] === true);
+
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().lastServiceRuns['svc-a']?.steps).toEqual({ merge: 'done', migration: 'done', restart: 'done' });
+    expect(store.getState().lastServiceOutcomes['svc-a']?.outcome).toBe('updated');
+    expect(store.getState().liveServiceDone['svc-b']).toBeUndefined();
+
+    releaseB?.();
+    await run;
+    expect(store.getState().liveServiceDone).toEqual({});
   });
 
   it('a blocker appends an unresolved issue, resolved once the run re-verifies and moves on', async () => {
@@ -1489,22 +1798,22 @@ describe('live per-service run tracking (story 3.10)', () => {
     const store = createAppStore({ ...base, git });
 
     const run = store.getState().runGroupUpdate();
-    await waitForCondition(() => store.getState().updateBlocker !== null);
+    await waitForCondition(() => store.getState().incidents.length > 0);
 
     // Raising the menu appends the unresolved entry before any phase is emitted.
-    expect(store.getState().updateBlocker).toMatchObject({ service: 'svc-a', kind: 'dirty-worktree' });
+    expect(store.getState().incidents[0]?.blocker).toMatchObject({ service: 'svc-a', kind: 'dirty-worktree' });
     expect(store.getState().liveServiceIssues).toEqual({
       'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: false }],
     });
     expect(store.getState().liveServicePhase).toEqual({});
 
-    store.getState().resolveUpdateBlocker('edited');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'edited');
     await run;
 
     expect(store.getState().updateStatus).toBe('done');
     expect(store.getState().updateResults).toEqual([
-      { service: 'svc-a', outcome: 'updated' },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     // Core resumed past the blocker (the next phase fired), so the entry flipped.
     expect(store.getState().liveServiceIssues).toEqual({
@@ -1519,29 +1828,32 @@ describe('live per-service run tracking (story 3.10)', () => {
     const git: GitPort = {
       ...(base.git as GitPort),
       listDirtyPaths: vi.fn(async (repoPath: string) => {
+        if (repoPath !== '/repo/a') {
+          return ok([]);
+        }
         dirtyReads += 1;
         // Still dirty after the stash, clean only once the repo is cancelled.
-        return ok(dirtyReads <= 2 && repoPath === '/repo/a' ? ['src/app.ts'] : []);
+        return ok(dirtyReads <= 2 ? ['src/app.ts'] : []);
       }),
     };
     const store = createAppStore({ ...base, git });
 
     const run = store.getState().runGroupUpdate();
-    await waitForCondition(() => store.getState().updateBlocker !== null);
-    store.getState().resolveUpdateBlocker('stash');
+    await waitForCondition(() => store.getState().incidents.length > 0);
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'stash');
 
     // Core re-presents the same menu — the second raise must not duplicate the row.
-    await waitForCondition(() => store.getState().updateBlocker !== null && dirtyReads >= 2);
+    await waitForCondition(() => store.getState().incidents.length > 0 && dirtyReads >= 2);
     expect(store.getState().liveServiceIssues).toEqual({
       'svc-a': [{ kind: 'dirty-worktree', detail: '/repo/a', resolved: false }],
     });
 
-    store.getState().resolveUpdateBlocker('cancel-repo');
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
     await run;
 
     expect(store.getState().updateResults).toEqual([
       { service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree', message: expect.any(String) } },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     // No further phase ever fired for the cancelled repo — the entry stays unresolved.
     expect(store.getState().liveServiceIssues).toEqual({
@@ -1562,7 +1874,7 @@ describe('live per-service run tracking (story 3.10)', () => {
     expect(store.getState().updateStatus).toBe('done');
     expect(store.getState().updateResults).toEqual([
       { service: 'svc-a', outcome: 'failed', detail: { code: 'migration-failed', message: expect.any(String) } },
-      { service: 'svc-b', outcome: 'updated' },
+      { service: 'svc-b', outcome: 'updated', run: expect.anything() },
     ]);
     expect(store.getState().liveServicePhase).toEqual({});
     expect(store.getState().liveServiceIssues['svc-a']).toHaveLength(1);
@@ -1597,6 +1909,8 @@ describe('live per-service run tracking (story 3.10)', () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
     store.setState({ liveServicePhase: { 'svc-a': 'pulling' }, liveServiceIssues: { 'svc-a': [] } });
@@ -1665,10 +1979,10 @@ describe('live per-service run tracking (story 3.10)', () => {
   });
 });
 
-// Story 3.11: the `:update-service [name]` entry point — arg resolves to a pre-scoped
-// single-service config, no arg raises the zone-consumed selection request, and every
-// trigger honors the running/restart guards with no screen opened.
-describe('update slice: single-service command dialog (story 3.11)', () => {
+// The `:update-service [name]` entry point — an arg resolves to a pre-scoped single-service
+// config, no arg raises the zone-consumed selection request, and every trigger honors the
+// running/restart guards with no screen opened.
+describe('update slice: single-service command dialog', () => {
   describe('parseUpdateServiceArg', () => {
     it('returns null for a bare command with no argument', () => {
       expect(parseUpdateServiceArg('update-service')).toBeNull();
@@ -1768,8 +2082,8 @@ describe('update slice: single-service command dialog (story 3.11)', () => {
 
     expect(store.getState().updateConfig).toBeNull();
     expect(store.getState().updateServiceSelectRequest).toBe(false);
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
   });
 
   it('openUpdateServiceDialog on an unwired store degrades to store-not-wired', async () => {
@@ -1844,8 +2158,8 @@ describe('update slice: single-service command dialog (story 3.11)', () => {
     await store.getState().openUpdateServicePick();
 
     expect(store.getState().updateServicePick).toBeNull();
-    expect(store.getState().updateStatus).toBe('error');
-    expect(store.getState().updateErrorCode).toBe('update-already-running');
+    expect(store.getState().updateStatus).toBe('running');
+    expect(store.getState().updateNotice?.code).toBe('update-already-running');
   });
 
   it('closeUpdateServicePick closes an open pick and is a no-op when closed', async () => {
@@ -1887,5 +2201,416 @@ describe('update slice: single-service command dialog (story 3.11)', () => {
 
     expect(store.getState().updateServiceSelectRequest).toBe(false);
     expect(store.getState().updateServicePick).toBeNull();
+  });
+});
+
+describe('update slice: merge source from another EDT', () => {
+  function depsWithSibling() {
+    const deps = fakeDeps();
+    const base = deps.edtRegistry!.list as ReturnType<typeof vi.fn>;
+    base.mockImplementation(async () =>
+      ok([
+        { ulid: 'edt-1', topic: 'demo', createdAt: '', status: 'active' as const, members: MEMBERS },
+        {
+          ulid: 'edt-2',
+          topic: 'sibling',
+          createdAt: '',
+          status: 'inactive' as const,
+          members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/sib' }],
+        },
+      ]),
+    );
+    (deps.git!.listBranches as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) =>
+      ok(path === '/repo/a' ? ['development', 'feat/sib'] : ['development']),
+    );
+    return deps;
+  }
+
+  it('lists every EDT except the one being updated', async () => {
+    const store = createAppStore(depsWithSibling());
+    expect(await store.getState().listMergeSourceEdts()).toEqual([{ ulid: 'edt-2', topic: 'sibling' }]);
+  });
+
+  it('resolves rows from the chosen EDT and flags services it does not cover', async () => {
+    const store = createAppStore(depsWithSibling());
+    await store.getState().openUpdateConfig('edt');
+    store.getState().setUpdateConfig(toggleMergeSource(store.getState().updateConfig!));
+
+    await store.getState().chooseMergeSourceEdt('edt-2');
+
+    const rows = store.getState().updateConfig!.rows;
+    expect(rows[0]).toMatchObject({ sourceBranch: 'feat/sib', origin: 'edt' });
+    expect(rows[1]).toMatchObject({ sourceBranch: '', sourceError: 'not-in-edt' });
+  });
+
+  it('refuses the active EDT as its own merge source and reports a vanished EDT', async () => {
+    const store = createAppStore(depsWithSibling());
+    await store.getState().openUpdateConfig('edt');
+
+    await store.getState().chooseMergeSourceEdt('edt-1');
+    expect(store.getState().updateConfig!.strategy.kind).toBe('shared');
+    expect(store.getState().updateConfig!.error).toContain('own merge source');
+
+    await store.getState().chooseMergeSourceEdt('gone');
+    expect(store.getState().updateConfig!.error).toContain('no longer exists');
+  });
+
+  it('drops a resolution that lands after the developer went back to shared branches', async () => {
+    const deps = depsWithSibling();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolveGate) => {
+      release = resolveGate;
+    });
+    (deps.git!.listBranches as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      await gate;
+      return ok(['development', 'feat/sib']);
+    });
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+
+    const pending = store.getState().chooseMergeSourceEdt('edt-2');
+    await Promise.resolve();
+    release();
+    await pending;
+
+    // The draft was still on shared branches when git answered: the late result is ignored.
+    expect(store.getState().updateConfig!.strategy.kind).toBe('shared');
+  });
+
+  it('offers no EDT when the active EDT cannot be read', async () => {
+    const deps = depsWithSibling();
+    (deps.state!.readActiveEdt as ReturnType<typeof vi.fn>).mockImplementation(async () => err('state-read-error', 'boom'));
+    const store = createAppStore(deps);
+    expect(await store.getState().listMergeSourceEdts()).toEqual([]);
+  });
+
+  it('opens the two-panel screen without the merge source on a single-service config', async () => {
+    const store = createAppStore(depsWithSibling());
+    await store.getState().openUpdateConfig({ service: 'svc-a', repoPath: '/repo/a' });
+    expect(store.getState().updateConfig!.layout).toBe('service-panels');
+  });
+});
+
+describe('update slice: smart group update (shared-types first)', () => {
+  // svc-a (/repo/a) is the single source, svc-b (/repo/b) its consumer.
+  function smartDeps(options: { publishFails?: () => boolean } = {}) {
+    const base = fakeDeps();
+    const heads = new Map<string, number>();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) => {
+        const name = repoPath.split('/').pop() ?? '';
+        return ok({
+          service: `svc-${name}`,
+          container: `ctr-${name}`,
+          migrationCommand: 'npm run migration:run',
+          sharedBranch: 'development',
+          modules: (name === 'a' ? { 'src-mod': {} } : { 'cons-mod': {} }) as Record<string, Record<string, unknown>>,
+        });
+      }),
+    };
+    const git = {
+      ...base.git,
+      // Every pull/merge moves HEAD: the merge reads as `advanced`.
+      headRevision: vi.fn(async (repoPath: string) => {
+        const next = (heads.get(repoPath) ?? 0) + 1;
+        heads.set(repoPath, next);
+        return ok(`h${String(next)}`);
+      }),
+      diffStat: vi.fn(async () => ok({ files: 1, insertions: 1, deletions: 0 })),
+      // The commit cleans the consumer's worktree again.
+      commit: vi.fn(async () => {
+        heads.set('written', 0);
+        return ok(undefined);
+      }),
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b' && (heads.get('written') ?? 0) > 0 ? ['package.json'] : [])),
+    } as unknown as GitPort;
+    const restart: RestartPort = {
+      run: vi.fn(async (_repoPath: string, command: string) =>
+        command === 'npm run v' && options.publishFails?.() === true ? err('restart-failed', 'npm ERR boom') : ok({ output: '' }),
+      ),
+    };
+    const sharedTypes = {
+      port: {
+        readVersion: vi.fn(async () => ok('0.1.0')),
+        readOwnVersion: vi.fn(async () => ok('0.1.5')),
+        writeVersionLine: vi.fn(async () => {
+          heads.set('written', 1);
+          return ok(undefined);
+        }),
+        verifyPublished: vi.fn(async () => ok(true)),
+      },
+      sourceModuleId: 'src-mod',
+      parseSourceConfig: () => ok({ publishCommand: 'npm run v', packageName: '@x/types' }),
+      consumerModuleId: 'cons-mod',
+      parseConsumerConfig: () => ok({ dependency: '@x/types', packageJsonPath: 'package.json' }),
+    };
+    const deps = fakeDeps({ manifest, git, restart, sharedTypes });
+    return { deps, restart, git, sharedTypes };
+  }
+
+  const RUN = {
+    selection: [
+      { service: 'svc-a', repoPath: '/repo/a' },
+      { service: 'svc-b', repoPath: '/repo/b' },
+    ],
+    sharedTypesSource: '/repo/a',
+  };
+
+  const order = (fn: unknown, predicate: (args: unknown[]) => boolean): number => {
+    const mock = fn as { mock: { calls: unknown[][]; invocationCallOrder: number[] } };
+    const index = mock.mock.calls.findIndex(predicate);
+    return index === -1 ? -1 : (mock.mock.invocationCallOrder[index] ?? -1);
+  };
+
+  it('updates the source alone, publishes, propagates with a commit, then updates the others', async () => {
+    const { deps, restart, git } = smartDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(store.getState().updateResults.map((row) => row.outcome)).toEqual(['updated', 'updated']);
+    const publish = order(restart.run, (args) => args[1] === 'npm run v');
+    const sourceMigration = order(deps.migration!.run, (args) => args[0] === '/repo/a');
+    const consumerMigration = order(deps.migration!.run, (args) => args[0] === '/repo/b');
+    expect(sourceMigration).toBeGreaterThan(0);
+    expect(publish).toBeGreaterThan(sourceMigration);
+    expect(consumerMigration).toBeGreaterThan(publish);
+    expect(git.commit).toHaveBeenCalledWith('/repo/b', expect.stringContaining('0.1.5'), ['package.json']);
+    expect(store.getState().liveSharedTypesPhase).toEqual({});
+  });
+
+  it('does nothing extra when the setting is off', async () => {
+    const { deps, restart } = smartDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'off' });
+
+    expect(restart.run).not.toHaveBeenCalledWith('/repo/a', 'npm run v');
+    expect(deps.git.commit).not.toHaveBeenCalled();
+  });
+
+  it('a single-service update of the source still propagates to its consumers without updating them', async () => {
+    const { deps, git } = smartDeps();
+    const store = createAppStore(deps);
+
+    await store.getState().runGroupUpdate('edt', { selection: [{ service: 'svc-a', repoPath: '/repo/a' }], sharedTypes: 'always', sharedTypesSource: '/repo/a' });
+
+    expect(deps.migration!.run).not.toHaveBeenCalledWith('/repo/b', expect.anything());
+    expect(git.commit).toHaveBeenCalledWith('/repo/b', expect.any(String), ['package.json']);
+  });
+
+  it('pauses on a phase failure and starts no other service until the developer chooses (retry then skip)', async () => {
+    let failing = true;
+    const { deps, restart } = smartDeps({ publishFails: () => failing });
+    const store = createAppStore(deps);
+
+    const run = store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidents[0]?.blocker).toMatchObject({ kind: 'shared-types-phase-failed', service: 'svc-a' });
+    expect(deps.migration!.run).not.toHaveBeenCalledWith('/repo/b', expect.anything());
+
+    // Retry re-runs the phase; it fails again and pauses again (still blocked).
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'edited');
+    await vi.waitFor(() => expect(restart.run).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    expect(store.getState().incidents[0]?.stillBlocked).toBeDefined();
+    expect(deps.migration!.run).not.toHaveBeenCalledWith('/repo/b', expect.anything());
+
+    // Skip continues without the phase: the consumer is updated, nothing was committed.
+    failing = false;
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+    await run;
+    expect(store.getState().updateResults.map((row) => `${row.service}:${row.outcome}`)).toEqual(['svc-a:updated', 'svc-b:updated']);
+    expect(deps.git.commit).not.toHaveBeenCalled();
+  });
+
+  describe('conflict auto-resolution', () => {
+    const OURS = '    "@x/types": "0.1.1",\n';
+    const THEIRS = '    "@x/types": "0.1.0",\n';
+    const conflictText = `{\n  "dependencies": {\n<<<<<<< HEAD\n${OURS}=======\n${THEIRS}>>>>>>> origin/development\n  }\n}\n`;
+
+    // svc-b's merge conflicts on package.json (and the lock) once; the files live in memory.
+    function conflictingDeps(options: { writeFails?: boolean; listFailsOnce?: boolean } = {}) {
+      const smart = smartDeps();
+      if (options.writeFails === true) {
+        (smart.sharedTypes.port.writeVersionLine as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(err('package-json-unreadable', 'cannot write'));
+      }
+      let listFails = false;
+      let merging = false;
+      let unmerged: string[] = [];
+      const files: Record<string, string> = {};
+      const git = {
+        ...smart.git,
+        mergeBranch: vi.fn(async (repoPath: string) => {
+          if (repoPath === '/repo/b' && !merging && unmerged.length === 0 && files['package.json'] === undefined) {
+            merging = true;
+            listFails = options.listFailsOnce === true;
+            unmerged = ['package.json', 'package-lock.json'];
+            files['package.json'] = conflictText;
+            return err('merge-conflict', 'Automatic merge failed');
+          }
+          return ok(undefined);
+        }),
+        isMergeInProgress: vi.fn(async () => ok(merging)),
+        listUnmergedPaths: vi.fn(async () => ok([...unmerged])),
+        hasUnmergedPaths: vi.fn(async () => ok(unmerged.length > 0)),
+        readWorktreeFile: vi.fn(async (_repo: string, path: string) => ok(files[path] ?? '<<<<<<< HEAD\n=======\n>>>>>>> x\n')),
+        writeResolvedFile: vi.fn(async (_repo: string, path: string, content: string, opts: { stage: boolean }) => {
+          files[path] = content;
+          if (opts.stage) {
+            unmerged = unmerged.filter((entry) => entry !== path);
+          }
+          return ok(undefined);
+        }),
+        checkoutSide: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async (_repo: string, paths: string[]) => {
+          unmerged = unmerged.filter((entry) => !paths.includes(entry));
+          return ok(undefined);
+        }),
+        finalizeMerge: vi.fn(async () => {
+          merging = false;
+          return ok(undefined);
+        }),
+      } as unknown as GitPort;
+      const state = {
+        ...smart.deps.state,
+        readActiveEdt: vi.fn(async () => {
+          if (listFails) {
+            listFails = false;
+            return err('state-read-error', 'state unreadable');
+          }
+          return smart.deps.state.readActiveEdt();
+        }),
+      } as AppStoreDeps['state'];
+      const deps = fakeDeps({ manifest: smart.deps.manifest, git, restart: smart.restart, sharedTypes: smart.sharedTypes, state });
+      return { deps, git, restart: smart.restart, files };
+    }
+
+    it('keeps the version published in the run, regenerates the lock and finalizes without a menu', async () => {
+      const { deps, git, restart, files } = conflictingDeps();
+      const store = createAppStore(deps);
+
+      await store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+
+      expect(store.getState().incidents).toEqual([]);
+      expect(files['package.json']).toContain('"@x/types": "0.1.5"');
+      expect(files['package.json']).not.toContain('<<<<<<<');
+      expect(restart.run).toHaveBeenCalledWith('/repo/b', 'npm i');
+      expect(git.finalizeMerge).toHaveBeenCalledWith('/repo/b');
+      const consumer = store.getState().updateResults.find((row) => row.service === 'svc-b');
+      expect(consumer).toMatchObject({ outcome: 'updated', run: { conflict: 'auto-resolved' } });
+    });
+
+    it('keeps the published version when the phase failed after the publish and was skipped', async () => {
+      const { deps, files } = conflictingDeps({ writeFails: true });
+      const store = createAppStore(deps);
+
+      const run = store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+      await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+      expect(store.getState().incidents[0]?.blocker).toMatchObject({ kind: 'shared-types-phase-failed' });
+      store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-repo');
+      await run;
+
+      expect(files['package.json']).toContain('"@x/types": "0.1.5"');
+      expect(store.getState().updateResults.find((row) => row.service === 'svc-b')?.run?.conflict).toBe('auto-resolved');
+    });
+
+    it('stores the resolver issue note in the issue detail and retries a failed consumer listing after edited', async () => {
+      const { deps, files } = conflictingDeps({ listFailsOnce: true });
+      const store = createAppStore(deps);
+
+      const run = store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'off' });
+      await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+      const blocker = store.getState().incidents[0]?.blocker;
+      expect(blocker).toMatchObject({ kind: 'merge-conflict', service: 'svc-b', autoResolveNote: expect.stringContaining('Cannot list the consumers') });
+      expect(store.getState().liveServiceIssues['svc-b']?.[0]?.detail).toContain('Cannot list the consumers');
+      store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'edited');
+      await run;
+
+      // The failed listing was not cached: the pass after `edited` resolved the line.
+      expect(files['package.json']).toContain('"@x/types": "0.1.1"');
+      expect(store.getState().updateResults.find((row) => row.service === 'svc-b')).toMatchObject({ outcome: 'updated', run: { conflict: 'partial' } });
+    });
+
+    it('keeps the consumer own value when nothing was published in the run', async () => {
+      const { deps, files } = conflictingDeps();
+      const store = createAppStore(deps);
+
+      await store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'off' });
+
+      expect(files['package.json']).toContain('"@x/types": "0.1.1"');
+      expect(store.getState().updateResults.find((row) => row.service === 'svc-b')?.run?.conflict).toBe('auto-resolved');
+    });
+  });
+
+  it('abort cancels the remaining services', async () => {
+    const { deps } = smartDeps({ publishFails: () => true });
+    const store = createAppStore(deps);
+
+    const run = store.getState().runGroupUpdate('edt', { ...RUN, sharedTypes: 'always' });
+    await vi.waitFor(() => expect(store.getState().incidents).toHaveLength(1));
+    store.getState().resolveUpdateIncident(store.getState().incidents[0]?.id ?? 'none', 'cancel-run');
+    await run;
+
+    expect(store.getState().updateResults.map((row) => `${row.service}:${row.outcome}`)).toEqual(['svc-a:updated', 'svc-b:skipped']);
+    expect(deps.migration!.run).not.toHaveBeenCalledWith('/repo/b', expect.anything());
+  });
+
+  it('the config draft carries the shared-types row only for a single source among the rows', async () => {
+    const { deps } = smartDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    expect(store.getState().updateConfig?.sharedTypesSource).toBe('/repo/a');
+    expect(store.getState().updateConfig?.sharedTypes).toBe('off');
+    store.getState().closeUpdateConfig();
+
+    await store.getState().openUpdateConfig({ service: 'svc-b', repoPath: '/repo/b' });
+    expect(store.getState().updateConfig?.sharedTypesSource).toBeNull();
+
+    const plain = createAppStore(fakeDeps());
+    await plain.getState().openUpdateConfig('edt');
+    expect(plain.getState().updateConfig?.sharedTypesSource).toBeNull();
+  });
+
+  it('the real confirm path forwards the mode and source: publish runs and the consumer is committed', async () => {
+    const { deps, restart, git } = smartDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    store.getState().setUpdateConfig({ ...store.getState().updateConfig!, sharedTypes: 'always' });
+    await store.getState().confirmUpdateConfig();
+
+    expect(store.getState().updateStatus).toBe('done');
+    expect(restart.run).toHaveBeenCalledWith('/repo/a', 'npm run v');
+    expect(git.commit).toHaveBeenCalledWith('/repo/b', expect.stringContaining('0.1.5'), ['package.json']);
+  });
+
+  it('confirming passes the mode through and a deselected source runs nothing extra', async () => {
+    const { deps, restart } = smartDeps();
+    const store = createAppStore(deps);
+    await store.getState().openUpdateConfig('edt');
+    const draft = store.getState().updateConfig!;
+    store.getState().setUpdateConfig({ ...draft, sharedTypes: 'always', rows: draft.rows.map((row) => (row.repoPath === '/repo/a' ? { ...row, selected: false } : row)) });
+    await store.getState().confirmUpdateConfig();
+    expect(restart.run).not.toHaveBeenCalledWith('/repo/a', 'npm run v');
+  });
+});
+
+describe('openInIde', () => {
+  it('launches the editor port with the repo path and the configured editor command', () => {
+    const editor = { launch: vi.fn(() => ok(undefined)) };
+    const store = createAppStore(fakeDeps({ editor }));
+    store.setState({ settings: { ...DEFAULT_SETTINGS, general: { ...DEFAULT_SETTINGS.general, editorCommand: 'code <repo>' } } });
+
+    expect(store.getState().openInIde('/repo/a')).toEqual(ok(undefined));
+    expect(editor.launch).toHaveBeenCalledWith('/repo/a', 'code <repo>');
+  });
+
+  it('reports editor-unavailable when no editor port is wired', () => {
+    const store = createAppStore(fakeDeps());
+
+    const result = store.getState().openInIde('/repo/a');
+
+    expect(!result.ok && result.error.code).toBe('editor-unavailable');
   });
 });

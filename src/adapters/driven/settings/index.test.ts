@@ -56,7 +56,7 @@ describe('loadSettings', () => {
     expect(result).toEqual({ ok: true, data: { settings: DEFAULT_SETTINGS, warning: null } });
   });
 
-  it('loads a valid settings file and exposes its values as-is (AC3)', async () => {
+  it('loads a valid settings file and exposes its values as-is', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     await writeFile(
@@ -70,10 +70,10 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 12 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
         warning: null,
       },
@@ -119,6 +119,23 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('commandPalette.gridMaxRows');
   });
 
+  it.each([
+    ['historySize: 201', 'commandPalette.historySize'],
+    ['historySize: 0', 'commandPalette.historySize'],
+    ['historyDedup: "x"', 'commandPalette.historyDedup'],
+  ])('falls back to defaults with a field-naming warning for commandPalette %s', async (line, field) => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, `commandPalette:\n  gridMaxRows: 8\n  ${line}\n`);
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain(field);
+  });
+
   it('falls back to defaults with a field-naming warning when logs.bufferSize exceeds the upper bound', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -158,7 +175,7 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('logs.bufferSize');
   });
 
-  // Story 5.4: mirrors the logs.bufferSize bound tests above for the two new fields.
+  // Mirrors the logs.bufferSize bound tests above for filterHistorySize/filterHistoryGridMaxRows.
   it('falls back to defaults with a field-naming warning when logs.filterHistorySize exceeds the upper bound', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -209,14 +226,41 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 8 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
         warning: null,
       },
     });
+  });
+
+  it('keeps the rest of the file and falls back to simple when logs.restartMode is not simple|clean', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 750\n  restartMode: bogus\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok && result.data.settings.logs).toEqual({
+      bufferSize: 750,
+      startWithHistory: false,
+      filterHistorySize: 20,
+      filterHistoryGridMaxRows: 8,
+      filterHistoryDedup: true,
+      restartMode: 'simple',
+    });
+  });
+
+  it('reads logs.restartMode: clean', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'logs:\n  bufferSize: 500\n  restartMode: clean\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok && result.data.settings.logs.restartMode).toBe('clean');
   });
 
   it('falls back to defaults with a field-naming warning when general.quitShortcutEnabled is not a boolean', async () => {
@@ -232,6 +276,104 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('general.quitShortcutEnabled');
   });
 
+  it('loads general.editorCommand as-is, and defaults it to empty for a general block written before the field existed', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'general:\n  editorCommand: code <repo>\n');
+
+    const configured = await loadSettings(file);
+
+    expect(configured.ok).toBe(true);
+    if (!configured.ok) throw new Error('expected ok');
+    expect(configured.data.settings.general).toEqual({ quitShortcutEnabled: true, editorCommand: 'code <repo>' });
+    expect(configured.data.warning).toBeNull();
+
+    await writeFile(file, 'general:\n  quitShortcutEnabled: false\n');
+
+    const legacy = await loadSettings(file);
+
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) throw new Error('expected ok');
+    expect(legacy.data.settings.general).toEqual({ quitShortcutEnabled: false, editorCommand: '' });
+    expect(legacy.data.warning).toBeNull();
+  });
+
+  it('loads update.concurrency, defaults it when the group is absent and rejects an out-of-range value', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'update:\n  concurrency: 4\n');
+    const configured = await loadSettings(file);
+    expect(configured.ok && configured.data.settings.update).toEqual({ ...DEFAULT_SETTINGS.update, concurrency: 4 });
+
+    await writeFile(file, 'general:\n  quitShortcutEnabled: true\n');
+    const legacy = await loadSettings(file);
+    expect(legacy.ok && legacy.data.settings.update).toEqual(DEFAULT_SETTINGS.update);
+
+    await writeFile(file, 'update:\n  concurrency: 0\n');
+    const invalid = await loadSettings(file);
+    expect(invalid.ok && invalid.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(invalid.ok && invalid.data.warning).toContain('update.concurrency');
+  });
+
+  it('loads update.runMigrations/cleanRestart/mergeSource, defaults them when absent and rejects invalid values', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'update:\n  runMigrations: false\n  cleanRestart: true\n  mergeSource: edt-pending\n');
+    const configured = await loadSettings(file);
+    expect(configured.ok && configured.data.settings.update).toEqual({
+      concurrency: 3,
+      runMigrations: false,
+      cleanRestart: true,
+      mergeSource: 'edt-pending',
+    });
+
+    await writeFile(file, 'update:\n  concurrency: 2\n');
+    const missing = await loadSettings(file);
+    expect(missing.ok && missing.data.settings.update).toEqual({
+      concurrency: 2,
+      runMigrations: true,
+      cleanRestart: false,
+      mergeSource: 'shared',
+    });
+
+    for (const [yaml, field] of [
+      ['update:\n  runMigrations: nope\n', 'update.runMigrations'],
+      ['update:\n  cleanRestart: maybe\n', 'update.cleanRestart'],
+      ['update:\n  mergeSource: elsewhere\n', 'update.mergeSource'],
+    ] as const) {
+      await writeFile(file, yaml);
+      const invalid = await loadSettings(file);
+      expect(invalid.ok && invalid.data.settings).toEqual(DEFAULT_SETTINGS);
+      expect(invalid.ok && invalid.data.warning).toContain(field);
+    }
+  });
+
+  it('defaults the History bounds for an old sharedTypes group and rejects out-of-range values', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'sharedTypes:\n  install: false\n');
+    const legacy = await loadSettings(file);
+    expect(legacy.ok && legacy.data.settings.sharedTypes).toEqual({ ...DEFAULT_SETTINGS.sharedTypes, install: false });
+    expect(legacy.ok && legacy.data.settings.sharedTypes.historyDepth).toBe(20);
+    expect(legacy.ok && legacy.data.settings.sharedTypes.maxCommitsScanned).toBe(1000);
+
+    await writeFile(file, 'sharedTypes:\n  historyDepth: 50\n  maxCommitsScanned: 5000\n');
+    const configured = await loadSettings(file);
+    expect(configured.ok && configured.data.settings.sharedTypes).toMatchObject({ historyDepth: 50, maxCommitsScanned: 5000 });
+
+    for (const [yaml, field] of [
+      ['sharedTypes:\n  historyDepth: 0\n', 'historyDepth'],
+      ['sharedTypes:\n  historyDepth: 201\n', 'historyDepth'],
+      ['sharedTypes:\n  maxCommitsScanned: 99\n', 'maxCommitsScanned'],
+      ['sharedTypes:\n  maxCommitsScanned: 20001\n', 'maxCommitsScanned'],
+    ] as const) {
+      await writeFile(file, yaml);
+      const invalid = await loadSettings(file);
+      expect(invalid.ok && invalid.data.settings).toEqual(DEFAULT_SETTINGS);
+      expect(invalid.ok && invalid.data.warning).toContain(field);
+    }
+  });
+
   it('falls back to defaults with a warning on an unknown top-level field (strict schema)', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
@@ -245,13 +387,11 @@ describe('loadSettings', () => {
     expect(result.data.warning).not.toBeNull();
   });
 
-  it('loads a pre-amendment file whose edts block predates hiddenActionTypes — defaults just that field, keeps hiddenActionHints (review fix, 2026-08-28)', async () => {
-    // A settings.yaml written before this amendment has an `edts:` block with
-    // `hiddenActionHints` only — `hiddenActionTypes` didn't exist yet. This must parse
-    // successfully (hiddenActionTypes defaulting to []), not fall back to every default: a
-    // required-field version of this schema previously discarded the developer's existing
-    // hiddenActionHints (and even unrelated commandPalette.gridMaxRows) customizations on
-    // every load, confirmed in real usage.
+  it('loads a pre-amendment file whose edts block predates hiddenActionTypes — defaults just that field, keeps hiddenActionHints', async () => {
+    // A settings.yaml written before hiddenActionTypes existed has an `edts:` block with
+    // `hiddenActionHints` only. It must parse (hiddenActionTypes defaulting to []), not fall
+    // back to every default — that would discard the developer's hiddenActionHints and even
+    // unrelated commandPalette.gridMaxRows customizations on every load.
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     await writeFile(file, 'commandPalette:\n  gridMaxRows: 15\nedts:\n  hiddenActionHints:\n    - edts\n');
@@ -262,10 +402,10 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 15 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
         warning: null,
       },
@@ -287,10 +427,10 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 15 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
         warning: null,
       },
@@ -362,7 +502,7 @@ describe('loadSettings', () => {
     expect(result.data.warning).toContain('edts.branchDropdownMaxRows');
   });
 
-  it('loads a pre-existing file whose logs block predates startWithHistory — defaults just that field, keeps bufferSize (review fix)', async () => {
+  it('loads a pre-existing file whose logs block predates startWithHistory — defaults just that field, keeps bufferSize', async () => {
     // A settings.yaml written before this field existed has a `logs:` block with `bufferSize`
     // only. Mirrors the hiddenActionTypes precedent just above: must default startWithHistory
     // to false rather than falling back to every default (which would also silently discard
@@ -377,10 +517,10 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 8 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
         warning: null,
       },
@@ -400,10 +540,10 @@ describe('loadSettings', () => {
       ok: true,
       data: {
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 12 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
         warning: null,
       },
@@ -421,15 +561,34 @@ describe('loadSettings', () => {
   });
 });
 
+describe('loadSettings — sharedTypes', () => {
+  it('reads custom option defaults and fills the missing ones', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'sharedTypes:\n  install: false\n  cleanRestart: true\n');
+    const result = await loadSettings(file);
+    expect(result.ok && result.data.settings.sharedTypes).toEqual({ install: false, cleanRestart: true, commit: true, historyDepth: 20, maxCommitsScanned: 1000 });
+  });
+
+  it('rejects an unknown key with a warning and falls back to defaults', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'sharedTypes:\n  bogus: 1\n');
+    const result = await loadSettings(file);
+    expect(result.ok && result.data.warning).not.toBeNull();
+    expect(result.ok && result.data.settings.sharedTypes).toEqual(DEFAULT_SETTINGS.sharedTypes);
+  });
+});
+
 describe('saveSettings', () => {
   it('creates the config dir and persists the settings as YAML', async () => {
     const root = await tempRoot();
     const file = join(root, 'tui-back', 'settings.yaml');
     const settings = {
-      general: { quitShortcutEnabled: true },
-      commandPalette: { gridMaxRows: 10 },
+      general: { quitShortcutEnabled: true, editorCommand: '' },
+      commandPalette: { gridMaxRows: 10, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
     };
 
     const result = await saveSettings(file, settings);
@@ -438,23 +597,23 @@ describe('saveSettings', () => {
     expect(parse(await readFile(file, 'utf8'))).toEqual(settings);
   });
 
-  it('overwrites a previously-saved file with the new value (no separate save step, AC3)', async () => {
+  it('overwrites a previously-saved file with the new value (no separate save step)', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     await saveSettings(file, DEFAULT_SETTINGS);
 
     await saveSettings(file, {
-      general: { quitShortcutEnabled: true },
-      commandPalette: { gridMaxRows: 20 },
+      general: { quitShortcutEnabled: true, editorCommand: '' },
+      commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
-      general: { quitShortcutEnabled: true },
-      commandPalette: { gridMaxRows: 20 },
+      general: { quitShortcutEnabled: true, editorCommand: '' },
+      commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
     });
   });
 });
@@ -465,10 +624,10 @@ describe('createSettingsPort', () => {
     const file = join(root, 'settings.yaml');
     const port = createSettingsPort(file);
     const settings = {
-      general: { quitShortcutEnabled: false },
-      commandPalette: { gridMaxRows: 5 },
+      general: { quitShortcutEnabled: false, editorCommand: '' },
+      commandPalette: { gridMaxRows: 5, historySize: 20, historyDedup: true },
       edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'], branchDropdownMaxRows: 5 },
-      logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+      update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
     };
 
     await port.save(settings);

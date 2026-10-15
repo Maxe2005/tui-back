@@ -58,9 +58,9 @@ This is also a craft project — part of its value is the experience of designin
 - **UJ-3. Max publishes and propagates a new `shared-types` version.**
   - **Persona + context:** Max just added a field to a shared DTO and needs every affected service on the new contract.
   - **Entry state:** EDT active with the services that consume the changed type.
-  - **Path:** Max publishes the new version through the tool, which runs `shared-types`'s own `npm run v` (FR-13); the tool shows which EDT member services are already on it (FR-14); Max triggers propagation for the ones that aren't (FR-15).
+  - **Path:** Max publishes the new version through the tool, which runs `shared-types`'s own `npm run v` (FR-13); Max enters the version and chooses the consuming services, and the tool rewrites their dependency line, optionally installs/clean-restarts and commits (FR-15); during a group update this is automatic (FR-30, FR-31). *(amended 2026-10-05)*
   - **Climax:** Without checking a single `package.json` by hand, Max sees every relevant service now on the new version.
-  - **Resolution:** Max reviews and commits the dependency bump per service himself — the tool staged it, but never committed on his behalf.
+  - **Resolution:** Max reviews the per-service commit made by the tool (only `package.json`/`package-lock.json`); nothing is ever pushed. *(amended 2026-10-05)*
 
 - **UJ-4. Max hits a merge conflict during a group update.**
   - **Persona + context:** Max runs a group update (UJ-1) and one service has diverged beyond a simple lockfile change.
@@ -109,6 +109,22 @@ The tool only acts on a repo that carries a manifest; the manifest declares that
 - Adding a new managed repo, or changing which modules are active on an existing one — including activating route exploration on a repo that isn't the gateway — requires only a manifest change, no core code change.
 
 **Notes:** `[NOTE FOR PM]` The exact manifest file format/schema is a technical-design decision, deliberately deferred to `bmad-architecture` — this PRD specifies the required declared capabilities, not the file's shape.
+
+#### FR-29: Container-less managed services (added 2026-10-01, Sprint Change Proposal)
+
+A managed repo's manifest may omit its container: the service is still fully managed (EDT membership, branches, group update, migrations, clean-restart recipe) but has no Docker runtime.
+
+**Consequences (testable):**
+- A manifest without `container` validates and the repo registers like any other.
+- A group update on a container-less service runs pull/merge and migrations, then the clean-restart recipe if the run asks for one and one is declared; otherwise the restart phase is reported as skipped ("no container"), never as a failure.
+- Health surfaces (Update zone, Logs zone, Dashboard) show a distinct "no container" state (glyph + dim text), never "down".
+- The Logs zone never subscribes a container-less service; selecting it shows an explicit "no container — no logs" pane state.
+- Container-only actions (plain restart, logs restart control) are hidden or disabled with an explanation for such a service.
+- In the Logs zone, services without a container appear in an info-only "services without container" section covering every such registry service (members included): greyed, unselectable, excluded from Tab order and from Ctrl+A. Ctrl+A toggles the focused list only (active EDT members / other services). Every service row shows its health badge (up/down/restarting/no container) whether or not the cursor is on it, and a restarting service states explicitly that a restart was requested and the container state is being re-verified. (Amended 2026-10-05, Sprint Change Proposal.)
+
+#### FR-33: Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal)
+
+Wherever Tab advances focus, Shift+Tab moves it back. Every zone declares its focus movement through one shared navigation primitive (configurable per zone: H/V arrows, Tab/Shift+Tab, Ctrl+N/P) instead of hand-rolled handlers; the footer and `?` help reflect the active bindings.
 
 ---
 
@@ -171,6 +187,8 @@ A developer can switch the active EDT at any time; the tool auto-preserves any u
 - On switch, every managed repo is also classified against the *outgoing* EDT: (1) a member of the outgoing EDT has its uncommitted work auto-preserved (tagged to that EDT, restored when it is re-entered); (2) a member of another EDT, or (3) a non-member, that holds uncommitted work is never silently moved — the developer is told which services are affected and chooses, per service, to adopt the work into the outgoing EDT (on a branch of their choosing) or to discard it, or cancels the switch with nothing touched.
 
 > Amended 2026-09-24 (Sprint Change Proposal, Stories 2.39-2.41): three-state evaluation added; previously only membership of the target EDT was considered.
+
+> Amended 2026-10-14 (Sprint Change Proposal, Story 2.44): the developer may chain a restart of the affected services (none / simple / clean) onto the switch, run in parallel; each service's final state is reported (FR-37).
 
 #### FR-7: An EDT never claims a shared branch
 
@@ -246,6 +264,7 @@ A developer can run a group update — pull/merge the update, run migrations, re
 - The end-of-run summary accounts for every targeted service by outcome (updated / skipped / failed) — no service is silently absent from the summary.
 - A group update triggered on an EDT with zero member services is a no-op, with an explicit message rather than silent success.
 - A second group-update run is rejected while one is already in progress, in any scope.
+- The targeted services are updated in parallel, bounded by a configurable concurrency (default 3; 1 = sequential). The end-of-run summary lists services in configuration order. (Amended 2026-10-08, Sprint Change Proposal.)
 
 #### FR-11: Assisted resolution of merge conflicts / dirty state
 
@@ -253,7 +272,7 @@ When a group update hits a repo that isn't cleanly updatable, the tool auto-reso
 
 **Consequences (testable):**
 - If only `package.json`/lockfile are dirty, the tool resolves it the same way `update_repo.sh` does today, without prompting.
-- For any other dirty/conflicted state, the tool presents a menu (stash / open in editor / cancel this repo / cancel the whole run) and does not proceed on that repo until the developer acts — canceling this repo alone lets the run continue with the rest; canceling the whole run stops it entirely.
+- For any other dirty/conflicted state, the tool raises an incident in a queue that fills as the run progresses; the developer chooses which incident to resolve first (stash / open in editor / cancel this repo / cancel the whole run). Only the blocked repo waits; the others keep updating, and a resolved repo resumes by itself after the tool re-verifies its state (amended 2026-10-08) — canceling this repo alone lets the run continue with the rest; canceling the whole run stops un-started services and lets in-flight services finish their current step.
 - After the developer acts, the tool re-checks the repo's state before resuming — it does not assume success.
 - A repo already mid-merge/mid-rebase from a previous interrupted or crashed run is detected as its own case, distinct from a lockfile-only dirty state, and surfaced to the developer explicitly before the guided menu applies.
 
@@ -268,6 +287,7 @@ When a migration fails during a group update, the tool surfaces which service, w
 - Re-running a fixed migration re-verifies success before that service is marked caught up.
 - Repeated failures on the same migration are surfaced the same way each time; no retry limit or escalation path is enforced in v1.
 - The re-trigger action is available directly from the affected service's own row/detail view in the Update zone, using the same single-service configuration interface as a full single-service update (FR-25) — no separate flow to remember.
+- A failed migration or restart is not an incident: the service ends failed as before, and the other services are neither blocked nor rolled back. It can be relaunched through the single-service update once the whole run has ended. (Clarified 2026-10-08.)
 
 #### FR-25: Configure a group update before it runs
 
@@ -278,6 +298,7 @@ Before any group update starts — EDT-scoped, all-repos, or scoped to a single 
 - Each selected service's source branch defaults to the manifest's `sharedBranch`, but can be changed to any branch the tool can resolve for that repo before the run starts.
 - The migrate toggle and the clean-restart toggle apply uniformly to every service selected for that run.
 - The same configuration screen backs the EDT-scoped update, the all-repos update (still gated by its own explicit confirmation, FR-10), and a single-service update triggered directly from that service's row in the Update zone.
+- For an EDT-scoped update, the configuration screen also offers one global merge-source strategy — the services' shared branches (default) or another EDT's branches (FR-28) — applied to every row before per-service adjustment. (Amended 2026-10-01, Sprint Change Proposal.)
 
 #### FR-26: Manifest-defined clean restart
 
@@ -297,44 +318,108 @@ At any time in the Update zone, the developer sees a list of services (active ED
 - A service's status during a run reflects its actual current step (updating vs. migrating vs. restarting), never a single generic "in progress" state.
 - A problem encountered on a service appears in that service's own detail view, distinguished as resolved (after assisted resolution, FR-11) or unresolved (still blocking).
 
+#### FR-28: Merge source from another EDT (added 2026-10-01, Sprint Change Proposal)
+
+When configuring an EDT-scoped group update, a developer can set the merge source for all selected services at once: either each service's own `sharedBranch` (today's default) or another, named EDT. With another EDT chosen, every service of the EDT being updated that is also a member of the chosen EDT merges from the branch that EDT records for it; every service that is not a member of the chosen EDT is flagged as unresolved and must be given a source branch by hand (its `sharedBranch` offered as the default) before the run can start.
+
+**Consequences (testable):**
+- The chosen EDT can never be the EDT being updated.
+- A service is resolved from the chosen EDT only when that EDT has a member with the same repoPath; its source branch is exactly that member's recorded branch.
+- An unresolved selected service blocks the run start with an explicit, per-row message; deselecting it or choosing its branch by hand clears the block.
+- A per-service manual choice survives later changes of the global strategy until the developer resets it to the global rule.
+- CLI parity (FR-1): `tui-back update --from-edt <topic>` applies the same resolution non-interactively and fails (no git write) listing every unresolved service.
+
+#### FR-32: Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal)
+
+After a group update, the Update zone's detail pane reports per service what really happened: a successful merge that advanced the branch shows +N/−M lines and F files; a successful merge with an unchanged HEAD shows "already up to date"; the migrate phase shows "ran (<command>)" with an output excerpt, or "none" when absent/disabled. The detail lives in memory only — the next run replaces it, a restart drops it.
+
+**Consequences (testable):**
+- HEAD-unchanged-after-merge ⇒ "already up to date", never a diffstat.
+- Advanced merge ⇒ +N/−M lines and F files via the GitPort diff capability.
+- Migration ran ⇒ command + excerpt; absent/disabled ⇒ "migrations: none".
+- CLI parity (FR-1): the same details ride the JSON line additively.
+
 ---
+
+#### FR-34: Full-screen service update report (added 2026-10-08, Sprint Change Proposal)
+
+A developer can open a service's update report full screen — the complete detail and error output of each step and every logged issue — scrollable, wrapping, and live while the run is in progress.
+
+**Consequences (testable):**
+- Nothing is capped or flattened: a multi-line migration or merge error is fully readable.
+- Failed steps are visually distinct (glyph + color) and can be jumped to.
+- The inline detail pane keeps its bounded rendering; the full report is the only unbounded-text surface.
+
+#### FR-35: Service actions (added 2026-10-12, Sprint Change Proposal)
+
+A single set of per-service actions — open in IDE, simple restart, clean restart, extensible — is available from the Logs zone and the Dashboard, behaving identically in both.
+
+**Consequences (testable):**
+- An unavailable action (no container, no clean-restart recipe) is shown disabled with its reason; a clean restart without a recipe falls back to a simple restart with a visible notice.
+- Logs `R` restarts with the mode chosen in `logs.restartMode` (simple by default).
+
+#### FR-36: Configurable defaults (added 2026-10-12, Sprint Change Proposal)
+
+The defaults of the Update global parameters, the st zone's option toggles, the Logs restart mode and the post-switch restart choice (`switch.restartMode`, amended 2026-10-14) are settings. A per-run change never writes back; with untouched settings behaviour is unchanged.
+
+#### FR-37: Post-switch service restart (added 2026-10-14, Sprint Change Proposal)
+
+When switching the active EDT, the developer can choose to restart the services in the same gesture: none (default), simple restart, or clean restart.
+
+**Consequences (testable):**
+- Only services whose branch changed in the switch and that declare a container are restarted; the others are reported as skipped with their reason, never failed.
+- Services restart in parallel, bounded by `update.concurrency`, with live per-service progress, like the group update.
+- Each service ends in one reported state: functional (container up and the manifest's `healthUrl` answers 2xx), up-unverified (up, no `healthUrl`), unhealthy, restarting, down, or failed.
+- A restart failure never rolls the switch back; a clean restart without a recipe falls back to a simple restart with a visible notice.
+- The default choice is the setting `switch.restartMode`; the CLI `edt switch --restart none|simple|clean` overrides it.
 
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
-**Description:** Absorbs `shared-types`'s existing one-command release script and closes the "no repo-by-repo manual check" gap. Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation status/action (FR-14/FR-15) is active only on repos whose manifest declares them a `shared-types-consumer`.
+**Description:** Absorbs `shared-types`'s release script and removes the manual `package.json` bump across services, including inside a group update (amended 2026-10-05). Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation and drift (FR-14/FR-15) apply only to repos declaring `shared-types-consumer`; the smart update (FR-30/FR-31) builds on Epic 3's group update.
 
 **Functional Requirements:**
 
-#### FR-13: Publish a new `shared-types` version
+#### FR-13: Publish a new `shared-types` version *(amended 2026-10-05)*
 
-A developer can publish a new `shared-types` version through the tool, which runs the `shared-types` repo's existing `npm run v` script — a sequential bump → build → publish → push.
-
-**Consequences (testable):**
-- A failure at any step of `npm run v` is surfaced with which step failed, not just a generic error, instead of leaving the developer to re-read raw script output.
-- After a fix, the developer can re-trigger the publish without the tool treating the prior failed attempt as success; the tool re-verifies before marking the version published — the same detect → fix → re-verify guarantee as FR-11/FR-12, applied here too.
-- A re-trigger after a partial failure (e.g. publish/push failed after bump and build already succeeded) resumes from the failed step rather than restarting from bump, avoiding a duplicate version bump or a publish conflict on an already-published version.
-- On success, the tool immediately offers propagation to the active EDT's eligible consumer members (one, several, or all) in the same flow, chaining into FR-15 — no separate manual step to go find the propagate action. Propagation remains independently triggerable later too (e.g. a newly added consumer catching up).
-- Publish is offered only when the active EDT includes the `shared-types` repo itself as a member, identified via a `shared-types-source` manifest module (distinct from `shared-types-consumer`).
-
-#### FR-14: See propagation status without a manual check
-
-The tool shows, for the active EDT's member services that declare themselves a `shared-types` consumer, whether they're on the version most recently published from the active EDT's own `shared-types` branch — without the developer checking any repo by hand.
+A developer can publish a new `shared-types` version through the tool, which runs the source repo's publish command (default `npm run v` — a sequential bump → build → publish → push; the push of the `shared-types` repo itself is done by that script).
 
 **Consequences (testable):**
-- Propagation status for every EDT-member service that declares itself a `shared-types` consumer is shown without the developer running `npm ls`/checking `package.json` by hand.
-- The "latest" version is resolved by walking the active EDT's `shared-types` branch's git ancestry (tags/commits reachable from its tip) — **never** by comparing against the single highest version number across all branches. Version numbers are globally unique but published independently per branch, so the global maximum can be functionally unrelated to the active branch's own lineage (e.g. global latest = 660, but the version actually relevant to this branch = 613, because 614–660 were published from unrelated branches).
-- Status reflects the branch-relevant latest version, resolved live via git ancestry at view time — never cached.
-- A member service that doesn't declare `shared-types-consumer` in its manifest is omitted from this view.
-- Unavailable when the active EDT doesn't include the `shared-types` repo itself as a member (see FR-13's `shared-types-source` gating).
+- A failure at any step is surfaced with which step failed, not just a generic error.
+- A re-trigger after a partial failure resumes from the failed step rather than restarting from bump, avoiding a duplicate version bump or a publish conflict on an already-published version.
+- On completion the new version is read from the source repo's `package.json` and **verified on the npm registry** before being marked published; a prior failed attempt is never treated as success.
+- On success the tool offers to chain into FR-15 with the published version pre-filled, or to stop. Propagation remains independently triggerable later.
+- Publish is offered only when the active EDT includes the repo declaring `shared-types-source` as a member.
+- Manifest parameters: `shared-types-source` takes `publishCommand` (default `npm run v`) and `packageName` (default `@ianord/shared-types`).
 
-#### FR-15: Propagate to chosen services
+#### FR-14: Search the `shared-types` version history *(redefined 2026-10-12, Sprint Change Proposal — replaces the declared-version drift view)*
 
-A developer can propagate the new version to some or all of the active EDT's eligible member services in one action.
+A developer searches the `shared-types` source repo's branches and commits in real time to see which versions each branch carried and when.
 
 **Consequences (testable):**
-- The tool stages the dependency bump (package.json/lockfile) and installs it per service.
-- The tool never commits or pushes any staged change without that developer's explicit approval, per the git constraints — propagation prepares the change, it does not finalize it.
-- A propagation failure on one service (e.g., install error) is independently retriable and doesn't block the others.
+- **By branch:** the developer picks a branch; the tool walks its commits newest-first and records every commit that changes the `"version"` line of the source repo's root `package.json`, until `n` versions are found (`sharedTypes.historyDepth`, default 20) or `sharedTypes.maxCommitsScanned` (default 1 000) commits were scanned.
+- **By version:** the developer enters a valid `MAJOR.MINOR.PATCH`; the tool shows the branch(es) containing the commit that set it and that commit's date (the bump date, not a registry publication date). Invalid input runs nothing.
+- Results stream in and the search is cancellable; nothing is cached and nothing is written to any repo.
+- Available only when the active EDT includes the `shared-types-source` repo. A result row can pre-fill FR-15's version field.
+
+#### FR-15: Propagate a version to chosen services *(amended 2026-10-05)*
+
+A developer enters a `shared-types` version and applies it to some or all of the active EDT's `shared-types-consumer` member services in one action.
+
+**Consequences (testable):**
+- The version field is pre-filled with `0.1.`, always editable; the version's existence on the registry is verified before execution.
+- Per selected service, only the dependency line in `package.json` is rewritten (manifest parameters `dependency`, default `@ianord/shared-types`, and `packageJsonPath`, default `package.json`), preserving all other formatting.
+- The developer then chooses, as independent toggles, `npm i`, a clean restart (the manifest recipe, FR-26) and a commit; a commit happens after the install/restart if they are chosen.
+- A commit stages **only** `package.json` and `package-lock.json`, never anything else, with a message that identifies the tool as the author of the operation. **No push ever happens for a consumer service.**
+- A consumer on a protected or shared branch goes through the existing git safety gate (AD-8). A consumer whose `package.json` or `package-lock.json` already has uncommitted changes is skipped with an explicit reason; other dirty files do not block it and are never staged.
+- A failure on one service is independently retriable and doesn't block the others.
+
+#### FR-30: Smart group update (added 2026-10-05, Sprint Change Proposal)
+
+When a group update (or a single-service update of the source repo) covers the `shared-types-source` repo, it is processed first; after its merge — always, or only if the merge changed something, per a setting in the update configuration — a new version is published (FR-13), propagated to the EDT's consumers and committed (FR-15, commit on, push never), before the remaining services are updated. A failure in this phase pauses the run with an explicit choice (retry, skip, abort).
+
+#### FR-31: Auto-resolve `shared-types`-only merge conflicts (added 2026-10-05, Sprint Change Proposal)
+
+When a consumer's update merge conflicts and the only conflicting hunk in `package.json` is the `shared-types` dependency line, the tool resolves it to the EDT's current value, takes `package-lock.json` from the EDT side and regenerates it with `npm i`, stages the lockfile if it changed and completes the merge. Any other conflicting hunk, or any conflict in another file, is left to the user through FR-11's assisted resolution.
 
 ---
 
@@ -367,7 +452,9 @@ Service health (up / down / restarting) is visible inline with the log view, so 
 **Consequences (testable):**
 - A failing service's health status is visible in the same view as its logs, without a separate health check step.
 - Restarting a failing service is a developer-triggered action from this view, replacing `check_health.sh`'s current silent auto-restart.
+- Restart honours `logs.restartMode` (simple | clean) and an open-in-IDE shortcut acts on the focused service (FR-35, added 2026-10-12).
 - A restart request on a service that's already restarting is a no-op — the control is disabled during restart, never triggering a second concurrent restart.
+- A service whose manifest declares `healthUrl` can additionally be verified *functional / unhealthy* where a restart is reported (FR-37, added 2026-10-14).
 
 ---
 
@@ -454,7 +541,7 @@ A developer's saved requests (FR-21) form one global library, not siloed per EDT
 These are trust bars every Must-scope capability already has to satisfy, not features to prioritize (carried forward verbatim from the brief's Non-Negotiable Constraints):
 
 - Only local repo copies are ever touched — never a remote or deployed environment.
-- No commit or push happens without explicit developer approval, at the moment it happens (applies directly to FR-11's guided resolution and FR-15's propagation, both of which stage but never finalize a change).
+- No commit or push happens without explicit developer approval, at the moment it happens (applies directly to FR-11's guided resolution; FR-15's propagation commits only when the developer ticks the commit option, and FR-30 only when the developer enabled the smart-update setting — never a push of a consumer commit; amended 2026-10-05).
 - Git write access is limited to the developer's own feature/fix branches.
 - `development`, preprod, and prod are read-only to the tool.
 - An EDT must never register a shared branch as its own (FR-7).
@@ -516,7 +603,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 - **SM-1**: Session start is one guided action (switch/create EDT → group update completes) instead of a manual multi-step sequence, every time. Validates FR-4, FR-6, FR-10.
 - **SM-2**: Zero forgotten-service incidents — no service silently left out of date after a group update. Target: 0 per month, observed over real use. Validates FR-10.
 - **SM-3**: Every merge/migration failure encountered during a group update is resolved through the tool's guided flow, without the developer dropping to a separate terminal. Validates FR-11, FR-12.
-- **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-14, FR-15.
+- **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-15, FR-30; FR-14 answers *which version, where, when* from git.
 - **SM-5**: The trace → fix → resume loop (fire a saved route request, see the relevant logs, get back to coding) stays fast enough not to break flow. Validates FR-20, FR-21, FR-22, FR-23.
 - **SM-6**: Zero incidents of a non-member service breaking EDT work because it was left on a stray branch — branch state for every managed repo is always visible and correct. Validates FR-8, FR-9.
 

@@ -5,9 +5,10 @@ import {
   createBranchPickerState,
   cycleBranchPickerMode,
   handleBranchPickerKey,
-  matchBranchesByPrefix,
+  matchBranchesBySubstring,
   type BranchPickerState,
 } from './index.js';
+import { branchPickerFooterContext } from './branch-picker.js';
 import { renderToString } from './render-to-string.js';
 
 function baseState(overrides: Partial<BranchPickerState> = {}): BranchPickerState {
@@ -22,6 +23,21 @@ function baseState(overrides: Partial<BranchPickerState> = {}): BranchPickerStat
   };
 }
 
+describe('cycleBranchPickerMode back', () => {
+  it('reverses, wrapping', () => {
+    expect(cycleBranchPickerMode('pick-existing', true, 'back')).toBe('rename-current');
+    expect(cycleBranchPickerMode('create-new', false, 'back')).toBe('pick-existing');
+  });
+});
+
+describe('cycleBranchPickerMode unknown mode', () => {
+  it('lets stepFocus pick the first stop forward and the last going back', () => {
+    const unknown = 'nope' as never;
+    expect(cycleBranchPickerMode(unknown, true, 'next')).toBe('pick-existing');
+    expect(cycleBranchPickerMode(unknown, true, 'back')).toBe('rename-current');
+  });
+});
+
 describe('cycleBranchPickerMode', () => {
   it('cycles Pick existing -> Create new -> Rename current -> Pick existing when a current branch exists', () => {
     expect(cycleBranchPickerMode('pick-existing', true)).toBe('create-new');
@@ -35,22 +51,8 @@ describe('cycleBranchPickerMode', () => {
   });
 });
 
-describe('matchBranchesByPrefix', () => {
-  it('case-insensitive prefix match, same convention as matchCommands', () => {
-    expect(matchBranchesByPrefix('feat', ['feature-x', 'FEATURE-Y', 'main', 'development'])).toEqual(['feature-x', 'FEATURE-Y']);
-  });
-
-  it('an empty query matches every branch', () => {
-    expect(matchBranchesByPrefix('', ['a', 'b'])).toEqual(['a', 'b']);
-  });
-
-  it('matches nothing when no branch shares the prefix', () => {
-    expect(matchBranchesByPrefix('zzz', ['a', 'b'])).toEqual([]);
-  });
-});
-
 describe('createBranchPickerState', () => {
-  it('defaults to Create new, pre-filled with the suggestion (Boundaries: "defaults to Create new")', () => {
+  it('defaults to Create new, pre-filled with the suggestion', () => {
     const state = createBranchPickerState({
       suggestedName: 'feature-suggested',
       defaultBaseBranch: 'development',
@@ -61,14 +63,14 @@ describe('createBranchPickerState', () => {
     expect(state.nameValue).toBe('feature-suggested');
     expect(state.baseBranch).toBe('development');
     expect(state.baseFocused).toBe(true);
-    // Story 2.32: every field's caret starts at its own seeded value's end.
+    // Every field's caret starts at its own seeded value's end.
     expect(state.nameValueCursor).toBe('feature-suggested'.length);
     expect(state.baseBranchCursor).toBe('development'.length);
     expect(state.pickQueryCursor).toBe(0);
   });
 });
 
-describe('handleBranchPickerKey — cursor navigation (story 2.32)', () => {
+describe('handleBranchPickerKey — cursor navigation', () => {
   it('Left/Right/Home/End move the name field caret; typing inserts at the caret', () => {
     const state = baseState({ baseFocused: false, nameValue: 'abd', nameValueCursor: 2 });
     const typed = handleBranchPickerKey(state, [], [], 'c', {});
@@ -91,16 +93,15 @@ describe('handleBranchPickerKey — cursor navigation (story 2.32)', () => {
       expect(end.state.nameValueCursor).toBe(3);
     }
 
-    // Left/Right-at-boundary clamp (unchanged from before).
+    // Left/Right-at-boundary clamp.
     const left = handleBranchPickerKey(baseState({ baseFocused: false, nameValue: 'ab', nameValueCursor: 0 }), [], [], '', { leftArrow: true });
     expect(left.type).toBe('update');
     if (left.type === 'update') {
       expect(left.state.nameValueCursor).toBe(0);
     }
 
-    // Code review fix: the title promises Left/Right both move the caret — a real decrement
-    // from a non-zero position (Left) and a real mid-string advance (Right), not just the
-    // already-at-0 clamp above.
+    // Left/Right both really move the caret — a decrement from a non-zero position (Left) and a
+    // mid-string advance (Right), not just the already-at-0 clamp above.
     const leftFromMid = handleBranchPickerKey(baseState({ baseFocused: false, nameValue: 'abcd', nameValueCursor: 3 }), [], [], '', { leftArrow: true });
     expect(leftFromMid.type).toBe('update');
     if (leftFromMid.type === 'update') {
@@ -141,7 +142,7 @@ describe('handleBranchPickerKey — mode cycling (Tab)', () => {
     expect(result.type).toBe('update');
     if (result.type === 'update') {
       expect(result.state.mode).toBe('rename-current');
-      // Pre-selected onto the current branch, skipping the picking step (Boundaries).
+      // Pre-selected onto the current branch, skipping the picking step.
       expect(result.state.renameSub).toEqual({ oldName: 'main', value: 'main', cursor: 4, error: null });
     }
   });
@@ -166,6 +167,28 @@ describe('handleBranchPickerKey — mode cycling (Tab)', () => {
   });
 });
 
+describe('handleBranchPickerKey — Shift+Tab', () => {
+  it('reverses the mode switch, wrapping Create new -> Pick existing -> Rename current', () => {
+    const state = baseState();
+    expect(state.mode).toBe('create-new');
+    const back = handleBranchPickerKey(state, [], [], '', { tab: true, shift: true });
+    expect(back.type === 'update' && back.state.mode).toBe('pick-existing');
+    const wrapped = handleBranchPickerKey(back.type === 'update' ? back.state : state, [], [], '', { tab: true, shift: true });
+    expect(wrapped.type === 'update' && wrapped.state.mode).toBe('rename-current');
+  });
+
+  it('swallows Tab and Shift+Tab while a Pick-existing row-rename sub-view is open', () => {
+    const state = baseState({
+      mode: 'pick-existing',
+      renameSub: { oldName: 'feat', value: 'feat', cursor: 4, error: null },
+    });
+    for (const key of [{ tab: true }, { tab: true, shift: true }]) {
+      const result = handleBranchPickerKey(state, ['feat'], [], '', key);
+      expect(result).toEqual({ type: 'update', state });
+    }
+  });
+});
+
 describe('handleBranchPickerKey — Create new', () => {
   it('Enter on the base-branch field advances to the name field without submitting', () => {
     const state = baseState();
@@ -174,6 +197,18 @@ describe('handleBranchPickerKey — Create new', () => {
     if (result.type === 'update') {
       expect(result.state.baseFocused).toBe(false);
     }
+  });
+
+  it('the base-branch field is the shared autocomplete: arrows highlight, Enter fills in, a listed branch advances', () => {
+    const branches = ['development', 'feat-x', 'feat-y'];
+    const typed = handleBranchPickerKey(baseState({ baseBranch: '', baseBranchCursor: 0 }), branches, [], 'f', {});
+    expect(typed.type === 'update' && typed.state.baseBranch).toBe('f');
+    const moved = handleBranchPickerKey(baseState({ baseBranch: 'feat', baseBranchCursor: 4 }), branches, [], '', { downArrow: true });
+    expect(moved.type === 'update' && [moved.state.baseBranch, moved.state.basePickCursor]).toEqual(['feat', 1]);
+    const filled = handleBranchPickerKey(baseState({ baseBranch: 'feat', baseBranchCursor: 4, basePickCursor: 1 }), branches, [], '', { return: true });
+    expect(filled.type === 'update' && [filled.state.baseBranch, filled.state.baseFocused]).toEqual(['feat-y', true]);
+    const advanced = handleBranchPickerKey(baseState({ baseBranch: 'feat-y', baseBranchCursor: 6 }), branches, [], '', { return: true });
+    expect(advanced.type === 'update' && advanced.state.baseFocused).toBe(false);
   });
 
   it('typing edits the currently-focused field only', () => {
@@ -238,7 +273,7 @@ describe('handleBranchPickerKey — Pick existing', () => {
     expect(result.type).toBe('update');
     if (result.type === 'update') {
       expect(result.state.pickQuery).toBe('f');
-      expect(matchBranchesByPrefix(result.state.pickQuery, ['feature-x', 'main'])).toEqual(['feature-x']);
+      expect(matchBranchesBySubstring(result.state.pickQuery, ['feature-x', 'main'])).toEqual(['feature-x']);
     }
     // Substring (not just prefix): 'eat' still proposes 'feature-x' — pinned at the picker
     // boundary (not just the helper), so a prefix-only regression fails here.
@@ -299,12 +334,20 @@ describe('handleBranchPickerKey — Pick existing', () => {
     expect(left.state.pickCursor).toBe(1);
   });
 
-  it('Ctrl+R on a row opens its inline rename field, pre-filled with the selected branch', () => {
+  it('Ctrl+T on a row opens its inline rename field, pre-filled with the selected branch', () => {
     const state = pickState({ pickCursor: 1 });
-    const result = handleBranchPickerKey(state, ['feature-x', 'shared-feature'], [], 'r', { ctrl: true });
+    const result = handleBranchPickerKey(state, ['feature-x', 'shared-feature'], [], 't', { ctrl: true });
     expect(result.type).toBe('update');
     if (result.type === 'update') {
       expect(result.state.renameSub).toEqual({ oldName: 'shared-feature', value: 'shared-feature', cursor: 'shared-feature'.length, error: null });
+    }
+  });
+
+  it('Ctrl+R no longer opens the rename field (it is back-to-global elsewhere)', () => {
+    const result = handleBranchPickerKey(pickState({ pickCursor: 1 }), ['feature-x', 'shared-feature'], [], 'r', { ctrl: true });
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub).toBeNull();
     }
   });
 
@@ -364,7 +407,7 @@ describe('applyBranchPickerRetry', () => {
     expect(retried.mode).toBe('create-new');
     expect(retried.baseFocused).toBe(false);
     expect(retried.nameValue).toBe('feature-collided');
-    // Story 2.32: a programmatic overwrite resets the caret to the reopened value's end.
+    // A programmatic overwrite resets the caret to the reopened value's end.
     expect(retried.nameValueCursor).toBe('feature-collided'.length);
   });
 
@@ -427,15 +470,14 @@ describe('BranchPicker rendering', () => {
     expect(output).not.toContain('✖');
   });
 
-  it('caps the pick-existing dropdown at maxRows with an overflow line', async () => {
+  it('caps the pick-existing dropdown at its line budget with a more-below indicator', async () => {
     const state = baseState({ mode: 'pick-existing', pickQuery: '', pickQueryCursor: 0, pickCursor: 0 });
     const output = await renderToString(
-      <BranchPicker state={state} branches={['b-one', 'b-two', 'b-three']} branchesStatus="ready" otherMemberBranches={[]} maxRows={2} />,
+      <BranchPicker state={state} branches={['b-one', 'b-two', 'b-three', 'b-four']} branchesStatus="ready" otherMemberBranches={[]} maxRows={3} />,
     );
     expect(output).toContain('b-one');
-    expect(output).toContain('b-two');
-    expect(output).not.toContain('b-three');
-    expect(output).toContain('… 1 more');
+    expect(output).not.toContain('b-two');
+    expect(output).toContain('↓ 3 more');
   });
 
   it('keeps the `Failed to load branches.` line with a usable field on branchesStatus=error', async () => {
@@ -447,13 +489,132 @@ describe('BranchPicker rendering', () => {
     expect(output).toContain('Filter');
   });
 
-  it('create-new mode renders byte-identical with no dropdown validity of its own', async () => {
+  it('create-new mode marks the base branch valid and keeps the name field plain', async () => {
     const state = baseState({ baseFocused: false, nameValue: 'feature-x', nameValueCursor: 9 });
     const output = await renderToString(
       <BranchPicker state={state} branches={['development']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} />,
     );
+    expect(output).toContain('Base branch: development ✔');
     expect(output).toContain('Name: feature-x');
-    expect(output).not.toContain('✔');
     expect(output).not.toContain('✖');
+  });
+});
+
+describe('branchPickerFooterContext', () => {
+  const sub = { oldName: 'a', value: 'a', cursor: 1, error: null };
+
+  it('follows the mode and the focused field', () => {
+    expect(branchPickerFooterContext(baseState({ mode: 'pick-existing' }), false)).toBe('branch-picker-pick');
+    expect(branchPickerFooterContext(baseState({ mode: 'pick-existing', renameSub: sub }), false)).toBe('confirm');
+    expect(branchPickerFooterContext(baseState({ mode: 'rename-current' }), false)).toBe('branch-picker-rename');
+    expect(branchPickerFooterContext(baseState({ baseFocused: true }), false)).toBe('branch-picker-base');
+    expect(branchPickerFooterContext(baseState({ baseFocused: false }), false)).toBe('branch-picker-name');
+    expect(branchPickerFooterContext(baseState({ baseFocused: false }), true)).toBe('branch-picker-name-members');
+    expect(branchPickerFooterContext(baseState({ baseFocused: false, nameSubListOpen: true }), true)).toBe('branch-picker-members');
+  });
+});
+
+describe('create-new base field edge cases', () => {
+  const BRANCHES = ['development', 'feat-x'];
+
+  it('an empty base keeps the default and advances instead of filling in the first branch', () => {
+    const result = handleBranchPickerKey(baseState({ baseBranch: '', baseBranchCursor: 0 }), BRANCHES, [], '', { return: true });
+    expect(result.type === 'update' && [result.state.baseFocused, result.state.baseBranch]).toEqual([false, '']);
+  });
+
+  it('never accepts free text while the branch list is loading or failed', () => {
+    for (const status of ['loading', 'error'] as const) {
+      const state = baseState({ baseBranch: 'typed-ref', baseBranchCursor: 9 });
+      const result = handleBranchPickerKey(state, [], [], '', { return: true }, status);
+      expect(result).toEqual({ type: 'update', state });
+    }
+    const ready = handleBranchPickerKey(baseState({ baseBranch: 'typed-ref', baseBranchCursor: 9 }), BRANCHES, [], '', { return: true }, 'ready');
+    expect(ready.type === 'update' && ready.state.baseFocused).toBe(false);
+  });
+
+  it('resets the base highlight when the value is edited or the mode changes', () => {
+    const edited = handleBranchPickerKey(baseState({ baseBranch: 'fe', baseBranchCursor: 2, basePickCursor: 1 }), BRANCHES, [], 'a', {});
+    expect(edited.type === 'update' && edited.state.basePickCursor).toBe(0);
+    const switched = handleBranchPickerKey(baseState({ basePickCursor: 1 }), BRANCHES, [], '', { tab: true });
+    expect(switched.type === 'update' && switched.state.basePickCursor).toBe(0);
+  });
+
+  it('keeps the loading and error line visible when the base field is not focused', async () => {
+    for (const [status, text] of [['loading', 'Loading branches…'], ['error', 'Failed to load branches.']] as const) {
+      const output = await renderToString(
+        <BranchPicker state={baseState({ baseFocused: false })} branches={[]} branchesStatus={status} otherMemberBranches={[]} maxRows={5} />,
+      );
+      expect(output.split(text)).toHaveLength(2);
+    }
+  });
+});
+
+describe('cross-EDT branch usage', () => {
+  const owners = { 'feat/owned': ['alpha'] };
+
+  it('Pick existing refuses setting a branch another EDT owns, inline, no submit', () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: 'feat/owned' });
+    const result = handleBranchPickerKey(state, ['feat/owned', 'feat/free'], [], '', { return: true }, 'ready', owners);
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.error).toContain("utilisée par l'EDT « alpha » — la reprendre ou la renommer casserait cet EDT");
+    }
+  });
+
+  it('Pick existing still submits an unowned branch (and any branch without owners)', () => {
+    const free = baseState({ mode: 'pick-existing', pickQuery: 'feat/free' });
+    expect(handleBranchPickerKey(free, ['feat/owned', 'feat/free'], [], '', { return: true }, 'ready', owners)).toEqual({
+      type: 'submit',
+      outcome: { kind: 'set', branch: 'feat/free' },
+    });
+    const owned = baseState({ mode: 'pick-existing', pickQuery: 'feat/owned' });
+    expect(handleBranchPickerKey(owned, ['feat/owned'], [], '', { return: true }).type).toBe('submit');
+  });
+
+  it('Pick existing row-rename of an owned branch is refused in the rename sub-view', () => {
+    const state = baseState({
+      mode: 'pick-existing',
+      renameSub: { oldName: 'feat/owned', value: 'feat/new', cursor: 8, error: null },
+    });
+    const result = handleBranchPickerKey(state, ['feat/owned'], [], '', { return: true }, 'ready', owners);
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub?.error).toContain('« alpha »');
+    }
+  });
+
+  it('Rename current refuses an owned member branch and an owned new name', () => {
+    const owned = baseState({ mode: 'rename-current', renameSub: { oldName: 'feat/owned', value: 'feat/new', cursor: 8, error: null } });
+    const a = handleBranchPickerKey(owned, [], [], '', { return: true }, 'ready', owners);
+    expect(a.type === 'update' && a.state.renameSub?.error).toContain('« alpha »');
+    const taking = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: 'feat/owned', cursor: 10, error: null } });
+    const b = handleBranchPickerKey(taking, [], [], '', { return: true }, 'ready', owners);
+    expect(b.type === 'update' && b.state.renameSub?.error).toContain('« alpha »');
+  });
+
+  it('Create new from an owned base is allowed', () => {
+    const state = baseState({ mode: 'create-new', baseBranch: 'feat/owned', baseFocused: false, nameValue: 'feat/mine' });
+    expect(handleBranchPickerKey(state, ['feat/owned'], [], '', { return: true }, 'ready', owners).type).toBe('submit');
+  });
+
+  it('annotates owned candidates in the pick-existing and base-branch lists', async () => {
+    const pick = baseState({ mode: 'pick-existing' });
+    const out = await renderToString(
+      <BranchPicker state={pick} branches={['feat/owned', 'feat/free']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} owners={owners} />,
+    );
+    expect(out).toContain('⚠ EDT « alpha »');
+    expect(out.match(/⚠/g)).toHaveLength(1);
+    const create = baseState({ mode: 'create-new', baseBranch: 'feat', baseFocused: true });
+    const out2 = await renderToString(
+      <BranchPicker state={create} branches={['feat/owned', 'feat/free']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} owners={owners} />,
+    );
+    expect(out2).toContain('⚠ EDT « alpha »');
+  });
+});
+
+describe('cross-EDT prototype-key safety', () => {
+  it('a branch named constructor is not refused when owners has no such own key', () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: 'constructor' });
+    expect(handleBranchPickerKey(state, ['constructor'], [], '', { return: true }, 'ready', {}).type).toBe('submit');
   });
 });

@@ -602,3 +602,199 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point.md`
   summary: The `:` command-bar grid truncates command labels (e.g. `edt-switch` renders as `edt-switc`) once a longer command name widens the layout.
   evidence: Story 2.31 adding `edt-create-from` made `app-shell.interaction.test.tsx`'s grid assertion fail on the clipped label; the test was re-anchored on `edt-delete`, the layout itself was not fixed.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate.md`
+  summary: Cross-EDT ownership check (renameBranch and assertAllowedBranch) is not atomic with the git write and compares repo paths with resolve() only (no realpath/symlink canonicalisation).
+  evidence: Pre-existing pattern in assertAllowedBranch (story 2.4); story 2.43 reuses it for renameBranch, so a concurrent registration or a symlinked repo path can bypass the gate.
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-6-scanner-extension-parameters-request-body-skeletons.md`
+  summary: The `nestjs-openapi` scanner ignores Swagger/OpenAPI 2.0 specs' request details (`in: body` parameters, `consumes`, `#/definitions/...` refs) and path-item-level `$ref`s.
+  evidence: extractRequestDetails only reads OpenAPI 3.x `requestBody`/`components`; 2.0 operations yield plain routes (still listed, no body skeleton) — acceptable for the gateway today, revisit if a 2.0 repo activates route-explorer.
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-7-jsontree-component-read-only-navigation-collapse-session-filters.md`
+  summary: JsonTree builds rows via unbounded recursion, so a pathologically deep response (thousands of nesting levels) can overflow the call stack and crash the TUI.
+  evidence: buildNode/flattenJson/countJsonNodes/listTreeContainers in shared/components/json-tree/model.ts recurse per nesting level with no depth cap; dev API responses make this unlikely, but a depth guard with a placeholder row needs a design decision.
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-9-routes-right-pane-mandatory-request-step-request-response-sub-tabs.md`
+  summary: Non-JSON request bodies (form, multipart, text) cannot be sent — the draft is always JSON-serialized with an inferred application/json content type, and the route's bodyContentType is not forwarded.
+  evidence: fireRequest serializes options.body with JSON.stringify; canEditRouteBody opens an (empty) editor for any content type and CLI --body only accepts JSON — needs a raw-body channel design.
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-9-routes-right-pane-mandatory-request-step-request-response-sub-tabs.md`
+  summary: Per-route request drafts are never reconciled with the scanner after a same-repo reload, so a newly declared required path/query/header parameter does not appear in an existing draft.
+  evidence: ensureRequestDraft keeps the existing draft by design and drafts survive same-repo reloads; a reseed/merge policy (and how to keep user edits) needs a decision.
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-9-routes-right-pane-mandatory-request-step-request-response-sub-tabs.md`
+  summary: Scanner-seeded query/header rows (including required ones) can be deleted with d and there is no "reset to seed" action to bring them back within the session.
+  evidence: removeRequestRow ignores row.required and addRequestRow creates rows with required false; likely belongs with 6.3's saved-request editing.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-12-update-merge-source-from-another-edt.md`
+  summary: The panels hook still reads the draft from props, so two keys delivered before a re-render can act on a stale draft (view and box are already read from refs).
+  evidence: Edge-case review of story 3.12; the pre-existing simple config dialog has the same limitation, so a store-level `getState()` read would fix both.
+
+## Deferred from: review of 7-2-container-less-managed-services (2026-10-05)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-2-container-less-managed-services.md`
+  summary: Optional manifest fields use two conventions — `migrationCommand` documents a `null` fallback while `container` (since 7.2) omits the key — and the zod schema rejects explicit `null` for both.
+  evidence: `.agents/skills/manifest-generator/SKILL.md` still instructs `migrationCommand: null` when undetected, but `z.string().trim().min(1).optional()` in `src/adapters/driven/manifest/schema.ts` rejects `null`; normalizing (nullish handling or doc alignment) is pre-existing debt surfaced, not caused, by 7.2. Surfaced by blind-hunter review layer.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-7-shared-focus-navigation.md`
+  summary: Footer `[Tab/Shift+Tab] focus` hint stays visible in EDTs/Logs while a dialog, filter editor or fullscreen preview is open and Tab means something else.
+  evidence: footerHintsFor only receives the zone id, not overlay/capture state (edge-case review).
+  resolved_by: story 7.4b — the footer is context-live: a dialog, pane or screen registers its context and the zone hints return when it closes (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-7-shared-focus-navigation.md`
+  summary: `TWO_PANEL_NAV` lives in `edts-zone.logic.ts` but is imported by shared dialog logic (wizard, switch-resolution); move it to the shared primitive or a dialogs module.
+  evidence: layering smell flagged by the blind review; dialogs depend on a zone-specific module.
+
+## Deferred from: review of 6-3-save-customize-and-re-fire-a-request (2026-10-06)
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-3-save-customize-and-re-fire-a-request.md`
+  summary: `global.db` has no version runner for future numbered schema files — `schema-001.sql` is re-applied on every open and there is no loader path for the `002.sql` that Story 6.5 will need for hide/favorite columns.
+  evidence: `src/adapters/driven/saved-requests/index.ts` executes the single schema file unconditionally; the `schema_version` row exists but nothing reads it to decide which numbered files to apply. Surfaced by review (blind-hunter); deliberately left for 6.5, which is the first story that must evolve the schema.
+  resolved_by: story 7.4b — `TWO_PANEL_NAV` now lives in `shared/keys/focus-navigation.ts` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4-interaction-consistency-audit-alignment.md`
+  summary: Enforce the one-hint-format rule with a guard test; many wizard, Logs, Routes, registry and reset hints still bypass `formatHints`.
+  evidence: Review found hand-written hints with mixed key spellings and letter case outside the helper, and no test checks the rule.
+  resolved_by: story 7.4b — hints are declared data (`keybindings/footer-contexts.ts`), and `hints.guard.test.ts` fails any `[Key] verb` literal built outside `formatHints` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4-interaction-consistency-audit-alignment.md`
+  summary: Derive the footer's resize filter and StateLine's `[R] retry` from the keybinding declarations, and fix the shared → keybindings → zones type-import layering.
+  evidence: `footerHintsFor` compares against a duplicated RESIZE_HINT string, StateLine hard-codes the retry text, and `list-cursor.ts` imports `NavigationKey` from `keybindings/`.
+  resolved_by: story 7.4b — footer entries carry `when: 'resizable'`, StateLine takes `RETRY_HINT` from the declarations, `NavigationKey` moved to `shared/keys/navigation-key.ts` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4-interaction-consistency-audit-alignment.md`
+  summary: Reuse the shared list-cursor reducer in settings-screen and repo-registry-screen instead of repeating the Home/End computation, and adopt StateLine in the remaining loading/empty spots.
+  evidence: Review found about eight inline `key.home ? 0 : len - 1` copies and unconverted "Loading…"/"No … yet" lines.
+  resolved_by: story 7.4b — settings and registry call `nextCursorForKey`; loading/empty/error lines go through `StateLine` (`_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`
+  summary: Long footer contexts (logs-fullscreen, routes-body-tree-add, wizard-pause) can wrap or clip on 80-column terminals; decide truncation or a two-line footer.
+  evidence: Review found no truncation or width test, and the agent reverted `truncate-end` because it cut Logs hints in an AppShell test.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`
+  summary: Close the hint-guard holes (keys longer than three characters, trailing comments, whole-file allowlist) and untangle the keybindings ↔ shared/components dependency cycle.
+  evidence: `hints.guard.test.ts` is a regex scan with a 1-3 character key pattern and a whole-file Dashboard exemption; `keybindings/` now imports `shared/components/hints` while components import it back.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-4b-interaction-alignment-follow-up.md`
+  summary: Restore discoverability of the BranchPicker "other members' branches" sub-list outside the footer, and derive the Tab focus hint from each zone's focus-nav declaration.
+  evidence: The in-pane `[↓] other members' branches` hint was removed and `footerHintsFor` now uses a static `Tab/Shift+Tab` entry guarded only by a mode assertion.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-9-bounded-rendering-audit-global-fix-regression-guard.md`
+  summary: Rewrite the bounded-rendering static guard on the TypeScript AST (regex misses `>` in attributes, nested/self-closing Text, `visible*`-named receivers satisfied by renaming) and extend it beyond `.tsx`.
+  evidence: Blind Hunter and Edge Case Hunter both showed regex false negatives; allow-list "empty on purpose" is only syntactically enforced.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-9-bounded-rendering-audit-global-fix-regression-guard.md`
+  summary: Handle display width (CJK, emoji, zero-width) in bounds math, truncation and matrix assertions instead of UTF-16/code-point counts.
+  evidence: normalizeMessage, tab-bar width estimate and matrix `Array.from(line).length` all count characters, not columns.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-9-bounded-rendering-audit-global-fix-regression-guard.md`
+  summary: Constant-size collections capped with silent `.slice` (wizard breadcrumb, table columns, step views, global lines, pane tabs) hide later additions without a "+N more" marker; chromeRows budgets are hand estimates; dialogs opened from local state (Update config panels, Routes dialogs, quit-confirm/blocker) are not force-opened in the matrix.
+  evidence: Edge Case Hunter and Verification Gap reports on the 7.9 diff.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Harden `writeVersionLine` against nested decoy section keys, braces inside string values, duplicate keys and a dependency declared in both dependencies and devDependencies.
+  evidence: The targeted text edit locates the block with a regex plus the first `}`; valid but unusual package.json shapes (overrides nesting, duplicate keys) can make it edit the wrong block or fail.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Make `writeVersionLine` atomic (temp file plus rename) and reject a blank version.
+  evidence: `writeFile` writes in place, so a crash mid-write can truncate package.json.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Distinguish auth-related E404 (private scope, E401/E403) from "version not published" in `verifyPublished`, and guard against package names starting with `-`.
+  evidence: A misconfigured registry login would be reported as an unpublished version; manifest-controlled names reach the npm argv.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-1-shared-types-modules-manifest-parameters.md`
+  summary: Constrain `packageJsonPath` to stay inside the repo (no absolute path, no `..`) when stories 4.2+ join it with a repo path.
+  evidence: The manifest schema currently accepts any non-blank string.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-2-propagate-a-version-to-chosen-services.md`
+  summary: Unstage the files staged by `stagePaths` when the following `commit` fails, so a retry or a later commit does not sweep them in.
+  evidence: Propagation stages `package.json`/`package-lock.json` then commits; a commit failure (hook, identity) leaves them staged.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-2-propagate-a-version-to-chosen-services.md`
+  summary: Re-check the branch gate immediately before the git write to close the window where HEAD changes after the first check.
+  evidence: The gate runs in the gate step and again in stagePaths/commit, but a branch switch between the check and the git command is not prevented (rare TOCTOU).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch.md`
+  summary: A member switch's branch gate (`assertAllowedBranch`) now reads the HEAD version of a dirty `.tui-back.yaml` (protected branches) because the carry clears it first.
+  evidence: The git adapter resolves the protected set from the on-disk manifest at gate time; the carry runs before it. Edge case: only differs when the local edit changes `protectedBranches`/`sharedBranch`.
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch.md`
+  summary: A symlinked `.tui-back.yaml` is read through but restored as a regular file; file mode is not preserved by the carry.
+  evidence: `capture` stores bytes only and `restore` renames a temp file over the target.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: `[f] full report` footer hint is static for the whole Update zone instead of being shown only when a report is available.
+  evidence: The footer comes from a static KEYBINDINGS row with zones; conditional hints need a dynamic footer mechanism. The matrix row "nothing to show" expects no hint advertised.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: `computeLineRowCount` / `sliceVisibleWindow` live in logs-zone.logic and are imported cross-zone by update-zone.logic; move them to a shared module.
+  evidence: Update zone logic now depends on the Logs zone's logic file.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-19-full-screen-service-report.md`
+  summary: A single wrapped line taller than the viewport cannot be scrolled within in the full-screen report; only its first rows are reachable.
+  evidence: reportWindow always shows whole lines; reported by blind review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: The incident popup can open over a service menu, pick or full-screen report that was already open in the Update zone.
+  evidence: The store opens the popup on the first incident whenever the Update zone is active, without knowing the zone's local dialogs; reported by edge-case review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: A run cancelled with unstarted services (now `run-cancelled` rows) still clears an `interrupted` EDT status because no row is `failed`.
+  evidence: groupUpdateEdt only checks for failed rows before setStatus('active'); reported by edge-case review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: update-incidents-dialog imports blocker helpers from update-zone while the zone imports the dialog (circular import); the helpers belong in a shared logic module.
+  evidence: Works at runtime (use only inside functions) but is a layering smell; reported by blind review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-18-parallel-update-run-incident-queue.md`
+  summary: The CLI `tui-back update` stays sequential (no concurrency passed) while the TUI defaults to 3; cancelled-run issue-log entries stay unresolved; the `:update-incidents` command gives no feedback with an empty queue; no docs mention `update.concurrency`, the `i` key or the awaiting status.
+  evidence: Observed by the three review layers; none breaks the story's acceptance criteria.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
+  summary: The persisted-history store ignores failed or throwing state writes/reads (no user-visible warning, an unhandled rejection can surface in `mutate`/`resetAndDrain`).
+  evidence: Carried over unchanged from the original filterHistory machinery in logs-slice.ts; `persist` discards the `Result` of `deps.write` and `load` silently keeps the default on a failed read.
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-6-command-history-recall-shared-input-history-primitive.md`
+  summary: A write to state.json while another field is corrupt treats the file as empty and overwrites it, discarding the valid sibling fields.
+  evidence: Pre-existing `writeActiveEdt`/`writeSplitterRatios`/`writeFilterHistory` convention (only state-read-error is propagated); the shared `mergeWriteStateFile` preserves it, now also covering commandHistory.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: Under `if-changed`, a source whose earlier publish failed (nothing new to merge) is never published, and a merge touching only non-package files still publishes.
+  evidence: `shouldRunSharedTypesPhase` keys only on merge kind `advanced`; no check of the repo's own version against the registry.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: A phase retry after publish succeeded but registry verification failed re-runs the publish command, and a partial-propagation retry re-propagates consumers that already succeeded without an idempotence test.
+  evidence: Retry reuses `publishedVersion` only after a verified publish; the 4.3 already-published re-check is not applied inside the smart phase.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: With the source row deselected the config row still shows its mode though confirm drops it, and a missing container/restart/sharedTypes dep silently runs a plain update.
+  evidence: `confirmUpdateConfigDraft` drops the mode silently and `buildSharedTypesHook` returns null without a notice.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-4-smart-group-update-shared-types-first.md`
+  summary: The phase result (published version, per-consumer outcomes) is not shown after the run, and a consumer skipped for a dirty package.json stays on the old version without a visible warning.
+  evidence: Only failed consumers pause the run; results are discarded after the hook returns.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: The conflict auto-resolver hardcodes `npm i` and `package-lock.json`, so a consumer on pnpm/yarn (or a workspace-root lock) gets a wrong lockfile.
+  evidence: resolve-conflict.ts never reads the manifest's installer or other lock names; propagateVersion (4.2) has the same npm-only assumption, so it is a cross-story gap.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: `writeResolvedFile` is not atomic and its containment check is lexical only (no realpath, `/`-based), so a symlinked package.json could be written through.
+  evidence: git adapter `isInside` compares string prefixes; a crash mid-write leaves a truncated package.json during a merge. Low likelihood on the fixed package.json/lockfile paths.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-5-auto-resolve-shared-types-only-merge-conflicts.md`
+  summary: A dependency declared in several sections (dependencies and devDependencies) of a conflicted package.json is treated as a mixed block and reported as an issue instead of being resolved.
+  evidence: rewriteDependencyBlocks forces `mixed` when the dependency line matches more than once in a block.
+
+- source_spec: epic-7/spec-7-11-overlay-owns-the-arrow-keys-settings-screen-help-panel.md
+  summary: Gate `issues-dialog.tsx`'s `useInput` on the zone-input predicate and derive AppShell's two hand-written overlay-flag lists from `isZoneInputActive`.
+  evidence: Story 7.11 review — both are unreachable leaks today, but a new overlay registered only in the predicate would not update AppShell.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+  summary: Harden `tokenizeCommandLine`/`resolveEditorCommand` (unterminated quote, quotes-only value that should fall through to `$EDITOR`, `<repo>` in the binary position).
+  evidence: The code was moved unchanged from the Update zone; the edge cases exist in the original (command.ts tokenizer swallows an unclosed quote into one token; an empty-string first token is chosen as the binary).
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+  summary: The editor launch runs `spawnSync` with inherited stdio without suspending Ink raw mode / alternate screen, and ignores signal/non-zero exit.
+  evidence: Same behaviour as the pre-move `launchEditor`; terminal editors launched from the TUI may share the terminal with Ink's rendering.
+- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+  summary: Restart conflict is reported with the code `update-already-running`, which is misleading outside the update flow; the Update slice's `describeServiceRestart` still offers restart for a container-less service with a recipe, unlike the registry.
+  evidence: Code reused from `service-restart.ts`; the two availability rules diverge until Stories 5.7/7.5 adopt the registry.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
+  summary: An invalid value in any settings key (e.g. `update.cleanRestart`) makes the whole settings file fall back to defaults, discarding unrelated valid settings.
+  evidence: Existing loader convention (one zod parse for the whole file); Story 3.20 AC keeps it, but per-field fallback would be kinder.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
+  summary: "Start services" global default for the Update config screen was not delivered; the option does not exist in the 3.7 screen or in group-update.
+  evidence: Story 3.20 AC mentions it but the human chose to defer it (no such option in code).
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
+  summary: CLI `update --from-edt` consumes the next argument as topic even if it is an override flag, and repeated override flags are accepted silently.
+  evidence: parseUpdateOverrides filters flags before topic parsing; edge case surfaced in review.
+- source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
+  summary: Settings Update tab cursor is not reset when switching tabs, and rapid toggles read a render-time snapshot of settings.
+  evidence: Same behaviour as other settings tabs/concurrency edit; surfaced by edge-case review.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
+  summary: Version-bump walk skips merge commits that change `package.json` (no diff under `git log -p`), so bumps introduced via merges are missed.
+  evidence: `listVersionBumpCommits` does not pass `-m`/`-c`; edge-case review of story 4.6.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
+  summary: In a shallow clone the grafted boundary commit shows the whole `package.json` as added and is reported as a false bump; the port doc promises a shallow-clone error.
+  evidence: No `git rev-parse --is-shallow-repository` check in the history adapter.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
+  summary: `loadSharedTypesHistoryBranches` has no stale-load token, so an EDT switch during an in-flight load can show the old source repo's branches.
+  evidence: Slice sets state after await without checking the active EDT.
+- source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
+  summary: Tab toggles the History search mode while the branch autocomplete dropdown may be open, instead of letting the autocomplete consume it; it also conflicts with the Tab-moves-focus convention.
+  evidence: `shared-types-history.logic.ts` was added to the focus-navigation guard allowlist.

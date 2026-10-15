@@ -24,7 +24,7 @@ function dialog(branches: Partial<BranchStepState> = {}): CreateDialogState {
   };
 }
 
-describe('BranchStepView — Panel B cells (story 2.37 review)', () => {
+describe('BranchStepView — Panel B cells', () => {
   it('truncates long service names and branch refs to BRANCH_MAX_WIDTH', async () => {
     const output = await renderToString(
       <BranchStepView
@@ -49,11 +49,11 @@ describe('BranchStepView — Panel B cells (story 2.37 review)', () => {
         maxVisibleRows={5}
       />,
     );
-    expect(output).toContain('échec du chargement des branches : fatal: not a git repository');
+    expect(output).toContain('failed to load branches: fatal: not a git repository');
   });
 });
 
-describe('reduceBranchStepKey (story 2.37 review)', () => {
+describe('reduceBranchStepKey', () => {
   const CANDS = [{ path: '/repos/a', service: 'svc-a', sharedBranch: 'main', protectedBranches: [] }];
   const editingName = (): CreateDialogState => dialog({ globalLine: 'name', editing: true, globalName: { value: 'demo', cursor: 4 } });
 
@@ -67,7 +67,13 @@ describe('reduceBranchStepKey (story 2.37 review)', () => {
     expect(moved.branches.globalName.cursor).toBe(0);
   });
 
-  it('editing the global name in Panel A carries untouched seeded rows along, never edited ones (story 2.31)', () => {
+  it('Shift+Tab switches panels like Tab (two stops: state changes, editing ends)', () => {
+    const { state } = reduceBranchStepKey(editingName(), CANDS, '', { tab: true, shift: true });
+    expect(state.branches.panel).toBe('rows');
+    expect(state.branches.editing).toBe(false);
+  });
+
+  it('editing the global name in Panel A carries untouched seeded rows along, never edited ones', () => {
     const seed = {
       ulid: 'root',
       topic: 'root',
@@ -103,12 +109,12 @@ describe('reduceBranchStepKey (story 2.37 review)', () => {
   });
 
   it('fixing the base or the name clears a stale "cannot leave Step 3" error', () => {
-    const blocked = { ...dialog({ editing: true, globalBase: { value: 'nope', cursor: 4 } }), error: 'svc-a : branche introuvable' };
+    const blocked = { ...dialog({ editing: true, globalBase: { value: 'nope', cursor: 4 } }), error: 'svc-a : branch not found' };
     expect(reduceBranchStepKey(blocked, CANDS, '', { backspace: true }).state.error).toBeNull();
-    const blockedName = { ...editingName(), error: 'svc-a : nom de branche vide' };
+    const blockedName = { ...editingName(), error: 'svc-a : empty branch name' };
     expect(reduceBranchStepKey(blockedName, CANDS, 'q', {}).state.error).toBeNull();
     // A pure focus/caret move is not a fix: the message stays.
-    expect(reduceBranchStepKey(blockedName, CANDS, '', { leftArrow: true }).state.error).toBe('svc-a : nom de branche vide');
+    expect(reduceBranchStepKey(blockedName, CANDS, '', { leftArrow: true }).state.error).toBe('svc-a : empty branch name');
   });
 
   it('Space never starts editing the base line; other printable keys do, with the key typed', () => {
@@ -130,7 +136,7 @@ describe('reduceBranchStepKey (story 2.37 review)', () => {
   });
 });
 
-describe('createBranchStepHandlers — decisions against the latest state (story 2.37 review)', () => {
+describe('createBranchStepHandlers — decisions against the latest state', () => {
   it('Enter then Esc queued in one batch enter and leave edit mode — the Esc never cancels', () => {
     // React applies queued updaters lazily and in order; both keys are handled before either
     // updater runs (keys arriving in one input chunk), so nothing may be decided up front.

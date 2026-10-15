@@ -1,6 +1,6 @@
-// tui/zones/edts/dialogs/create-wizard: Step 1 "Nom" (Story 2.36) — one autofocused
-// TextInputLine for the EDT name, with its availability re-checked on every keystroke
-// (checkNameAvailability: trimmed, case-sensitive, against the loaded EDT list).
+// tui/zones/edts/dialogs/create-wizard: Step 1 "Nom" — one autofocused TextInputLine for the EDT
+// name, with its availability re-checked on every keystroke (checkNameAvailability: trimmed,
+// case-sensitive, against the loaded EDT list).
 import { Box, Text, type Key } from 'ink';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
@@ -29,9 +29,9 @@ export function handleNameStepInput(
 export function NameStepView({ dialog, availability }: { dialog: CreateDialogState; availability: NameAvailability }) {
   return (
     <Box flexDirection="column">
-      <TextInputLine label="Nom" value={dialog.topic} cursor={dialog.topicCursor} focused={true} />
-      {availability === 'available' ? <Text color={colors.success}>✔ disponible</Text> : null}
-      {availability === 'taken' ? <Text color={colors.error}>✖ déjà pris</Text> : null}
+      <TextInputLine label="Name" value={dialog.topic} cursor={dialog.topicCursor} focused={true} />
+      {availability === 'available' ? <Text color={colors.success}>✔ available</Text> : null}
+      {availability === 'taken' ? <Text color={colors.error}>✖ already taken</Text> : null}
     </Box>
   );
 }

@@ -1,8 +1,6 @@
-// core/edt/list: unit tests against fake ports (AD-13 core layer) — every I/O-matrix row of
-// story 2.6 (FR-9): upstream configured, no upstream, offline/unresolvable, member vs.
-// non-member uniformity (including a non-member kept on `development`), and the
-// reachability/manifest-error passthrough mirroring core/scripts/list-repos.ts. Real
-// git/fs behavior lives in adapters/driven/git/index.test.ts and the black-box e2e.
+// core/edt/list: unit tests against fake ports (FR-9) — upstream configured, no upstream,
+// offline/unresolvable, member vs. non-member uniformity, and the reachability/manifest-error
+// passthrough mirroring core/scripts/list-repos.ts.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
@@ -61,6 +59,8 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -86,16 +86,28 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
+    stagePaths: vi.fn(async () => ok(undefined)),
+    commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+    listBranchesContaining: vi.fn(async () => ok([] as string[])),
     ...overrides,
   };
 }
@@ -105,7 +117,7 @@ function edtEntry(ulid: string, topic: string, members: EdtRegistryEntry['member
 }
 
 describe('listEdtBranchesDivergence', () => {
-  it('shows branch + both ahead/behind counts for a service with a configured upstream (AC1)', async () => {
+  it('shows branch + both ahead/behind counts for a service with a configured upstream', async () => {
     const registry = fakeRegistry(['/repo/a']);
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('feat/a')),
@@ -132,7 +144,7 @@ describe('listEdtBranchesDivergence', () => {
     });
   });
 
-  it('shows an explicit "no upstream" state, not a numeric value, when none is configured (AC2)', async () => {
+  it('shows an explicit "no upstream" state, not a numeric value, when none is configured', async () => {
     const registry = fakeRegistry(['/repo/a']);
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('feat/a')),
@@ -153,7 +165,7 @@ describe('listEdtBranchesDivergence', () => {
     ]);
   });
 
-  it('shows an explicit "unknown (offline)" state, not a stale/zero value, when the upstream ref is unresolvable (AC3)', async () => {
+  it('shows an explicit "unknown (offline)" state, not a stale/zero value, when the upstream ref is unresolvable', async () => {
     const registry = fakeRegistry(['/repo/a']);
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('feat/a')),
@@ -216,7 +228,7 @@ describe('listEdtBranchesDivergence', () => {
     ]);
   });
 
-  it('shows branch/divergence uniformly for an EDT member and a non-member alike (AC4)', async () => {
+  it('shows branch/divergence uniformly for an EDT member and a non-member alike', async () => {
     const registry = fakeRegistry(['/repo/member', '/repo/non-member']);
     const edtRegistry = fakeEdtRegistry([edtEntry('edt-1', 'topic-1', [{ service: 'svc-member', repoPath: '/repo/member', branch: 'feat/member' }])]);
     const git = fakeGit({
@@ -237,7 +249,7 @@ describe('listEdtBranchesDivergence', () => {
     expect(byPath.get('/repo/non-member')).toMatchObject({ isMember: false, branch: 'development' });
   });
 
-  it('shows a non-member service correctly kept on development the same as any other service (story 2.4 interplay)', async () => {
+  it('shows a non-member service correctly kept on development the same as any other service', async () => {
     const registry = fakeRegistry(['/repo/kept-on-development']);
     const edtRegistry = fakeEdtRegistry([edtEntry('edt-1', 'topic-1', [{ service: 'svc-other', repoPath: '/repo/other-member', branch: 'feat/other' }])]);
     const git = fakeGit({ currentBranch: vi.fn(async () => ok('development')) });
@@ -356,9 +368,8 @@ describe('listEdtBranchesDivergence', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'state-read-error' } });
   });
 
-  // Story 2.27: threads each repo's own manifest-declared sharedBranch through, uniformly for
-  // member and non-member alike — the value the EDT zone's every base-branch suggestion now
-  // derives from instead of a hardcoded 'development' literal.
+  // Each repo's own manifest sharedBranch is threaded through, uniformly for member and
+  // non-member alike — the EDT zone's base-branch suggestions derive from it.
   it("threads the repo's own manifest-declared sharedBranch through, never a hardcoded literal", async () => {
     const registry = fakeRegistry(['/repo/a', '/repo/b']);
     const manifest = fakeManifest({
@@ -381,8 +392,8 @@ describe('listEdtBranchesDivergence', () => {
     expect(byPath.get('/repo/b')).toBe('master');
   });
 
-  // Story 2.42: the manifest's own protectedBranches ride along next to sharedBranch — an
-  // empty array when the manifest declares none.
+  // The manifest's protectedBranches ride along next to sharedBranch — an empty array when the
+  // manifest declares none.
   it("threads the repo's manifest protectedBranches through, defaulting to an empty list", async () => {
     const registry = fakeRegistry(['/repo/a', '/repo/b']);
     const manifest = fakeManifest({

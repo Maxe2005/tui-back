@@ -6,8 +6,52 @@ import { resolveZoneTabState } from './zone-tab-bar.js';
 import { renderToString } from './render-to-string.js';
 import { ZoneTabBar } from './zone-tab-bar.js';
 
+const ZERO_EVENTS = { dashboard: 0, edts: 0, update: 0, logs: 0, routes: 0, 'shared-types': 0 };
+
+describe('resolveZoneTabState — busy', () => {
+  const updateZone = ZONES.find((zone) => zone.id === 'update')!;
+
+  it('a busy tab carries the updating badge whether or not it is active', () => {
+    expect(resolveZoneTabState(updateZone, 'dashboard', 0, 'enabled', true).badge).toEqual({ text: '⇄ updating', color: colors.info });
+    expect(resolveZoneTabState(updateZone, 'update', 0, 'enabled', true).badge).toEqual({ text: '⇄ updating', color: colors.background });
+  });
+
+  it('pending incidents turn the busy badge into an awaiting-you count, falling back at zero', () => {
+    expect(resolveZoneTabState(updateZone, 'dashboard', 0, 'enabled', true, 2).badge).toEqual({ text: '◐ 2 awaiting you', color: colors.warning });
+    expect(resolveZoneTabState(updateZone, 'update', 0, 'enabled', true, 2).badge).toEqual({ text: '◐ 2 awaiting you', color: colors.background });
+    expect(resolveZoneTabState(updateZone, 'dashboard', 0, 'enabled', true, 0).badge?.text).toBe('⇄ updating');
+  });
+
+  it('the rendered bar shows the awaiting count', async () => {
+    const output = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} busy={{ update: { incidents: 3 } }} />);
+    expect(output).toContain('3 awaiting you');
+  });
+
+  it('the badge shows in the rendered bar only when the update runs', async () => {
+    const running = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} busy={{ update: { incidents: 0 } }} />);
+    const idle = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} />);
+    expect(running).toContain('⇄ updating');
+    expect(idle).not.toContain('⇄ updating');
+  });
+});
+
+describe('ZoneTabBar — st tab busy', () => {
+  it('shows the updating badge on the st tab from another zone and while st is active', async () => {
+    const other = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} busy={{ 'shared-types': { incidents: 0 } }} />);
+    const active = await renderToString(<ZoneTabBar activeZone="shared-types" events={ZERO_EVENTS} busy={{ 'shared-types': { incidents: 0 } }} />);
+    expect(other).toContain('⇄ updating');
+    expect(active).toContain('⇄ updating');
+  });
+
+  it('shows the awaiting badge when blocked and nothing for another zone when idle', async () => {
+    const blocked = await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} busy={{ 'shared-types': { incidents: 1 } }} />);
+    expect(blocked).toContain('1 awaiting you');
+    expect(await renderToString(<ZoneTabBar activeZone="dashboard" events={ZERO_EVENTS} />)).not.toContain('updating');
+  });
+});
+
 describe('resolveZoneTabState', () => {
-  it('resolves the active zone: accent fill, bold, background-colored text (AC2)', () => {
+  it('resolves the active zone: accent fill, bold, background-colored text', () => {
     const zone = ZONES[0];
     const state = resolveZoneTabState(zone, 'dashboard', 0);
     expect(state).toEqual({
@@ -20,7 +64,7 @@ describe('resolveZoneTabState', () => {
     });
   });
 
-  it('resolves an inactive zone: text-dim on background, no badge (AC2)', () => {
+  it('resolves an inactive zone: text-dim on background, no badge', () => {
     const zone = ZONES[1];
     const state = resolveZoneTabState(zone, 'dashboard', 0);
     expect(state).toEqual({
@@ -33,7 +77,7 @@ describe('resolveZoneTabState', () => {
     });
   });
 
-  it('resolves a disabled tab: text-dim + strikethrough, never accent, never bold (story 2.13)', () => {
+  it('resolves a disabled tab: text-dim + strikethrough, never accent, never bold', () => {
     const zone = ZONES[4];
     const state = resolveZoneTabState(zone, 'dashboard', 0, 'disabled');
     expect(state).toEqual({
@@ -46,7 +90,7 @@ describe('resolveZoneTabState', () => {
     });
   });
 
-  it('resolves a disabled tab that is also the active zone: still no accent fill (story 2.13)', () => {
+  it('resolves a disabled tab that is also the active zone: still no accent fill', () => {
     const zone = ZONES[4];
     const state = resolveZoneTabState(zone, zone.id, 0, 'disabled');
     expect(state.active).toBe(true);
@@ -55,13 +99,13 @@ describe('resolveZoneTabState', () => {
     expect(state.strikethrough).toBe(true);
   });
 
-  it('never shows a badge on a disabled tab, even with pending events (story 2.13)', () => {
+  it('never shows a badge on a disabled tab, even with pending events', () => {
     const zone = ZONES[4];
     const state = resolveZoneTabState(zone, 'dashboard', 3, 'disabled');
     expect(state.badge).toBeNull();
   });
 
-  it('shows a glyph+counter badge in the zone status color when a background event is pending (AC3)', () => {
+  it('shows a glyph+counter badge in the zone status color when a background event is pending', () => {
     const zone = ZONES[4];
     const state = resolveZoneTabState(zone, 'dashboard', 3);
     expect(state.badge).toEqual({
@@ -71,7 +115,7 @@ describe('resolveZoneTabState', () => {
     expect(state.active).toBe(false);
   });
 
-  it('hides the badge once the zone is active (AC3)', () => {
+  it('hides the badge once the zone is active', () => {
     const zone = ZONES[4];
     const state = resolveZoneTabState(zone, 'routes', 3);
     expect(state.active).toBe(true);
@@ -80,7 +124,7 @@ describe('resolveZoneTabState', () => {
 });
 
 describe('ZoneTabBar', () => {
-  it('renders all six zone tabs simultaneously (AC1)', async () => {
+  it('renders all six zone tabs simultaneously', async () => {
     const output = await renderToString(
       <ZoneTabBar activeZone="dashboard" events={{ dashboard: 0, edts: 0, update: 0, logs: 0, routes: 0, 'shared-types': 0 }} />,
     );
@@ -89,7 +133,7 @@ describe('ZoneTabBar', () => {
     }
   });
 
-  it('renders a pending-event badge on a non-active tab (AC3)', async () => {
+  it('renders a pending-event badge on a non-active tab', async () => {
     const output = await renderToString(
       <ZoneTabBar
         activeZone="dashboard"
@@ -101,7 +145,7 @@ describe('ZoneTabBar', () => {
 
   const events = { dashboard: 0, edts: 0, update: 0, logs: 0, routes: 0, 'shared-types': 0 };
 
-  it('never renders an omitted tab (story 2.13)', async () => {
+  it('never renders an omitted tab', async () => {
     const tabVisibility: ResolveTabVisibilityData = {
       routes: { status: 'omitted', carryingServices: [] },
       sharedTypes: { status: 'enabled', carryingServices: [] },
@@ -126,7 +170,7 @@ describe('ZoneTabBar', () => {
     expect(output).toContain('[d] Dashboard');
   });
 
-  it('still renders a disabled tab label (dimmed/strikethrough, not omitted) (story 2.13)', async () => {
+  it('still renders a disabled tab label (dimmed/strikethrough, not omitted)', async () => {
     const tabVisibility: ResolveTabVisibilityData = {
       routes: { status: 'enabled', carryingServices: [] },
       sharedTypes: { status: 'disabled', carryingServices: ['shared-types'] },

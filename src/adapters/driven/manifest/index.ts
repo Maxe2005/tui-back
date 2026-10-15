@@ -1,7 +1,7 @@
-// adapters/driven/manifest: loads and validates a repo's root .tui-back.yaml, the
-// single per-repo activation surface (AD-4). A repo is "managed" iff this file exists
-// and validates; its absence is the unmanaged primitive (manifest-not-found) that
-// Story 1.5's scan silently skips — never a crash and never name-based special-casing.
+// adapters/driven/manifest: loads and validates a repo's root .tui-back.yaml, the single
+// per-repo activation surface (AD-4). A repo is "managed" iff this file exists and validates;
+// its absence is the unmanaged primitive (manifest-not-found) — never a crash and never
+// name-based special-casing.
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
@@ -41,9 +41,9 @@ export async function loadManifest(
   const schema = options.knownModuleIds ? createManifestSchema(options.knownModuleIds) : manifestSchema;
   const result = schema.safeParse(parsed);
   if (!result.success) {
-    // Story 1.6 (AD-5): a manifest naming a module id the tool does not know must fail loudly,
-    // naming the offending id AND the repo path it came from. The schema flags the id (it has
-    // no repoPath); the loader owns repoPath and assigns the distinct kebab-case code.
+    // A manifest naming a module id the tool does not know must fail loudly, naming the
+    // offending id AND the repo path it came from (AD-5). The schema flags the id (it has no
+    // repoPath); the loader owns repoPath and assigns the distinct kebab-case code.
     const moduleIssue = result.error.issues.find(
       (issue) => issue.path[0] === 'modules' && UNKNOWN_MODULE_ISSUE.test(issue.message),
     );

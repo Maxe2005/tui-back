@@ -41,17 +41,13 @@ export { TopBar } from './top-bar.js';
 export { Footer, DEFAULT_FOOTER_HINTS } from './footer.js';
 export { ZoneTabBar, resolveZoneTabState } from './zone-tab-bar.js';
 export type { ZoneTabState } from './zone-tab-bar.js';
-export {
-  ListDetailSplit,
-  resolveSplitFlex,
-  DEFAULT_LIST_RATIO,
-} from './list-detail-split.js';
+export { ZoneLayout } from './zone-layout.js';
+export type { ZoneLayoutProps } from './zone-layout.js';
 export { ZonePlaceholder } from './zone-placeholder.js';
 export type { ZonePlaceholderProps } from './zone-placeholder.js';
 export {
   BranchPicker,
   cycleBranchPickerMode,
-  matchBranchesByPrefix,
   createBranchPickerState,
   applyBranchPickerRetry,
   handleBranchPickerKey,
@@ -71,7 +67,6 @@ export {
   matchBranchesBySubstring,
   isBranchAutocompleteExactMatch,
   resolveBranchAutocompleteValidity,
-  resolveBranchAutocompleteDropdown,
   handleBranchAutocompleteKey,
 } from './branch-autocomplete-input.js';
 export type {
@@ -97,3 +92,9 @@ export type {
   FilterablePickListKeyResult,
   FilterablePickListProps,
 } from './filterable-pick-list.js';
+export { MenuList, resolveMenuKey } from './menu-list.js';
+export type { MenuItem, MenuKey, MenuStep } from './menu-list.js';
+export { StateLine, resolveStateLineText } from './state-line.js';
+export type { StateLineProps } from './state-line.js';
+export { formatHint, formatHints, CONFIRM_CANCEL_HINTS, KEY_UP_DOWN, HINT_SEPARATOR } from './hints.js';
+export type { Hint } from './hints.js';

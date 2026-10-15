@@ -1,22 +1,8 @@
-// Black-box test per AD-13: "adapters/driving/cli tested black-box (invoke subcommand as
-// child process, assert AD-3 envelope)". Spawns the real, shipped binary — no npm link
-// required; node resolves package imports (tsx/esm/api) upward from the script's own
-// location regardless of this test's cwd.
-//
-// Deliberately does not attempt to simulate a real TTY (no pty library in the Stack table).
-// spawnSync's stdout is a pipe by default, so every case here exercises the non-TTY
-// JSON-line branch; the TTY/human-text branch is covered directly by envelope.test.ts.
-//
-// Story 2.8 (fullscreen TUI rendering): the interactive `tui-back-tui` binary itself is never
-// spawned by this suite (its own `process.stdin.isTTY` guard would just make it exit 1 under
-// spawnSync's piped stdin), so alt-screen enter/exit and live-resize behavior are NOT covered
-// here — there's no pty lib in this repo's stack to give a child process a real TTY. That
-// coverage is intentionally left to the manual verification steps in
-// spec-2-8-fullscreen-tui-rendering.md's `## Verification` section.
-//
-// Story 1.5's register/list-repos/scan cases all override XDG_CONFIG_HOME with a temp dir
-// so the child process never touches the real config dir (registry.yaml writes are scoped
-// to the fixture).
+// Black-box CLI tests (AD-13): spawns the real, shipped binary as a child process and asserts
+// the envelope. spawnSync's stdout is a pipe and there is no pty library, so only the non-TTY
+// JSON branch runs here (envelope.test.ts covers TTY rendering) and the fullscreen TUI binary
+// is never spawned — its alt-screen and resize behavior are verified manually. Every case
+// points XDG_CONFIG_HOME at a temp dir so the real config dir is never touched.
 import { describe, expect, it, afterEach } from 'vitest';
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -162,7 +148,7 @@ describe('tui-back CLI (black-box)', () => {
 });
 
 describe('tui-back register (black-box)', () => {
-  it('persists the path into XDG_CONFIG_HOME/tui-back/registry.yaml and exits 0 (AC1)', async () => {
+  it('persists the path into XDG_CONFIG_HOME/tui-back/registry.yaml and exits 0', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(false);
 
@@ -310,7 +296,7 @@ describe('tui-back register --reset (black-box)', () => {
 });
 
 describe('tui-back list-repos (black-box)', () => {
-  it('lists managed repos, silently skips unmanaged, and reports unreachable (AC2)', async () => {
+  it('lists managed repos, silently skips unmanaged, and reports unreachable', async () => {
     const xdg = await makeTempDir();
     const managed = await makeRepo(true);
     const unmanaged = await makeRepo(false);
@@ -342,7 +328,7 @@ describe('tui-back list-repos (black-box)', () => {
     });
   });
 
-  it('surfaces moduleIds in the JSON envelope for a module-free managed repo (AC4)', async () => {
+  it('surfaces moduleIds in the JSON envelope for a module-free managed repo', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(true);
     const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
@@ -357,7 +343,27 @@ describe('tui-back list-repos (black-box)', () => {
     expect(parsed.data.repos[0].moduleIds).toEqual([]);
   });
 
-  it('surfaces a manifest with a non-empty modules map as an unknown-module error (AC3)', async () => {
+  it('lists a container-less repo with container null in the JSON envelope', async () => {
+    const xdg = await makeTempDir();
+    const repo = await makeRepo(false);
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    await writeFile(
+      join(repo, '.tui-back.yaml'),
+      ['service: shared-types', 'sharedBranch: development', 'modules: {}', ''].join('\n'),
+    );
+    expect(runCli(['register', repo], env).status).toBe(0);
+
+    const { status, stdout } = runCli(['list-repos'], env);
+
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.repos).toEqual([
+      { path: repo, service: 'shared-types', container: null, sharedBranch: 'development', moduleIds: [] },
+    ]);
+  });
+
+  it('surfaces a manifest with a non-empty modules map as an unknown-module error', async () => {
     const xdg = await makeTempDir();
     const repo = await makeRepo(false);
     const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
@@ -420,7 +426,7 @@ describe('tui-back list-repos (black-box)', () => {
   });
 });
 
-describe('tui-back registry validate (black-box, story 2.28)', () => {
+describe('tui-back registry validate (black-box)', () => {
   it('validates a healthy repo as valid in exactly one JSON line, exit 0', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
@@ -509,7 +515,7 @@ describe('tui-back registry validate (black-box, story 2.28)', () => {
   });
 });
 
-describe('tui-back list-routes (black-box, story 6.1)', () => {
+describe('tui-back list-routes (black-box)', () => {
   const routesManifest = [
     'service: api-gateway',
     'container: api-gateway',
@@ -611,10 +617,9 @@ describe('tui-back list-routes (black-box, story 6.1)', () => {
   });
 });
 
-describe('tui-back fire-request (black-box, story 6.2)', () => {
-  // AD-3 envelope + arg-validation only: every case below rejects before any network
-  // call, so no live dev-gateway is needed (the manual live-fire check stays a human
-  // step per the spec's Ask First constraint).
+describe('tui-back fire-request (black-box)', () => {
+  // Envelope + arg-validation only: every case below rejects before any network call, so no
+  // live dev-gateway is needed (the live fire is checked manually).
   it('rejects a missing repoPath with missing-argument as exactly one JSON line, exit 1', async () => {
     const xdg = await makeTempDir();
     const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
@@ -656,6 +661,55 @@ describe('tui-back fire-request (black-box, story 6.2)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('route-exploration-not-activated');
+  });
+});
+
+describe('tui-back request-* (black-box)', () => {
+  // The saved-request library lives at <dataDir>/global.db, so every case below points
+  // XDG_DATA_HOME at a temp dir — the real library is never touched.
+  function requestEnv(xdg: string) {
+    return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
+  }
+
+  it('request-list on an empty library returns ok with [] as exactly one JSON line, exit 0', async () => {
+    const xdg = await makeTempDir();
+
+    const { status, stdout } = runCli(['request-list'], requestEnv(xdg));
+
+    expect(status).toBe(0);
+    expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+    expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { requests: [] } });
+  });
+
+  it('request-fire and request-delete on unknown names fail saved-request-not-found, exit 1', async () => {
+    const xdg = await makeTempDir();
+    const env = requestEnv(xdg);
+
+    for (const args of [['request-fire', 'missing'], ['request-delete', 'missing']]) {
+      const { status, stdout } = runCli(args, env);
+
+      expect(status).toBe(1);
+      expect(stdout.split('\n')).toEqual([stdout.trim(), '']);
+      expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'saved-request-not-found' } });
+    }
+  });
+
+  it('request-fire rejects --overwrite together with --save-as as invalid-argument, exit 1', async () => {
+    const xdg = await makeTempDir();
+
+    const { status, stdout } = runCli(['request-fire', 'any', '--overwrite', '--save-as', 'other'], requestEnv(xdg));
+
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+  });
+
+  it('request-delete rejects a missing name with missing-argument and an extra one with invalid-argument', async () => {
+    const xdg = await makeTempDir();
+    const env = requestEnv(xdg);
+
+    expect(runCli(['request-delete'], env).status).toBe(1);
+    expect(JSON.parse(runCli(['request-delete'], env).stdout.trim())).toMatchObject({ ok: false, error: { code: 'missing-argument' } });
+    expect(JSON.parse(runCli(['request-delete', 'a', 'b'], env).stdout.trim())).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
   });
 });
 
@@ -732,7 +786,7 @@ describe('tui-back --help (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update', 'registry', 'list-routes', 'fire-request']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'edt', 'update', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete']);
   });
 });
 
@@ -746,8 +800,8 @@ function commitManifest(dir: string): void {
   expect(runGit(dir, ['commit', '-m', 'add manifest']).status).toBe(0);
 }
 
-describe('tui-back edts (black-box, story 2.6)', () => {
-  it('shows branch + ahead/behind for a service with a configured upstream (AC1)', async () => {
+describe('tui-back edts (black-box)', () => {
+  it('shows branch + ahead/behind for a service with a configured upstream', async () => {
     const xdg = await makeTempDir();
     const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
     const origin = await makeGitRepo();
@@ -775,7 +829,7 @@ describe('tui-back edts (black-box, story 2.6)', () => {
     });
   });
 
-  it('shows an explicit "no upstream" state for a repo with no remote configured (AC2)', async () => {
+  it('shows an explicit "no upstream" state for a repo with no remote configured', async () => {
     const xdg = await makeTempDir();
     const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
     const repo = await makeGitRepo();
@@ -800,14 +854,14 @@ describe('tui-back edts (black-box, story 2.6)', () => {
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { services: [], unreachable: [], errors: [] } });
   });
 
-  it('marks the active EDT\'s member service isMember: true, uniformly alongside a non-member (AC4)', async () => {
+  it('marks the active EDT\'s member service isMember: true, uniformly alongside a non-member', async () => {
     const xdg = await makeTempDir();
     const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
     const member = await makeGitRepo();
     commitManifest(member);
     // The default flow (no --create-branches) reuses the member's *current* branch as its
-    // own EDT branch — which must not be the shared `development` branch (story 2.3's gate),
-    // so check it out onto an ordinary feature branch first.
+    // own EDT branch — which must not be the shared `development` branch (the gate rejects
+    // it), so check it out onto an ordinary feature branch first.
     expect(runGit(member, ['checkout', '-b', 'feat/member']).status).toBe(0);
     const nonMember = await makeGitRepo();
     commitManifest(nonMember);
@@ -857,12 +911,12 @@ describe('tui-back edt create (black-box)', () => {
     await expect(access(join(xdg, 'tui-back', 'edts.yaml'))).rejects.toMatchObject({ code: 'ENOENT' });
   }
 
-  it('creates the EDT skeleton (state.json, manifest, db) and registers topic + member branch (AC1/AC2)', async () => {
+  it('creates the EDT skeleton (state.json, manifest, db) and registers topic + member branch', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     // makeGitRepo() leaves the repo on `development` (shared); check out an ordinary branch
-    // so this skeleton/registration test isn't itself exercising story 2.3's gate (that has
-    // its own dedicated case below).
+    // so this skeleton/registration test isn't itself exercising the shared-branch gate (that
+    // has its own dedicated case below).
     expect(runGit(repo, ['checkout', '-b', 'feature-x']).status).toBe(0);
     const env = createEnv(xdg);
     await registerRepos([repo], env);
@@ -902,7 +956,7 @@ describe('tui-back edt create (black-box)', () => {
     ]);
   });
 
-  it('creates one shared branch in every member from the base (grouped mode, AC1)', async () => {
+  it('creates one shared branch in every member from the base (grouped mode)', async () => {
     const xdg = await makeTempDir();
     const repoA = await makeGitRepo();
     const repoB = await makeGitRepo();
@@ -933,7 +987,7 @@ describe('tui-back edt create (black-box)', () => {
     ]);
   });
 
-  it('creates one branch per member by path=name pairs (individual mode, AC1)', async () => {
+  it('creates one branch per member by path=name pairs (individual mode)', async () => {
     const xdg = await makeTempDir();
     const repoA = await makeGitRepo();
     const repoB = await makeGitRepo();
@@ -966,13 +1020,13 @@ describe('tui-back edt create (black-box)', () => {
     ]);
   });
 
-  it('a missing base branch fails that member only; the other member and the EDT succeed (AC3)', async () => {
+  it('a missing base branch fails that member only; the other member and the EDT succeed', async () => {
     const xdg = await makeTempDir();
     const repoA = await makeGitRepo();
     const repoB = await makeGitRepo();
     const env = createEnv(xdg);
     await registerRepos([repoA, repoB], env);
-    // Matrix row: the base is missing in repo A only — repo B carries it.
+    // The base is missing in repo A only — repo B carries it.
     expect(runGit(repoB, ['branch', 'nope']).status).toBe(0);
 
     const { status, stdout } = runCli(
@@ -992,14 +1046,14 @@ describe('tui-back edt create (black-box)', () => {
     });
     expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'created' });
 
-    // repo A's branch creation failed, so it is excluded from members entirely (story 2.3)
-    // — only repo B, which succeeded, is registered.
+    // repo A's branch creation failed, so it is excluded from members entirely — only repo B,
+    // which succeeded, is registered.
     const edtRegistry = parse(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8'));
     expect(edtRegistry.edts[0].members).toHaveLength(1);
     expect(edtRegistry.edts[0].members[0]).toMatchObject({ repoPath: repoB, branch: 'feat/x' });
   });
 
-  it('a name collision fails that member only (branch-exists); the other proceeds (matrix)', async () => {
+  it('a name collision fails that member only (branch-exists); the other proceeds', async () => {
     const xdg = await makeTempDir();
     const repoA = await makeGitRepo();
     const repoB = await makeGitRepo();
@@ -1028,7 +1082,7 @@ describe('tui-back edt create (black-box)', () => {
   it('rejects a shared-branch target before any git invocation (shared-branch-rejected, FR-7)', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
-    // Story 2.42: the protected set is manifest-defined — this fixture's manifest lists `prod`.
+    // The protected set is manifest-defined — this fixture's manifest lists `prod`.
     await writeFile(join(repo, '.tui-back.yaml'), `${manifestYaml}\nprotectedBranches: [preprod, prod]\n`);
     const env = createEnv(xdg);
     await registerRepos([repo], env);
@@ -1051,7 +1105,7 @@ describe('tui-back edt create (black-box)', () => {
     expect(branchExists(repo, 'prod')).toBe(false);
   });
 
-  it('rejects a member whose current branch is shared when branch-creation is disabled (story 2.3, FR-7)', async () => {
+  it('rejects a member whose current branch is shared when branch-creation is disabled (FR-7)', async () => {
     const xdg = await makeTempDir();
     // makeGitRepo() leaves the repo on `development` (its default base branch) with no
     // other branch created — its current branch is the shared branch itself.
@@ -1080,7 +1134,7 @@ describe('tui-back edt create (black-box)', () => {
     ]);
   });
 
-  it('rejects a duplicate topic with edt-topic-exists before any write (AC2)', async () => {
+  it('rejects a duplicate topic with edt-topic-exists before any write', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1101,7 +1155,7 @@ describe('tui-back edt create (black-box)', () => {
     expect(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8')).toBe(registryBefore);
   });
 
-  it('rejects zero members with invalid-member before any write (AC3)', async () => {
+  it('rejects zero members with invalid-member before any write', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
 
@@ -1114,7 +1168,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects an unregistered member with invalid-member before any write (matrix)', async () => {
+  it('rejects an unregistered member with invalid-member before any write', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
 
@@ -1127,7 +1181,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects duplicate --member values with invalid-argument (review)', async () => {
+  it('rejects duplicate --member values with invalid-argument', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1145,7 +1199,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects an empty --member value with invalid-argument (review)', async () => {
+  it('rejects an empty --member value with invalid-argument', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
 
@@ -1158,7 +1212,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects an empty grouped --branch-name with invalid-argument before touching git (review)', async () => {
+  it('rejects an empty grouped --branch-name with invalid-argument before touching git', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1176,7 +1230,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects a missing --topic with invalid-argument and exits 1 (review)', async () => {
+  it('rejects a missing --topic with invalid-argument and exits 1', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1191,7 +1245,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects an invalid --branch-mode value with invalid-argument and exits 1 (review)', async () => {
+  it('rejects an invalid --branch-mode value with invalid-argument and exits 1', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1209,7 +1263,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects --branch-name without --create-branches with invalid-argument and exits 1 (review)', async () => {
+  it('rejects --branch-name without --create-branches with invalid-argument and exits 1', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1227,7 +1281,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects two grouped --branch-name values with invalid-argument and exits 1 (review)', async () => {
+  it('rejects two grouped --branch-name values with invalid-argument and exits 1', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1245,7 +1299,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('rejects an individual --branch-name naming a non-member with invalid-argument (review)', async () => {
+  it('rejects an individual --branch-name naming a non-member with invalid-argument', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1263,7 +1317,7 @@ describe('tui-back edt create (black-box)', () => {
     await expectNoEdtState(xdg);
   });
 
-  it('two racing same-topic edt create subprocesses: exactly one registers, the other fails with edt-topic-exists (race, review)', async () => {
+  it('two racing same-topic edt create subprocesses: exactly one registers, the other fails with edt-topic-exists (race)', async () => {
     const xdg = await makeTempDir();
     const repo = await makeGitRepo();
     const env = createEnv(xdg);
@@ -1352,7 +1406,7 @@ describe('tui-back edt switch (black-box)', () => {
     return JSON.parse(await readFile(join(xdg, 'tui-back', 'state.json'), 'utf8'));
   }
 
-  it('fails upfront with edt-not-found for an unregistered topic, touching no repo (AC)', async () => {
+  it('fails upfront with edt-not-found for an unregistered topic, touching no repo', async () => {
     const xdg = await makeTempDir();
     const { status, stdout } = runCli(['edt', 'switch', '--to', 'no-such-topic'], createEnv(xdg));
 
@@ -1365,7 +1419,7 @@ describe('tui-back edt switch (black-box)', () => {
 
   it(
     'round-trips uncommitted work across a switch: an outgoing member (state 1) is stashed under the outgoing tag, ' +
-      'lands clean on its shared branch, and pops back onto its own branch when switching back (story 2.39, manual-check scenario, AC)',
+      'lands clean on its shared branch, and pops back onto its own branch when switching back',
     async () => {
       const xdg = await makeTempDir();
       const env = createEnv(xdg);
@@ -1423,7 +1477,7 @@ describe('tui-back edt switch (black-box)', () => {
         wasInterrupted: false,
       });
 
-      // r1: on the shared branch, clean — the work never leaks out of its EDT (D1 gone).
+      // r1: on the shared branch, clean — the work never leaks out of its EDT.
       expect(runGit(r1, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('development');
       expect(runGit(r1, ['status', '--porcelain']).stdout.trim()).toBe('');
       expect(runGit(r1, ['stash', 'list']).stdout.trim()).toContain(`tui-back:${ulidA}`);
@@ -1456,7 +1510,7 @@ describe('tui-back edt switch (black-box)', () => {
     },
   );
 
-  it('fails safe on a dirty non-member: exits non-zero with switch-dirty-services-unresolved, touching nothing (story 2.39, AC)', async () => {
+  it('fails safe on a dirty non-member: exits non-zero with switch-dirty-services-unresolved, touching nothing', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const r1 = await makeCleanGitRepo();
@@ -1491,7 +1545,7 @@ describe('tui-back edt switch (black-box)', () => {
     expect(await readFile(join(xdg, 'tui-back', 'edts.yaml'), 'utf8')).toBe(edtsBefore);
   });
 
-  describe('dirty flags (story 2.40)', () => {
+  describe('dirty flags', () => {
     async function dirtyNonMemberSetup() {
       const xdg = await makeTempDir();
       const env = createEnv(xdg);
@@ -1600,7 +1654,7 @@ describe('tui-back edt switch (black-box)', () => {
     });
   });
 
-  it('a target member whose own branch is missing locally is `failed` in data.results, never a thrown error (AC)', async () => {
+  it('a target member whose own branch is missing locally is `failed` in data.results, never a thrown error', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const repo = await makeCleanGitRepo();
@@ -1628,7 +1682,7 @@ describe('tui-back edt switch (black-box)', () => {
 
   it(
     "rejects a target member whose branch is already registered as a different, still-registered EDT's own " +
-      'branch for the same repo (AD-8 cross-EDT gate, review)',
+      'branch for the same repo (AD-8 cross-EDT gate)',
     async () => {
       const xdg = await makeTempDir();
       const env = createEnv(xdg);
@@ -1674,7 +1728,7 @@ describe('tui-back edt switch (black-box)', () => {
     },
   );
 
-  it('blocks by default on a held outgoing lock; --force proceeds and marks it interrupted; returning reports wasInterrupted (AC)', async () => {
+  it('blocks by default on a held outgoing lock; --force proceeds and marks it interrupted; returning reports wasInterrupted', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const r1 = await makeCleanGitRepo();
@@ -1689,8 +1743,8 @@ describe('tui-back edt switch (black-box)', () => {
 
     expect(runCli(['edt', 'switch', '--to', 'a'], env).status).toBe(0);
 
-    // Simulate an in-progress action holding edt:<ulidA>'s lock (this story only reserves the
-    // convention — nothing acquires it yet, so the held lock is constructed directly here).
+    // Simulate an in-progress action holding edt:<ulidA>'s lock (constructed directly: a real
+    // action finishes too fast to race black-box).
     const lockDir = join(xdg, 'tui-back', 'locks');
     const lockPath = lockPathFor(lockDir, `edt:${ulidA}`);
     await mkdir(lockPath, { recursive: true });
@@ -1718,7 +1772,7 @@ describe('tui-back edt switch (black-box)', () => {
   });
 });
 
-describe('tui-back edt delete (black-box, story 2.29)', () => {
+describe('tui-back edt delete (black-box)', () => {
   function createEnv(xdg: string) {
     return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
   }
@@ -1744,12 +1798,12 @@ describe('tui-back edt delete (black-box, story 2.29)', () => {
     expect(parsed.error.code).toBe('edt-not-found');
   });
 
-  it('rejects deleting the active EDT, never touching a member branch or the registry entry (AC)', async () => {
+  it('rejects deleting the active EDT, never touching a member branch or the registry entry', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const repo = await makeGitRepo();
-    // Story 2.39: a first-ever switch refuses a dirty target member without a resolution, so
-    // the untracked manifest makeGitRepo() leaves behind is committed first.
+    // A first-ever switch refuses a dirty target member without a resolution, so the untracked
+    // manifest makeGitRepo() leaves behind is committed first.
     commitManifest(repo);
     await registerRepos([repo], env);
     const created = runCli(
@@ -1769,7 +1823,7 @@ describe('tui-back edt delete (black-box, story 2.29)', () => {
     expect((await readEdtsYaml(xdg)).edts.some((e) => e.topic === 'demo')).toBe(true);
   });
 
-  it('deletes the EDT record and its SQLite file, leaving a member branch untouched by default (AC)', async () => {
+  it('deletes the EDT record and its SQLite file, leaving a member branch untouched by default', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const repo = await makeGitRepo();
@@ -1788,11 +1842,11 @@ describe('tui-back edt delete (black-box, story 2.29)', () => {
     expect(parsed.data).toMatchObject({ ulid, topic: 'demo', results: [{ outcome: 'left' }] });
     expect((await readEdtsYaml(xdg)).edts.some((e) => e.topic === 'demo')).toBe(false);
     await expect(access(join(xdg, 'tui-back', 'edts', `${ulid}.db`))).rejects.toMatchObject({ code: 'ENOENT' });
-    // Omitting --branches for the member leaves its branch untouched (AC).
+    // Omitting --branches for the member leaves its branch untouched.
     expect(branchExists(repo, 'feat/demo')).toBe(true);
   });
 
-  it('deletes a member branch when --branches <repoPath>=delete is passed (AC)', async () => {
+  it('deletes a member branch when --branches <repoPath>=delete is passed', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const repo = await makeGitRepo();
@@ -1826,15 +1880,15 @@ describe('tui-back edt delete (black-box, story 2.29)', () => {
   });
 });
 
-describe('tui-back update (black-box, stories 3.1-3.2)', () => {
+describe('tui-back update (black-box)', () => {
   function createEnv(xdg: string) {
     return { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
   }
 
-  // The shared manifestYaml fixture declares `migrationCommand: npm run migration:run`,
-  // which has no package.json to run against in these fixtures — and story 3.2 executes
-  // the declared command for real. Update members therefore rewrite the origin manifest
-  // to the variant the case exercises before it is committed and cloned.
+  // The shared manifestYaml fixture declares `migrationCommand: npm run migration:run`, which
+  // has no package.json to run against in these fixtures — and update executes the declared
+  // command for real. Update members therefore rewrite the origin manifest to the variant the
+  // case exercises before it is committed and cloned.
   function manifestYamlWithMigration(migrationCommand: string | null): string {
     const lines = ['service: route-explorer', 'container: route-explorer'];
     if (migrationCommand !== null) {
@@ -1843,7 +1897,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     return [...lines, 'sharedBranch: development', 'modules: {}'].join('\n');
   }
 
-  // Story 3.8: the same manifest shape plus a declared clean-restart recipe. Commands are
+  // The same manifest shape plus a declared clean-restart recipe. Commands are
   // double-quoted so shell metacharacters survive the YAML round-trip.
   function manifestYamlWithRestart(migrationCommand: string | null, restartCommands: string[]): string {
     const lines = ['service: route-explorer', 'container: route-explorer'];
@@ -1873,7 +1927,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     return stubDir;
   }
 
-  // Story 3.8: the same stub, but recording every invocation's argv — proves which restart
+  // The same stub, but recording every invocation's argv — proves which restart
   // path a run took (plain `docker restart` vs the recipe, which never shells out to
   // docker at all).
   async function makeLoggingDockerStub(): Promise<{ stubDir: string; logPath: string }> {
@@ -1884,16 +1938,15 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     return { stubDir, logPath };
   }
 
-  // A member repo cloned from its own origin, sitting on a feature branch behind the
-  // origin's development — the "member on feature branch, behind shared branch, clean
-  // tree" matrix row. The clone carries a committed manifest, so the tree starts clean.
+  // A member repo cloned from its own origin, sitting on a feature branch behind the origin's
+  // development, with a clean tree (the clone carries a committed manifest).
   // `migrationCommand` selects the committed manifest variant: a shell command the update
   // really executes (default `true`), or null for a manifest declaring no migrations.
   async function makeBehindMember(migrationCommand: string | null = 'true'): Promise<{ origin: string; repo: string }> {
     return makeBehindMemberWithManifest(manifestYamlWithMigration(migrationCommand));
   }
 
-  // Story 3.8: the same behind-member fixture but with a caller-supplied manifest —
+  // The same behind-member fixture but with a caller-supplied manifest —
   // the recipe variants commit a manifest declaring `restartCommands`.
   async function makeBehindMemberWithManifest(manifestYaml: string): Promise<{ origin: string; repo: string }> {
     const origin = await makeGitRepo();
@@ -1924,7 +1977,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     return { ...env, PATH: `${stubDir}${delimiter}${process.env.PATH}` };
   }
 
-  it('brings two behind members up to date: one JSON line, both updated, exit 0 (AC1)', async () => {
+  it('brings two behind members up to date: one JSON line, both updated, exit 0', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember();
@@ -1943,8 +1996,8 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
         ulid: expect.any(String),
         topic: 'demo',
         results: [
-          { service: 'route-explorer', outcome: 'updated' },
-          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'edt',
       },
@@ -1956,7 +2009,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     }
   });
 
-  it('a conflicting member fails with merge-conflict back at its pre-run HEAD while the other still reports updated (AC4)', async () => {
+  it('a conflicting member fails with merge-conflict back at its pre-run HEAD while the other still reports updated', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     // The conflicted member declares a marker-writing migration: its absence afterwards
@@ -1978,7 +2031,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const data = JSON.parse(stdout.trim()).data;
     expect(data.results).toEqual([
       { service: 'route-explorer', outcome: 'failed', detail: expect.objectContaining({ code: 'merge-conflict' }) },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.objectContaining({ merge: expect.objectContaining({ kind: 'advanced', files: expect.any(Number) }) }) },
     ]);
     // The conflicting repo is back at its pre-run HEAD with no merge in progress.
     expect(runGit(a.repo, ['rev-parse', 'HEAD']).stdout.trim()).toBe(headBefore);
@@ -1995,7 +2048,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
     // Dirtied after the switch: a first-ever switch refuses a dirty member without an
-    // explicit resolution (story 2.39).
+    // explicit resolution.
     await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
@@ -2004,14 +2057,14 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
       { service: 'route-explorer', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // The dirty repo was never merged: the origin's advance is still not an ancestor.
     const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
     expect(runGit(a.repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).not.toBe(0);
   });
 
-  it('a lockfile-only dirty member is auto-discarded and still updates, one JSON line (story 3.4)', async () => {
+  it('a lockfile-only dirty member is auto-discarded and still updates, one JSON line', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember();
@@ -2023,7 +2076,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(runGit(a.repo, ['commit', '-m', 'add package.json']).status).toBe(0);
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
-    // Dirtied after the switch (story 2.39: a first-ever switch refuses unresolved dirt).
+    // Dirtied after the switch (a first-ever switch refuses unresolved dirt).
     await writeFile(join(a.repo, 'package.json'), '{"name":"route-explorer-dirty"}\n');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
@@ -2032,8 +2085,8 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(status).toBe(0);
     expect(stdout.trim().split('\n')).toHaveLength(1);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
-      { service: 'route-explorer', outcome: 'updated' },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // The lockfile dirt was discarded (committed content restored) and the merge landed.
     expect(await readFile(join(a.repo, 'package.json'), 'utf8')).toBe('{"name":"route-explorer"}\n');
@@ -2041,7 +2094,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(runGit(a.repo, ['merge-base', '--is-ancestor', originHead, 'HEAD']).status).toBe(0);
   });
 
-  it('runs each member migrationCommand after pull/merge: marker files prove it ran, both updated (story 3.2 AC1)', async () => {
+  it('runs each member migrationCommand after pull/merge: marker files prove it ran, both updated', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember('touch migrated.txt');
@@ -2054,8 +2107,8 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
-      { service: 'route-explorer', outcome: 'updated' },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // Both members merged AND migrated: the origin advance is an ancestor and the
     // migration's marker file exists in each working tree.
@@ -2066,7 +2119,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     }
   });
 
-  it('skips the migration step without error when no migrationCommand is declared (story 3.2 AC2)', async () => {
+  it('skips the migration step without error when no migrationCommand is declared', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember(null);
@@ -2079,12 +2132,12 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
 
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
-      { service: 'route-explorer', outcome: 'updated' },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
   });
 
-  it('a failing migration fails only that service with migration-failed detail while the other still reports updated (story 3.2 AC3)', async () => {
+  it('a failing migration fails only that service with migration-failed detail while the other still reports updated', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember('echo migration-boom >&2; exit 3');
@@ -2097,7 +2150,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
 
     expect(status).toBe(0);
     const data = JSON.parse(stdout.trim()).data;
-    expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'updated' });
+    expect(data.results[1]).toEqual({ service: 'route-explorer', outcome: 'updated', run: expect.anything() });
     expect(data.results[0].service).toBe('route-explorer');
     expect(data.results[0].outcome).toBe('failed');
     expect(data.results[0].detail.code).toBe('migration-failed');
@@ -2111,7 +2164,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await expect(access(join(b.repo, 'migrated.txt'))).resolves.toBeUndefined();
   });
 
-  it('a dirty member never runs its migration and keeps dirty-worktree while the other updates (story 3.2 AC4)', async () => {
+  it('a dirty member never runs its migration and keeps dirty-worktree while the other updates', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember('touch should-not-run.txt');
@@ -2119,7 +2172,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await registerRepos([a.repo, b.repo], env);
     await createAndSwitchEdt(env, 'demo', [a.repo, b.repo]);
     // Dirtied after the switch: a first-ever switch refuses a dirty member without an
-    // explicit resolution (story 2.39).
+    // explicit resolution.
     await writeFile(join(a.repo, 'wip.txt'), 'uncommitted work');
     const dockerEnv = withDocker(env, await makeDockerStub());
 
@@ -2128,7 +2181,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(status).toBe(0);
     expect(JSON.parse(stdout.trim()).data.results).toEqual([
       { service: 'route-explorer', outcome: 'skipped', detail: expect.objectContaining({ code: 'dirty-worktree' }) },
-      { service: 'route-explorer', outcome: 'updated' },
+      { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
     ]);
     // The dirty repo was never merged and never migrated.
     const originHead = runGit(a.origin, ['rev-parse', 'development']).stdout.trim();
@@ -2136,7 +2189,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await expect(access(join(a.repo, 'should-not-run.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('rejects unknown flags with invalid-argument, and gates --all behind --yes (story 3.3)', async () => {
+  it('rejects unknown flags with invalid-argument, and gates --all behind --yes', async () => {
     const xdg = await makeTempDir();
 
     for (const args of [['update', '--force'], ['update', 'extra']]) {
@@ -2157,7 +2210,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(parsed.error.message).toContain('--yes');
   });
 
-  it('brings every managed repo up to date with update --all --yes, no EDT needed (story 3.3 AC1)', async () => {
+  it('brings every managed repo up to date with update --all --yes, no EDT needed', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember();
@@ -2176,8 +2229,8 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
         ulid: 'all',
         topic: 'all-repos',
         results: [
-          { service: 'route-explorer', outcome: 'updated' },
-          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'all',
       },
@@ -2189,7 +2242,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     }
   });
 
-  it('update --all --yes accepts either flag order (story 3.3)', async () => {
+  it('update --all --yes accepts either flag order', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember();
@@ -2205,7 +2258,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     });
   });
 
-  it('reports an empty registry as an explicit no-op with a note, exit 0 (story 3.3 AC4)', async () => {
+  it('reports an empty registry as an explicit no-op with a note, exit 0', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
 
@@ -2251,7 +2304,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(parsed.data.note.length).toBeGreaterThan(0);
   });
 
-  it('follows the new group-update signature with full defaults: one JSON line, scope edt, migrations on (story 3.7)', async () => {
+  it('follows the group-update signature with full defaults: one JSON line, scope edt, migrations on', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember('touch migrated.txt');
@@ -2268,7 +2321,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
       data: {
         ulid: expect.any(String),
         topic: 'demo',
-        results: [{ service: 'route-explorer', outcome: 'updated' }],
+        results: [{ service: 'route-explorer', outcome: 'updated', run: expect.anything() }],
         scope: 'edt',
       },
     });
@@ -2276,7 +2329,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await expect(access(join(a.repo, 'migrated.txt'))).resolves.toBeUndefined();
   });
 
-  it('update --all --yes follows the new call-site defaults: scope all, migrations on, one JSON line (story 3.7)', async () => {
+  it('update --all --yes follows the call-site defaults: scope all, migrations on, one JSON line', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember('touch migrated.txt');
@@ -2294,8 +2347,8 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
         ulid: 'all',
         topic: 'all-repos',
         results: [
-          { service: 'route-explorer', outcome: 'updated' },
-          { service: 'route-explorer', outcome: 'updated' },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
+          { service: 'route-explorer', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'all',
       },
@@ -2305,7 +2358,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     await expect(access(join(b.repo, 'migrated.txt'))).resolves.toBeUndefined();
   });
 
-  it('falls back to the plain container restart when no recipe is declared (story 3.8)', async () => {
+  it('falls back to the plain container restart when no recipe is declared', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMemberWithManifest(manifestYamlWithMigration(null));
@@ -2317,12 +2370,12 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const { status, stdout } = runCli(['update'], dockerEnv);
 
     expect(status).toBe(0);
-    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated' }]);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated', run: expect.anything() }]);
     // No recipe declared, so the run took the plain container-restart path.
     expect(await readFile(logPath, 'utf8')).toContain('restart -- route-explorer');
   });
 
-  it('leaves a declared recipe untouched without the clean-restart toggle: plain restart runs (story 3.8)', async () => {
+  it('leaves a declared recipe untouched without the clean-restart toggle: plain restart runs', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     // The recipe would fail loudly (and mark the working tree) if it ever ran — the CLI
@@ -2336,14 +2389,14 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     const { status, stdout } = runCli(['update'], dockerEnv);
 
     expect(status).toBe(0);
-    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated' }]);
+    expect(JSON.parse(stdout.trim()).data.results).toEqual([{ service: 'route-explorer', outcome: 'updated', run: expect.anything() }]);
     // The plain container restart ran instead of the recipe.
     expect(await readFile(logPath, 'utf8')).toContain('restart -- route-explorer');
     // No recipe command ever executed in the repo working directory.
     await expect(access(join(a.repo, 'recipe-ran.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('rejects a second run while one holds the lock with update-already-running (AC2)', { timeout: 30000 }, async () => {
+  it('rejects a second run while one holds the lock with update-already-running', { timeout: 30000 }, async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember();
@@ -2364,7 +2417,7 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
     expect(JSON.parse(stdout.trim())).toMatchObject({ ok: false, error: { code: 'update-already-running' } });
   });
 
-  it('rejects update --all --yes while an EDT-scoped run holds the lock, and vice versa (story 3.3 AC3)', { timeout: 30000 }, async () => {
+  it('rejects update --all --yes while an EDT-scoped run holds the lock, and vice versa', { timeout: 30000 }, async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const a = await makeBehindMember();
@@ -2385,12 +2438,12 @@ describe('tui-back update (black-box, stories 3.1-3.2)', () => {
   });
 });
 
-describe('tui-back registry clean (black-box, story 2.33)', () => {
+describe('tui-back registry clean (black-box)', () => {
   function createEnv(xdg: string) {
     return { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
   }
 
-  it('AC4: --yes --path <p1> --path <p2> removes both stale paths, one outcome row each', async () => {
+  it('--yes --path <p1> --path <p2> removes both stale paths, one outcome row each', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const unreachable = await makeRepo(true);
@@ -2470,7 +2523,7 @@ describe('tui-back registry clean (black-box, story 2.33)', () => {
     expect(JSON.parse(yesOnly.stdout.trim()).error.code).toBe('invalid-argument');
   });
 
-  it('rejects a --path value that looks like another flag or is empty, instead of silently misinterpreting it (review fix)', async () => {
+  it('rejects a --path value that looks like another flag or is empty, instead of silently misinterpreting it', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
 
@@ -2481,7 +2534,7 @@ describe('tui-back registry clean (black-box, story 2.33)', () => {
     expect(JSON.parse(empty.stdout.trim()).error.code).toBe('invalid-argument');
   });
 
-  it('de-duplicates the same resolved path given via multiple --path flags (review fix)', async () => {
+  it('de-duplicates the same resolved path given via multiple --path flags', async () => {
     const xdg = await makeTempDir();
     const env = createEnv(xdg);
     const unreachable = await makeRepo(true);
@@ -2497,7 +2550,7 @@ describe('tui-back registry clean (black-box, story 2.33)', () => {
     expect(JSON.parse(stdout.trim())).toEqual({ ok: true, data: { results: [{ path: unreachable, outcome: 'removed' }] } });
   });
 
-  it('flags a stale candidate that is still an EDT member with a memberOfEdts note, through the real CLI (AC3/AC6, review fix)', async () => {
+  it('flags a stale candidate that is still an EDT member with a memberOfEdts note, through the real CLI', async () => {
     const xdg = await makeTempDir();
     const env = { XDG_CONFIG_HOME: xdg, XDG_DATA_HOME: xdg, XDG_STATE_HOME: xdg };
     const repo = await makeGitRepo();

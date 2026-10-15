@@ -1,9 +1,7 @@
-// tui/store/slices: the `:reset` overlay — reachable exclusively through the registered
-// `reset` command (never a raw keypress). Mirrors settings-slice.ts's open/close triplet, plus
-// a BUSY guard on open, a preview load for the summary step, and `runReset`, which calls the
-// core resetTool use-case in-process (AD-2) and then rehydrates every store field it could
-// have invalidated (loadEdts, loadTabVisibility, checkRegistryEmpty, loadFilterHistory) so
-// the EDTs zone and top bar reflect the reset without restarting the TUI.
+// tui/store/slices: the `:reset` overlay — open/close, a BUSY guard on open, a preview load
+// for the summary step, and `runReset`, which calls core resetTool in-process and then
+// rehydrates every store field it could have invalidated (loadEdts, loadTabVisibility,
+// checkRegistryEmpty, loadFilterHistory, loadCommandHistory) so the TUI reflects the reset without a restart.
 import type { StateCreator } from 'zustand';
 import { resetTool, resolveResetCategories, type ResetCategory, type ResetToolData } from '../../../../../core/scripts/reset-tool.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
@@ -158,7 +156,7 @@ export function createResetSlice(deps?: AppStoreDeps): StateCreator<AppState, []
           if (resolveResetCategories(categories).includes('histories')) {
             // Empty the in-memory history and let every queued save land first, so a pending
             // logs-slice write can't overwrite the reset's own `{}` afterwards.
-            await get().clearFilterHistoryAndDrainSaves();
+            await Promise.all([get().clearFilterHistoryAndDrainSaves(), get().clearCommandHistoryAndDrainSaves()]);
           }
           const result = await resetTool({
             categories,
@@ -177,11 +175,11 @@ export function createResetSlice(deps?: AppStoreDeps): StateCreator<AppState, []
         } catch (error) {
           resetError = errorMessage(error);
         } finally {
-          // Rehydrate only after every disk write has settled (Design Notes), and always —
+          // Rehydrate only after every disk write has settled, and always —
           // even after a throw, disk may have partly changed. allSettled + a wrapped call so
           // one failing (or synchronously throwing) loader never skips the others, and the
           // status below always leaves 'running'.
-          const loaders = [get().loadEdts, get().loadTabVisibility, get().checkRegistryEmpty, get().loadFilterHistory];
+          const loaders = [get().loadEdts, get().loadTabVisibility, get().checkRegistryEmpty, get().loadFilterHistory, get().loadCommandHistory];
           const settled = await Promise.allSettled(loaders.map((load) => Promise.resolve().then(() => load())));
           const failedReload = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
           if (failedReload && resetError === null) {

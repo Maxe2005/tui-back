@@ -55,10 +55,9 @@ export async function runCli(
     result = err('internal-error', String(error));
   }
 
-// renderResult (specifically JSON.stringify inside it) can itself throw — e.g. a circular
+  // renderResult (specifically JSON.stringify inside it) can itself throw — e.g. a circular
   // reference or a BigInt inside a use-case's returned data. That must never escape as an
-  // uncaught exception (AD-3's whole point), so it gets the same try/catch treatment as
-  // subcommand.run above, one level up.
+  // uncaught exception, so it gets the same try/catch treatment as subcommand.run above.
   try {
     return renderResult(result, isTTY);
   } catch (error) {

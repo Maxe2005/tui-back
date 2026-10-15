@@ -1,8 +1,6 @@
 // adapters/driven/restart: integration tests against the real `sh` plus a stubbed shell
-// (AD-13 driven layer, story 3.8). The stub-shell cases mirror the migration adapter's
-// own pattern: the adapter's whole contract is how the shell's exit codes/streams
-// surface as Result errors, exercised through a stub `sh` script on a temp dir that
-// records its argv and cwd and exits as instructed.
+// script on a temp dir that records its argv and cwd and exits as instructed — the adapter's
+// contract is how the shell's exit codes/streams surface as Result errors.
 import { describe, expect, it, afterEach } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

@@ -1,34 +1,23 @@
-// tui/shared/command-bar: story 2.14's `:` command-entry bar, reworked by story 2.17 into
-// shell-style Tab-completion. A `modal-dialog` + text input; nothing else renders until `Tab`
-// is pressed. `Tab` on an empty input reveals the full command grid immediately; on a
-// non-empty input it completes to a single match, completes to a longer shared prefix across
-// 2+ matches, or — once already sitting at that maximal prefix — arms a `TabPressState` that a
-// second `Tab` within `TAB_DOUBLE_PRESS_WINDOW_MS` (same query, no intervening key) resolves
-// into the grid. The grid is a column-major, arrow-navigable browser (UX-DR30): `Down` from
-// the input enters it top-of-first-column, `Up`/`Down` move within a column, `Left`/`Right`
-// hop columns (scrolling the visible window by one column at a hidden edge), `Enter` completes
-// to the highlighted cell and returns focus to the input, any printable character (or
-// backspace — see the spec's "Ask First" resolution) returns to the input and collapses the
-// grid, and `Esc` closes the whole bar regardless of which side has focus.
-//
-// Self-contained `useInput` (mirrors repo-registry-screen.tsx's phase-dispatch shape): typing,
-// filtering, Tab-autocomplete/double-Tab-grid, grid navigation, Enter-run/unknown-message, and
-// Esc-cancel are all handled here, not routed through AppShell's central useInput callback —
-// AppShell only tracks the single `commandBarOpen` boolean that mounts/unmounts this component.
-//
-// Testability convention (render-to-string.tsx): the shared renderToString harness's fake
-// stdin never emits data, so a useInput callback itself is never invoked by any test using
-// that harness — every key-handling decision below is a pure, directly-testable function;
-// useInput only interprets the raw Ink Key and dispatches the pure result (mirrors
-// repo-registry-screen.tsx's typeRootInputChar/backspaceRootInput and
-// edts-zone.tsx's resolveSelectionDirection/moveSelection). Real-keypress coverage lives in
-// app-shell.interaction.test.tsx, same as Story 2.12's Left/Right coverage.
+// tui/shared/command-bar: the `:` command-entry bar with shell-style Tab completion — Tab
+// completes a single match or a longer shared prefix; a second Tab at the maximal prefix (or
+// Tab on empty input) reveals a column-major, arrow-navigable command grid. Its own useInput
+// handles everything; AppShell only mounts/unmounts it via `commandBarOpen`. Every key decision
+// is a pure, unit-tested function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
-import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
+import { Box, Text, type Key } from 'ink';
+import { useInput } from './hooks/use-input.js';
+import {
+  resolveHistoryBrowseDown,
+  resolveHistoryBrowseUp,
+  resolveSnapBackBase,
+  type HistoryBrowseState,
+} from './input-history/index.js';
+import { useBounds } from './bounds/bounds-context.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { resolveBoundedVisibility } from './components/bounded-list.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
 import {
   COMMANDS,
   matchCommands,
@@ -36,20 +25,17 @@ import {
   runCommand as runCommandInZone,
   type Command,
 } from '../commands/commands.js';
+import { StateLine } from './components/state-line.js';
 
 // A second `Tab` at the maximal common prefix must land within this window, on the same
-// query, with no intervening key, to reveal the grid (Boundaries: "TAB_DOUBLE_PRESS_WINDOW_MS
-// (500ms, named constant)"). Colocated with its single consumer, mirroring
-// adapters/driven/lock/index.ts's ORPHAN_STALE_AGE_MS convention.
+// query, with no intervening key, to reveal the grid.
 export const TAB_DOUBLE_PRESS_WINDOW_MS = 500;
 
-// Story 2.19: the default grid-rows-per-column value, now user-overridable via the
-// `:settings` screen's Command Palette tab (store.settings.commandPalette.gridMaxRows) — this
-// constant survives only as DEFAULT_SETTINGS.commandPalette.gridMaxRows (core/ports/settings.ts),
-// the single source of truth an unwired/pre-first-load store still falls back to.
+// The default grid rows per column, user-overridable from the `:settings` Command Palette tab
+// (store.settings.commandPalette.gridMaxRows); DEFAULT_SETTINGS holds the fallback value.
 
-// Layout-only implementation details (not named by the spec): the gap rendered between
-// adjacent grid columns and the width reserved for a truncation "…" marker on a hidden edge.
+// Layout-only details: the gap rendered between adjacent grid columns and the width reserved
+// for a truncation "…" marker on a hidden edge.
 const GRID_COLUMN_GAP = 1;
 const GRID_ELLIPSIS_WIDTH = 1;
 // ModalDialog's own chrome (double border + padding on each side) plus a small safety margin,
@@ -73,8 +59,8 @@ export function backspaceCommandQuery(current: string): string {
 }
 
 // Tab autocompletes only on an unambiguous single match; zero or 2+ matches leave the query
-// untouched. Extracted as its own pure function (kept exactly as story 2.14 shipped it) so the
-// single-match branch stays directly unit-testable; resolveTabPress below delegates to it.
+// untouched. Kept as its own pure function so the single-match branch stays directly
+// unit-testable; resolveTabPress below delegates to it.
 export function resolveTabAutocomplete(query: string, matches: readonly Command[]): string {
   return matches.length === 1 ? matches[0]!.name : query;
 }
@@ -101,7 +87,7 @@ export function longestCommonPrefix(matches: readonly Command[]): string {
   return prefix;
 }
 
-// A stamped-then-checked value, not a timer (Design Notes): recorded on a Tab press that
+// A stamped-then-checked value, not a timer: recorded on a Tab press that
 // leaves the query unchanged (already at the maximal common prefix), and compared against
 // `Date.now()` on the *next* Tab press to detect "same query, within the window".
 export type TabPressState = { query: string; at: number };
@@ -112,10 +98,10 @@ export type TabResolution =
   | { kind: 'pending'; state: TabPressState }
   | { kind: 'noop' };
 
-// Resolves a single Tab press against the current query/matches/pending state. Callers are
-// responsible for the empty-query special case (Boundaries: "Tab on empty input shows the
-// full grid immediately, no double-press needed") — this function only covers the non-empty
-// I/O matrix rows (single match / longer common prefix / maximal-prefix first vs second press).
+// Resolves a single Tab press against the current query/matches/pending state. Callers handle
+// the empty-query case (Tab on empty input shows the full grid immediately) — this only covers
+// a non-empty query (single match / longer common prefix / maximal-prefix first vs second
+// press).
 export function resolveTabPress(
   query: string,
   matches: readonly Command[],
@@ -150,11 +136,7 @@ export function resolveTabPress(
 }
 
 // Column-major grouping: column 0 holds the first `maxRows` matches, column 1 the next
-// `maxRows`, and so on (Boundaries: "column-major, ≤ COMMAND_GRID_MAX_ROWS rows/column").
-// Story 5.4: generalized to a generic `T` — the only real `Command`-specific access
-// (`columnDisplayWidth`'s `.name.length`, immediately below) already took a `getLabel`
-// accessor by the time this was touched, so `groupCommandsByColumn`/`commandAtGridCursor`
-// themselves never needed one; every existing call site keeps passing `Command[]` as `T`.
+// `maxRows`, and so on. Generic over `T` (commands, or filter-history query strings).
 export function groupCommandsByColumn<T>(matches: readonly T[], maxRows: number): T[][] {
   const rows = Math.max(1, maxRows);
   const columns: T[][] = [];
@@ -164,58 +146,43 @@ export function groupCommandsByColumn<T>(matches: readonly T[], maxRows: number)
   return columns;
 }
 
-// Story 5.5: `top`/`bottom` are optional — only ever present once a `verticalWindow` is passed
-// to `layoutCommandGrid` (the filter-history grid's own use inside LogFilterEditor). Every
-// other existing caller (this file's own command palette grid) never passes one, so its
-// `truncated` object stays exactly `{ left, right }`, byte-for-byte what it always was.
+// `top`/`bottom` are present only when a `verticalWindow` is passed to `layoutCommandGrid`
+// (the filter-history grid inside LogFilterEditor); the command palette's `truncated` stays
+// `{ left, right }`.
 export type GridTruncation = { left: boolean; right: boolean; top?: boolean; bottom?: boolean };
 
 export type CommandGridLayout<T> = {
   // Only the columns that actually fit `availableWidth` from `scrollOffset` onward — every
-  // whole column, never a partial one (Boundaries: "only whole columns that fit render").
+  // whole column, never a partial one.
   columns: readonly T[][];
   truncated: GridTruncation;
   // The (possibly clamped) horizontal scroll position this layout was actually computed from.
   scrollOffset: number;
-  // Story 5.5: the (possibly clamped) *vertical* scroll position within each column — 0 and
-  // inert unless a `verticalWindow` was requested.
+  // The (possibly clamped) *vertical* scroll position within each column — 0 and inert unless
+  // a `verticalWindow` was requested.
   rowScrollOffset: number;
 };
 
-// Story 5.5: requests vertical pagination on top of the existing horizontal one — mirrors it
-// (Boundaries UX-DR30) rather than reimplementing a separate windowing scheme. `cursorRow` is
-// the currently-highlighted row *within whichever column owns the cursor* (moveGridCursorVertical's
-// own `row`, an absolute index into that column's full, unsliced array) — the window centers on
-// it once every column's tallest exceeds `maxVisibleRows`, reusing bounded-list.tsx's own
-// `resolveBoundedVisibility` (which itself reserves rows for its indicators) rather than a
-// second copy of the same budget/clamp math.
+// Requests vertical pagination on top of the horizontal one. `cursorRow` is the highlighted row
+// *within whichever column owns the cursor* (an absolute index into that column's full array);
+// the window centers on it once the tallest column exceeds `maxVisibleRows`, reusing
+// bounded-list.tsx's `resolveBoundedVisibility` (which reserves rows for its indicators)
+// rather than a second copy of the same budget/clamp math.
 export type GridVerticalWindow = { maxVisibleRows: number; cursorRow: number };
 
-// Review fix (story 5.4): exported so a second grid consumer (logs-zone.tsx's filter-history
-// browser) reuses this instead of reimplementing the same column-width reduction locally — per
-// the spec's Design Notes ("one reusable grid implementation ... rather than reimplementing the
-// same column-width/truncation math").
+// Exported so the filter-history browser (logs-zone.tsx) reuses the same column-width
+// reduction instead of reimplementing it.
 export function columnDisplayWidth<T>(column: readonly T[], getLabel: (item: T) => string): number {
   return column.reduce((max, item) => Math.max(max, getLabel(item).length), 0);
 }
 
-// Column-major layout + horizontal-scroll truncation (Boundaries: "column width = its longest
-// label; when total width exceeds available width, only whole columns that fit render, with a
-// `…` marker on whichever edge(s) hide columns"). `scrollOffset` is state the component owns
-// (Design Notes) — passed in fresh each render alongside `matches`/`maxRows`/`availableWidth`
-// so this stays a stateless projection; the returned `scrollOffset` is the clamped value the
-// layout was actually computed from.
-//
-// Story 5.4: generalized with a `getLabel` accessor so the filter-history grid browser
-// (logs-zone.tsx) can reuse this over plain query strings (`getLabel = (s) => s`) rather than
-// reimplementing the same column-width/truncation math — every existing call site passes
-// `getLabel = (c) => c.name`.
-//
-// Story 5.5: split into a private horizontal resolver (`resolveHorizontalGrid`, the exact
-// pre-5.5 logic, untouched) and a vertical-windowing pass (`applyVerticalWindow`) layered on
-// top of its result — `layoutCommandGrid` itself stays the single public entry point, its first
-// 5 params and their meaning completely unchanged (every pre-5.5 call site keeps compiling and
-// behaving identically since `verticalWindow` is optional and defaults to off).
+// Column-major layout + horizontal-scroll truncation: a column is as wide as its longest
+// label; when the total exceeds the available width only whole columns that fit render, with a
+// `…` marker on each edge that hides columns. `scrollOffset` is component-owned state passed in
+// fresh each render, so this stays a stateless projection; the returned `scrollOffset` is the
+// clamped value actually used. `getLabel` lets the filter-history grid reuse it over plain
+// strings. A horizontal pass (`resolveHorizontalGrid`) runs first, then the optional
+// vertical-windowing pass (`applyVerticalWindow`).
 export function layoutCommandGrid<T>(
   matches: readonly T[],
   maxRows: number,
@@ -299,19 +266,11 @@ function resolveHorizontalGrid<T>(
   };
 }
 
-// Story 5.5: mirrors the horizontal truncation/scroll above (UX-DR30) but for rows within each
-// already-horizontally-selected column. A no-op (columns/truncated/scrollOffset passed through
-// untouched, `rowScrollOffset: 0`) whenever no `verticalWindow` is requested or every column
-// already fits — the exact NO_OVERFLOW case every pre-5.5 caller (the command palette's own
-// grid) keeps hitting, since it never passes one.
-//
-// Review fix: this used to slice every column to the full `maxVisibleRows` and let
-// `logs-zone.tsx` render the `▲`/`▼` indicator lines as *additional* siblings around that —
-// so the grid's real on-screen footprint was `maxVisibleRows + up to 2`, over budget by
-// design. Reuses bounded-list.tsx's own `resolveBoundedVisibility` (over a synthetic row-index
-// array standing in for "the tallest column") instead of a second, easy-to-desync copy of the
-// same budget/cursor-follow math — this guarantees the exact same invariant BoundedList itself
-// guarantees: `columns[*].length + (top?1:0) + (bottom?1:0) <= maxVisibleRows`.
+// Mirrors the horizontal truncation/scroll above, but for rows within each already-selected
+// column. A no-op (`rowScrollOffset: 0`) when no `verticalWindow` is requested or every column
+// already fits. Reuses bounded-list.tsx's `resolveBoundedVisibility` (over a synthetic row-index
+// array standing in for the tallest column), so the indicator lines count toward the budget:
+// `columns[*].length + (top?1:0) + (bottom?1:0) <= maxVisibleRows`.
 function applyVerticalWindow<T>(
   horizontal: HorizontalGridLayout<T>,
   verticalWindow: GridVerticalWindow | undefined,
@@ -335,10 +294,8 @@ function applyVerticalWindow<T>(
 export type GridCursor = { column: number; row: number };
 
 // Maps an arrow keypress to the direction moveGridCursorVertical/moveGridCursorHorizontal
-// expect. Extracted from useInput's inline ternaries (review fix, story 2.17) so a swapped
-// up/down or left/right mapping is directly unit-testable — the real COMMANDS registry never
-// spans 2+ columns, so a swapped left/right ternary in particular would otherwise be
-// unreachable by any real-keypress test.
+// expect. A pure function so a swapped up/down or left/right mapping is unit-testable — the
+// real COMMANDS registry rarely spans 2+ columns, so a real-keypress test could miss it.
 export function resolveGridVerticalDirection(key: Pick<Key, 'upArrow' | 'downArrow'>): 'up' | 'down' {
   return key.upArrow ? 'up' : 'down';
 }
@@ -348,8 +305,8 @@ export function resolveGridHorizontalDirection(key: Pick<Key, 'leftArrow' | 'rig
 }
 
 // `Up`/`Down` move within a column, clamped to its row count; `Up` at row 0 returns null,
-// signalling "leave the grid, focus back to the input" (Boundaries: "Up at row 0 → back to
-// input"). `Down` always resolves to a cursor — clamped, never null.
+// signalling "leave the grid, focus back to the input". `Down` always resolves to a cursor —
+// clamped, never null.
 export function moveGridCursorVertical(
   cursor: GridCursor,
   direction: 'up' | 'down',
@@ -367,8 +324,7 @@ export type GridHorizontalMove = { cursor: GridCursor; scrollOffset: number };
 
 // `Left`/`Right` move to the adjacent column, same row index clamped to that column's length;
 // at a hidden-column edge the visible window scrolls by exactly one column so the newly
-// entered column stays in view. At the true first/last column, this is a no-op (Boundaries
-// doesn't describe wrapping).
+// entered column stays in view. At the true first/last column this is a no-op (no wrapping).
 export function moveGridCursorHorizontal(
   cursor: GridCursor,
   direction: 'left' | 'right',
@@ -397,20 +353,17 @@ export function moveGridCursorHorizontal(
 
 // Resolves the command under an absolute grid cursor position against the full (unsliced)
 // column grouping — `cursor.column` is an absolute index, independent of the currently
-// scrolled-into-view window. Story 5.4: generalized to `T`, same as groupCommandsByColumn above.
+// scrolled-into-view window.
 export function commandAtGridCursor<T>(columns: readonly (readonly T[])[], cursor: GridCursor): T | undefined {
   return columns[cursor.column]?.[cursor.row];
 }
 
-// Story 3.11: the single Enter-dispatch entry point. The command name is the query's
-// first whitespace-separated token (case-insensitive) so commands that take an argument
-// (`edt-switch <topic>`, `update-service <name>`) dispatch on their name while the run
-// itself still receives the full query to parse. The zone switch itself is delegated to
-// commands.ts's own runCommand (a command carrying `zoneId` activates that zone first,
-// unless it is already active) so the opened screen lives where the developer lands.
-// Returns true when a command ran, false when nothing matched (the caller shows the
-// unknown-command message). Pure dispatch over the registry — directly unit-testable
-// without mounting Ink.
+// The single Enter-dispatch entry point. The command name is the query's first
+// whitespace-separated token (case-insensitive) so commands that take an argument
+// (`edt-switch <topic>`, `update-service <name>`) dispatch on their name while the run itself
+// receives the full query. The zone switch is delegated to commands.ts's runCommand. Returns
+// true when a command ran, false when nothing matched (the caller shows the unknown-command
+// message).
 export function runCommand(
   useStore: AppStore,
   fullQuery: string,
@@ -440,28 +393,45 @@ export type CommandBarProps = {
 };
 
 export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps) {
-  // Story 2.19: read live from the store (settings screen's Command Palette tab) instead of
-  // the retired COMMAND_GRID_MAX_ROWS constant.
-  const gridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
+  // Read live from the store (the settings screen's Command Palette tab).
+  const configuredGridMaxRows = useStore((state) => state.settings.commandPalette.gridMaxRows);
+  // Frame (6) + input line + one message line + one spare row.
+  const bounds = useBounds();
+  const gridMaxRows = Math.max(1, Math.min(configuredGridMaxRows, bounds.rows - 9));
+  useFooterContext('command-bar', 'command', useStore);
+  // The persisted recall list, most recent first.
+  const commandHistory = useStore((state) => state.commandHistory);
+  const commitCommandHistoryEntry = useStore((state) => state.commitCommandHistoryEntry);
   const [query, setQuery] = useState('');
+  // Non-null while ↑/↓ are recalling history — `query` then shows the recalled entry and
+  // `browsing.savedDraft` holds the draft to restore (the shared input-history primitive).
+  const [browsing, setBrowsing] = useState<HistoryBrowseState | null>(null);
   const [unknownCommand, setUnknownCommand] = useState(false);
   const [pending, setPending] = useState<TabPressState | null>(null);
   // Whether the grid has been revealed at all this session (Tab on empty input, or a resolved
-  // double-Tab). Actual visibility also depends on there still being 2+ live matches — see
-  // `gridVisible` below (Boundaries: "re-filter it live ... hiding it again once only one
-  // match remains").
+  // double-Tab). Actual visibility also needs 2+ live matches — see `gridVisible` below (the
+  // grid re-filters live and hides once only one match remains).
   const [gridShown, setGridShown] = useState(false);
   const [focus, setFocus] = useState<'input' | 'grid'>('input');
-  const [gridCursor, setGridCursor] = useState<GridCursor>({ column: 0, row: 0 });
+  const [rawGridCursor, setGridCursor] = useState<GridCursor>({ column: 0, row: 0 });
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const matches = matchCommands(query, COMMANDS);
   const gridVisible = gridShown && matches.length > 1;
 
-  const { columns: terminalColumns } = useWindowSize();
+  const terminalColumns = bounds.columns;
   const availableWidth = Math.max(terminalColumns - MODAL_CHROME_WIDTH, MIN_GRID_WIDTH);
   const allColumns = groupCommandsByColumn(matches, gridMaxRows);
+  // A resize can change the column heights (gridMaxRows follows the bounds): keep the cursor on a real cell.
+  const cursorColumn = Math.max(0, Math.min(rawGridCursor.column, allColumns.length - 1));
+  const gridCursor: GridCursor = {
+    column: cursorColumn,
+    row: Math.max(0, Math.min(rawGridCursor.row, (allColumns[cursorColumn]?.length ?? 1) - 1)),
+  };
   const layout = layoutCommandGrid(matches, gridMaxRows, availableWidth, (command) => command.name, scrollOffset);
+
+  // layoutCommandGrid already windows the grid to the terminal's width and the configured rows.
+  const visibleColumns = layout.columns;
 
   const openGridAtOrigin = () => {
     setGridShown(true);
@@ -471,8 +441,8 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
   };
 
   // Shared exit path back to the input from grid focus, used by both "any printable
-  // character" and (per the spec's Ask-First resolution) backspace: focus returns to the
-  // input and the grid collapses entirely — a fresh Tab is required to bring it back.
+  // character" and backspace: focus returns to the input and the grid collapses entirely — a
+  // fresh Tab is required to bring it back.
   const exitGridToInput = () => {
     setFocus('input');
     setGridShown(false);
@@ -526,12 +496,10 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
         return;
       }
 
-      // Tab has no defined meaning while browsing the grid (Boundaries only enumerates
-      // Up/Down/Left/Right/Enter/printable/Esc). Ink already reports empty `input` for Tab
-      // (parse-keypress.js's `nonAlphanumericKeys`), so falling through to the printable-char
-      // branch below is already a no-op in practice — this guard makes that explicit rather
-      // than relying on an un-asserted upstream detail (review fix), matching the conservative
-      // no-op already used at grid edges (Left/Right at the first/last column).
+      // Tab has no meaning while browsing the grid. Ink already reports empty `input` for Tab
+      // (parse-keypress.js's `nonAlphanumericKeys`), so the printable-char branch below would
+      // be a no-op anyway — this guard makes that explicit rather than relying on an upstream
+      // detail.
       if (key.tab) {
         return;
       }
@@ -544,14 +512,16 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
       return;
     }
 
-    // focus === 'input'. Any key other than Tab discards a pending double-Tab state
-    // (Boundaries: "any other key ... discards the pending state").
+    // focus === 'input'. Any key other than Tab discards a pending double-Tab state.
     if (!key.tab && pending !== null) {
       setPending(null);
     }
 
     if (key.return) {
+      // Runs the displayed query — a recalled command runs as shown. Only a recognized command
+      // is recorded, so an unknown one never enters the history.
       if (runCommand(useStore, query)) {
+        commitCommandHistoryEntry(query.trim());
         onClose();
       } else {
         setUnknownCommand(true);
@@ -560,6 +530,9 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
     }
 
     if (key.tab) {
+      // Tab adopts a recalled entry as the new draft (browsing ends) and then behaves as usual
+      // on that text.
+      setBrowsing(null);
       if (query === '') {
         // Nothing to complete — reveal the full grid immediately, no double-press needed.
         openGridAtOrigin();
@@ -581,7 +554,22 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
       return;
     }
 
+    if (key.upArrow) {
+      const result = resolveHistoryBrowseUp(query, browsing, commandHistory);
+      setQuery(result.query);
+      setBrowsing(result.browsing);
+      setUnknownCommand(false);
+      return;
+    }
+
     if (key.downArrow) {
+      if (browsing !== null) {
+        const result = resolveHistoryBrowseDown(browsing, commandHistory);
+        setQuery(result.query);
+        setBrowsing(result.browsing);
+        setUnknownCommand(false);
+        return;
+      }
       if (gridVisible) {
         setFocus('grid');
         setGridCursor({ column: 0, row: 0 });
@@ -590,23 +578,29 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
       return;
     }
 
+    // Backspace / a printable character while browsing snap back to the draft with the
+    // keystroke applied on top of it, rather than editing the recalled entry in place.
+    const { base } = resolveSnapBackBase(query, query.length, browsing);
+
     if (key.backspace || key.delete) {
-      setQuery((current) => backspaceCommandQuery(current));
+      setQuery(backspaceCommandQuery(base));
+      setBrowsing(null);
       setUnknownCommand(false);
       return;
     }
 
-    const nextQuery = typeCommandQueryChar(query, input, key);
-    if (nextQuery !== query) {
+    const nextQuery = typeCommandQueryChar(base, input, key);
+    if (nextQuery !== base) {
       setQuery(nextQuery);
+      setBrowsing(null);
       setUnknownCommand(false);
     }
   });
 
   return (
-    <ModalDialog title="COMMAND" open onConfirm={() => {}} onCancel={onClose}>
+    <ModalDialog title="COMMAND" open>
       <Box flexDirection="column">
-        <Text color={colors.text}>
+        <Text color={colors.text} wrap="truncate-start">
           :<Text color={colors.accent}>{query}</Text>
           <Text color={colors['text-dim']}>█</Text>
         </Text>
@@ -616,22 +610,22 @@ export function CommandBar({ useStore = useAppStore, onClose }: CommandBarProps)
         ) : null}
 
         {gridShown && matches.length === 0 ? (
-          <Text color={colors['text-dim']}>No matching command.</Text>
+          <StateLine kind="empty" subject="commands" text="No matching command." />
         ) : null}
 
         {gridVisible ? (
           <Box flexDirection="row">
             {layout.truncated.left ? <Text color={colors['text-dim']}>… </Text> : null}
-            {layout.columns.map((column, columnIndex) => {
+            {visibleColumns.map((visibleColumn, columnIndex) => {
               const absoluteColumn = layout.scrollOffset + columnIndex;
-              const width = columnDisplayWidth(column, (command) => command.name);
+              const width = columnDisplayWidth(visibleColumn, (command) => command.name);
               return (
                 <Box key={absoluteColumn} flexDirection="column" marginRight={GRID_COLUMN_GAP}>
-                  {column.map((command, rowIndex) => {
+                  {visibleColumn.map((command, rowIndex) => {
                     const isCursor =
                       focus === 'grid' && gridCursor.column === absoluteColumn && gridCursor.row === rowIndex;
                     return (
-                      <Text key={command.name} color={isCursor ? colors.accent : colors['text-dim']}>
+                      <Text key={command.name} color={isCursor ? colors.accent : colors['text-dim']} wrap="truncate-end">
                         {isCursor ? '› ' : '  '}
                         {command.name.padEnd(width)}
                       </Text>

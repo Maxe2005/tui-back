@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import {
   applyLogFilters,
@@ -10,17 +11,23 @@ import {
   DEFAULT_VISIBILITY_FLAGS,
   adjustScrollOffset,
   computeGridLayout,
+  computeLogsLayout,
   computeLineRowCount,
   cycleLogsPaneFocus,
   detectLogLevel,
   filterVisibleLines,
+  formatHealthLabel,
   formatLogFilterSpec,
   formatLogLine,
+  healthBadgeState,
   isAtOldestLine,
   isClearAllLogsKey,
   isPaneEngagedInGlobalFilter,
   isPaneWrapped,
+  isRestartingDisplay,
   isSelectAllKey,
+  logsFooterContext,
+  logsLegendHints,
   isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
@@ -33,6 +40,7 @@ import {
   setPaneGlobalFilterEngagement,
   setPaneLogFilter,
   sliceVisibleWindow,
+  splitNoContainerRows,
   toggleAllPanesWrapFlag,
   toggleFilterMode,
   toggleGlobalFilterEngagement,
@@ -46,11 +54,103 @@ import {
   type LogFilterSpec,
 } from './logs-zone.logic.js';
 
+describe('healthBadgeState / formatHealthLabel', () => {
+  it('passes raw health through and reads the container-less service as its own dim state', () => {
+    expect(healthBadgeState('up')).toBe('up');
+    expect(healthBadgeState('down')).toBe('down');
+    expect(healthBadgeState('restarting')).toBe('in-progress');
+    expect(healthBadgeState('no-container')).toBe('no-container');
+  });
+
+  it('labels the container-less service in words, never as a kebab-case code', () => {
+    expect(formatHealthLabel('up')).toBe('up');
+    expect(formatHealthLabel('down')).toBe('down');
+    expect(formatHealthLabel('no-container')).toBe('no container');
+  });
+
+  it('a restarting service names the request and the re-verification, never the bare state', () => {
+    expect(formatHealthLabel('restarting')).toBe('restart requested — re-verifying');
+  });
+});
+
+describe('isRestartingDisplay', () => {
+  it('is true for the in-flight restart flag even while docker still reports the old health', () => {
+    expect(isRestartingDisplay(true, 'up')).toBe(true);
+    expect(isRestartingDisplay(true, 'down')).toBe(true);
+  });
+
+  it('is true for docker-reported restarting without the flag', () => {
+    expect(isRestartingDisplay(false, 'restarting')).toBe(true);
+  });
+
+  it('is false otherwise, including the container-less state', () => {
+    expect(isRestartingDisplay(false, 'up')).toBe(false);
+    expect(isRestartingDisplay(false, 'down')).toBe(false);
+    expect(isRestartingDisplay(false, 'no-container')).toBe(false);
+  });
+
+  it('is false for a container-less row even with a stale restart flag', () => {
+    expect(isRestartingDisplay(true, 'no-container')).toBe(false);
+  });
+});
+
+describe('splitNoContainerRows', () => {
+  function row(path: string) {
+    return {
+      service: path.split('/').pop() ?? path,
+      path,
+      isMember: false,
+      sharedBranch: 'development',
+      protectedBranches: [],
+      branch: 'main',
+      ahead: 0,
+      behind: 0,
+      status: 'current' as const,
+    };
+  }
+
+  it('moves only positively-resolved container-less rows out of the selectable list', () => {
+    const services = [row('/repos/a'), row('/repos/lib'), row('/repos/c')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, { '/repos/lib': true });
+
+    expect(selectable.map((entry) => entry.path)).toEqual(['/repos/a', '/repos/c']);
+    expect(withoutContainer.map((entry) => entry.path)).toEqual(['/repos/lib']);
+  });
+
+  it('keeps rows with unknown or failed presence (absent) and known-with-container (false) selectable', () => {
+    const services = [row('/repos/a'), row('/repos/b')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, { '/repos/a': false });
+
+    expect(selectable.map((entry) => entry.path)).toEqual(['/repos/a', '/repos/b']);
+    expect(withoutContainer).toEqual([]);
+  });
+
+  it('returns everything selectable against an empty presence map (first render, loads in flight)', () => {
+    const services = [row('/repos/a')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, {});
+
+    expect(selectable).toEqual(services);
+    expect(withoutContainer).toEqual([]);
+  });
+});
+
+describe('cycleLogsPaneFocus back', () => {
+  it('reverses, wrapping first to last', () => {
+    expect(cycleLogsPaneFocus('edt-list', 'back')).toBe('panes');
+    expect(cycleLogsPaneFocus('panes', 'back')).toBe('other-list');
+  });
+});
+
 describe('cycleLogsPaneFocus', () => {
   it('cycles edt-list -> other-list -> panes -> edt-list', () => {
     expect(cycleLogsPaneFocus('edt-list')).toBe('other-list');
     expect(cycleLogsPaneFocus('other-list')).toBe('panes');
     expect(cycleLogsPaneFocus('panes')).toBe('edt-list');
+  });
+
+  it('never yields an info-only focus — the without-container section is skipped by construction', () => {
+    const foci = new Set([cycleLogsPaneFocus('edt-list'), cycleLogsPaneFocus('other-list'), cycleLogsPaneFocus('panes')]);
+    expect(foci).toEqual(new Set(['other-list', 'panes', 'edt-list']));
   });
 });
 
@@ -150,7 +250,7 @@ describe('adjustScrollOffset / isAtOldestLine', () => {
     expect(isAtOldestLine(3, 5)).toBe(false);
   });
 
-  it('isAtOldestLine is true for a genuinely empty pane too — its normal starting state, and the case that must still trigger the first scrollback fetch (review fix)', () => {
+  it('isAtOldestLine is true for a genuinely empty pane too — its normal starting state, and the case that must still trigger the first scrollback fetch', () => {
     expect(isAtOldestLine(0, 0)).toBe(true);
   });
 });
@@ -184,7 +284,7 @@ describe('resolvePaneScrollDirection', () => {
 });
 
 describe('resolveFullscreenScrollDirection', () => {
-  it('accepts a bare arrow — fullscreen has no sub-focus grid to disambiguate from (review fix)', () => {
+  it('accepts a bare arrow — fullscreen has no sub-focus grid to disambiguate from', () => {
     expect(resolveFullscreenScrollDirection({ upArrow: true })).toBe('up');
     expect(resolveFullscreenScrollDirection({ downArrow: true })).toBe('down');
   });
@@ -211,9 +311,8 @@ describe('isSelectAllKey', () => {
 });
 
 describe('resolveSelectAllToggle', () => {
-  // Review fix, user-reported: Ctrl+Shift+A (the old, separate deselect-all shortcut) is
-  // unreachable on virtually every real terminal — Ctrl+letter combos never carry shift
-  // information at the byte level. One shortcut now does both, based on current selection.
+  // Ctrl+letter combos never carry shift information at the byte level, so one shortcut does
+  // both select-all and deselect-all, based on the current selection.
   it('resolves to select-all when not everything is currently selected', () => {
     expect(resolveSelectAllToggle(['/a', '/b'], [])).toBe('select-all');
     expect(resolveSelectAllToggle(['/a', '/b'], ['/a'])).toBe('select-all');
@@ -235,9 +334,9 @@ describe('resolveVisibilityToggleKey / toggleVisibilityFlag', () => {
     expect(resolveVisibilityToggleKey('t')).toBe('timestamp');
     expect(resolveVisibilityToggleKey('o')).toBe('stdout');
     expect(resolveVisibilityToggleKey('p')).toBe('stderr');
-    // 'e' was freed up (review fix) — it collided with the Edts zone's own tab mnemonic.
+    // 'e' is not bound — it would collide with the EDTs zone's tab mnemonic.
     expect(resolveVisibilityToggleKey('e')).toBeNull();
-    // 'w' moved to per-pane wrap state (togglePaneWrapFlag) — no longer a shared flag.
+    // 'w' is per-pane wrap state (togglePaneWrapFlag), not a shared flag.
     expect(resolveVisibilityToggleKey('w')).toBeNull();
     expect(resolveVisibilityToggleKey('x')).toBeNull();
   });
@@ -271,17 +370,18 @@ describe('filterVisibleLines', () => {
 });
 
 describe('isClearAllLogsKey / isWrapAllLogsKey', () => {
-  it('is true for Ctrl+C / Ctrl+W, case-insensitively', () => {
+  it('is true for Ctrl+C (case-insensitively) and for Shift+W', () => {
     expect(isClearAllLogsKey('c', { ctrl: true })).toBe(true);
     expect(isClearAllLogsKey('C', { ctrl: true })).toBe(true);
-    expect(isWrapAllLogsKey('w', { ctrl: true })).toBe(true);
-    expect(isWrapAllLogsKey('W', { ctrl: true })).toBe(true);
+    expect(isWrapAllLogsKey('W', {})).toBe(true);
   });
 
-  it('is false without ctrl, or for a different letter', () => {
+  it('is false for the wrong modifier or a different letter; Ctrl+W is never wrap-all', () => {
     expect(isClearAllLogsKey('c', {})).toBe(false);
     expect(isClearAllLogsKey('w', { ctrl: true })).toBe(false);
     expect(isWrapAllLogsKey('w', {})).toBe(false);
+    expect(isWrapAllLogsKey('w', { ctrl: true })).toBe(false);
+    expect(isWrapAllLogsKey('W', { ctrl: true })).toBe(false);
     expect(isWrapAllLogsKey('c', { ctrl: true })).toBe(false);
   });
 });
@@ -368,14 +468,10 @@ describe('computeLineRowCount', () => {
     expect(computeLineRowCount('', 40, true)).toBe(1);
   });
 
-  // Review fix (user-reported): computeLineRowCount used to divide the raw string length by
-  // width, so an ANSI colour escape's bytes (invisible on screen) inflated the cost right along
-  // with the visible text — a heavily-coloured line could report needing 2-3x the rows it
-  // actually renders as. That made sliceVisibleWindow stop far short of the pane's real budget,
-  // leaving a blank gap at the bottom in wrap mode that no fix to the pane's own row budget
-  // could close. Delegating to wrap-ansi (the same library, same options, Ink's own Text
-  // component uses for wrap="wrap") makes the cost ANSI-aware, matching what Ink actually
-  // renders exactly rather than approximating it.
+  // computeLineRowCount must be ANSI-aware: an escape sequence's bytes are invisible on screen,
+  // and counting them would make sliceVisibleWindow stop short of the pane's real budget,
+  // leaving a blank gap in wrap mode. It delegates to wrap-ansi (the library and options Ink's
+  // own Text uses for wrap="wrap"), so the cost matches what Ink renders.
   it('does not let ANSI colour escapes inflate the row cost beyond the visible text', () => {
     const plain = 'word0 word1 word2 word3 word4 word5 word6 word7';
     const colored = plain
@@ -395,7 +491,7 @@ describe('computeLineRowCount', () => {
   });
 });
 
-// Story 5.2: the two-tier text/regex/level filter over already-buffered lines.
+// The two-tier text/regex/level filter over already-buffered lines.
 describe('detectLogLevel', () => {
   it('matches ERROR/WARN/INFO/DEBUG case-insensitively', () => {
     expect(detectLogLevel('2026-01-01 ERROR something broke')).toBe('ERROR');
@@ -480,7 +576,7 @@ describe('applyLogFilters', () => {
     expect(applyLogFilters(lines, null, null)).toEqual(lines);
   });
 
-  it('I/O matrix PANE_OPT_OUT: a disengaged pane (global passed as null) ignores the global filter entirely', () => {
+  it('a disengaged pane (global passed as null) ignores the global filter entirely', () => {
     const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null };
     // Engaged: only "disk" lines survive.
     expect(applyLogFilters(lines, global, null)).toEqual([lines[0], lines[2]]);
@@ -488,7 +584,7 @@ describe('applyLogFilters', () => {
     expect(applyLogFilters(lines, null, null)).toEqual(lines);
   });
 
-  it('I/O matrix COMBINED_AND: a global text filter and an own level filter both apply — a line must satisfy both', () => {
+  it('a global text filter and an own level filter both apply — a line must satisfy both', () => {
     const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null };
     const own: LogFilterSpec = { mode: 'text', query: '', level: 'ERROR' };
     expect(applyLogFilters(lines, global, own)).toEqual([lines[0]]);
@@ -501,7 +597,7 @@ describe('applyLogFilters', () => {
 });
 
 describe('isPaneEngagedInGlobalFilter / toggleGlobalFilterEngagement / setPaneGlobalFilterEngagement', () => {
-  it('defaults an untouched pane (or a null repoPath) to engaged (Boundaries: engaged by default)', () => {
+  it('defaults an untouched pane (or a null repoPath) to engaged', () => {
     expect(DEFAULT_PANE_GLOBAL_FILTER_ENGAGED).toBe(true);
     expect(isPaneEngagedInGlobalFilter({}, '/repo/a')).toBe(true);
     expect(isPaneEngagedInGlobalFilter({}, null)).toBe(true);
@@ -580,8 +676,8 @@ describe('formatLogFilterSpec', () => {
 });
 
 describe('resolveFilterClearTarget', () => {
-  // I/O matrix ESCAPE_PANE: "Esc, pane sub-focused, own filter set -> that pane's own filter
-  // clears; engagement/global unaffected".
+  // Esc, pane sub-focused, own filter set -> that pane's own filter clears; engagement/global
+  // unaffected.
   it('targets the pane\'s own filter when sub-focused with an own filter set', () => {
     expect(resolveFilterClearTarget(true, '/repo/a', true)).toEqual({ scope: 'pane-own', repoPath: '/repo/a' });
   });
@@ -590,8 +686,8 @@ describe('resolveFilterClearTarget', () => {
     expect(resolveFilterClearTarget(true, '/repo/a', false)).toEqual({ scope: 'pane-disengage', repoPath: '/repo/a' });
   });
 
-  // I/O matrix ESCAPE_LIST: "Esc, list-focused, global filter active -> Global filter clears;
-  // disengaged panes stay disengaged (unaffected)".
+  // Esc, list-focused, global filter active -> the global filter clears; disengaged panes stay
+  // disengaged.
   it('targets global when not sub-focused (list-focus), regardless of any own filter', () => {
     expect(resolveFilterClearTarget(false, '/repo/a', true)).toEqual({ scope: 'global' });
     expect(resolveFilterClearTarget(false, null, false)).toEqual({ scope: 'global' });
@@ -602,7 +698,7 @@ describe('resolveFilterClearTarget', () => {
   });
 });
 
-// Story 5.4: filter history recall.
+// Filter history recall.
 describe('filterHistoryKeyString', () => {
   it('encodes a global scope as "global:<mode>", ignoring repoPath', () => {
     expect(filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'text' })).toBe('global:text');
@@ -614,7 +710,7 @@ describe('filterHistoryKeyString', () => {
     expect(filterHistoryKeyString(key)).toBe('service:/repos/api-gateway:text');
   });
 
-  it('gives global-text/global-regex and per-service-text/per-service-regex four distinct keys (Boundaries)', () => {
+  it('gives global-text/global-regex and per-service-text/per-service-regex four distinct keys', () => {
     const keys = [
       filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'text' }),
       filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'regex' }),
@@ -625,7 +721,7 @@ describe('filterHistoryKeyString', () => {
   });
 });
 
-describe('pushFilterHistoryEntry (I/O matrix HISTORY_PUSH/DEDUP_TOP)', () => {
+describe('pushFilterHistoryEntry', () => {
   it('front-pushes a new query onto an empty list', () => {
     expect(pushFilterHistoryEntry([], 'boom', 20)).toEqual(['boom']);
   });
@@ -634,11 +730,11 @@ describe('pushFilterHistoryEntry (I/O matrix HISTORY_PUSH/DEDUP_TOP)', () => {
     expect(pushFilterHistoryEntry(['old'], 'new', 20)).toEqual(['new', 'old']);
   });
 
-  it('moves an identical-to-top entry to the front without duplicating it (DEDUP_TOP)', () => {
+  it('moves an identical-to-top entry to the front without duplicating it', () => {
     expect(pushFilterHistoryEntry(['boom', 'other'], 'boom', 20)).toEqual(['boom', 'other']);
   });
 
-  it('does not dedup an entry that matches a non-top entry (Boundaries only special-cases the current top)', () => {
+  it('does not dedup an entry that matches a non-top entry (only the current top is special-cased)', () => {
     expect(pushFilterHistoryEntry(['other', 'boom'], 'boom', 20)).toEqual(['boom', 'other', 'boom']);
   });
 
@@ -663,7 +759,7 @@ describe('pushFilterHistoryEntry (I/O matrix HISTORY_PUSH/DEDUP_TOP)', () => {
   });
 });
 
-describe('resolveHistoryBrowseUp (I/O matrix ARROW_UP_OLDEST)', () => {
+describe('resolveHistoryBrowseUp', () => {
   it('recalls the most-recent entry on an untouched draft, preserving the draft', () => {
     const result = resolveHistoryBrowseUp('my-draft', null, ['newest', 'older', 'oldest']);
     expect(result).toEqual({ query: 'newest', browsing: { index: 0, savedDraft: 'my-draft' } });
@@ -702,7 +798,7 @@ describe('resolveHistoryBrowseUp (I/O matrix ARROW_UP_OLDEST)', () => {
   });
 });
 
-describe('resolveHistoryBrowseDown (I/O matrix ARROW_DOWN_PAST_RECENT)', () => {
+describe('resolveHistoryBrowseDown', () => {
   it('walks back toward the draft one entry at a time', () => {
     const browsing = { index: 1, savedDraft: 'draft' };
     const result = resolveHistoryBrowseDown(browsing, ['newest', 'older', 'oldest']);
@@ -719,5 +815,70 @@ describe('resolveHistoryBrowseDown (I/O matrix ARROW_DOWN_PAST_RECENT)', () => {
     const browsing = { index: 1, savedDraft: 'active' };
     const result = resolveHistoryBrowseDown(browsing, ['active', 'older']);
     expect(result).toEqual({ query: 'active', browsing: null });
+  });
+});
+
+describe('computeLogsLayout list ratio', () => {
+  const base = {
+    windowColumns: 120,
+    windowRows: 40,
+    activePaneCount: 1,
+    edtServiceCount: 0,
+    otherServiceCount: 0,
+    filterEditorOpen: false,
+    historyGridOpen: false,
+    filterHistoryGridMaxRows: 8,
+  };
+
+  it('gives the grid less width as the list ratio grows, and the columns always fit the window', () => {
+    const narrowList = computeLogsLayout({ ...base, listRatio: 0.15 });
+    const wideList = computeLogsLayout({ ...base, listRatio: 0.5 });
+    expect(wideList.layout.cellWidth).toBeLessThan(narrowList.layout.cellWidth);
+    for (const [ratio, result] of [[0.15, narrowList], [0.5, wideList]] as const) {
+      const listColumns = Math.floor((base.windowColumns - 1) * ratio);
+      expect(listColumns + 1 + result.layout.cellWidth * result.layout.cols).toBeLessThanOrEqual(base.windowColumns);
+    }
+  });
+});
+
+describe('logsFooterContext restart mode and O hint', () => {
+  it('picks the clean fullscreen context only for a restartable pane in clean mode', () => {
+    const full = { open: true, restartable: true };
+    expect(logsFooterContext(false, false, full, 'clean')).toBe('logs-fullscreen-clean');
+    expect(logsFooterContext(false, false, full, 'simple')).toBe('logs-fullscreen');
+    const noContainer = { open: true, restartable: false };
+    expect(logsFooterContext(false, false, noContainer, 'clean')).toBe('logs-fullscreen-no-container');
+    expect(logsFooterContext(false, false, noContainer, 'simple')).toBe('logs-fullscreen-no-container');
+  });
+
+  it('lists the O hint in all three fullscreen footer contexts', () => {
+    for (const id of ['logs-fullscreen', 'logs-fullscreen-clean', 'logs-fullscreen-no-container'] as const) {
+      expect(FOOTER_CONTEXTS[id].hints).toContainEqual(['O', 'open in IDE']);
+    }
+  });
+});
+
+describe('logsFooterContext', () => {
+  const closed = { open: false, restartable: true };
+  const full = { open: true, restartable: true };
+
+  it('puts the filter editor (and its history grid) above the fullscreen pane', () => {
+    expect(logsFooterContext(false, false, closed)).toBeNull();
+    expect(logsFooterContext(false, false, full)).toBe('logs-fullscreen');
+    expect(logsFooterContext(true, false, full)).toBe('logs-filter-edit');
+    expect(logsFooterContext(true, true, full)).toBe('logs-filter-history');
+  });
+
+  it('never advertises a restart for a pane without a container', () => {
+    expect(logsFooterContext(false, false, { open: true, restartable: false })).toBe('logs-fullscreen-no-container');
+    expect(JSON.stringify(FOOTER_CONTEXTS['logs-fullscreen-no-container'].hints)).not.toContain('restart');
+  });
+});
+
+describe('logsLegendHints', () => {
+  it('shows the live state of the stream toggles', () => {
+    const hints = logsLegendHints({ showTimestamps: true, showStdout: false, showStderr: true });
+    expect(hints).toContainEqual(['t', 'timestamps on']);
+    expect(hints).toContainEqual(['o', 'stdout off']);
   });
 });

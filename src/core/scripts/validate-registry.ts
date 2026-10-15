@@ -1,4 +1,4 @@
-// core/scripts/validate-registry: story 2.28 — semantic validation of registered repos.
+// core/scripts/validate-registry: semantic validation of registered repos.
 // A schema-valid manifest's declared values must actually be real (e.g. a typo'd
 // sharedBranch surfaces here, not later as a confusing create/switch/update failure).
 // Read-only throughout: exists() -> load() -> branchExistsLocally() ->

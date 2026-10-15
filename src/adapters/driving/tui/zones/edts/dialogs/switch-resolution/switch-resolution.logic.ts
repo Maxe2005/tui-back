@@ -1,31 +1,17 @@
-// tui/zones/edts/dialogs/switch-resolution: Story 2.41 — the SWITCH EDT resolution view's draft
-// state, pure key reducer and row helpers (unit-tested directly), kept apart from its Ink view
-// (switch-resolution-view.tsx) the same way the create wizard keeps wizard.logic.ts apart from
-// its steps. The draft lives in the dialog state only, never in core: the core switch is parked
-// on the edt-slice seam until this view resolves `proceed` (with `buildResolutions(rows)`) or
-// `cancel`.
-//
-// The view mirrors the create wizard's Step 3 (Story 2.37):
-//   - Panel A "STRATÉGIE GLOBALE" (focused on open): "Action par défaut" — `(•) Adopter dans
-//     <outgoing topic>  ( ) Écraser` (`Space`/`←→`) — and, when Adopter, "Nom global de la
-//     branche" (pre-filled with the outgoing topic's slug; touched-flag convention of Story
-//     2.22), applied to every row whose repo sits on a SHARED branch. With no outgoing EDT only
-//     Écraser is offered.
-//   - Panel B "SERVICES CONCERNÉS": one row per dirty state-2/3 service; `↑/↓` move, `Enter`
-//     opens the "Configurer <service>" box (Action Adopter/Écraser + an always-editable
-//     "Branche"); `[ Appliquer ]` makes the row Perso (or Écraser), `Ctrl+R` returns it to the
-//     global strategy.
-//   - `Ctrl+N` confirms: blocked while any row is invalid; with any Écraser row it first opens
-//     the discard confirmation (files per service, default Retour, `Ctrl+E` confirms).
-//   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation);
-//     on the main view it cancels the whole switch.
+// tui/zones/edts/dialogs/switch-resolution: the SWITCH EDT resolution view's draft state, pure
+// key reducer and row helpers, kept apart from its Ink view (switch-resolution-view.tsx). The
+// draft lives in the dialog state only, never in core: the core switch is parked on the
+// edt-slice seam until this view resolves `proceed` (with `buildResolutions(rows)`) or
+// `cancel`. The layout mirrors the create wizard's Step 3 (see the main reducer below).
 import { resolve } from 'node:path';
 import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
+import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
 import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
+import { nextBoxLine as moveBoxLine } from '../../../../shared/keys/box-line-nav.js';
 
 export type ResolutionAction = 'adopt' | 'discard';
 
@@ -35,9 +21,9 @@ export type ResolutionOverride = { kind: 'adopt'; branch: string } | { kind: 'di
 // A row's effective plan: `override ?? global`.
 export type RowPlan = { kind: 'adopt'; branch: string; source: 'global' | 'perso' } | { kind: 'discard'; source: 'global' | 'perso' };
 
-// Story 2.41 review: the branches OTHER EDTs (every one but the outgoing EDT) register for a
-// repo, keyed by resolved repoPath — plain data computed once when the view opens. Adopting
-// onto such a branch would steal it from that EDT (the git gate rejects it anyway).
+// The branches OTHER EDTs (every one but the outgoing EDT) register for a repo, keyed by resolved
+// repoPath — plain data computed once when the view opens. Adopting onto such a branch would
+// steal it from that EDT (the git gate rejects it anyway).
 export type EdtBranchClaim = { branch: string; topic: string };
 export type OtherEdtBranches = Readonly<Record<string, readonly EdtBranchClaim[]>>;
 
@@ -101,26 +87,24 @@ export type SwitchResolutionState = {
   decision: SwitchResolutionDecision | null;
 };
 
-export const SWITCH_RESOLUTION_FOOTER = '[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Confirmer • [Esc] Annuler le switch';
-
 export const RESOLUTION_MODE_LABELS = {
-  adoptGlobal: '[Adopter (Global)]',
-  adoptPerso: '[Adopter (Perso)]',
-  discard: '[Écraser]',
+  adoptGlobal: '[Adopt (Global)]',
+  adoptPerso: '[Adopt (Custom)]',
+  discard: '[Discard]',
 } as const;
 
 export const RESOLUTION_ERRORS = {
   // `currentBranch === 'HEAD'` also covers a branch core could not read.
-  detachedHead: 'HEAD détachée ou branche illisible — seul Écraser est possible',
-  unreadableManifest: 'manifeste illisible — impossible de valider la branche ; choisissez Écraser ou annulez',
-  noOutgoing: 'Aucun EDT sortant — seul [Écraser] est possible',
-  blocked: 'Corrigez les lignes invalides avant de confirmer',
+  detachedHead: 'Detached HEAD or unreadable branch — only Discard is possible',
+  unreadableManifest: 'unreadable manifest — cannot validate the branch; choose Discard or cancel',
+  noOutgoing: 'No outgoing EDT — only [Discard] is possible',
+  blocked: 'Fix the invalid rows before confirming',
 } as const;
 
 // Ctrl+E refused: this discard row's file list could not be read by the pre-flight, so what
 // would be destroyed cannot be shown (nor pinned through `confirmedPaths`).
 export function unlistedDiscardError(service: string): string {
-  return `liste des fichiers indisponible pour ${service} — annulez et relancez la bascule`;
+  return `file list unavailable for ${service} — cancel and retry the switch`;
 }
 
 // The rows needing a decision: dirty state-2/3 repos (state-1 rows are auto-stashed).
@@ -168,8 +152,7 @@ export function claimOf(branch: string, claims: readonly EdtBranchClaim[]): EdtB
 }
 
 // The branch a global (or box-prefilled) adopt targets: the global name when the repo sits on a
-// shared branch or on a branch another EDT registers for it (story 2.41 review), its current
-// branch otherwise.
+// shared branch or on a branch another EDT registers for it, its current branch otherwise.
 export function globalAdoptTarget(repo: SwitchDirtyRepo, globalName: string, claims: readonly EdtBranchClaim[] = []): string {
   return repo.currentBranchShared || claimOf(repo.currentBranch, claims) !== undefined ? globalName.trim() : repo.currentBranch;
 }
@@ -228,13 +211,13 @@ export function modeLabel(plan: RowPlan): string {
 
 export function scopeLabel(repo: SwitchDirtyRepo): string {
   if (repo.scope === 'member-of-other-edt') {
-    return repo.owningEdtTopics.length > 0 ? `membre de ${repo.owningEdtTopics.join(', ')}` : 'membre d\'un autre EDT';
+    return repo.owningEdtTopics.length > 0 ? `member of ${repo.owningEdtTopics.join(', ')}` : 'member of another EDT';
   }
-  return 'hors EDT';
+  return 'outside any EDT';
 }
 
 export function claimedBranchError(topic: string): string {
-  return `utilisée par l'EDT « ${topic} » — la reprendre casserait cet EDT`;
+  return `used by the EDT “${topic}” — reusing it would break that EDT`;
 }
 
 // Advisory (the git gate stays authoritative). Order: detached HEAD, unreadable manifest (no
@@ -257,7 +240,7 @@ export function validateAdoptBranch(
   if (name === '') {
     return OVERRIDE_BOX_ERRORS.nameRequired;
   }
-  // Story 2.42: the repo's own manifest-defined set (protectedBranches ∪ sharedBranch).
+  // The repo's own manifest-defined set (protectedBranches ∪ sharedBranch).
   if (isProtectedTarget(name, { sharedBranch: repo.sharedBranch, protectedBranches: repo.protectedBranches })) {
     return protectedNameError(name, repo.service);
   }
@@ -287,8 +270,8 @@ export function buildResolutions(rows: readonly ResolutionRow[]): Record<string,
     if (row.plan.kind === 'adopt') {
       resolutions[row.repo.repoPath] = { kind: 'adopt', branch: row.plan.branch };
     } else {
-      // Story 2.41 review: pins the discard to the files the confirmation listed — core
-      // refuses it if the fresh capture holds anything else.
+      // Pins the discard to the files the confirmation listed — core refuses it if the fresh
+      // capture holds anything else.
       const paths = row.repo.dirtyPaths;
       resolutions[row.repo.repoPath] = paths !== undefined ? { kind: 'discard', confirmedPaths: [...paths] } : { kind: 'discard' };
     }
@@ -317,7 +300,7 @@ export function blockedRow(
   return undefined;
 }
 
-// ---- The "Configurer <service>" box --------------------------------------------------------
+// ---- The "Configure <service>" box --------------------------------------------------------
 
 export function boxLines(box: Pick<SwitchResolutionBox, 'action'>): SwitchResolutionBoxLine[] {
   return box.action === 'adopt' ? ['action', 'branch', 'apply'] : ['action', 'apply'];
@@ -386,14 +369,13 @@ export function reduceResolutionBoxKey(
   if (key.escape) {
     return { type: 'close' };
   }
-  if (key.upArrow || key.downArrow) {
-    const lines = boxLines(box);
-    const index = lines.indexOf(box.line) + (key.downArrow ? 1 : -1);
-    return { type: 'update', box: { ...box, line: lines[Math.min(Math.max(index, 0), lines.length - 1)] ?? box.line } };
+  const moved = moveBoxLine(boxLines(box), box.line, input, key);
+  if (moved !== null) {
+    return { type: 'update', box: { ...box, line: moved } };
   }
   if (box.line === 'action') {
-    if (input === ' ' || key.tab || key.leftArrow || key.rightArrow) {
-      // With no outgoing EDT only Écraser is offered.
+    if (input === ' ' || key.leftArrow || key.rightArrow) {
+      // With no outgoing EDT only Discard is offered.
       return row.hasOutgoing ? { type: 'update', box: { ...box, action: box.action === 'adopt' ? 'discard' : 'adopt', error: null } } : { type: 'update', box };
     }
     return { type: 'update', box: key.return ? { ...box, line: nextBoxLine(box) } : box };
@@ -401,7 +383,7 @@ export function reduceResolutionBoxKey(
   if (box.line === 'branch') {
     return { type: 'update', box: key.return ? { ...box, editing: true, error: null } : box };
   }
-  // [ Appliquer ]
+  // [ Apply ]
   if (!key.return) {
     return { type: 'update', box };
   }
@@ -413,6 +395,17 @@ export function reduceResolutionBoxKey(
 }
 
 // ---- The main reducer ----------------------------------------------------------------------
+//   - Panel A "GLOBAL STRATEGY" (focused on open): the default action, Adopt into <outgoing
+//     topic> or Discard (`Space`/`←→`), plus, when Adopt, the global branch name (pre-filled
+//     with the outgoing topic's slug) applied to every row on a SHARED branch. With no outgoing
+//     EDT only Discard is offered.
+//   - Panel B "AFFECTED SERVICES": one row per dirty state-2/3 service; `Enter` opens the
+//     "Configure <service>" box, `[ Apply ]` makes the row Custom (or Discard), `Ctrl+R`
+//     returns it to the global strategy.
+//   - `Ctrl+N` confirms: blocked while any row is invalid; with any Discard row it first opens
+//     the discard confirmation (files per service, default back, `Ctrl+E` confirms).
+//   - `Esc` closes the innermost element first (a field in edit, the box, the confirmation); on
+//     the main view it cancels the whole switch.
 
 function withRowsChanged(prev: SwitchResolutionState, next: SwitchResolutionState): SwitchResolutionState {
   const changed =
@@ -432,7 +425,7 @@ export function reduceSwitchResolutionKey(
   const global = globalOf(state);
   const rows = buildRows(dirty, global);
 
-  // The discard confirmation: default is Retour; only Ctrl+E confirms.
+  // The discard confirmation: default is back; only Ctrl+E confirms.
   if (state.confirm !== null) {
     if (isCtrl(input, key, 'e')) {
       const unlisted = rows.find((row) => row.plan.kind === 'discard' && row.repo.dirtyPaths === undefined);
@@ -487,8 +480,9 @@ export function reduceSwitchResolutionKey(
     return { ...state, editing: false, decision: { kind: 'proceed', resolutions: buildResolutions(rows) } };
   }
 
-  if (key.tab) {
-    return { ...state, panel: state.panel === 'global' ? 'rows' : 'global', editing: false };
+  const panelStep = resolveFocusStep(input, key, 'tab');
+  if (panelStep !== null) {
+    return { ...state, panel: stepFocus(TWO_PANEL_NAV.stops, state.panel, panelStep), editing: false };
   }
 
   if (state.panel === 'global') {
@@ -552,7 +546,7 @@ export function needsResultsView(results: readonly SwitchEdtRepoResult[]): boole
   return results.some((row) => row.outcome !== 'switched');
 }
 
-// The action-log detail: adopted branches and discarded paths (Story 2.41).
+// The action-log detail: adopted branches and discarded paths.
 export function describeSwitchForLog(targetTopic: string, forced: boolean, results: readonly SwitchEdtRepoResult[]): string {
   const parts = [`Switched to EDT "${targetTopic}"${forced ? ' (forced)' : ''}`];
   const adopted = results
