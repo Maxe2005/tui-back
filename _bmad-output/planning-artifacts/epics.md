@@ -48,6 +48,7 @@ FR-29 (added 2026-10-01, Sprint Change Proposal): Container-less managed service
 FR-32 (added 2026-10-05, Sprint Change Proposal): Per-service last-run merge/migration detail in Update, session-only.
 FR-34 (added 2026-10-08, Sprint Change Proposal): Full-screen, scrollable per-service update report; FR-10/FR-11 amended for parallel runs and the incident queue.
 FR-33 (added 2026-10-05, Sprint Change Proposal): Reversible, unified focus navigation — Shift+Tab reverses Tab everywhere via one configurable primitive.
+FR-38 (added 2026-10-15, Sprint Change Proposal): Branch drift detection and realignment — detect repos no longer on their expected branch (EDT members: the EDT-defined branch; others: their `sharedBranch`) and realign a chosen selection (global presets + per-service refinement), with optional post-realign restart and settings defaults.
 
 ### NonFunctional Requirements
 
@@ -163,6 +164,7 @@ FR-32: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint 
 FR-35: Epic 7/5 - Service actions: open IDE, simple/clean restart (added 2026-10-12 — Stories 7.12, 5.7, 8.3)
 FR-36: Epics 3/4/5 - Configurable defaults: Update globals, st options, Logs restart mode (added 2026-10-12 — Stories 3.20, 4.7, 5.7)
 FR-37: Epic 2 - Post-switch service restart (none/simple/clean), parallel, verified per-service state; default in settings (added 2026-10-14 — Story 2.44)
+FR-38: Epic 8 - Branch drift detection & realignment: Attention lines, `realign` command + shortcut, selection table, optional restart, settings defaults (added 2026-10-15 — Stories 8.6, 8.7, 8.8)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
@@ -174,8 +176,8 @@ FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint C
 > Added 2026-10-15 (Sprint Change Proposal `sprint-change-proposal-2026-10-15.md`). Replaces former Stories 7.5/7.6.
 
 A developer lands on a Dashboard that answers "should I worry about anything?" at a glance: the active EDT's services with state, branch and divergence, the shared per-service actions (open in IDE, restart, clean restart), an Attention block and a registry-health summary, under the permanent banner.
-**FRs covered:** none new (draws on FR-9, FR-29, FR-35; completes UX-DR19)
-**Implementation notes:** Prerequisites all done: 7.3 layout contract, 7.7 focus navigation, 7.9 bounded rendering, 7.11 overlay ownership, 7.12 service actions; 2.42 protected branches, 2.43 cross-EDT branch usage. Refresh is on mount and on `R` (no live poll). Execution order: 8.1 → 8.2 → 8.3 / 8.4 (parallelizable) → 8.5. Dropped on purpose: last group-update outcome, background-event badges, operation-in-progress indicator.
+**FRs covered:** FR-38 (Stories 8.6–8.8, added 2026-10-15); otherwise draws on FR-9, FR-29, FR-35, FR-36, FR-37; completes UX-DR19
+**Implementation notes:** Prerequisites all done: 7.3 layout contract, 7.7 focus navigation, 7.9 bounded rendering, 7.11 overlay ownership, 7.12 service actions; 2.42 protected branches, 2.43 cross-EDT branch usage. Refresh is on mount and on `R` (no live poll). Execution order: 8.1 → 8.2 → 8.3 / 8.4 (parallelizable) → 8.5; then 8.6 → 8.7 → 8.8 (branch realignment, added 2026-10-15 — 8.6 extends the 8.1 snapshot and 8.4's Attention block; 8.7/8.8 reuse the Epic 2 switch core and Story 2.44's restart phase). Dropped on purpose: last group-update outcome, background-event badges, operation-in-progress indicator.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 A developer can launch the tool, see the full navigation shell (top bar, six zone-tabs, footer, resizable list/detail split, modal-dialog, `?` help screen), register managed repos via a manifest, and run any action identically via the TUI or as a standalone CLI script.
@@ -3557,3 +3559,77 @@ As a developer, I want the Dashboard's EDT actions and final look to match the a
 
 **Implementation notes:** closes the deferred "banner clips on short terminals" entry by guaranteeing the minimum-size screen rather than compacting the banner.
 
+
+### Story 8.6: Branch Drift Detection — Snapshot & Attention
+
+> Added 2026-10-15 (Sprint Change Proposal `sprint-change-proposal-2026-10-15-2.md`). Adds FR-38. Extends Stories 8.1 and 8.4.
+
+As a developer, I want the tool to tell me when a repo is no longer on the branch it should be on, so that I notice a drifted workspace before building or testing on the wrong code.
+
+**Acceptance Criteria:**
+
+**Given** the active EDT **When** the snapshot is built **Then** each member service carries its *expected branch* (the branch defined for that EDT) and a `drift` flag when its current branch differs; a detached HEAD counts as drift.
+
+**Given** a managed service that is **not** a member of the active EDT **When** the snapshot is built **Then** it carries its `sharedBranch` as expected branch and the same `drift` flag when it sits on another branch (services are listed in a separate `others` collection; the existing member-only fields are unchanged).
+
+**Given** a probe fails for one service **When** drift is computed **Then** that service carries an explicit `unknown` drift state and is never reported as drifted or aligned; other services are unaffected.
+
+**Given** drift exists **When** the Attention block renders (Story 8.4) **Then** it lists one line per drifted service — naming the service, its current and expected branch, and whether it is an EDT member or an "other" service — ordered after the protected-branch line and before "behind shared branch"; the block count includes them. When any line exists, the block offers the `realign` shortcut.
+
+**Given** no active EDT **When** requested **Then** only non-member drift against `sharedBranch` cannot be defined; the snapshot says "no active EDT" as today and carries no drift data.
+
+**Given** the CLI `dashboard` **When** it runs **Then** the drift data is emitted in the same JSON envelope (AD-3).
+
+**Implementation notes:** reuse the branch/divergence computation of Story 2.6 and the EDT membership/branch data already read by the snapshot; no new git call per service beyond the current-branch read already made.
+
+### Story 8.7: `realign` Use-Case & CLI — Selective Branch Realignment
+
+> Added 2026-10-15. Adds FR-38. Builds on the Epic 2 switch core (safety gate AD-8, dirty-work preservation) and Story 2.44's restart phase (`runPool`, `ServiceActions`, `verifyService`). **Prerequisite (blocking):** 2.44 `done` and merged; otherwise HALT — never re-implement the restart phase here.
+
+As a developer, I want to realign a chosen set of repos on the branches they should be on, so that my workspace matches the active EDT's configuration in one step.
+
+**Acceptance Criteria:**
+
+**Given** the use-case **When** it is called with a selection of services **Then** each selected *member* service is checked out on the branch defined for the active EDT and each selected *non-member* service on its `sharedBranch`; services already aligned are reported `unchanged`, never touched.
+
+**Given** a selected service with uncommitted work **When** realigned **Then** the same fail-safe dirty handling as the switch (Story 2.40) applies — work is preserved or the service is skipped with its reason, never discarded silently; a merge/rebase in progress or a failing branch-scope gate (AD-8) makes that service `failed`/`skipped` with a precise message, without aborting the others.
+
+**Given** a realign run **When** it ends **Then** it returns one closed result per service (`realigned` / `unchanged` / `skipped` / `failed`) with its detail; an action-log entry (NFR-3) records the selection and every outcome; a worker that throws becomes that service's `failed` row; the run never rejects.
+
+**Given** the option `restart` (`none` | `simple` | `clean`) **When** set **Then** services whose branch actually changed and that declare a container go through Story 2.44's restart phase and verification (parallel via `runPool`, same final states); other services are `skipped` in the restart report, never `failed`; the realign is never rolled back by a restart failure.
+
+**Given** the realign run is in flight **When** an update, a switch or another realign is started **Then** it is rejected through the existing action lock (Story 3.16 semantics, both directions).
+
+**Given** the CLI `tui-back realign [--scope none|edt|all] [--service <name>…] [--restart none|simple|clean]` **When** run **Then** the selection is built from the flags (absent flags use the settings of Story 8.8), the same core runs, per-service rows are emitted in the script envelope, and the exit code is non-zero when any selected service ended `failed` or any restarted service ended `failed`, `down` or `unhealthy`. An unknown value or service is rejected before anything is touched.
+
+**Implementation notes:** `core/realign`, pure with ports injected; extract (do not duplicate) the "checkout expected branch with preservation" step from the switch core so both use one implementation. The global scopes resolve to a service list: `none` = empty, `edt` = drifted active-EDT members, `all` = every drifted service (aligned services are never candidates, in the CLI as in the dialog).
+
+### Story 8.8: Realign Dialog, Shortcut & Settings Defaults
+
+> Added 2026-10-15. Adds FR-38; amends FR-36. Mirrors the selection table of the Update configuration screen (Story 3.7/3.20).
+
+As a developer, I want a selection table to choose which repos to realign — with global presets and per-service refinement — reachable by command and shortcut, so that I fix a drifted workspace in a few keystrokes.
+
+**Acceptance Criteria:**
+
+**Given** the command bar **When** the developer types `:realign` **Then** the realign dialog opens; the same dialog opens from the Dashboard Attention block's shortcut (a key declared in the keybinding declaration list, listed in the footer and `?` help, with no collision with `R`, `Ctrl+O/R/L`, `e`).
+
+**Given** the dialog **When** it renders **Then** it shows, as in the Update configuration table, one row per **drifted** service only (aligned and `unknown` services are not listed) — drifted members first, then drifted others — with a checkbox, service name, current branch and expected branch; a member/other marker is shown by text, never by colour alone.
+
+**Given** no service is drifted **When** the dialog is opened **Then** it shows a single "all services are aligned" line and no confirm action.
+
+**Given** the global presets **When** the developer picks one **Then** they act on the listed (drifted) rows only: `Aucun` clears every selection, `Services de l'EDT` selects the drifted active-EDT members among the listed rows, `Tous` selects every listed row; the preset's initial value comes from settings (default `edt`, below); `Space` toggles one row afterwards to refine.
+
+**Given** the dialog **When** it renders **Then** it also shows the restart selector `Aucun / Redémarrage simple / Clean restart` (same control and hint as Story 2.44), pre-selected from settings; `←/→`/`Space` change it for this run only (never written back).
+
+**Given** the developer confirms **When** the run starts **Then** the selected services are realigned through Story 8.7's use-case with live per-service rows (`pending → realigning → [restarting → verifying →] final state`), glyph and colour, a responsive TUI, and a summary listing non-green services first; the Dashboard refreshes afterwards.
+
+**Given** nothing is selected **When** the developer confirms **Then** the action is disabled with the reason "no service selected".
+
+**Given** `:settings` **When** the developer opens it **Then** it offers `realign.defaultScope` (`none` | `edt` | `all`, default `edt`) and `realign.restartMode` (`none` | `simple` | `clean`, default `none`), persisted and applied live; the CLI (Story 8.7) uses the same defaults when its flags are absent (FR-36).
+
+**Given** the dialog and any new component **When** built **Then** they register in `dialog-registry.tsx`, use bounded primitives (AD-19) and gate their input on overlay ownership (Story 7.11).
+
+**Given** the docs **When** updated **Then** the user docs describe the `realign` command, its flags, the shortcut and the two settings.
+
+**Implementation notes:** build in this order, one commit each: settings group (`core/ports/settings.ts`) → store slice + action → dialog (selection table, presets, restart selector) → command-bar entry and Dashboard shortcut → results view → docs.

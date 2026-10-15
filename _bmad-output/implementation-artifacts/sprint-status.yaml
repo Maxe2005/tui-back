@@ -94,4 +94,8 @@ development_status:
   8-3-dashboard-active-edt-services-table-service-actions: backlog
   8-4-dashboard-attention-block-registry-health: backlog
   8-5-dashboard-edt-actions-visual-finish: backlog
+  # 8-6/8-7/8-8 (branch drift detection & realignment) added 2026-10-15: sprint-change-proposal-2026-10-15-2.md. Order: 8-6 → 8-7 (needs 2-44 merged) → 8-8.
+  8-6-branch-drift-detection-snapshot-attention: backlog
+  8-7-realign-use-case-and-cli-selective-branch-realignment: backlog
+  8-8-realign-dialog-shortcut-settings-defaults: backlog
   epic-8-retrospective: optional
