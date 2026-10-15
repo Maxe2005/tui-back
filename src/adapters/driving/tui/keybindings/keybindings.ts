@@ -167,6 +167,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Esc (switch resolution)',
     description: 'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
   },
+  {
+    keys: 'R (Dashboard)',
+    description: 'Dashboard: refresh every section (also retries a failed section)',
+    footer: { key: 'R', verb: 'refresh', zones: ['dashboard'] },
+  },
   // Scoped to the Logs zone's pane grid.
   {
     keys: 'W (Logs)',
