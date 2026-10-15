@@ -2,6 +2,7 @@
 // "updated Ns ago" line and the short labels a service row prints for each probed field.
 import type { DashboardRegistrySummary, DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import type { ServiceAction } from '../../../../../core/service-actions/index.js';
+import { formatHint } from '../../shared/components/hints.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
 
 export type DashboardBody = 'registry-error' | 'empty-registry' | 'sections';
@@ -185,4 +186,56 @@ export function nextAttentionIndex(current: number | null, count: number): numbe
 // Index of the row (in listing order) an attention item points at; -1 when the row is gone.
 export function rowIndexForAttention(rows: readonly DashboardService[], item: AttentionItem): number {
   return rows.findIndex((row) => row.path === item.path);
+}
+
+// The bottom EDT section: which actions the Dashboard offers for the current EDT state.
+export type EdtSectionKind = 'active' | 'no-active' | 'none';
+export type EdtSectionAction = { key: 'E' | 'e'; label: string };
+
+export const EDT_SECTION_ROWS = 2;
+export const NO_EDT_MESSAGE = 'No EDT yet.';
+
+// `edtCount` is null while the EDT list is not loaded: EDTs are then assumed to exist.
+export function resolveEdtSection(snapshot: { status: 'active' | 'no-active-edt'; edt: { topic: string } | null }, edtCount: number | null): EdtSectionKind {
+  if (snapshot.status === 'active' && snapshot.edt !== null) {
+    return 'active';
+  }
+  return edtCount === 0 ? 'none' : 'no-active';
+}
+
+export function edtSectionActions(kind: EdtSectionKind, topic: string | null): EdtSectionAction[] {
+  switch (kind) {
+    case 'active':
+      return [
+        { key: 'E', label: `Enter ${topic ?? 'EDT'}` },
+        { key: 'e', label: 'Choose another EDT / create one' },
+      ];
+    case 'no-active':
+      return [{ key: 'e', label: 'Choose or create an EDT' }];
+    case 'none':
+      return [{ key: 'e', label: 'Create a first EDT' }];
+  }
+}
+
+export function formatEdtAction(action: EdtSectionAction): string {
+  return `[${action.key}] ▸ ${action.label}`;
+}
+
+// The EDT line: topic, size, then the freshness and refresh hint (omitted until a load landed).
+export function formatEdtLine(topic: string, serviceCount: number, updated: string | null): string {
+  return `EDT ${topic} · ${serviceCount} services${updated === null ? '' : ` · ${updated} · ${formatHint(['R', 'refresh'])}`}`;
+}
+
+export type EdtKeyEffect = { openDialog: 'switch' | 'create' | null; zone: 'edts' } | null;
+
+// What `E` / `e` do: `E` needs an active EDT; `e` opens the quick-pick, or the create wizard when
+// no EDT exists at all.
+export function edtKeyEffect(input: string, kind: EdtSectionKind): EdtKeyEffect {
+  if (input === 'E') {
+    return kind === 'active' ? { openDialog: null, zone: 'edts' } : null;
+  }
+  if (input === 'e') {
+    return { openDialog: kind === 'none' ? 'create' : 'switch', zone: 'edts' };
+  }
+  return null;
 }

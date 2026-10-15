@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import { MIN_TERMINAL_ROWS, SHELL_CHROME_ROWS } from '../../shared/bounds/bounds.js';
 import { BANNER_LINES } from './launch-banner.js';
-import { actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, containerLabel, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, rowIndexForAttention } from './dashboard.logic.js';
+import { edtKeyEffect, edtSectionActions, formatEdtAction, formatEdtLine, resolveEdtSection, actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, containerLabel, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, rowIndexForAttention } from './dashboard.logic.js';
 
 const FIELD_ERROR = { ok: false as const, error: { code: 'x', message: 'y' } };
 
@@ -198,5 +198,36 @@ describe('registry and attention cursor helpers', () => {
     expect(nextAttentionIndex(0, 3)).toBe(1);
     expect(nextAttentionIndex(2, 3)).toBe(0);
     expect(nextAttentionIndex(null, 0)).toBeNull();
+  });
+});
+
+describe('EDT section', () => {
+  const active = { status: 'active' as const, edt: { topic: 'feat-x' } };
+  const none = { status: 'no-active-edt' as const, edt: null };
+
+  it('resolves the state from the snapshot and the EDT count', () => {
+    expect(resolveEdtSection(active, 3)).toBe('active');
+    expect(resolveEdtSection(none, 3)).toBe('no-active');
+    expect(resolveEdtSection(none, null)).toBe('no-active');
+    expect(resolveEdtSection(none, 0)).toBe('none');
+  });
+
+  it('labels the actions per state', () => {
+    expect(edtSectionActions('active', 'feat-x').map(formatEdtAction)).toEqual(['[E] ▸ Enter feat-x', '[e] ▸ Choose another EDT / create one']);
+    expect(edtSectionActions('no-active', null).map(formatEdtAction)).toEqual(['[e] ▸ Choose or create an EDT']);
+    expect(edtSectionActions('none', null).map(formatEdtAction)).toEqual(['[e] ▸ Create a first EDT']);
+  });
+
+  it('merges the updated time and the refresh hint into the EDT line', () => {
+    expect(formatEdtLine('t', 2, 'updated 3s ago')).toBe('EDT t · 2 services · updated 3s ago · [R] refresh');
+    expect(formatEdtLine('t', 2, null)).toBe('EDT t · 2 services');
+  });
+
+  it('maps E and e to their effects', () => {
+    expect(edtKeyEffect('E', 'active')).toEqual({ openDialog: null, zone: 'edts' });
+    expect(edtKeyEffect('E', 'no-active')).toBeNull();
+    expect(edtKeyEffect('e', 'active')).toEqual({ openDialog: 'switch', zone: 'edts' });
+    expect(edtKeyEffect('e', 'none')).toEqual({ openDialog: 'create', zone: 'edts' });
+    expect(edtKeyEffect('x', 'active')).toBeNull();
   });
 });
