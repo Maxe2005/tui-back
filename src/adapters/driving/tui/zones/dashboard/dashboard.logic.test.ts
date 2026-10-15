@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import { MIN_TERMINAL_ROWS, SHELL_CHROME_ROWS } from '../../shared/bounds/bounds.js';
 import { BANNER_LINES } from './launch-banner.js';
-import { buildAttentionItems, formatAttentionLine, moveAttentionCursor, registryAllClear, branchLabel, containerLabel, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel } from './dashboard.logic.js';
+import { actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, containerLabel, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, rowIndexForAttention } from './dashboard.logic.js';
 
 const FIELD_ERROR = { ok: false as const, error: { code: 'x', message: 'y' } };
 
@@ -60,6 +60,78 @@ describe('fixed banner', () => {
   });
 });
 
+function row(overrides: Partial<DashboardService> = {}): DashboardService {
+  return {
+    service: 'api',
+    path: '/r/api',
+    manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
+    container: { ok: true, value: 'up' },
+    branch: 'feat/x',
+    divergence: { status: 'current', ahead: 1, behind: 2 },
+    workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
+    protectedBranch: false,
+    usedByEdts: [],
+    ...overrides,
+  };
+}
+
+describe('row anomalies', () => {
+  it('prints no marker and no reason for a healthy row', () => {
+    expect(issueMarker(row())).toBe(' ');
+    expect(reasonLine(row())).toBeNull();
+  });
+  it('names every anomaly on the reason line and marks the row', () => {
+    const dirty = row({ workingTree: { ok: true, value: { uncommitted: true, mergeInProgress: true, rebaseInProgress: true } } });
+    expect(issueMarker(dirty)).toBe('!');
+    expect(reasonLine(dirty)).toBe('uncommitted changes · merge in progress · rebase in progress');
+  });
+  it('surfaces a probe error message, no-upstream and offline', () => {
+    expect(reasonLine(row({ workingTree: { ok: false, error: { code: 'g', message: 'not a repo' } } }))).toBe('git error: not a repo');
+    expect(reasonLine(row({ divergence: { status: 'no-upstream', ahead: null, behind: null } }))).toBe('no upstream branch');
+    expect(reasonLine(row({ divergence: { status: 'unknown-offline', ahead: null, behind: null } }))).toBe('offline: divergence unknown');
+  });
+});
+
+describe('reasonParts details', () => {
+  it('keeps the offline detail message and the manifest error message', () => {
+    expect(reasonLine(row({ divergence: { status: 'unknown-offline', ahead: null, behind: null, detail: { code: 'git', message: 'no route to host' } } }))).toBe(
+      'offline: no route to host',
+    );
+    expect(reasonLine(row({ manifest: { ok: false, error: { code: 'manifest-invalid', message: 'bad yaml' } } }))).toBe('manifest error: bad yaml');
+    expect(reasonLine(row({ container: { ok: false, error: { code: 'd', message: 'docker down' } } }))).toBe('container error: docker down');
+  });
+});
+
+describe('aheadBehindLabel', () => {
+  it('reads unknown when a current divergence has no counts', () => {
+    expect(aheadBehindLabel({ status: 'current', ahead: null, behind: null })).toBe('unknown');
+    expect(aheadBehindLabel({ status: 'current', ahead: 0, behind: null })).toBe('unknown');
+  });
+  it('prints counts, or the explicit no-upstream / offline state', () => {
+    expect(aheadBehindLabel({ status: 'current', ahead: 1, behind: 2 })).toBe('↑1 ↓2');
+    expect(aheadBehindLabel({ status: 'no-upstream', ahead: null, behind: null })).toBe('no upstream');
+    expect(aheadBehindLabel({ status: 'unknown-offline', ahead: null, behind: null })).toBe('offline');
+  });
+});
+
+describe('action helpers', () => {
+  const actions = [
+    { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: { available: true as const } },
+    { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: { available: true as const } },
+  ];
+  it('disables every action with "operation in progress" while one runs', () => {
+    expect(disableWhileRunning(actions, true).map((a) => a.availability)).toEqual([
+      { available: false, reason: 'operation in progress' },
+      { available: false, reason: 'operation in progress' },
+    ]);
+    expect(disableWhileRunning(actions, false)).toEqual(actions);
+  });
+  it('matches an action by its displayed Ctrl key', () => {
+    expect(actionForKey(actions, 'r')?.id).toBe('restart-simple');
+    expect(actionForKey(actions, 'x')).toBeUndefined();
+  });
+});
+
 function svc(over: Partial<DashboardService>): DashboardService {
   return {
     service: 's',
@@ -108,17 +180,23 @@ describe('buildAttentionItems', () => {
       buildAttentionItems([svc({ workingTree: FIELD_ERROR, divergence: { status: 'current', ahead: null, behind: null, detail: { code: 'x', message: 'y' } } })]),
     ).toEqual([]);
   });
+  it('points each item at its row by path, so equal service names stay apart', () => {
+    const rows = [svc({ service: 'a', path: '/1' }), svc({ service: 'a', path: '/2', usedByEdts: ['x'] })];
+    const [item] = buildAttentionItems(rows);
+    expect(rowIndexForAttention(rows, item!)).toBe(1);
+  });
 });
 
-describe('registry and cursor helpers', () => {
+describe('registry and attention cursor helpers', () => {
   it('detects an all-clear registry', () => {
     expect(registryAllClear({ repoCount: 4, invalidManifests: 0, unreachable: 0, listingIssues: 0 })).toBe(true);
     expect(registryAllClear({ repoCount: 4, invalidManifests: 0, unreachable: 1, listingIssues: 0 })).toBe(false);
     expect(registryAllClear({ repoCount: 0, invalidManifests: 0, unreachable: 0, listingIssues: 0 })).toBe(false);
   });
-  it('clamps the attention cursor', () => {
-    expect(moveAttentionCursor(0, -1, 3)).toBe(0);
-    expect(moveAttentionCursor(2, 1, 3)).toBe(2);
-    expect(moveAttentionCursor(0, 1, 0)).toBe(0);
+  it('cycles through the attention lines, starting at the first', () => {
+    expect(nextAttentionIndex(null, 3)).toBe(0);
+    expect(nextAttentionIndex(0, 3)).toBe(1);
+    expect(nextAttentionIndex(2, 3)).toBe(0);
+    expect(nextAttentionIndex(null, 0)).toBeNull();
   });
 });

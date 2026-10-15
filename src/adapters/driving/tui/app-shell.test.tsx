@@ -192,6 +192,13 @@ describe('AppShell', () => {
       expect(shouldSwitchZone('x')).toBeNull();
     });
 
+    it('ignores Ctrl/Meta letters so zone bindings like Ctrl+R and Ctrl+L never switch zone', () => {
+      expect(shouldSwitchZone('r', undefined, { ctrl: true })).toBeNull();
+      expect(shouldSwitchZone('l', undefined, { ctrl: true })).toBeNull();
+      expect(shouldSwitchZone('d', undefined, { meta: true })).toBeNull();
+      expect(shouldSwitchZone('r', undefined, { ctrl: false })).toBe('routes');
+    });
+
     describe('reachable-set gating', () => {
       it('shouldSwitchZone returns null for an omitted zone\'s mnemonic — never lands on it', () => {
         const reachable: ReadonlySet<ZoneId> = new Set(['dashboard', 'edts', 'update', 'logs', 'shared-types']);
@@ -338,6 +345,8 @@ describe('AppShell', () => {
     it('shouldOpenCommand returns true for :', () => {
       expect(shouldOpenCommand(':')).toBe(true);
       expect(shouldOpenCommand('j')).toBe(false);
+      expect(shouldOpenCommand(':', { ctrl: true })).toBe(false);
+      expect(shouldOpenCommand(':', { meta: true })).toBe(false);
     });
 
 it('shouldQuit returns true for q', () => {
@@ -627,13 +636,20 @@ it('shouldQuit returns true for q', () => {
         dashboardRegistryStatus: 'idle',
         dashboardRegistry: null,
         dashboardUpdatedAt: null,
-        dashboardFocusedService: null,
-        focusDashboardService: () => {},
         loadDashboard: async () => {},
+        dashboardServiceActions: {},
+        dashboardActionState: {},
+        loadDashboardServiceActions: async () => {},
+        runDashboardServiceAction: async () => {},
+        pendingServiceFocus: null,
+        openServiceInZone: () => {},
+        clearPendingServiceFocus: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
       expect(shouldQuit('j', {}, minimalState)).toBe(false);
+      expect(shouldQuit('q', { ctrl: true }, minimalState)).toBe(false);
+      expect(shouldQuit('q', { meta: true }, minimalState)).toBe(false);
       expect(
         shouldQuit('q', {}, { ...minimalState, settings: { ...minimalState.settings, general: { quitShortcutEnabled: false, editorCommand: '' } } }),
       ).toBe(false);

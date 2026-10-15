@@ -70,6 +70,8 @@ context:
 
 ## Spec Change Log
 
+- After merging story 8.3 (user-requested adjustment): 8.3 owns `↑/↓`/`Enter` for the service-row cursor, so the attention cursor and the `dashboardFocusedService` hand-off field were dropped. `a` now steps through the Attention lines (wrapping) and moves 8.3's row cursor to the line's service (matched by repo path), which satisfies "focus moves to that service's row". Known-bad state avoided: two competing `↑/↓` handlers and a write-only store field. Layout: the success states were folded onto one line each (attention header + success, registry counts + healthy) because the `:reset` overlay shares the 24-row terminal with the dashboard and the extra rows garbled it.
+
 ## Design Notes
 
 Attention is derived in the TUI from the services section, not added to the snapshot, so the CLI envelope is unchanged. The focus field is intentionally the only coupling to Story 8.3: 8.3 renders the focused row from `dashboardFocusedService`; until it lands, the field is write-only. Attention probe errors are excluded on purpose — a failed probe is not evidence of an issue and already shows on its row.

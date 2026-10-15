@@ -222,10 +222,36 @@ describe('DashboardZone snapshot sections', () => {
     });
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).toContain('EDT topic-a · 2 services');
-    expect(output).toContain('svc-a · up · feat/x · uncommitted');
-    expect(output).toContain('svc-b · container error · feat/x · git error');
+    expect(output).toContain('svc-a up feat/x ↑0 ↓0');
+    expect(output).toContain('svc-b container error feat/x ↑0 ↓0');
+    // The focused (first) row explains its anomaly and lists the actions' absence while unloaded.
+    expect(output).toContain('uncommitted changes');
+    expect(output).toContain('Actions unavailable.');
     expect(output).toContain('1 invalid manifests');
     expect(output).toContain('updated 0s ago');
+  });
+
+  it('shows the focused row actions with their unavailable reasons, and the running progress', async () => {
+    const actions = [
+      { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: { available: true as const } },
+      { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: { available: false as const, reason: 'no container' } },
+      { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: { available: false as const, reason: 'no clean recipe' } },
+    ];
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: ACTIVE,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+      dashboardServiceActions: { '/r/a': actions },
+    });
+    const idle = await renderToString(<DashboardZone useStore={store} />);
+    expect(idle).toContain('[Ctrl+O]');
+    expect(idle).toContain('(no container)');
+    expect(idle).toContain('Ctrl+L: no clean recipe');
+    store.setState({ dashboardActionState: { '/r/a': { running: { actionId: 'restart-clean', text: 'Clean restart — recipe step 2/3' }, result: null } } });
+    const running = await renderToString(<DashboardZone useStore={store} />);
+    expect(running).toContain('Clean restart — recipe step 2/3');
+    expect(running).toContain('Ctrl+R: operation in progress');
   });
 
   it('lists attention lines with a count, and the registry hint with its counts', async () => {

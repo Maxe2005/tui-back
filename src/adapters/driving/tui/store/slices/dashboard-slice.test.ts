@@ -104,19 +104,4 @@ describe('dashboard slice', () => {
     expect(store.getState().dashboardServicesStatus).toBe('error');
     expect(store.getState().dashboardRegistryStatus).toBe('error');
   });
-
-  it('stores the focused service and clears it when the service vanishes on reload', async () => {
-    const store = createAppStore(fakeDeps());
-    store.getState().focusDashboardService('svc-a');
-    expect(store.getState().dashboardFocusedService).toBe('svc-a');
-    await store.getState().loadDashboard();
-    expect(store.getState().dashboardFocusedService).toBeNull();
-  });
-
-  it('clears the focused service when the services section fails to load', async () => {
-    const store = createAppStore(fakeDeps({ edtRegistry: { list: async () => err('edt-error', 'x') } }));
-    store.getState().focusDashboardService('svc-a');
-    await store.getState().loadDashboard();
-    expect(store.getState().dashboardFocusedService).toBeNull();
-  });
 });
