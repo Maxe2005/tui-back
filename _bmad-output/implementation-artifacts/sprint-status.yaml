@@ -50,7 +50,7 @@ development_status:
   2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: done
   2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: done
   2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: review
-  2-44-edt-switch-optional-parallel-service-restart-verified-state: in-progress
+  2-44-edt-switch-optional-parallel-service-restart-verified-state: review
   epic-2-retrospective: optional
 
   epic-3: in-progress

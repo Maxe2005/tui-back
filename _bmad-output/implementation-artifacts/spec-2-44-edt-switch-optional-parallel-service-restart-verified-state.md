@@ -2,7 +2,7 @@
 title: 'Story 2.44: EDT Switch — Optional Parallel Service Restart & Verified State'
 type: 'feature'
 created: '2026-10-15'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '6666e5124a5163d583a6024a06d174d31778610d'
 review_loop_iteration: 0
 context:
@@ -60,14 +60,14 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `core/ports/health-probe.ts` + `adapters/driven/health/http-probe.ts` + tests -- port and fetch adapter
-- [ ] manifest `healthUrl` (port, schema, tests) + `docs/tui-back-manifest.md` + manifest-generator skill
-- [ ] `core/service-actions` `verifyService` + constants + tests -- all six states
-- [ ] `switch.restartMode` in settings port/schema/screen + tests
-- [ ] `core/edt/switch-restart.ts` + tests -- targets, skips, pool, clean fallback, throw, summary ordering
-- [ ] `edt-slice.ts` + `switch-dialog.tsx` selector, lock exclusion, action log, wizard/quick-pick seam documented + tests
-- [ ] report view (`BoundedList`, live rows, summary non-green first) + tests
-- [ ] CLI `--restart` flag, envelope rows, exit code + tests; update `EDT_SWITCH_USAGE`
+- [x] `core/ports/health-probe.ts` + `adapters/driven/health/http-probe.ts` + tests -- port and fetch adapter
+- [x] manifest `healthUrl` (port, schema, tests) + `docs/tui-back-manifest.md` + manifest-generator skill
+- [x] `core/service-actions` `verifyService` + constants + tests -- all six states
+- [x] `switch.restartMode` in settings port/schema/screen + tests
+- [x] `core/edt/switch-restart.ts` + tests -- targets, skips, pool, clean fallback, throw, summary ordering
+- [x] `edt-slice.ts` + `switch-dialog.tsx` selector, lock exclusion, action log, wizard/quick-pick seam documented + tests
+- [x] report view (`BoundedList`, live rows, summary non-green first) + tests
+- [x] CLI `--restart` flag, envelope rows, exit code + tests; update `EDT_SWITCH_USAGE`
 
 **Acceptance Criteria:**
 - Given the epics.md Story 2.44 criteria, when each is exercised, then all hold with `npm test`, typecheck and lint green.
