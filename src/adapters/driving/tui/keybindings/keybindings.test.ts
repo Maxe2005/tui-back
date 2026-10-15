@@ -61,6 +61,7 @@ const EXPECTED = [
     'Esc (switch resolution)',
     'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
   ],
+  ['R (Dashboard)', 'Dashboard: refresh every section (also retries a failed section)'],
   ['W (Logs)', 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)'],
   ['i (Logs)', 'Logs: toggle the focused pane between following and ignoring the global filter'],
   ['R (Logs)', "Logs: restart the focused pane's service"],
