@@ -14,6 +14,7 @@ import type { SavedRequest, SavedRequestPort } from '../../../core/ports/saved-r
 import { DEFAULT_SETTINGS, type Settings, type SettingsPort } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { runCli, type Subcommand } from './dispatch.js';
+import type { DockerPort } from '../../../core/ports/docker.js';
 import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
 
 // `registry clean`'s interactive TTY branch drives a real `node:readline/promises` prompt —
@@ -266,6 +267,7 @@ describe('subcommand registry guards', () => {
       edtRegistryResourceKey: '/cfg/edts.yaml',
       git,
       container,
+      docker: { getContainerHealth: async () => ok('up' as const) } as unknown as DockerPort,
       migration,
       restart,
       state: fakeState(),
@@ -277,7 +279,7 @@ describe('subcommand registry guards', () => {
     });
   }
 
-  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/registry/list-routes/fire-request without name collisions', () => {
+  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/registry/list-routes/fire-request/dashboard without name collisions', () => {
     const subcommands = buildTestSubcommands();
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual([
@@ -286,6 +288,7 @@ describe('subcommand registry guards', () => {
       'scan',
       'ping',
       'edts',
+      'dashboard',
       'edt',
       'update',
       'registry',
@@ -308,6 +311,20 @@ describe('subcommand registry guards', () => {
 
     const result = await edts.run([]);
     expect(result).toMatchObject({ ok: true, data: { services: [], unreachable: [], errors: [] } });
+  });
+
+  it('dashboard rejects arguments and otherwise returns the snapshot', async () => {
+    const subcommands = buildTestSubcommands();
+    const dashboard = subcommands.find((subcommand) => subcommand.name === 'dashboard');
+    if (!dashboard) throw new Error('expected dashboard subcommand');
+
+    expect(await dashboard.run(['extra'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+
+    const result = await dashboard.run([]);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { status: 'no-active-edt', edt: null, services: [], registry: { repoCount: 0 } },
+    });
   });
 
   it('list-routes rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
