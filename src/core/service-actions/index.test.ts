@@ -138,3 +138,80 @@ describe('service actions openInIde', () => {
     expect(!result.ok && result.error.code).toBe('editor-launch-failed');
   });
 });
+
+describe('service actions verifyService', () => {
+  function verifySetup(manifest: Partial<Manifest>, healthSeq: ('up' | 'down' | 'restarting' | 'unavailable')[], probeSeq: { healthy: boolean; reason?: string }[] = []) {
+    let t = 0;
+    const clock = { now: () => t, sleep: vi.fn(async (ms: number) => { t += ms; }) };
+    let h = 0;
+    const docker = {
+      getContainerHealth: vi.fn(async () => {
+        const next = healthSeq[Math.min(h++, healthSeq.length - 1)];
+        return next === 'unavailable' ? err('docker-unavailable', 'no docker') : ok(next);
+      }),
+    };
+    let p = 0;
+    const healthProbe = { probe: vi.fn(async () => ok(probeSeq[Math.min(p++, probeSeq.length - 1)] ?? { healthy: false })) };
+    const base = setup(manifest);
+    const actions = createServiceActions({
+      manifest: { load: async () => ok({ service: 'api', sharedBranch: 'development', modules: {}, ...manifest } as Manifest) },
+      container: { restart: vi.fn() } as never,
+      restart: base.restart,
+      editor: base.editor,
+      lock: base.lock,
+      docker: docker as never,
+      healthProbe,
+      clock,
+    });
+    return { actions, docker, healthProbe, clock };
+  }
+
+  it('is functional when the container is up and healthUrl answers 2xx', async () => {
+    const { actions, healthProbe } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['up'], [{ healthy: true }]);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'functional' } });
+    expect(healthProbe.probe).toHaveBeenCalledWith('http://x/h', expect.any(Number));
+  });
+
+  it('keeps polling until healthUrl answers', async () => {
+    const { actions, clock } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['up'], [{ healthy: false }, { healthy: false }, { healthy: true }]);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'functional' } });
+    expect(clock.sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it('is up-unverified when up without a healthUrl, with no probe', async () => {
+    const { actions, healthProbe } = verifySetup({ container: 'api' }, ['up']);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'up-unverified' } });
+    expect(healthProbe.probe).not.toHaveBeenCalled();
+  });
+
+  it('is unhealthy when healthUrl never answers 2xx before the timeout', async () => {
+    const { actions, clock } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['up'], [{ healthy: false, reason: 'HTTP 503' }]);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'unhealthy', detail: 'HTTP 503' } });
+    expect(clock.now()).toBeLessThanOrEqual(30_000);
+  });
+
+  it('is restarting when still restarting at the timeout', async () => {
+    const { actions } = verifySetup({ container: 'api' }, ['restarting']);
+    const result = await actions.verifyService('/r');
+    expect(result.ok && result.data.state).toBe('restarting');
+  });
+
+  it('settles on down immediately', async () => {
+    const { actions, clock } = verifySetup({ container: 'api' }, ['restarting', 'down']);
+    const result = await actions.verifyService('/r');
+    expect(result.ok && result.data.state).toBe('down');
+    expect(clock.sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('errors when docker never answers, and for a container-less service', async () => {
+    const unavailable = await verifySetup({ container: 'api' }, ['unavailable']).actions.verifyService('/r');
+    expect(!unavailable.ok && unavailable.error.code).toBe('docker-unavailable');
+    const none = await verifySetup({}, ['up']).actions.verifyService('/r');
+    expect(!none.ok && none.error.code).toBe('no-container');
+  });
+
+  it('rejects a blank repoPath', async () => {
+    const result = await verifySetup({ container: 'api' }, ['up']).actions.verifyService('  ');
+    expect(!result.ok && result.error.code).toBe('invalid-argument');
+  });
+});
