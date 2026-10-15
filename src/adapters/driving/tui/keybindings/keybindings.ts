@@ -172,6 +172,16 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'Dashboard: refresh every section (also retries a failed section)',
     footer: { key: 'R', verb: 'refresh', zones: ['dashboard'] },
   },
+  {
+    keys: '↑ / ↓ (Dashboard)',
+    description: 'Dashboard: move the cursor over the Attention lines',
+    footer: { key: '↑/↓', verb: 'attention', zones: ['dashboard'] },
+  },
+  {
+    keys: 'Enter (Dashboard)',
+    description: 'Dashboard: focus the service of the highlighted Attention line',
+    footer: { key: 'Enter', verb: 'focus', zones: ['dashboard'] },
+  },
   // Scoped to the Logs zone's pane grid.
   {
     keys: 'W (Logs)',
