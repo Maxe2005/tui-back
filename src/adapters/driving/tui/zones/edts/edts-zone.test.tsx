@@ -1245,6 +1245,30 @@ describe('EdtsZone', () => {
     expect(output).toContain('other-work');
   });
 
+  it('the switch-confirm dialog shows the post-switch restart selector, pre-selected from switch.restartMode', async () => {
+    const store = createAppStore();
+    store.setState({
+      edts: [edtEntry({ topic: 'other-work' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: noopAsync,
+      loadEdtsBranches: noopAsync,
+    });
+    const byDefault = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-confirm" />);
+    expect(byDefault).toContain('Redémarrer les services après le switch');
+    expect(byDefault).toContain('(•) Aucun');
+    expect(byDefault).toContain('( ) Redémarrage simple');
+    expect(byDefault).toContain('( ) Clean restart');
+    expect(byDefault).toContain('retombe sur un redémarrage simple');
+
+    store.setState({ settings: { ...store.getState().settings, switch: { restartMode: 'clean' } } });
+    const preselected = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-confirm" />);
+    expect(preselected).toContain('(•) Clean restart');
+    expect(preselected).toContain('( ) Aucun');
+  });
+
   it('switch-blocked-action-in-progress surfaces an explicit force-or-cancel prompt', async () => {
     const store = createAppStore();
     store.setState({

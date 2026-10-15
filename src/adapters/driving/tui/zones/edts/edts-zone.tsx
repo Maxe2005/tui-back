@@ -127,6 +127,11 @@ export function EdtsZone({
   // The switch dirty-repo confirm seam (edt-slice.ts).
   const switchDirtyRepos = useStore((state) => state.switchDirtyRepos);
   const resolveSwitchDirtyRepos = useStore((state) => state.resolveSwitchDirtyRepos);
+  // FR-37: the post-switch restart run, and the setting the switch dialog's selector starts on.
+  const runSwitchRestart = useStore((state) => state.runSwitchRestart);
+  const clearSwitchRestart = useStore((state) => state.clearSwitchRestart);
+  const switchRestart = useStore((state) => state.switchRestart);
+  const defaultRestartMode = useStore((state) => state.settings.switch.restartMode);
   const modifyEdtAction = useStore((state) => state.modifyEdt);
   const deleteEdtAction = useStore((state) => state.deleteEdt);
   const resolveMemberDeleteStatusesAction = useStore((state) => state.resolveMemberDeleteStatuses);
@@ -481,6 +486,10 @@ export function EdtsZone({
     focusedEdt,
     switchDirtyRepos,
     resolveSwitchDirtyRepos,
+    runSwitchRestart,
+    clearSwitchRestart,
+    switchRestart,
+    defaultRestartMode,
   });
   // Once the core switch parks on the dirty-repo seam, open the resolution view on a fresh draft —
   // the outgoing EDT is the store's active one (null on a first switch) — and load each state-2/3
@@ -997,7 +1006,7 @@ export function EdtsZone({
         />
       ) : null}
 
-      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} maxVisibleRows={switchResolutionMaxRows} /> : null}
+      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} maxVisibleRows={switchResolutionMaxRows} defaultRestartMode={defaultRestartMode} switchRestart={switchRestart} /> : null}
 
       {dialog.kind === 'modify' ? <ModifyDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} maxRows={branchDropdownMaxRows} /> : null}
 

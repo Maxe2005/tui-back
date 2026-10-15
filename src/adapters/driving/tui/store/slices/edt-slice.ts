@@ -10,6 +10,14 @@ import {
   type CreateEdtData,
   type MemberBranchPlan,
 } from '../../../../../core/edt/create.js';
+import {
+  listSwitchRestartRepos,
+  restartAfterSwitch,
+  type RestartReport,
+  type RestartRow,
+  type SwitchRestartRunMode,
+} from '../../../../../core/edt/switch-restart.js';
+import { createServiceActions, type ServiceActions } from '../../../../../core/service-actions/index.js';
 import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../core/edt/activate.js';
 import {
   switchActiveEdt as switchActiveEdtUseCase,
@@ -51,6 +59,23 @@ export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DE
 export const UPDATE_IN_PROGRESS_CODE = 'update-in-progress';
 export const UPDATE_IN_PROGRESS_MESSAGE =
   'A group update is in progress — wait for it to finish before activating or switching an EDT.';
+
+// A restart run (post-switch, standalone, or a group update) is in flight — see the exclusion
+// notes on `runSwitchRestart`.
+export const SWITCH_RESTART_IN_PROGRESS_CODE = 'switch-restart-in-progress';
+export const SWITCH_RESTART_IN_PROGRESS_MESSAGE =
+  'A post-switch service restart is in progress — wait for it to finish before starting an update, a switch or another restart.';
+
+// The live post-switch restart run, read by the switch dialog's report view. `rows` are in run
+// order while `running` (stable positions for live updates) and non-green first once `done`.
+export type SwitchRestartState = {
+  topic: string;
+  mode: Exclude<SwitchRestartRunMode, 'none'>;
+  status: 'running' | 'done' | 'error';
+  rows: RestartRow[];
+  report: RestartReport | null;
+  error: string | null;
+};
 
 export type CreateEdtParams = {
   topic: string;
@@ -139,6 +164,18 @@ export type EdtSlice = {
   // `activated` updates cached active pointer like switchEdt.
   activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
+  // The optional post-switch restart phase (FR-37): a second call after a successful switchEdt,
+  // never part of it. `null` until a run starts; kept after it ends so the report survives
+  // leaving the zone, until clearSwitchRestart. Starting one while an update, another restart
+  // run or a standalone restart is in flight is rejected — and, while it runs, update starts,
+  // switches and standalone restarts on its services are rejected too (both directions).
+  switchRestart: SwitchRestartState | null;
+  runSwitchRestart: (params: {
+    topic: string;
+    mode: Exclude<SwitchRestartRunMode, 'none'>;
+    results: SwitchActiveEdtData['results'];
+  }) => Promise<Result<RestartReport>>;
+  clearSwitchRestart: () => void;
   // Switch dirty-repo seam: non-null while switchActiveEdt paused inside switchEdt.
   // Core raises only when state-2/3 repo (outside outgoing EDT) is dirty.
   // Awaits SwitchDirtyReposChoice; switch dialog renders resolution view.
@@ -182,6 +219,20 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
   // The pending seam promise's resolver — installed when switchActiveEdt raises a dirty-repo
   // preview, consumed when the dialog dispatches its choice.
   let pendingSwitchDirtyResolve: ((choice: SwitchDirtyReposChoice) => void) | null = null;
+  // Built once from the injected ports (same registry the Logs zone uses); absent when the
+  // restart ports are not wired — runSwitchRestart then reports an explicit error.
+  const serviceActions: ServiceActions | null =
+    deps?.container && deps.restart && deps.editor
+      ? createServiceActions({
+          manifest: deps.manifest,
+          container: deps.container,
+          restart: deps.restart,
+          editor: deps.editor,
+          lock: deps.lock,
+          docker: deps.docker,
+          healthProbe: deps.healthProbe,
+        })
+      : null;
   return (set, get) => ({
     activeEdt: null,
     setActiveEdt: (edt) => set({ activeEdt: edt }),
@@ -300,6 +351,75 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
       return result;
     },
+    switchRestart: null,
+    clearSwitchRestart: () => {
+      // A running run owns its state until it ends.
+      if (get().switchRestart?.status !== 'running') {
+        set({ switchRestart: null });
+      }
+    },
+    runSwitchRestart: async ({ topic, mode, results }) => {
+      if (!deps || serviceActions === null) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      const rejected = (message: string): Result<RestartReport> => ({
+        ok: false,
+        error: { code: SWITCH_RESTART_IN_PROGRESS_CODE, message },
+      });
+      if (get().switchRestart?.status === 'running') {
+        return rejected(SWITCH_RESTART_IN_PROGRESS_MESSAGE);
+      }
+      if (get().updateStatus === 'running') {
+        return rejected(UPDATE_IN_PROGRESS_MESSAGE.replace('activating or switching an EDT', 'restarting services after a switch'));
+      }
+      if (Object.keys(get().serviceRestartInFlight).length > 0) {
+        return rejected('A service restart is already in progress — wait for it to finish before restarting services after a switch.');
+      }
+      const repos = await listSwitchRestartRepos({ registry: deps.registry, manifest: deps.manifest });
+      if (!repos.ok) {
+        set({ switchRestart: { topic, mode, status: 'error', rows: [], report: null, error: repos.error.message } });
+        return repos;
+      }
+      // Marks every target as restarting in the shared in-flight map, so a group update or a
+      // standalone restart on the same services is refused until the run ends.
+      const changed = new Set(results.filter((row) => row.outcome !== 'failed').map((row) => row.service));
+      const inFlightPaths = repos.data.filter((repo) => repo.hasContainer && changed.has(repo.service)).map((repo) => repo.repoPath);
+      set({
+        switchRestart: { topic, mode, status: 'running', rows: [], report: null, error: null },
+        serviceRestartInFlight: { ...get().serviceRestartInFlight, ...Object.fromEntries(inFlightPaths.map((path) => [path, 'restart' as const])) },
+      });
+      const liveRows = new Map<string, RestartRow>();
+      let outcome: Result<RestartReport>;
+      try {
+        outcome = await restartAfterSwitch({
+          results,
+          repos: repos.data,
+          mode,
+          concurrency: get().settings.update.concurrency,
+          serviceActions,
+          onPhase: (row) => {
+            liveRows.set(row.repoPath, row);
+            const current = get().switchRestart;
+            if (current?.status === 'running') {
+              set({ switchRestart: { ...current, rows: [...liveRows.values()] } });
+            }
+          },
+        });
+      } catch (error) {
+        outcome = { ok: false, error: { code: 'switch-restart-failed', message: error instanceof Error ? error.message : String(error) } };
+      }
+      const remaining = { ...get().serviceRestartInFlight };
+      for (const path of inFlightPaths) {
+        delete remaining[path];
+      }
+      set({
+        serviceRestartInFlight: remaining,
+        switchRestart: outcome.ok
+          ? { topic, mode, status: 'done', rows: outcome.data.rows, report: outcome.data, error: null }
+          : { topic, mode, status: 'error', rows: [...liveRows.values()], report: null, error: outcome.error.message },
+      });
+      return outcome;
+    },
     switchDirtyRepos: null,
     resolveSwitchDirtyRepos: (choice) => {
       const resolve = pendingSwitchDirtyResolve;
@@ -313,6 +433,9 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
       if (get().updateStatus === 'running') {
         return { ok: false, error: { code: UPDATE_IN_PROGRESS_CODE, message: UPDATE_IN_PROGRESS_MESSAGE } };
+      }
+      if (get().switchRestart?.status === 'running') {
+        return { ok: false, error: { code: SWITCH_RESTART_IN_PROGRESS_CODE, message: SWITCH_RESTART_IN_PROGRESS_MESSAGE } };
       }
       try {
         const result = await switchActiveEdtUseCase({

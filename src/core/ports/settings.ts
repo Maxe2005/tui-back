@@ -12,6 +12,13 @@ export type UpdateMergeSourceDefault = (typeof UPDATE_MERGE_SOURCES)[number];
 export const SWITCH_RESTART_MODES = ['none', 'simple', 'clean'] as const;
 export type SwitchRestartMode = (typeof SWITCH_RESTART_MODES)[number];
 
+// none → simple → clean → none (direction -1 goes back) — shared by the :settings control and
+// the switch dialog's selector so the two always cycle the same way.
+export function cycleSwitchRestartMode(current: SwitchRestartMode, direction: 1 | -1): SwitchRestartMode {
+  const index = SWITCH_RESTART_MODES.indexOf(current);
+  return SWITCH_RESTART_MODES[(index + direction + SWITCH_RESTART_MODES.length) % SWITCH_RESTART_MODES.length] ?? 'none';
+}
+
 export interface Settings {
   // The `q` keybinding (quit the app) is global, so it lives on the General tab. Only the raw
   // `q` keypress is gated by this flag; the `:quit` command always works.

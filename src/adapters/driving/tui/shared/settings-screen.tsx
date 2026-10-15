@@ -35,7 +35,7 @@ import {
   MIN_LOG_BUFFER_SIZE,
   MAX_UPDATE_CONCURRENCY,
   MIN_UPDATE_CONCURRENCY,
-  SWITCH_RESTART_MODES,
+  cycleSwitchRestartMode,
   type Settings,
   type SwitchRestartMode,
   type UpdateMergeSourceDefault,
@@ -405,10 +405,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
 const SWITCH_RESTART_LABELS: Record<SwitchRestartMode, string> = { none: 'None', simple: 'Simple restart', clean: 'Clean restart' };
 
 // Left/Right/Space cycle none → simple → clean (Left goes back).
-export function cycleSwitchRestartMode(current: SwitchRestartMode, direction: 1 | -1): SwitchRestartMode {
-  const index = SWITCH_RESTART_MODES.indexOf(current);
-  return SWITCH_RESTART_MODES[(index + direction + SWITCH_RESTART_MODES.length) % SWITCH_RESTART_MODES.length] ?? 'none';
-}
+export { cycleSwitchRestartMode };
 
 // The Logs tab's group list: one field (or a small related cluster) per group, so no screen
 // renders more than a handful of lines. ModalDialog has no height cap, and a flat list of every

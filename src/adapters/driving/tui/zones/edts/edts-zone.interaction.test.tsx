@@ -188,6 +188,98 @@ describe('EdtsZone real-keypress interactions', () => {
       await instance.waitUntilExit();
     }
   });
+  it('←/→ changes the post-switch restart mode for this switch only; Enter switches, then runs the restart phase with it', async () => {
+    const store = createAppStore();
+    const target = edt({ ulid: 'target-ulid', topic: 'other' });
+    const restartCalls: Array<{ topic: string; mode: string }> = [];
+    const logged: string[] = [];
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logEdtAction: async (_ulid, _type, _outcome, detail) => {
+        logged.push(detail);
+      },
+      switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => ({
+        ok: true,
+        data: { ulid: target.ulid, topic: target.topic, results: [{ service: 'svc-a', outcome: 'switched' }], wasInterrupted: false },
+      }),
+      runSwitchRestart: async ({ topic, mode }) => {
+        restartCalls.push({ topic, mode });
+        const report = {
+          mode,
+          rows: [{ service: 'svc-a', repoPath: '/repo/a', phase: 'unhealthy' as const, detail: 'HTTP 503' }],
+          summary: { functional: 0, 'up-unverified': 0, unhealthy: 1, restarting: 0, down: 0, failed: 0, skipped: 0 },
+        };
+        return { ok: true, data: report };
+      },
+    });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output).toContain('(•) Aucun');
+
+      await press(instance, stdin, KEYS.right);
+      expect(stdout.output).toContain('(•) Redémarrage simple');
+      await press(instance, stdin, KEYS.right);
+      expect(stdout.output).toContain('(•) Clean restart');
+      await press(instance, stdin, KEYS.left);
+
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(restartCalls).toEqual([{ topic: 'other', mode: 'simple' }]);
+      // Never written back to the setting.
+      expect(store.getState().settings.switch.restartMode).toBe('none');
+      // The action log records the mode and every service's final state.
+      expect(logged.some((line) => line.includes('restart simple: svc-a=unhealthy'))).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('with the default mode none the switch runs no restart phase and shows no restart UI', async () => {
+    const store = createAppStore();
+    const target = edt({ ulid: 'target-ulid', topic: 'other' });
+    let restartCalls = 0;
+    store.setState({
+      edts: [target],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logEdtAction: async () => {},
+      switchEdt: async (): Promise<Result<SwitchActiveEdtData>> => ({
+        ok: true,
+        data: { ulid: target.ulid, topic: target.topic, results: [{ service: 'svc-a', outcome: 'switched' }], wasInterrupted: false },
+      }),
+      runSwitchRestart: async () => {
+        restartCalls += 1;
+        return { ok: false, error: { code: 'x', message: 'x' } };
+      },
+    });
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.enter);
+      await settle(instance);
+      expect(restartCalls).toBe(0);
+      expect(stdout.output).not.toContain('Restarting services');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   // When a service outside the outgoing EDT is dirty, the switch dialog shows the two-panel
   // resolution view. These fakes drive the same store fields (switchDirtyRepos /
   // resolveSwitchDirtyRepos) edt-slice.ts's real seam does — the end-to-end wiring through

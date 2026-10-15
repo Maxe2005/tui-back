@@ -33,6 +33,7 @@ import {
 } from "../adapters/driven/settings/index.js";
 import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/saved-requests/index.js";
 import { createDockerPort } from "../adapters/driven/docker/index.js";
+import { createHttpHealthProbe } from "../adapters/driven/health/http-probe.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
 import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/edt/resolve-tab-visibility.js";
@@ -187,6 +188,7 @@ const store = createAppStore({
   edtsBaseDir,
   settings,
   docker,
+  healthProbe: createHttpHealthProbe(),
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,
   savedRequests,

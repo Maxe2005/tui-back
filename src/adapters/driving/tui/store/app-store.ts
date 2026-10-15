@@ -7,6 +7,7 @@ import type { UseBoundStore, StoreApi } from 'zustand';
 import type { ContainerPort } from '../../../../core/ports/container.js';
 import type { DevAuthPort } from '../../../../core/ports/dev-auth.js';
 import type { DockerPort } from '../../../../core/ports/docker.js';
+import type { HealthProbePort } from '../../../../core/ports/health-probe.js';
 import type { EditorPort } from '../../../../core/ports/editor.js';
 import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../core/ports/git.js';
@@ -83,6 +84,9 @@ export type AppStoreDeps = {
   // The Logs zone's Docker touchpoint — wrapped by the single LogsManager instance the logs
   // slice creates and closes over.
   docker: DockerPort;
+  // The post-switch verification's HTTP touchpoint (manifest `healthUrl`). Optional like the
+  // rest; without it a service declaring a healthUrl cannot be verified (explicit failed row).
+  healthProbe?: HealthProbePort;
   // The Routes zone's scanner touchpoint — the routes slice calls core/routes/list-routes.ts
   // in-process through it; loadRoutes degrades to an explicit error state when it is missing.
   scanner?: RouteScannerPort;
