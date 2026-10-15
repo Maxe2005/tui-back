@@ -1,31 +1,36 @@
+import type { ZoneId } from '../zones/zones.js';
+import { formatHints, type Hint } from '../shared/components/hints.js';
+import { FOOTER_CONTEXTS } from './footer-contexts.js';
+import { focusNavKeysLabel } from '../shared/keys/focus-navigation.js';
+export type { NavigationKey } from '../shared/keys/navigation-key.js';
+
+// `footer` marks a row the footer advertises too (with `zones` when only those zones show it,
+// `when: 'resizable'` when only a zone declaring a splitter boundary does), so the footer and the
+// ? help are generated from this one list. Context rows (dialogs, panes, screens) come from
+// FOOTER_CONTEXTS and are appended below.
 export type Keybinding = {
   keys: string;
   description: string;
+  // Rows of the same section are listed under one heading in the `?` help.
+  section?: string;
+  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' };
 };
 
-// Story 2.7: the subset of Ink's `Key` type every list-navigation pure function reads
-// (resolveSelectionDirection/resolveSelectionJump in edts-zone.tsx, resolveHelpScroll in
-// keybinding-help.tsx). Shared here so the shape can't drift out of sync across call sites —
-// arrow/Home/End keys produce an empty `input` string in Ink, only these flags are set.
-// Story 2.9 adds `tab`: its first two real consumers are the EDTs zone's Tab-cycle
-// (topic-input ↔ member-checklist inside a form; EDT-selector ↔ SERVICES-list focus in the
-// base view) — Tab already produces an empty `input` in Ink too, only `key.tab` is set.
-export type NavigationKey = {
-  upArrow: boolean;
-  downArrow: boolean;
-  home: boolean;
-  end: boolean;
-  tab: boolean;
-};
+// The retry key StateLine advertises beside a load error; zones bind R to their reload.
+export const CONTEXT_SECTION = 'Keys per dialog, pane and screen';
+
+export const RETRY_HINT: Hint = ['R', 'retry'];
 
 export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: '↑ / ↓',
     description: 'Move highlight up/down within a list',
+    footer: { key: '↑/↓', verb: 'move' },
   },
   {
     keys: 'Home / End',
     description: 'Jump to top/bottom of the current list',
+    footer: { key: 'Home/End', verb: 'top/bottom' },
   },
   {
     keys: 'Space',
@@ -42,29 +47,35 @@ export const KEYBINDINGS: readonly Keybinding[] = [
       'Cancel, always (close modal, exit splitter resize-mode, clear active filter)',
   },
   {
-    keys: 'Tab',
-    description: 'Cycle (between form fields / resizable boundaries)',
+    keys: focusNavKeysLabel('tab'),
+    description: 'Cycle focus (between panes, form fields / resizable boundaries); Shift+Tab reverses',
+    footer: { key: 'Tab/Shift+Tab', verb: 'focus', zones: ['edts', 'logs'] },
   },
   {
     keys: 'Ctrl+W',
     description:
-      'Keyboard resize-mode on the active splitter (arrows resize, Enter/Esc exits)',
+      'Keyboard resize-mode on the active zone\'s splitter (Tab cycles boundaries, Shift+Tab reverses, arrows resize, Enter/Esc exits)',
+    footer: { key: 'Ctrl+W', verb: 'resize', when: 'resizable' },
   },
   {
     keys: '/',
-    description: 'Open filter within the current zone',
+    description: 'Logs / Routes: open the filter',
+    footer: { key: '/', verb: 'filter', zones: ['logs', 'routes'] },
   },
   {
     keys: ':',
     description: 'Open command entry',
+    footer: { key: ':', verb: 'cmd' },
   },
   {
     keys: '?',
     description: 'Open the keybinding-help screen',
+    footer: { key: '?', verb: 'help' },
   },
   {
     keys: 'q',
     description: "Quit (confirms first if a run is in progress; disable in :settings' General tab)",
+    footer: { key: 'q', verb: 'quit' },
   },
   {
     keys: ':quit',
@@ -78,8 +89,9 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: '← / →',
     description: 'Switch to previous/next zone tab, wrapping at the ends',
+    footer: { key: '←/→', verb: 'zone' },
   },
-  // Story 2.36: wizard-scoped — only while the create-EDT wizard modal owns the keystroke.
+  // Wizard-scoped — only while the create-EDT wizard modal owns the keystroke.
   {
     keys: 'Ctrl+→ / Ctrl+N',
     description: 'Create-EDT wizard: next step (only if the current step is valid)',
@@ -88,8 +100,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+← / Ctrl+P',
     description: 'Create-EDT wizard: previous step (always allowed, choices kept)',
   },
-  // Story 2.37: scoped to the create-EDT wizard's Step 3 — the generic Tab/Enter rows above
-  // stay true elsewhere; these spell out what the two keys do on that step.
+  // Scoped to the create-EDT wizard's Step 3 — the generic Tab/Enter rows above stay true
+  // elsewhere; these spell out what the two keys do on that step.
   {
     keys: 'Tab (wizard Step 3)',
     description: 'Create-EDT wizard, Step 3: switch between the global strategy and the per-service table',
@@ -98,15 +110,13 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Enter (wizard Step 3)',
     description: 'Create-EDT wizard, Step 3: edit the focused global line / configure the focused service row (never advances)',
   },
-  // Story 2.37: scoped to the create-EDT wizard's Step 3 "Configurer <service>" box — no
-  // collision: BranchPicker's own Ctrl+R (rename a row) lives in other modals, and the wizard
-  // no longer hosts a BranchPicker.
+  // Back to global in every per-service box or table; the branch picker's rename is Ctrl+T.
   {
     keys: 'Ctrl+R',
-    description: 'Create-EDT wizard, "Configurer" box: revert the service to the global branch strategy',
+    description: 'Per-service box or table (wizard Step 3, switch resolution, Update config): revert the service to the global strategy',
   },
-  // Story 2.38: scoped to the create-EDT wizard's Step 4 (activation choice, first-EDT pause
-  // panel and its overwrite confirmation).
+  // Scoped to the create-EDT wizard's Step 4 (activation choice, first-EDT pause panel and its
+  // overwrite confirmation).
   {
     keys: 'Space / ↑ ↓ (wizard Step 4)',
     description: 'Create-EDT wizard, Step 4: choose between switching to the new EDT now and creating it without switching',
@@ -127,8 +137,8 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Ctrl+E (wizard Step 4 overwrite)',
     description: 'Create-EDT wizard, overwrite confirmation: discard exactly the listed files and activate (↑/↓ scroll, Enter/Esc go back)',
   },
-  // Story 2.41: scoped to the SWITCH EDT resolution view (dirty services outside the EDT being
-  // left) — same Tab/Enter/Ctrl+R meanings as the wizard's Step 3 it mirrors.
+  // Scoped to the SWITCH EDT resolution view (dirty services outside the EDT being left) —
+  // same Tab/Enter/Ctrl+R meanings as the wizard's Step 3 it mirrors.
   {
     keys: 'Tab (switch resolution)',
     description: 'Switch EDT, dirty services: switch between the global strategy and the per-service table',
@@ -139,15 +149,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'Ctrl+N (switch resolution)',
-    description: 'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Écraser] row asks a second confirmation)',
-  },
-  {
-    keys: 'Ctrl+R (switch resolution)',
-    description: 'Switch EDT, "Configurer" box: return the service to the global strategy',
+    description: 'Switch EDT, dirty services: confirm (blocked while a row is invalid; any [Discard] row asks a second confirmation)',
   },
   {
     keys: 'Space / ← → (switch resolution)',
-    description: 'Switch EDT, global strategy and "Configurer" box: toggle the action between Adopter and Écraser',
+    description: 'Switch EDT, global strategy and "Configure" box: toggle the action between Adopt and Discard',
   },
   {
     keys: '↑ / ↓ (switch discard confirmation)',
@@ -161,4 +167,62 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Esc (switch resolution)',
     description: 'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
   },
+  // Scoped to the Logs zone's pane grid.
+  {
+    keys: 'W (Logs)',
+    description: 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)',
+    footer: { key: 'W', verb: 'wrap all', zones: ['logs'] },
+  },
+  {
+    keys: 'i (Logs)',
+    description: 'Logs: toggle the focused pane between following and ignoring the global filter',
+  },
+  {
+    keys: 'R (Logs)',
+    description: 'Logs: restart the focused pane\'s service',
+  },
+  {
+    keys: 'O (Logs)',
+    description: 'Logs: open the focused pane\'s service repo in your editor (also for services without a container)',
+  },
+  {
+    keys: 'm / a / p (Update)',
+    description: 'Update: configure a group update for the EDT members / for every managed repo / for the highlighted service',
+    footer: { key: 'm/a/p', verb: 'configure', zones: ['update'] },
+  },
+  {
+    keys: 'f (Update)',
+    description: 'Update: open the full-screen report of the highlighted service (Enter on a failed recap row too)',
+    footer: { key: 'f', verb: 'full report', zones: ['update'] },
+  },
+  {
+    keys: 'i (Update)',
+    description: 'Update: reopen the incident queue of the running update (also `:update-incidents`)',
+    footer: { key: 'i', verb: 'incidents', zones: ['update'] },
+  },
+  {
+    keys: 'Enter (Update config)',
+    description: 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box',
+  },
+  {
+    keys: 'R (load error)',
+    description: 'EDTs, Update and Logs: retry a failed list load',
+  },
+  {
+    keys: 'Ctrl+R (Routes)',
+    description: 'Routes: fire the request of the open pane',
+  },
+  {
+    keys: 'Ctrl+T (branch picker)',
+    description: 'Branch picker: rename the highlighted branch',
+  },
+  {
+    keys: 'PgUp / PgDn',
+    description: 'Scroll a dialog taller than the window; page the Update last-run recap and full report',
+  },
+  ...Object.values(FOOTER_CONTEXTS).map((context) => ({
+    keys: context.label,
+    description: context.hints.length > 0 ? formatHints(context.hints) : 'No keys while it runs',
+    section: CONTEXT_SECTION,
+  })),
 ];

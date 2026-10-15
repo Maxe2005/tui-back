@@ -1,9 +1,7 @@
-// adapters/driving/cli/subcommands: the production subcommand registry (AD-2). Each entry
-// is a thin wrapper around exactly one core use-case; the first story registering more than
-// one subcommand, so it also owns the duplicate-name guard (assertUniqueSubcommandNames)
-// that would otherwise let a future registry silently shadow an earlier subcommand.
-// Wrappers also validate argument cardinality so a typo'd or excess argument is an explicit
-// invalid-argument error instead of a silently ignored one.
+// adapters/driving/cli/subcommands: the production subcommand registry (AD-2). Each entry is a
+// thin wrapper around one core use-case that also validates argument cardinality, so a typo'd
+// or excess argument is an explicit invalid-argument instead of being ignored.
+// assertUniqueSubcommandNames keeps a later entry from silently shadowing an earlier one.
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { err, ok, type Result } from '../../../core/result.js';
@@ -14,25 +12,30 @@ import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
 import { groupUpdate } from '../../../core/scripts/group-update.js';
+import { selectionFromEdt } from '../../../core/scripts/resolve-merge-sources.js';
 import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
 import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { ManifestCarryPort } from '../../../core/ports/manifest-carry.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RestartPort } from '../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../core/ports/registry.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
+import type { SavedRequestPort } from '../../../core/ports/saved-request.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
 import { listRepos } from '../../../core/scripts/list-repos.js';
 import { scanRepos } from '../../../core/scripts/scan.js';
 import { listRoutes } from '../../../core/routes/list-routes.js';
-import { fireRequest } from '../../../core/routes/fire-request.js';
+import { fireRequest, type FireRequestOptions } from '../../../core/routes/fire-request.js';
+import { deleteSavedRequest, fireSavedRequest, listSavedRequests, saveRequest } from '../../../core/routes/saved-requests.js';
 import type { Subcommand } from './dispatch.js';
 
 const EDT_CREATE_USAGE =
@@ -46,7 +49,33 @@ const EDT_DELETE_USAGE =
   'tui-back edt delete <topic> [--branches <repoPath>=<leave|delete>]... ' +
   '(a member with no matching --branches entry defaults to leave; the active EDT can never be deleted)';
 const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}`;
-const UPDATE_USAGE = 'tui-back update | tui-back update --all --yes';
+const UPDATE_FLAGS = '[--migrations|--no-migrations] [--clean-restart|--no-clean-restart]';
+const UPDATE_USAGE =
+  `tui-back update ${UPDATE_FLAGS}\n` +
+  `tui-back update --from-edt <topic> ${UPDATE_FLAGS}\n` +
+  `tui-back update --all --yes ${UPDATE_FLAGS}\n` +
+  '(unflagged options default to settings.yaml update.runMigrations / update.cleanRestart)';
+
+// Pulls the run-wide override flags out of `update`'s args. A flag and its negation together are
+// contradictory: reported as an invalid-argument rather than silently picking one.
+function parseUpdateOverrides(
+  args: readonly string[],
+): { ok: true; rest: string[]; runMigrations?: boolean; cleanRestart?: boolean } | { ok: false; message: string } {
+  const has = (flag: string): boolean => args.includes(flag);
+  if (has('--migrations') && has('--no-migrations')) {
+    return { ok: false, message: '--migrations and --no-migrations are mutually exclusive' };
+  }
+  if (has('--clean-restart') && has('--no-clean-restart')) {
+    return { ok: false, message: '--clean-restart and --no-clean-restart are mutually exclusive' };
+  }
+  const flags = new Set(['--migrations', '--no-migrations', '--clean-restart', '--no-clean-restart']);
+  return {
+    ok: true,
+    rest: args.filter((arg) => !flags.has(arg)),
+    ...(has('--migrations') ? { runMigrations: true } : has('--no-migrations') ? { runMigrations: false } : {}),
+    ...(has('--clean-restart') ? { cleanRestart: true } : has('--no-clean-restart') ? { cleanRestart: false } : {}),
+  };
+}
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
 const REGISTRY_VALIDATE_USAGE = 'tui-back registry validate';
@@ -55,6 +84,7 @@ const REGISTRY_USAGE = `${REGISTRY_CLEAN_USAGE}\n${REGISTRY_VALIDATE_USAGE}`;
 export function buildSubcommands(deps: {
   registry: RegistryPort;
   manifest: ManifestPort;
+  manifestCarry: ManifestCarryPort;
   lock: LockPort;
   registryResourceKey: string;
   edtsBaseDir: string;
@@ -65,14 +95,16 @@ export function buildSubcommands(deps: {
   migration: MigrationPort;
   restart: RestartPort;
   state: StatePort;
-  // Story 2.33: gates `registry clean`'s bare-invocation interactive list-then-confirm
-  // prompt. Defaults to false (never prompts) so every existing deps-construction call site
-  // (tests, in particular) is unaffected — only bin/main.ts's composition root wires this,
-  // and (review fix) only when BOTH stdout and stdin are real TTYs — a piped/redirected
-  // stdin must never let `rl.question()` block on or misread a nonexistent live answer.
+  // Source of the `update` defaults (runMigrations / cleanRestart); a load failure or warning is reported on stderr and the built-in defaults apply.
+  settings: SettingsPort;
+  // Gates `registry clean`'s bare-invocation interactive list-then-confirm prompt. Defaults to
+  // false (never prompts); only bin/main.ts wires it, and only when BOTH stdout and stdin are
+  // real TTYs — a piped stdin must never let `rl.question()` block on or misread a
+  // nonexistent answer.
   isTTY?: boolean;
   scanner: RouteScannerPort;
   auth: DevAuthPort;
+  savedRequests: SavedRequestPort;
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
@@ -123,10 +155,8 @@ export function buildSubcommands(deps: {
     {
       name: 'edts',
       usage: 'tui-back edts',
-      // Story 2.6 (FR-9): every managed service's current branch + ahead/behind divergence
-      // from its own configured upstream, uniformly for EDT members and non-members alike —
-      // the same core/edt/list.ts use-case the TUI's EDTs zone will consume in-process
-      // (AD-2).
+      // Every managed service's current branch + ahead/behind divergence from its own
+      // configured upstream (FR-9), uniformly for EDT members and non-members alike.
       run: async (args) =>
         args.length === 0
           ? listEdtBranchesDivergence({
@@ -161,15 +191,31 @@ export function buildSubcommands(deps: {
     {
       name: 'update',
       usage: UPDATE_USAGE,
-      // Story 3.3: the bare invocation stays EDT-scoped (3.1/3.2, `--all` never implied);
-      // `--all --yes` (order-insensitive) runs the same per-service flow against every
-      // managed repo; `--all` alone is a `confirmation-required` rejection naming `--yes`
-      // (confirmation stays out of core — a driving concern). Any other flag is an explicit
-      // invalid-argument rejection, never silently ignored.
-      run: async (args) => {
-        // Story 3.4: the CLI explicitly passes no resolution seam — dirty worktrees keep
-        // today's `skipped`/`dirty-worktree` rows and conflicts keep the abort-and-report
-        // `failed`/`merge-conflict` rows, with no prompt and single-line JSON output.
+      // The bare invocation is EDT-scoped (`--all` is never implied); `--all --yes`
+      // (order-insensitive) runs the same per-service flow against every managed repo; `--all`
+      // alone is a `confirmation-required` rejection naming `--yes` (confirmation stays out of
+      // core — a driving concern). Any other flag is an explicit invalid-argument rejection.
+      run: async (rawArgs) => {
+        const overrides = parseUpdateOverrides(rawArgs);
+        if (!overrides.ok) {
+          return err('invalid-argument', `${overrides.message}. Usage: ${UPDATE_USAGE}`);
+        }
+        const args = overrides.rest;
+        // Defaults come from settings.yaml (a load failure falls back to the built-in ones);
+        // explicit flags win.
+        const loaded = await deps.settings.load();
+        if (!loaded.ok) {
+          // stderr is separate from the stdout JSON envelope (same idiom as dispatch.ts).
+          console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+        } else if (loaded.data.warning !== null) {
+          console.error(`tui-back: ${loaded.data.warning}`);
+        }
+        const defaults = (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).update;
+        const runMigrations = overrides.runMigrations ?? defaults.runMigrations;
+        const cleanRestart = overrides.cleanRestart ?? defaults.cleanRestart;
+        // The CLI passes no resolution seam: dirty worktrees stay `skipped`/`dirty-worktree`
+        // rows and conflicts abort-and-report as `failed`/`merge-conflict`, with no prompt and
+        // single-line JSON output.
         if (args.length === 0) {
           return groupUpdate({
             edtRegistry: deps.edtRegistry,
@@ -182,13 +228,12 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'edt',
-            // Story 3.7: the CLI takes no configuration — full default selection (no
-            // `selection` filter), migrate ON, clean restart OFF (no new flags).
-            runMigrations: true,
-            cleanRestart: false,
+            // Full default selection (no `selection` filter); the two toggles are the
+            // settings defaults unless a flag overrides them.
+            runMigrations,
+            cleanRestart,
             onUpdateBlocker: undefined,
-            // Story 3.10: the CLI takes no live observer either — no new flags, and the
-            // single-line JSON output is unchanged.
+            // No live observer either: the output stays a single JSON line.
             onPhase: undefined,
           });
         }
@@ -205,11 +250,34 @@ export function buildSubcommands(deps: {
             lock: deps.lock,
             registry: deps.registry,
             scope: 'all',
-            // Story 3.7: same full-default configuration as the bare invocation above.
-            runMigrations: true,
-            cleanRestart: false,
+            // Same toggles as the bare invocation above.
+            runMigrations,
+            cleanRestart,
             onUpdateBlocker: undefined,
-            // Story 3.10: same no-observer wiring as above.
+            // Same no-observer wiring as above.
+            onPhase: undefined,
+          });
+        }
+        if (args.length === 2 && args[0] === '--from-edt' && args[1].trim() !== '') {
+          const selection = await selectionFromEdt({ edtRegistry: deps.edtRegistry, state: deps.state, git: deps.git }, args[1].trim());
+          if (!selection.ok) {
+            return selection;
+          }
+          return groupUpdate({
+            edtRegistry: deps.edtRegistry,
+            state: deps.state,
+            manifest: deps.manifest,
+            git: deps.git,
+            container: deps.container,
+            migration: deps.migration,
+            restart: deps.restart,
+            lock: deps.lock,
+            registry: deps.registry,
+            scope: 'edt',
+            selection: selection.data,
+            runMigrations,
+            cleanRestart,
+            onUpdateBlocker: undefined,
             onPhase: undefined,
           });
         }
@@ -225,9 +293,8 @@ export function buildSubcommands(deps: {
     {
       name: 'registry',
       usage: REGISTRY_USAGE,
-      // Story 2.33: verb-dispatch subcommand, same shape as `edt` above — today's only
-      // action is `clean`, but the dispatch shape leaves room for a future registry verb
-      // without renaming the subcommand.
+      // Verb-dispatch subcommand, same shape as `edt` above — `clean` is the only action, but
+      // the dispatch shape leaves room for another registry verb without renaming.
       run: async (args) => {
         if (args[0] === 'clean') {
           return runRegistryClean(deps, args.slice(1));
@@ -242,10 +309,8 @@ export function buildSubcommands(deps: {
     {
       name: 'list-routes',
       usage: 'tui-back list-routes <repoPath>',
-      // Story 6.1: thin wrapper around core/routes/list-routes.ts (AD-2) — the wrapper owns
-      // argument cardinality (missing → missing-argument like scan/register, excess or blank
-      // → invalid-argument, never silently ignored); the use-case owns the manifest gate
-      // and the scanner delegation.
+      // The wrapper owns argument cardinality (missing → missing-argument, excess or blank →
+      // invalid-argument); the use-case owns the manifest gate and the scanner delegation.
       run: async (args) => {
         if (args.length === 0) {
           return err('missing-argument', 'Usage: tui-back list-routes <repoPath>');
@@ -258,29 +323,302 @@ export function buildSubcommands(deps: {
     },
     {
       name: 'fire-request',
-      usage: 'tui-back fire-request <repoPath> <METHOD> <path>',
-      // Story 6.2: thin wrapper around core/routes/fire-request.ts (AD-2) — the wrapper owns
-      // argument cardinality (missing → missing-argument like scan/register, any other arity
-      // or a blank argument → invalid-argument, never silently ignored); the use-case owns
-      // the manifest gate, the route-exists check, the session, and the fire itself.
+      usage: FIRE_REQUEST_USAGE,
+      // The wrapper owns argument cardinality (missing → missing-argument, any other arity or
+      // a blank argument → invalid-argument) and the optional repeatable
+      // --body/--query/--header flags plus a single --save <name> after the three positionals;
+      // the use-case owns the manifest gate, the route-exists check, the session, and the fire
+      // itself. A --save name is collision-checked before anything is fired (a colliding name
+      // is duplicate-request-name with nothing sent) and persisted only after a successful fire.
       run: async (args) => {
         if (args.length === 0) {
-          return err('missing-argument', 'Usage: tui-back fire-request <repoPath> <METHOD> <path>');
+          return err('missing-argument', `Usage: ${FIRE_REQUEST_USAGE}`);
         }
-        if (args.length !== 3 || args.some((arg) => arg.trim() === '')) {
-          return err('invalid-argument', 'Usage: tui-back fire-request <repoPath> <METHOD> <path>');
+        const positionals = args.slice(0, 3);
+        if (positionals.length !== 3 || positionals.some((arg) => arg.trim() === '' || arg.startsWith('--'))) {
+          return err('invalid-argument', `Usage: ${FIRE_REQUEST_USAGE}`);
         }
-        return fireRequest(
+        const parsed = parseFireRequestFlags(args.slice(3));
+        if (!parsed.ok) {
+          return parsed;
+        }
+        if (parsed.data.saveName !== null) {
+          const collision = await deps.savedRequests.get(parsed.data.saveName.trim());
+          if (collision.ok) {
+            return err('duplicate-request-name', `A request named "${parsed.data.saveName.trim()}" already exists: choose a different name`);
+          }
+          if (collision.error.code !== 'saved-request-not-found') {
+            return collision;
+          }
+        }
+        const fired = await fireRequest(
           { manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
           resolve(args[0]),
           args[1],
           args[2],
+          ...(parsed.data.options === null ? [] : [parsed.data.options]),
         );
+        if (!fired.ok || parsed.data.saveName === null) {
+          return fired;
+        }
+        const options = parsed.data.options;
+        const headers = options?.headers;
+        const explicit =
+          headers === undefined
+            ? undefined
+            : Object.entries(headers).find(([name]) => name.toLowerCase() === 'content-type')?.[1];
+        const contentType = explicit ?? (options?.body !== undefined ? 'application/json' : undefined);
+        const saved = await saveRequest(
+          { store: deps.savedRequests },
+          {
+            name: parsed.data.saveName,
+            repoPath: resolve(args[0]),
+            method: args[1],
+            path: args[2],
+            ...(options?.query === undefined ? {} : { query: options.query }),
+            ...(headers === undefined ? {} : { headers }),
+            ...(options?.body === undefined ? {} : { bodyText: JSON.stringify(options.body) }),
+            ...(contentType === undefined ? {} : { contentType }),
+          },
+        );
+        if (!saved.ok) {
+          return saved;
+        }
+        return fired;
+      },
+    },
+    {
+      name: 'request-list',
+      usage: REQUEST_LIST_USAGE,
+      // An optional --repo <path> narrows the library to one repo; without it every saved
+      // request is listed with its advisory stale flag (computed per repo via a fresh scan).
+      run: async (args) => {
+        let repo: string | undefined;
+        for (let i = 0; i < args.length; i++) {
+          const flag = args[i];
+          const value = args[i + 1];
+          if (flag !== '--repo') {
+            return err('invalid-argument', `Unknown argument ${flag}. Usage: ${REQUEST_LIST_USAGE}`);
+          }
+          if (value === undefined || value.startsWith('--')) {
+            return err('invalid-argument', `Missing value for --repo. Usage: ${REQUEST_LIST_USAGE}`);
+          }
+          if (repo !== undefined) {
+            return err('invalid-argument', `--repo may be given only once. Usage: ${REQUEST_LIST_USAGE}`);
+          }
+          if (value.trim() === '') {
+            return err('invalid-argument', `--repo must not be blank. Usage: ${REQUEST_LIST_USAGE}`);
+          }
+          repo = resolve(value);
+          i += 1;
+        }
+        return listSavedRequests(
+          { store: deps.savedRequests, manifest: deps.manifest, scanner: deps.scanner },
+          ...(repo === undefined ? [] : [{ repoPath: repo }]),
+        );
+      },
+    },
+    {
+      name: 'request-fire',
+      usage: REQUEST_FIRE_USAGE,
+      // Re-fires a saved request by exact name with optional --body/--query/--header overrides;
+      // --overwrite writes the overrides back onto the original, --save-as <new> stores them as
+      // a new record (a colliding name is duplicate-request-name, before anything is fired).
+      // A stale record is rejected with unknown-route and nothing is sent.
+      run: async (args) => {
+        if (args.length === 0) {
+          return err('missing-argument', `Usage: ${REQUEST_FIRE_USAGE}`);
+        }
+        const name = args[0];
+        if (name.trim() === '' || name.startsWith('--')) {
+          return err('invalid-argument', `Usage: ${REQUEST_FIRE_USAGE}`);
+        }
+        const parsed = parseRequestFireFlags(args.slice(1));
+        if (!parsed.ok) {
+          return parsed;
+        }
+        return fireSavedRequest(
+          { store: deps.savedRequests, manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
+          name,
+          parsed.data.overrides,
+          parsed.data.save,
+        );
+      },
+    },
+    {
+      name: 'request-delete',
+      usage: REQUEST_DELETE_USAGE,
+      // Removes one saved request by exact name; an unknown name is saved-request-not-found.
+      run: async (args) => {
+        if (args.length === 0) {
+          return err('missing-argument', `Usage: ${REQUEST_DELETE_USAGE}`);
+        }
+        if (args.length > 1 || args[0].trim() === '') {
+          return err('invalid-argument', `Usage: ${REQUEST_DELETE_USAGE}`);
+        }
+        const removed = await deleteSavedRequest({ store: deps.savedRequests }, args[0]);
+        if (!removed.ok) {
+          return removed;
+        }
+        return ok({ name: args[0] });
       },
     },
   ];
   assertUniqueSubcommandNames(subcommands);
   return subcommands;
+}
+
+const FIRE_REQUEST_USAGE =
+  "tui-back fire-request <repoPath> <METHOD> <path> [--body <json>] [--query name=value]... [--header 'Name: value']... [--save <name>]";
+const REQUEST_LIST_USAGE = 'tui-back request-list [--repo <path>]';
+const REQUEST_FIRE_USAGE =
+  "tui-back request-fire <name> [--body <json>] [--query name=value]... [--header 'Name: value']... [--overwrite | --save-as <new>]";
+const REQUEST_DELETE_USAGE = 'tui-back request-delete <name>';
+
+// Hand-rolled `fire-request` flags (same dependency-free walk as `edt create` below).
+// `--body` takes JSON (unparsable → invalid-argument, at most once); `--query name=value` and
+// `--header 'Name: value'` repeat with distinct names (a repeated query name, or a header name
+// repeated in any case, is invalid-argument rather than silently overwritten or comma-merged);
+// `--save <name>` persists the fired request under that name (at most once, blank rejected).
+// A value that is itself a flag counts as missing.
+function parseFireRequestFlags(flags: string[]): Result<{ options: FireRequestOptions | null; saveName: string | null }> {
+  if (flags.length === 0) {
+    return ok({ options: null, saveName: null });
+  }
+  const options: FireRequestOptions = {};
+  let saveName: string | null = null;
+  let sawOption = false;
+  for (let i = 0; i < flags.length; i++) {
+    const flag = flags[i];
+    const value = flags[i + 1];
+    if (flag !== '--body' && flag !== '--query' && flag !== '--header' && flag !== '--save') {
+      return err('invalid-argument', `Unknown argument ${flag}. Usage: ${FIRE_REQUEST_USAGE}`);
+    }
+    if (value === undefined || value.startsWith('--')) {
+      return err('invalid-argument', `Missing value for ${flag}. Usage: ${FIRE_REQUEST_USAGE}`);
+    }
+    i += 1;
+    if (flag === '--save') {
+      if (saveName !== null) {
+        return err('invalid-argument', `--save may be given only once. Usage: ${FIRE_REQUEST_USAGE}`);
+      }
+      if (value.trim() === '') {
+        return err('invalid-argument', `--save must not be blank. Usage: ${FIRE_REQUEST_USAGE}`);
+      }
+      saveName = value;
+      continue;
+    }
+    sawOption = true;
+    if (flag === '--body') {
+      if (options.body !== undefined) {
+        return err('invalid-argument', `--body may be given only once. Usage: ${FIRE_REQUEST_USAGE}`);
+      }
+      try {
+        options.body = JSON.parse(value) as unknown;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        return err('invalid-argument', `--body is not valid JSON: ${reason}`);
+      }
+      continue;
+    }
+    if (flag === '--query') {
+      const separator = value.indexOf('=');
+      const name = separator === -1 ? '' : value.slice(0, separator).trim();
+      if (name === '') {
+        return err('invalid-argument', `--query expects name=value, got "${value}". Usage: ${FIRE_REQUEST_USAGE}`);
+      }
+      if (options.query !== undefined && Object.prototype.hasOwnProperty.call(options.query, name)) {
+        return err('invalid-argument', `--query ${name} is given more than once. Usage: ${FIRE_REQUEST_USAGE}`);
+      }
+      options.query = { ...(options.query ?? {}), [name]: value.slice(separator + 1) };
+      continue;
+    }
+    const separator = value.indexOf(':');
+    const name = separator === -1 ? '' : value.slice(0, separator).trim();
+    if (name === '') {
+      return err('invalid-argument', `--header expects 'Name: value', got "${value}". Usage: ${FIRE_REQUEST_USAGE}`);
+    }
+    if (Object.keys(options.headers ?? {}).some((existing) => existing.toLowerCase() === name.toLowerCase())) {
+      return err('invalid-argument', `--header ${name} is given more than once. Usage: ${FIRE_REQUEST_USAGE}`);
+    }
+    options.headers = { ...(options.headers ?? {}), [name]: value.slice(separator + 1).trim() };
+  }
+  return ok({ options: sawOption ? options : null, saveName });
+}
+
+// Hand-rolled `request-fire` flags: the same --body/--query/--header walk as `fire-request`
+// plus the per-fire persistence choice — either --overwrite (no value) or --save-as <new>,
+// never both.
+function parseRequestFireFlags(
+  flags: string[],
+): Result<{ overrides: { body?: unknown; query?: Record<string, string>; headers?: Record<string, string> }; save: { overwrite?: boolean; saveAs?: string } }> {
+  const overrides: { body?: unknown; query?: Record<string, string>; headers?: Record<string, string> } = {};
+  const save: { overwrite?: boolean; saveAs?: string } = {};
+  for (let i = 0; i < flags.length; i++) {
+    const flag = flags[i];
+    const value = flags[i + 1];
+    if (flag === '--overwrite') {
+      if (save.overwrite === true) {
+        return err('invalid-argument', `--overwrite may be given only once. Usage: ${REQUEST_FIRE_USAGE}`);
+      }
+      save.overwrite = true;
+      continue;
+    }
+    if (flag !== '--body' && flag !== '--query' && flag !== '--header' && flag !== '--save-as') {
+      return err('invalid-argument', `Unknown argument ${flag}. Usage: ${REQUEST_FIRE_USAGE}`);
+    }
+    if (value === undefined || value.startsWith('--')) {
+      return err('invalid-argument', `Missing value for ${flag}. Usage: ${REQUEST_FIRE_USAGE}`);
+    }
+    i += 1;
+    if (flag === '--save-as') {
+      if (save.saveAs !== undefined) {
+        return err('invalid-argument', `--save-as may be given only once. Usage: ${REQUEST_FIRE_USAGE}`);
+      }
+      if (value.trim() === '') {
+        return err('invalid-argument', `--save-as must not be blank. Usage: ${REQUEST_FIRE_USAGE}`);
+      }
+      save.saveAs = value;
+      continue;
+    }
+    if (flag === '--body') {
+      if (overrides.body !== undefined) {
+        return err('invalid-argument', `--body may be given only once. Usage: ${REQUEST_FIRE_USAGE}`);
+      }
+      try {
+        overrides.body = JSON.parse(value) as unknown;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        return err('invalid-argument', `--body is not valid JSON: ${reason}`);
+      }
+      continue;
+    }
+    if (flag === '--query') {
+      const separator = value.indexOf('=');
+      const name = separator === -1 ? '' : value.slice(0, separator).trim();
+      if (name === '') {
+        return err('invalid-argument', `--query expects name=value, got "${value}". Usage: ${REQUEST_FIRE_USAGE}`);
+      }
+      if (overrides.query !== undefined && Object.prototype.hasOwnProperty.call(overrides.query, name)) {
+        return err('invalid-argument', `--query ${name} is given more than once. Usage: ${REQUEST_FIRE_USAGE}`);
+      }
+      overrides.query = { ...(overrides.query ?? {}), [name]: value.slice(separator + 1) };
+      continue;
+    }
+    const separator = value.indexOf(':');
+    const name = separator === -1 ? '' : value.slice(0, separator).trim();
+    if (name === '') {
+      return err('invalid-argument', `--header expects 'Name: value', got "${value}". Usage: ${REQUEST_FIRE_USAGE}`);
+    }
+    if (Object.keys(overrides.headers ?? {}).some((existing) => existing.toLowerCase() === name.toLowerCase())) {
+      return err('invalid-argument', `--header ${name} is given more than once. Usage: ${REQUEST_FIRE_USAGE}`);
+    }
+    overrides.headers = { ...(overrides.headers ?? {}), [name]: value.slice(separator + 1).trim() };
+  }
+  if (save.overwrite === true && save.saveAs !== undefined) {
+    return err('invalid-argument', `Choose either --overwrite or --save-as <new>, not both. Usage: ${REQUEST_FIRE_USAGE}`);
+  }
+  return ok({ overrides, save });
 }
 
 // Hand-rolled flag parsing for `edt create` (following the register --reset pattern): the
@@ -450,6 +788,7 @@ async function runEdtSwitch(
     edtRegistryResourceKey: string;
     registry: RegistryPort;
     manifest: ManifestPort;
+    manifestCarry: ManifestCarryPort;
     git: GitPort;
     lock: LockPort;
     state: StatePort;
@@ -529,15 +868,17 @@ async function runEdtSwitch(
     edtRegistryResourceKey: deps.edtRegistryResourceKey,
     registry: deps.registry,
     manifest: deps.manifest,
+    manifestCarry: deps.manifestCarry,
     git: deps.git,
     lock: deps.lock,
     state: deps.state,
     topic,
     force,
-    // Story 2.40: no dialog on this path. The flags build a policy the core expands per dirty
+    // no dialog on this path. The flags build a policy the core expands per dirty
     // state-2/3 repo after its own classification; with no flag, a dirty state-2/3 repo fails
     // safe (switch-dirty-services-unresolved). A dirty outgoing-EDT member is auto-stashed.
     dirtyPolicy,
+    onDirtyReposBeforeSwitch: undefined,
   });
 }
 
@@ -642,11 +983,10 @@ async function runEdtModify(
   });
 }
 
-// Hand-rolled flag parsing for `edt delete`: a positional <topic> (mirroring the `<topic>`
-// precedent, unlike modify/switch's --topic flag — Code Map) plus repeated
-// `--branches <repoPath>=<leave|delete>` (mirrors --set-branch's `<path>=<value>` parsing).
-// A member with no matching --branches entry defaults to 'leave' — deleteEdt itself already
-// treats an absent disposition that way, so this wrapper never has to fill one in.
+// Hand-rolled flag parsing for `edt delete`: a positional <topic> (unlike modify/switch's
+// --topic flag) plus repeated `--branches <repoPath>=<leave|delete>`. A member with no
+// matching --branches entry defaults to 'leave' — deleteEdt itself treats an absent
+// disposition that way.
 async function runEdtDelete(
   deps: {
     edtRegistry: EdtRegistryPort;
@@ -674,8 +1014,8 @@ async function runEdtDelete(
         return err('invalid-argument', `--branches must be <repoPath>=<leave|delete>, got "${value}"`);
       }
       const rawPath = value.slice(0, eq);
-      // Review fix (story 2.29): an empty repoPath before "=" (e.g. "--branches =delete")
-      // used to resolve silently to process.cwd() — reject it instead of guessing.
+      // An empty repoPath before "=" (e.g. "--branches =delete") would resolve to
+      // process.cwd() — reject it instead of guessing.
       if (rawPath.trim() === '') {
         return err('invalid-argument', `--branches "${value}" is missing a repoPath before "="`);
       }
@@ -684,9 +1024,8 @@ async function runEdtDelete(
       if (disposition !== 'leave' && disposition !== 'delete') {
         return err('invalid-argument', `--branches disposition must be "leave" or "delete", got "${disposition}"`);
       }
-      // Review fix (story 2.29): a --branches repeated for the same resolved repoPath used to
-      // let the later value silently win — reject it instead, same spirit as the unmatched-path
-      // check below.
+      // A --branches repeated for the same resolved repoPath is rejected rather than letting
+      // the later value silently win.
       if (Object.prototype.hasOwnProperty.call(dispositions, path)) {
         return err('invalid-argument', `--branches "${rawPath}" was specified more than once`);
       }
@@ -705,12 +1044,10 @@ async function runEdtDelete(
     return err('invalid-argument', `Missing <topic>. Usage: ${EDT_DELETE_USAGE}`);
   }
 
-  // Review fix (story 2.29): a --branches repoPath that isn't one of the target EDT's own
-  // members used to be silently ignored (that "member" just never had its disposition
-  // filled in, defaulting to 'leave') — reject it instead, naming the unmatched path(s), the
-  // same way a developer typo deserves a loud failure rather than a silent no-op. Skipped
-  // when the topic itself isn't found: deleteEdt's own edt-not-found already covers that,
-  // and there is no real membership to validate --branches against.
+  // A --branches repoPath that isn't one of the target EDT's own members is rejected, naming
+  // the unmatched path(s) — a typo deserves a loud failure, not a silent 'leave'. Skipped when
+  // the topic itself isn't found: deleteEdt's own edt-not-found covers that, and there is no
+  // real membership to validate --branches against.
   if (Object.keys(dispositions).length > 0) {
     const listed = await deps.edtRegistry.list();
     if (!listed.ok) {
@@ -742,16 +1079,12 @@ async function runEdtDelete(
   });
 }
 
-// `registry clean` flag parsing + the interactive/scripted split (Boundaries: "list-then-
-// confirm interactive on a TTY; --yes + repeated --path <path> for scripted use, consistent
-// with update's --all --yes"). Scripted mode (--yes together with at least one --path) never
-// classifies — it removes exactly the given paths via removeStaleRegistryEntries, mirroring
-// AC4's `registry clean --yes --path <p1> --path <p2>` example. Bare invocation always
-// classifies first (so a zero-candidates registry is reported the same way regardless of
-// TTY-ness, matrix row "No candidates ... explicit result, never silent"); once candidates
-// exist, a non-TTY run is rejected with confirmation-required (same shape as update's `--all`
-// alone) rather than silently doing nothing, and a TTY run lists every candidate (path +
-// reason + memberOfEdts note) and prompts for one whole-list confirmation before removing.
+// `registry clean` flag parsing + the interactive/scripted split. Scripted mode (--yes with at
+// least one --path) never classifies — it removes exactly the given paths. A bare invocation
+// always classifies first (so zero candidates is reported the same way regardless of TTY);
+// with candidates, a non-TTY run is rejected with confirmation-required (like update's `--all`
+// alone), and a TTY run lists every candidate (path + reason + memberOfEdts note) and prompts
+// for one whole-list confirmation before removing.
 async function runRegistryClean(
   deps: {
     registry: RegistryPort;
@@ -765,9 +1098,8 @@ async function runRegistryClean(
 ): Promise<Result<unknown>> {
   let yes = false;
   const paths: string[] = [];
-  // Review fix: the same resolved path given via multiple --path flags used to call
-  // registry.remove twice and produce a duplicate outcome row — deduped here so
-  // removeStaleRegistryEntries only ever sees each path once.
+  // The same resolved path given via multiple --path flags is deduped so
+  // removeStaleRegistryEntries never removes it twice or reports a duplicate row.
   const seenPaths = new Set<string>();
 
   for (let i = 0; i < args.length; i++) {
@@ -781,16 +1113,16 @@ async function runRegistryClean(
       if (value === undefined) {
         return err('invalid-argument', `Missing value for --path. Usage: ${REGISTRY_CLEAN_USAGE}`);
       }
-      // Review fix: a value that looks like another flag (e.g. `--path --yes`) is a missing
-      // value in disguise, not a literal path — reject it instead of silently consuming it.
+      // A value that looks like another flag (e.g. `--path --yes`) is a missing value in
+      // disguise, not a literal path.
       if (value.startsWith('--')) {
         return err(
           'invalid-argument',
           `--path value must not look like a flag: "${value}". Usage: ${REGISTRY_CLEAN_USAGE}`,
         );
       }
-      // Review fix: `--path ""` used to resolve() to process.cwd() and could remove an
-      // unintended entry — reject an empty/whitespace-only value instead of guessing.
+      // `--path ""` would resolve() to process.cwd() and could remove an unintended entry —
+      // reject an empty/whitespace-only value instead of guessing.
       if (value.trim() === '') {
         return err('invalid-argument', `--path value must not be empty. Usage: ${REGISTRY_CLEAN_USAGE}`);
       }
@@ -827,10 +1159,9 @@ async function runRegistryClean(
     return classified;
   }
   if (classified.data.candidates.length === 0) {
-    // Matrix: "No candidates ... explicit 'no stale entries' result, never silent" — reported
-    // the same way whether or not the run is interactive. `errors` still surfaces any path
-    // that couldn't even be checked (review fix) — a healthy-looking zero-candidates run
-    // never silently hides that.
+    // Zero candidates is an explicit "no stale entries" result, reported the same way whether
+    // or not the run is interactive. `errors` still surfaces any path that couldn't even be
+    // checked, so a healthy-looking run never hides it.
     return ok({ candidates: [], errors: classified.data.errors, results: [] });
   }
 
@@ -849,8 +1180,8 @@ async function runRegistryClean(
     const note = candidate.memberOfEdts.length > 0 ? ` [member of EDT: ${candidate.memberOfEdts.join(', ')}]` : '';
     process.stdout.write(`  ${candidate.path} — ${candidate.reason}${note}\n`);
   }
-  // Review fix: a path that couldn't be checked at all used to be invisible — reported here
-  // too, distinct from the removable candidate list above.
+  // A path that couldn't be checked at all is reported too, distinct from the removable
+  // candidate list above.
   if (classified.data.errors.length > 0) {
     process.stdout.write(`Could not be checked (${classified.data.errors.length}, left alone):\n`);
     for (const error of classified.data.errors) {
@@ -880,7 +1211,7 @@ async function runRegistryClean(
   return ok({ candidates: classified.data.candidates, errors: classified.data.errors, results: removed.data.results });
 }
 
-// `registry validate` (story 2.28): flagless read-only semantic validation over every
+// `registry validate`: flagless read-only semantic validation over every
 // registered path — zero args; any excess arg is an explicit invalid-argument rejection,
 // never silently ignored (mirrors list-repos's own zero-flag arity pattern). No isTTY
 // gate: read-only output has no prompt path, the envelope owns TTY/JSON rendering.

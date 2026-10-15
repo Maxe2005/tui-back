@@ -1,7 +1,4 @@
-// core/edt/delete: unit tests against fake ports (AD-13 core layer) — every I/O-matrix row of
-// story 2.29 plus the validation-ordering and per-member-isolation guarantees. Real
-// git/edt-registry behavior lives in those adapters' own tests and the black-box e2e; here
-// only the use-case's orchestration is exercised: active-EDT rejection, per-member
+// core/edt/delete: unit tests against fake ports — active-EDT rejection, per-member
 // disposition (leave/delete, merged+clean -> -d vs. unmerged/dirty -> -D), cross-EDT
 // branch-collision partial failure, and the lock-held registry-entry + SQLite-file removal.
 import { describe, expect, it, vi, afterEach, type Mock } from 'vitest';
@@ -83,6 +80,8 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -104,8 +103,14 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     renameBranch: vi.fn(async () => ok(undefined)),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
+    stagePaths: vi.fn(async () => ok(undefined)),
+    commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+    listBranchesContaining: vi.fn(async () => ok([] as string[])),
     pull: vi.fn(async () => ok(undefined)),
     isMergeInProgress: vi.fn(async () => ok(false)),
     mergeBranch: vi.fn(async () => ok(undefined)),
@@ -114,9 +119,15 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
@@ -163,7 +174,7 @@ describe('deleteEdt', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
   });
 
-  // Review fix (story 2.29): previously-uncovered early-return branches.
+  // Early-return branches.
   it('propagates an edtRegistry.list() failure, without ever reaching the active-EDT check', async () => {
     const state = fakeState({ readActiveEdt: vi.fn() });
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => err('edt-registry-invalid-format', 'bad shape')) });
@@ -188,7 +199,7 @@ describe('deleteEdt', () => {
     expect(calls(edtRegistry.remove)).toHaveLength(0);
   });
 
-  // I/O matrix: "Delete the active EDT" -> rejected before any write, edt-delete-active-rejected.
+  // Deleting the active EDT -> rejected before any write, edt-delete-active-rejected.
   it('rejects deleting the active EDT before any git/registry write, never auto-switching', async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const state = fakeState({ readActiveEdt: vi.fn(async () => ok('target-ulid')) });
@@ -229,7 +240,7 @@ describe('deleteEdt', () => {
     expect(existsSync(join(edtsBaseDir, `${TARGET.ulid}.db`))).toBe(false);
   });
 
-  // I/O matrix: "Delete non-active EDT, member merged+clean" -> git branch -d.
+  // Non-active EDT, member merged+clean -> git branch -d.
   it('deletes a merged+clean member branch via -d (force: false)', async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const git = fakeGit({ isBranchMerged: vi.fn(async () => ok(true)), hasUncommittedChanges: vi.fn(async () => ok(false)) });
@@ -244,9 +255,9 @@ describe('deleteEdt', () => {
     expect(calls(git.deleteBranch)).toContainEqual(['/repo/a', 'feat/a', false]);
   });
 
-  // Review fix (story 2.29): a member's branch may already be gone (deleted manually outside
-  // the tool) — isBranchMerged would error on a non-existent ref; deleteMemberBranch must
-  // short-circuit to 'deleted' instead of reporting a spurious failure.
+  // A member's branch may already be gone (deleted manually outside the tool) — isBranchMerged
+  // would error on a non-existent ref; deleteMemberBranch must short-circuit to 'deleted'
+  // instead of reporting a spurious failure.
   it('treats an already-gone member branch as already deleted, never calling isBranchMerged', async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const git = fakeGit({ branchExistsLocally: vi.fn(async () => ok(false)), isBranchMerged: vi.fn() });
@@ -279,8 +290,7 @@ describe('deleteEdt', () => {
     });
   });
 
-  // Review fix (story 2.29): manifest.load() failing inside deleteMemberBranch itself (the
-  // same failure mode was already covered for resolveMemberDeleteStatuses, but not here).
+  // manifest.load() failing inside deleteMemberBranch itself.
   it("propagates a deleteMemberBranch manifest.load() failure as a failed row", async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const manifest = fakeManifest({ load: vi.fn(async () => err('manifest-not-found', 'no manifest')) });
@@ -300,8 +310,7 @@ describe('deleteEdt', () => {
     expect(calls(git.deleteBranch)).toHaveLength(0);
   });
 
-  // Review fix (story 2.29): dispositions' keys must be resolve()'d before comparing against
-  // member.repoPath, mirroring assertAllowedBranch's own review-patch normalization.
+  // dispositions' keys must be resolve()'d before comparing against member.repoPath.
   it('matches a disposition key against a member even when the two repoPath spellings differ (trailing slash)', async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const git = fakeGit();
@@ -316,7 +325,7 @@ describe('deleteEdt', () => {
     expect(calls(git.deleteBranch)).toContainEqual(['/repo/a', 'feat/a', false]);
   });
 
-  // I/O matrix: "Delete non-active EDT, member unmerged/dirty" -> git branch -D (force).
+  // Non-active EDT, member unmerged/dirty -> git branch -D (force).
   it('force-deletes an unmerged member branch via -D (force: true)', async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const git = fakeGit({ isBranchMerged: vi.fn(async () => ok(false)) });
@@ -327,9 +336,9 @@ describe('deleteEdt', () => {
     expect(calls(git.deleteBranch)).toContainEqual(['/repo/a', 'feat/a', true]);
   });
 
-  // Design Notes clean-detection, case 2: repoPath's currently checked-out branch equals
-  // member.branch AND hasUncommittedChanges is true -> genuinely this member's own dirty
-  // working tree (e.g. a single-repo setup) -> force-delete via -D even though merged.
+  // Clean detection, case 2: repoPath's currently checked-out branch equals member.branch AND
+  // hasUncommittedChanges is true -> genuinely this member's own dirty working tree (e.g. a
+  // single-repo setup) -> force-delete via -D even though merged.
   it("force-deletes a merged branch via -D when the member's own branch is currently checked out and dirty", async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const git = fakeGit({
@@ -344,16 +353,20 @@ describe('deleteEdt', () => {
     expect(calls(git.deleteBranch)).toContainEqual(['/repo/a', 'feat/a', true]);
   });
 
-  // Design Notes clean-detection, case 1: a stash tagged `tui-back:<edtUlid>` exists in
-  // repoPath (this EDT's own ulid, the tag switch.ts writes switching *away* from it) ->
-  // treated as dirty regardless of what (if anything) is currently checked out there ->
-  // force-delete via -D even though merged.
+  // Clean detection, case 1: a stash tagged `tui-back:<edtUlid>` exists in repoPath (this
+  // EDT's own ulid, the tag switch.ts writes switching *away* from it) -> treated as dirty
+  // regardless of what (if anything) is currently checked out there -> force-delete via -D
+  // even though merged.
   it('force-deletes a merged branch via -D when a tui-back:<edtUlid>-tagged stash exists, even with nothing matching checked out', async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const git = fakeGit({
       isBranchMerged: vi.fn(async () => ok(true)),
       currentBranch: vi.fn(async () => ok('development')),
       hasStash: vi.fn(async (repoPath: string, tag: string) => ok(repoPath === '/repo/a' && tag === 'tui-back:target-ulid')),
+      fetchRemote: vi.fn(async () => ok(undefined)),
+      listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+      listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+      listBranchesContaining: vi.fn(async () => ok([] as string[])),
     });
     const params = await makeParams({ edtRegistry, git, dispositions: { '/repo/a': 'delete' } });
 
@@ -362,10 +375,8 @@ describe('deleteEdt', () => {
     expect(calls(git.deleteBranch)).toContainEqual(['/repo/a', 'feat/a', true]);
   });
 
-  // Design Notes: neither signal holds (not checked out, no matching stash) -> clean ->
-  // delete via -d even though the member happens to be dirty by some *other* EDT's own
-  // working-tree state (the exact false-negative the old hasUncommittedChanges-alone
-  // detection was vulnerable to).
+  // Neither signal holds (not checked out, no matching stash) -> clean -> delete via -d even
+  // though the repo is dirty by some *other* EDT's working-tree state.
   it("deletes a merged branch via -d when the member isn't checked out and has no matching stash, regardless of the repo's current working-tree state", async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
     const git = fakeGit({
@@ -373,6 +384,10 @@ describe('deleteEdt', () => {
       currentBranch: vi.fn(async () => ok('some-other-edts-branch')),
       hasUncommittedChanges: vi.fn(async () => ok(true)), // some *other* EDT's own dirt
       hasStash: vi.fn(async () => ok(false)),
+      fetchRemote: vi.fn(async () => ok(undefined)),
+      listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+      listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+      listBranchesContaining: vi.fn(async () => ok([] as string[])),
     });
     const params = await makeParams({ edtRegistry, git, dispositions: { '/repo/a': 'delete' } });
 
@@ -381,7 +396,7 @@ describe('deleteEdt', () => {
     expect(calls(git.deleteBranch)).toContainEqual(['/repo/a', 'feat/a', false]);
   });
 
-  // I/O matrix: "Branch chosen for deletion owned by another EDT" -> refused per-branch,
+  // A branch chosen for deletion but owned by another EDT -> refused per-branch,
   // record still deleted, other members' deletions proceed.
   it('reports branch-owned-by-other-edt for one member without blocking the others or the record removal', async () => {
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET])) });
@@ -460,9 +475,8 @@ describe('deleteEdt', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
   });
 
-  // Review fix (story 2.29): a registry.remove() failure used to drop the already-computed
-  // results entirely — the caller had no idea what had actually happened to git by then
-  // (branch deletions run outside the lock, before the registry write, per AD-9).
+  // A registry.remove() failure must still report the already-computed results: branch
+  // deletions run outside the lock, before the registry write (AD-9).
   it('attaches the already-computed per-member results as error.details.partialResults when registry.remove() fails', async () => {
     const edtRegistry = fakeEdtRegistry({
       list: vi.fn(async () => ok([TARGET])),
@@ -536,6 +550,10 @@ describe('resolveMemberDeleteStatuses', () => {
     const git = fakeGit({
       isBranchMerged: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
       hasStash: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      fetchRemote: vi.fn(async () => ok(undefined)),
+      listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+      listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+      listBranchesContaining: vi.fn(async () => ok([] as string[])),
     });
 
     const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, TARGET.members);
@@ -570,15 +588,19 @@ describe('resolveMemberDeleteStatuses', () => {
     ]);
   });
 
-  // Design Notes — the corrected clean-detection algorithm's three cases, spelled out
-  // explicitly against the `clean` field this function renders in the delete-confirm dialog.
-  describe('clean-detection (Design Notes — fixes the false-clean/false-dirty bug from attempt 1)', () => {
+  // The clean-detection algorithm's three cases, spelled out against the `clean` field the
+  // delete-confirm dialog renders.
+  describe('clean-detection', () => {
     it('a member with a tui-back:<edtUlid>-tagged stash and nothing checked out is treated as dirty', async () => {
       const manifest = fakeManifest();
       const git = fakeGit({
         currentBranch: vi.fn(async () => ok('development')), // nothing checked out matches feat/a
         hasUncommittedChanges: vi.fn(async () => ok(false)),
         hasStash: vi.fn(async (repoPath: string, tag: string) => ok(repoPath === '/repo/a' && tag === 'tui-back:target-ulid')),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);
@@ -591,6 +613,10 @@ describe('resolveMemberDeleteStatuses', () => {
       const git = fakeGit({
         currentBranch: vi.fn(async () => ok('development')),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);
@@ -604,6 +630,10 @@ describe('resolveMemberDeleteStatuses', () => {
         currentBranch: vi.fn(async () => ok('feat/a')),
         hasUncommittedChanges: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       });
 
       const result = await resolveMemberDeleteStatuses(git, manifest, TARGET.ulid, [member('svc-a', '/repo/a', 'feat/a')]);

@@ -1,4 +1,4 @@
-// tui/shared/branch-owners-text: Story 2.43 — the single wording of cross-EDT branch usage in
+// tui/shared/branch-owners-text: the single wording of cross-EDT branch usage in
 // every branch chooser: the `⚠`-less annotation text (glyph is added by the renderer) and the
 // French inline refusal for applying/renaming a branch another EDT owns.
 export type BranchOwners = Readonly<Record<string, readonly string[]>>;

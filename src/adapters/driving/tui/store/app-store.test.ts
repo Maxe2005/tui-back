@@ -20,8 +20,10 @@ import type { StatePort } from "../../../../core/ports/state.js";
 import { DEFAULT_SETTINGS, type SettingsPort } from "../../../../core/ports/settings.js";
 import type { DockerPort } from "../../../../core/ports/docker.js";
 import { ZONES } from "../zones/zones.js";
-import { DEFAULT_LIST_RATIO } from "../shared/components/list-detail-split.js";
+import { ZONE_LAYOUTS, defaultZoneRatios } from "../zones/zone-layouts.js";
 import { createAppStore, NO_BRANCH_CREATION, type AppStoreDeps } from "./app-store.js";
+
+const DEFAULT_LIST_RATIO = ZONE_LAYOUTS.dashboard.boundaries[0]!.defaultRatio;
 
 function manifestFor(repoPath: string): Manifest {
   const name = repoPath.split("/").pop();
@@ -66,16 +68,28 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
+    stagePaths: vi.fn(async () => ok(undefined)),
+    commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+    listBranchesContaining: vi.fn(async () => ok([] as string[])),
   };
   const edtRegistry: EdtRegistryPort = {
     add: vi.fn(async () => ok(undefined)),
@@ -91,6 +105,8 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () =>
@@ -111,6 +127,7 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
   return {
     registry,
     manifest,
+    manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
     git,
     edtRegistry,
     state,
@@ -149,20 +166,16 @@ describe("app store", () => {
     expect(state.activeEdt).toBeNull();
     for (const zone of ZONES) {
       expect(state.zoneEvents[zone.id]).toBe(0);
-      expect(state.splitterRatios[zone.id]).toEqual(
-        zone.id === "edts"
-          ? [DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO, DEFAULT_LIST_RATIO]
-          : [DEFAULT_LIST_RATIO],
-      );
+      expect(state.splitterRatios[zone.id]).toEqual(defaultZoneRatios(zone.id));
     }
   });
 
-  it("defaults resizeMode to null (story 2.21)", () => {
+  it("defaults resizeMode to null", () => {
     const store = createAppStore();
     expect(store.getState().resizeMode).toBeNull();
   });
 
-  it("covers exactly the six compiled-in zones — no duplicate copy per zone (AC5)", () => {
+  it("covers exactly the six compiled-in zones — no duplicate copy per zone", () => {
     const store = createAppStore();
     const state = store.getState();
     expect(ZONES).toHaveLength(6);
@@ -173,7 +186,7 @@ describe("app store", () => {
     );
   });
 
-  it("switches the active zone and clears pending events for the visited zone (AC3)", () => {
+  it("switches the active zone and clears pending events for the visited zone", () => {
     const store = createAppStore();
     store.getState().addZoneEvent("logs");
     store.getState().addZoneEvent("logs");
@@ -183,7 +196,7 @@ describe("app store", () => {
     expect(store.getState().zoneEvents.logs).toBe(0);
   });
 
-  it("adds pending background-event counts per zone independently (AC3)", () => {
+  it("adds pending background-event counts per zone independently", () => {
     const store = createAppStore();
     store.getState().addZoneEvent("routes");
     store.getState().addZoneEvent("routes");
@@ -192,7 +205,7 @@ describe("app store", () => {
     expect(store.getState().zoneEvents.dashboard).toBe(1);
   });
 
-  it("stores the splitter ratio per zone/boundary, clamped to keep both panes usable (AC4)", () => {
+  it("stores the splitter ratio per zone/boundary, clamped to keep both panes usable", () => {
     const store = createAppStore();
     store.getState().setSplitterRatio("edts", 0, 0.5);
     expect(store.getState().splitterRatios.edts[0]).toBe(0.5);
@@ -203,9 +216,9 @@ describe("app store", () => {
     expect(store.getState().splitterRatios.dashboard[0]).toBe(DEFAULT_LIST_RATIO);
   });
 
-  // Story 2.21: the EDTs zone has 3 independently movable boundaries — each setSplitterRatio
-  // call only ever touches the one boundaryIndex it's given, never the other two.
-  it("moves only the targeted boundary within a multi-boundary zone (story 2.21)", () => {
+  // The EDTs zone has 3 independently movable boundaries — each setSplitterRatio call only
+  // ever touches the one boundaryIndex it's given, never the other two.
+  it("moves only the targeted boundary within a multi-boundary zone", () => {
     const store = createAppStore();
     store.getState().setSplitterRatio("edts", 1, 0.7);
     expect(store.getState().splitterRatios.edts).toEqual([DEFAULT_LIST_RATIO, 0.7, DEFAULT_LIST_RATIO]);
@@ -213,14 +226,14 @@ describe("app store", () => {
     expect(store.getState().splitterRatios.edts).toEqual([DEFAULT_LIST_RATIO, 0.7, 0.3]);
   });
 
-  it("ignores an out-of-range boundaryIndex rather than writing a sparse array (story 2.21)", () => {
+  it("ignores an out-of-range boundaryIndex rather than writing a sparse array", () => {
     const store = createAppStore();
     const before = store.getState().splitterRatios.dashboard;
     store.getState().setSplitterRatio("dashboard", 5, 0.5);
     expect(store.getState().splitterRatios.dashboard).toEqual(before);
   });
 
-  describe("resizeMode (story 2.21, Ctrl+W keyboard resize-mode)", () => {
+  describe("resizeMode (Ctrl+W keyboard resize-mode)", () => {
     it("enterResizeMode sets the zone with targetBoundary 0", () => {
       const store = createAppStore();
       store.getState().enterResizeMode("edts");
@@ -243,6 +256,15 @@ describe("app store", () => {
       expect(store.getState().resizeMode?.targetBoundary).toBe(2);
       store.getState().cycleResizeTargetBoundary();
       expect(store.getState().resizeMode?.targetBoundary).toBe(0);
+    });
+
+    it("cycleResizeTargetBoundary('back') reverses, wrapping first to last", () => {
+      const store = createAppStore();
+      store.getState().enterResizeMode("edts");
+      store.getState().cycleResizeTargetBoundary("back");
+      expect(store.getState().resizeMode?.targetBoundary).toBe(2);
+      store.getState().cycleResizeTargetBoundary("back");
+      expect(store.getState().resizeMode?.targetBoundary).toBe(1);
     });
 
     it("cycleResizeTargetBoundary is a no-op while resizeMode is null", () => {
@@ -269,7 +291,7 @@ describe("app store", () => {
     expect(store.getState().helpOpen).toBe(false);
   });
 
-  describe("loadEdtsBranches (story 2.6, FR-9)", () => {
+  describe("loadEdtsBranches (FR-9)", () => {
     it("starts idle with no data before the first load", () => {
       const store = createAppStore(fakeDeps());
       expect(store.getState().edtsBranches).toBeNull();
@@ -330,7 +352,7 @@ describe("app store", () => {
       expect(store.getState().edtsBranches).toBeNull();
     });
 
-    it("populates edtsUnreachable/edtsErrors from the core use-case alongside edtsBranches (review patch)", async () => {
+    it("populates edtsUnreachable/edtsErrors from the core use-case alongside edtsBranches", async () => {
       const registry: RegistryPort = {
         list: vi.fn(async () => ok(["/repo/a", "/repo/gone", "/repo/bad"])),
         add: vi.fn(async () => ok(undefined)),
@@ -394,7 +416,7 @@ describe("app store", () => {
     });
   });
 
-  describe("loadTabVisibility (story 2.13)", () => {
+  describe("loadTabVisibility", () => {
     it("starts with the default reachable state (both enabled) before the first load — no spinner, no flash-then-hide", () => {
       const store = createAppStore(fakeDeps());
       expect(store.getState().tabVisibility).toEqual({
@@ -483,7 +505,7 @@ describe("app store", () => {
       expect(store.getState().tabVisibilityStatus).toBe("idle");
     });
 
-    it("keeps the last known-good tabVisibility on a later reload failure (review-guard, mirrors edtsBranches' rule)", async () => {
+    it("keeps the last known-good tabVisibility on a later reload failure (mirrors edtsBranches' rule)", async () => {
       let call = 0;
       const registry: RegistryPort = {
         list: vi.fn(async () => {
@@ -510,7 +532,7 @@ describe("app store", () => {
     });
   });
 
-  describe("active-EDT membership change reloads tabVisibility (story 2.13)", () => {
+  describe("active-EDT membership change reloads tabVisibility", () => {
     it("createEdt success triggers a tabVisibility reload", async () => {
       const edtsBaseDir = await makeEdtsBaseDir();
       const store = createAppStore(fakeDeps({ edtsBaseDir }));
@@ -625,8 +647,7 @@ describe("app store", () => {
     });
   });
 
-  // Story 2.29: delete an EDT.
-  describe("deleteEdt / resolveMemberDeleteStatuses / openEdtDeleteDialog (story 2.29)", () => {
+  describe("deleteEdt / resolveMemberDeleteStatuses / openEdtDeleteDialog", () => {
     function fakeTarget(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
       return {
         ulid: "edt-1",
@@ -672,6 +693,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ edtRegistry, state }));
 
@@ -706,8 +729,14 @@ describe("app store", () => {
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
         pull: vi.fn(async () => ok(undefined)),
         isMergeInProgress: vi.fn(async () => ok(false)),
         mergeBranch: vi.fn(async () => ok(undefined)),
@@ -716,9 +745,15 @@ describe("app store", () => {
         discardPaths: vi.fn(async () => ok(undefined)),
         discardAll: vi.fn(async () => ok(undefined)),
         diffNameOnly: vi.fn(async () => ok([])),
+        headRevision: vi.fn(async () => ok('head-a')),
+        diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
         discardPathsToHead: vi.fn(async () => ok(undefined)),
         isRebaseInProgress: vi.fn(async () => ok(false)),
         hasUnmergedPaths: vi.fn(async () => ok(false)),
+        listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+        readWorktreeFile: vi.fn(async () => ok("")),
+        writeResolvedFile: vi.fn(async () => ok(undefined)),
+        checkoutSide: vi.fn(async () => ok(undefined)),
         finalizeMerge: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ git }));
@@ -753,7 +788,7 @@ describe("app store", () => {
       expect(store.getState().currentEdtAction).toMatchObject({ type: "delete", target: "select EDT" });
     });
 
-    it("openEdtCreateFromDialog sets currentEdtAction with type 'create-from' and the parsed topic (story 2.31)", () => {
+    it("openEdtCreateFromDialog sets currentEdtAction with type 'create-from' and the parsed topic", () => {
       const store = createAppStore(fakeDeps());
 
       store.getState().openEdtCreateFromDialog("edt-create-from feat-a");
@@ -761,7 +796,7 @@ describe("app store", () => {
       expect(store.getState().currentEdtAction).toMatchObject({ type: "create-from", target: "feat-a" });
     });
 
-    it("openEdtCreateFromDialog with no topic sets target to 'select EDT' (story 2.31)", () => {
+    it("openEdtCreateFromDialog with no topic sets target to 'select EDT'", () => {
       const store = createAppStore(fakeDeps());
 
       store.getState().openEdtCreateFromDialog("edt-create-from");
@@ -770,10 +805,9 @@ describe("app store", () => {
     });
   });
 
-  // Story 2.22: the create-EDT dialog now always builds and supplies its own
-  // CreateBranchOptions — the store must forward exactly what it's given through to
-  // core/edt/create.ts rather than silently substituting its own hardcoded default.
-  describe("createEdt passes branchOptions through unchanged (story 2.22)", () => {
+  // The create-EDT dialog always builds and supplies its own CreateBranchOptions — the store
+  // must forward exactly what it's given to core/edt/create.ts, never substitute a default.
+  describe("createEdt passes branchOptions through unchanged", () => {
     it("a real (non-NO_BRANCH_CREATION) branchOptions reaches git.createBranch with the caller's base/name", async () => {
       const edtsBaseDir = await makeEdtsBaseDir();
       const git: GitPort = {
@@ -796,16 +830,28 @@ describe("app store", () => {
         discardPaths: vi.fn(async () => ok(undefined)),
         discardAll: vi.fn(async () => ok(undefined)),
         diffNameOnly: vi.fn(async () => ok([])),
+        headRevision: vi.fn(async () => ok('head-a')),
+        diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
         discardPathsToHead: vi.fn(async () => ok(undefined)),
         isRebaseInProgress: vi.fn(async () => ok(false)),
         hasUnmergedPaths: vi.fn(async () => ok(false)),
+        listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+        readWorktreeFile: vi.fn(async () => ok("")),
+        writeResolvedFile: vi.fn(async () => ok(undefined)),
+        checkoutSide: vi.fn(async () => ok(undefined)),
         finalizeMerge: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
 
@@ -841,16 +887,28 @@ describe("app store", () => {
         discardPaths: vi.fn(async () => ok(undefined)),
         discardAll: vi.fn(async () => ok(undefined)),
         diffNameOnly: vi.fn(async () => ok([])),
+        headRevision: vi.fn(async () => ok('head-a')),
+        diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
         discardPathsToHead: vi.fn(async () => ok(undefined)),
         isRebaseInProgress: vi.fn(async () => ok(false)),
         hasUnmergedPaths: vi.fn(async () => ok(false)),
+        listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+        readWorktreeFile: vi.fn(async () => ok("")),
+        writeResolvedFile: vi.fn(async () => ok(undefined)),
+        checkoutSide: vi.fn(async () => ok(undefined)),
         finalizeMerge: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ edtsBaseDir, git }));
 
@@ -867,12 +925,11 @@ describe("app store", () => {
     });
   });
 
-  // Story 2.26: the branch-picker's own store actions and modifyEdt's renameBranches param
-  // wrap real core exports (createMemberBranch/renameMemberBranch/listMemberBranches, and
-  // modifyEdtUseCase itself) — every interaction test exercising the picker instead replaces
-  // these actions wholesale via store.setState(...), so nothing else in the suite verifies
-  // that the real wiring below actually reaches deps.git with the right arguments in order.
-  describe("branch-picker store actions (story 2.26)", () => {
+  // The branch-picker's store actions and modifyEdt's renameBranches param wrap real core
+  // exports — every interaction test exercising the picker replaces these actions wholesale
+  // via store.setState(...), so only these tests verify that the real wiring reaches deps.git
+  // with the right arguments in order.
+  describe("branch-picker store actions", () => {
     it("listBranches forwards repoPath to git.listBranches and returns its result unchanged", async () => {
       const git: GitPort = {
         assertAllowedBranch: vi.fn(async () => ok(undefined)),
@@ -894,16 +951,28 @@ describe("app store", () => {
         discardPaths: vi.fn(async () => ok(undefined)),
         discardAll: vi.fn(async () => ok(undefined)),
         diffNameOnly: vi.fn(async () => ok([])),
+        headRevision: vi.fn(async () => ok('head-a')),
+        diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
         discardPathsToHead: vi.fn(async () => ok(undefined)),
         isRebaseInProgress: vi.fn(async () => ok(false)),
         hasUnmergedPaths: vi.fn(async () => ok(false)),
+        listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+        readWorktreeFile: vi.fn(async () => ok("")),
+        writeResolvedFile: vi.fn(async () => ok(undefined)),
+        checkoutSide: vi.fn(async () => ok(undefined)),
         finalizeMerge: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok(["main", "feature-x"])),
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -934,16 +1003,28 @@ describe("app store", () => {
         discardPaths: vi.fn(async () => ok(undefined)),
         discardAll: vi.fn(async () => ok(undefined)),
         diffNameOnly: vi.fn(async () => ok([])),
+        headRevision: vi.fn(async () => ok('head-a')),
+        diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
         discardPathsToHead: vi.fn(async () => ok(undefined)),
         isRebaseInProgress: vi.fn(async () => ok(false)),
         hasUnmergedPaths: vi.fn(async () => ok(false)),
+        listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+        readWorktreeFile: vi.fn(async () => ok("")),
+        writeResolvedFile: vi.fn(async () => ok(undefined)),
+        checkoutSide: vi.fn(async () => ok(undefined)),
         finalizeMerge: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -974,16 +1055,28 @@ describe("app store", () => {
         discardPaths: vi.fn(async () => ok(undefined)),
         discardAll: vi.fn(async () => ok(undefined)),
         diffNameOnly: vi.fn(async () => ok([])),
+        headRevision: vi.fn(async () => ok('head-a')),
+        diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
         discardPathsToHead: vi.fn(async () => ok(undefined)),
         isRebaseInProgress: vi.fn(async () => ok(false)),
         hasUnmergedPaths: vi.fn(async () => ok(false)),
+        listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+        readWorktreeFile: vi.fn(async () => ok("")),
+        writeResolvedFile: vi.fn(async () => ok(undefined)),
+        checkoutSide: vi.fn(async () => ok(undefined)),
         finalizeMerge: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       };
       const store = createAppStore(fakeDeps({ git }));
 
@@ -1014,16 +1107,28 @@ describe("app store", () => {
         discardPaths: vi.fn(async () => ok(undefined)),
         discardAll: vi.fn(async () => ok(undefined)),
         diffNameOnly: vi.fn(async () => ok([])),
+        headRevision: vi.fn(async () => ok('head-a')),
+        diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
         discardPathsToHead: vi.fn(async () => ok(undefined)),
         isRebaseInProgress: vi.fn(async () => ok(false)),
         hasUnmergedPaths: vi.fn(async () => ok(false)),
+        listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+        readWorktreeFile: vi.fn(async () => ok("")),
+        writeResolvedFile: vi.fn(async () => ok(undefined)),
+        checkoutSide: vi.fn(async () => ok(undefined)),
         finalizeMerge: vi.fn(async () => ok(undefined)),
         listBranches: vi.fn(async () => ok([])),
         renameBranch: vi.fn(async () => ok(undefined)),
         listRemoteBranches: vi.fn(async () => ok([])),
         createTrackingBranch: vi.fn(async () => ok(undefined)),
+        stagePaths: vi.fn(async () => ok(undefined)),
+        commit: vi.fn(async () => ok(undefined)),
         isBranchMerged: vi.fn(async () => ok(true)),
         hasStash: vi.fn(async () => ok(false)),
+        fetchRemote: vi.fn(async () => ok(undefined)),
+        listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+        listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+        listBranchesContaining: vi.fn(async () => ok([] as string[])),
       };
       const edtRegistry: EdtRegistryPort = {
         add: vi.fn(async () => ok(undefined)),
@@ -1059,7 +1164,7 @@ describe("app store", () => {
     });
   });
 
-  describe("settings slice (story 2.19)", () => {
+  describe("settings slice", () => {
     it("seeds `settings` with DEFAULT_SETTINGS before loadSettings() ever resolves", () => {
       const store = createAppStore(fakeDeps());
       expect(store.getState().settings).toEqual(DEFAULT_SETTINGS);
@@ -1071,10 +1176,10 @@ describe("app store", () => {
         load: vi.fn(async () =>
           ok({
             settings: {
-              general: { quitShortcutEnabled: true },
-              commandPalette: { gridMaxRows: 12 },
+              general: { quitShortcutEnabled: true, editorCommand: '' },
+              commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
               edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-              logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+              update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
             },
             warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
           }),
@@ -1086,10 +1191,10 @@ describe("app store", () => {
       await store.getState().loadSettings();
 
       expect(store.getState().settings).toEqual({
-        general: { quitShortcutEnabled: true },
-        commandPalette: { gridMaxRows: 12 },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
+        commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       });
       expect(store.getState().settingsWarning).toContain("using defaults");
     });
@@ -1113,7 +1218,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual(DEFAULT_SETTINGS);
     });
 
-    it("updateSettings() applies optimistically before persistence resolves, then persists (Boundaries: no separate save step)", async () => {
+    it("updateSettings() applies optimistically before persistence resolves, then persists (no separate save step)", async () => {
       let resolveSave: (() => void) | undefined;
       const savePromise = new Promise<void>((resolve) => {
         resolveSave = resolve;
@@ -1136,52 +1241,58 @@ describe("app store", () => {
       await updatePromise;
 
       expect(save).toHaveBeenCalledWith({
-        general: { quitShortcutEnabled: true },
-        commandPalette: { gridMaxRows: 15 },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
+        commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       });
+    });
+
+    it("updateSettings() merges a partial sharedTypes update, keeping the sibling keys", async () => {
+      const store = createAppStore();
+      await store.getState().updateSettings({ sharedTypes: { cleanRestart: true } });
+      expect(store.getState().settings.sharedTypes).toEqual({ install: true, cleanRestart: true, commit: true, historyDepth: 20, maxCommitsScanned: 1000 });
     });
 
     it("updateSettings() shallow-merges only the provided sub-object, leaving the other untouched", async () => {
       const store = createAppStore(fakeDeps());
       store.setState({
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 20 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
       });
 
       await store.getState().updateSettings({ edts: { hiddenActionHints: ["other-services"] } });
 
       expect(store.getState().settings).toEqual({
-        general: { quitShortcutEnabled: true },
-        commandPalette: { gridMaxRows: 20 },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
+        commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       });
     });
 
-    it("updateSettings() shallow-merges hiddenActionTypes independently of hiddenActionHints (amended 2026-08-28)", async () => {
+    it("updateSettings() shallow-merges hiddenActionTypes independently of hiddenActionHints", async () => {
       const store = createAppStore(fakeDeps());
       store.setState({
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 20 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
       });
 
       await store.getState().updateSettings({ edts: { hiddenActionTypes: ["create", "modify"] } });
 
       expect(store.getState().settings).toEqual({
-        general: { quitShortcutEnabled: true },
-        commandPalette: { gridMaxRows: 20 },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
+        commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"], branchDropdownMaxRows: 5 },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       });
     });
 
@@ -1284,10 +1395,10 @@ describe("app store", () => {
       // newer update already applied above.
       resolveLoad?.({
         settings: {
-          general: { quitShortcutEnabled: true },
-          commandPalette: { gridMaxRows: 8 },
+          general: { quitShortcutEnabled: true, editorCommand: '' },
+          commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
         },
         warning: null,
       });
@@ -1297,8 +1408,8 @@ describe("app store", () => {
     });
   });
 
-  describe("splitterRatios persistence (story 2.21)", () => {
-    it("setSplitterRatio() applies live before persistence resolves, then persists the whole ratios map (Boundaries: no separate save step)", async () => {
+  describe("splitterRatios persistence", () => {
+    it("setSplitterRatio() applies live before persistence resolves, then persists the whole ratios map (no separate save step)", async () => {
       let resolveSave: (() => void) | undefined;
       const savePromise = new Promise<void>((resolve) => {
         resolveSave = resolve;
@@ -1314,6 +1425,8 @@ describe("app store", () => {
         writeSplitterRatios,
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1357,6 +1470,8 @@ describe("app store", () => {
         writeSplitterRatios,
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1376,6 +1491,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1394,6 +1511,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1407,6 +1526,45 @@ describe("app store", () => {
       expect(store.getState().splitterRatios.dashboard).toEqual([0.6]);
     });
 
+    it("loadSplitterRatios() clamps a persisted ratio to its boundary's own min/max", async () => {
+      const state: StatePort = {
+        readActiveEdt: vi.fn(async () => ok(null)),
+        writeActiveEdt: vi.fn(async () => ok(undefined)),
+        readSplitterRatios: vi.fn(async () => ok({ logs: [0.9], dashboard: [0.9] })),
+        writeSplitterRatios: vi.fn(async () => ok(undefined)),
+        readFilterHistory: vi.fn(async () => ok(null)),
+        writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
+      };
+      const store = createAppStore(fakeDeps({ state }));
+
+      await store.getState().loadSplitterRatios();
+
+      expect(store.getState().splitterRatios.logs).toEqual([0.5]);
+      expect(store.getState().splitterRatios.dashboard).toEqual([0.8]);
+    });
+
+    it("enterResizeMode() engages on boundary 0 in any zone with a boundary and Tab cycles that zone's declared boundaries", () => {
+      const store = createAppStore();
+      store.getState().enterResizeMode("logs");
+      expect(store.getState().resizeMode).toEqual({ zone: "logs", targetBoundary: 0 });
+      store.getState().cycleResizeTargetBoundary();
+      expect(store.getState().resizeMode).toEqual({ zone: "logs", targetBoundary: 0 });
+      store.getState().exitResizeMode();
+      store.getState().enterResizeMode("edts");
+      store.getState().cycleResizeTargetBoundary();
+      expect(store.getState().resizeMode).toEqual({ zone: "edts", targetBoundary: 1 });
+    });
+
+    it("setSplitterRatio() clamps to the targeted boundary's own min/max", async () => {
+      const store = createAppStore();
+      await store.getState().setSplitterRatio("logs", 0, 0.99);
+      expect(store.getState().splitterRatios.logs).toEqual([0.5]);
+      await store.getState().setSplitterRatio("logs", 0, 0);
+      expect(store.getState().splitterRatios.logs).toEqual([0.15]);
+    });
+
     it("loadSplitterRatios() on a genuine I/O error keeps the built-in defaults", async () => {
       const state: StatePort = {
         readActiveEdt: vi.fn(async () => ok(null)),
@@ -1415,6 +1573,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1427,7 +1587,7 @@ describe("app store", () => {
       ]);
     });
 
-    it("loadSplitterRatios() on a fresh/pre-2.21 machine (null) keeps the built-in defaults", async () => {
+    it("loadSplitterRatios() on a fresh machine (null) keeps the built-in defaults", async () => {
       const state: StatePort = {
         readActiveEdt: vi.fn(async () => ok(null)),
         writeActiveEdt: vi.fn(async () => ok(undefined)),
@@ -1435,6 +1595,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1457,11 +1619,10 @@ describe("app store", () => {
       ]);
     });
 
-    // Review fix (story 2.21, finding 4): mirrors the settingsVersion-guarded
-    // "loadSettings() discards a stale result superseded by a newer updateSettings()" test
-    // above — loadSplitterRatios() (AppShell's mount-time load) must never overwrite a live
-    // setSplitterRatio() move (e.g. a Ctrl+W resize) that lands while the read is still in
-    // flight with the stale pre-move value it read from disk.
+    // Mirrors the settingsVersion-guarded "loadSettings() discards a stale result superseded
+    // by a newer updateSettings()" test above — loadSplitterRatios() (AppShell's mount-time
+    // load) must never overwrite a live setSplitterRatio() move (e.g. a Ctrl+W resize) that
+    // lands while the read is still in flight with the stale pre-move value it read from disk.
     it("loadSplitterRatios() discards a stale result superseded by a newer setSplitterRatio() while it was in flight", async () => {
       let resolveLoad: ((value: { ok: true; data: Record<string, number[]> }) => void) | undefined;
       const loadPromise = new Promise<{ ok: true; data: Record<string, number[]> }>((resolve) => {
@@ -1474,6 +1635,8 @@ describe("app store", () => {
         writeSplitterRatios: vi.fn(async () => ok(undefined)),
         readFilterHistory: vi.fn(async () => ok(null)),
         writeFilterHistory: vi.fn(async () => ok(undefined)),
+        readCommandHistory: vi.fn(async () => ok(null)),
+        writeCommandHistory: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1491,7 +1654,7 @@ describe("app store", () => {
   });
 });
 
-describe("logs slice (story 5.1)", () => {
+describe("logs slice", () => {
   it("toggleLogsEdtSelection/toggleLogsOtherSelection add then remove a repoPath (Space toggle)", () => {
     const store = createAppStore(fakeDeps());
 
@@ -1514,7 +1677,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsEdtSelected).toEqual([]);
   });
 
-  it("openLogsFullscreen/closeLogsFullscreen set and clear logsFullscreenTarget/logsFullscreenServiceName without touching selection (I/O matrix FULLSCREEN_PREVIEW)", () => {
+  it("openLogsFullscreen/closeLogsFullscreen set and clear logsFullscreenTarget/logsFullscreenServiceName without touching selection", () => {
     const store = createAppStore(fakeDeps());
     store.getState().selectAllLogsEdtServices(["/repo/a"]);
 
@@ -1585,7 +1748,7 @@ describe("logs slice (story 5.1)", () => {
     });
   });
 
-  it("subscribeLogsPane surfaces a docker-unavailable Result as this pane's own streamError (I/O matrix DOCKER_UNAVAILABLE)", async () => {
+  it("subscribeLogsPane surfaces a docker-unavailable Result as this pane's own streamError", async () => {
     const docker: DockerPort = {
       streamLogs: vi.fn((_container, _onLine, onError) => {
         onError({ code: "docker-unavailable", message: "docker daemon unreachable" });
@@ -1605,7 +1768,7 @@ describe("logs slice (story 5.1)", () => {
     });
   });
 
-  it("unsubscribeLogsPane stops the stream and removes the pane entry (I/O matrix SELECTION_CHANGE: that stream stops, its pane is removed)", async () => {
+  it("unsubscribeLogsPane stops the stream and removes the pane entry", async () => {
     const stop = vi.fn();
     const docker: DockerPort = {
       streamLogs: vi.fn(() => stop),
@@ -1622,7 +1785,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]).toBeUndefined();
   });
 
-  it("loadOlderLogsPane on a pane that started genuinely empty pins scrollOffset to 0 — the newest of the just-fetched history — rather than overshooting past every line just loaded (review fix)", async () => {
+  it("loadOlderLogsPane on a pane that started genuinely empty pins scrollOffset to 0 — the newest of the just-fetched history — rather than overshooting past every line just loaded", async () => {
     const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
@@ -1639,7 +1802,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(0);
   });
 
-  it("loadOlderLogsPane on a pane that already had visible lines bumps scrollOffset to preserve the viewport (I/O matrix SCROLLBACK_RELOAD)", async () => {
+  it("loadOlderLogsPane on a pane that already had visible lines bumps scrollOffset to preserve the viewport", async () => {
     const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
     let fetchOlder = false;
     const docker: DockerPort = {
@@ -1664,12 +1827,12 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(1);
   });
 
-  it("loadOlderLogsPane surfaces a manifest.load failure as this pane's own streamError, instead of silently no-oping forever (review fix)", async () => {
+  it("loadOlderLogsPane surfaces a manifest.load failure as this pane's own streamError, instead of silently no-oping forever", async () => {
     const manifest: ManifestPort = {
       load: vi
         .fn()
-        // Story 5.3: subscribeLogsPane's immediate health poll issues its own manifest.load
-        // synchronously before subscribe's own load, so the queue needs one extra ok.
+        // subscribeLogsPane's immediate health poll issues its own manifest.load synchronously
+        // before subscribe's own load, so the queue needs one extra ok.
         .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
         .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
         .mockResolvedValueOnce(err("manifest-not-found", "no manifest here")),
@@ -1691,7 +1854,7 @@ describe("logs slice (story 5.1)", () => {
     });
   });
 
-  it("loadOlderLogsPane on a fetch failure sets noMoreHistory without erroring (I/O matrix: fetch fails -> scrolling stops at the edge)", async () => {
+  it("loadOlderLogsPane on a fetch failure sets noMoreHistory without erroring (scrolling stops at the edge)", async () => {
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => err("docker-unavailable", "daemon down")),
@@ -1722,7 +1885,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.lines).toEqual([]);
   });
 
-  it("subscribeLogsPane immediately loads the most recent history when settings.logs.startWithHistory is true (Settings tab, review fix)", async () => {
+  it("subscribeLogsPane immediately loads the most recent history when settings.logs.startWithHistory is true", async () => {
     const olderLine = { timestamp: "2025-12-31T23:59:00.000Z", stream: "stdout" as const, text: "older" };
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
@@ -1795,7 +1958,7 @@ describe("logs slice (story 5.1)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.scrollOffset).toBe(0);
   });
 
-  it("stopAllLogsPanes stops every active pane's stream and clears all pane state (process-exit teardown fallback, review fix)", async () => {
+  it("stopAllLogsPanes stops every active pane's stream and clears all pane state (process-exit teardown fallback)", async () => {
     const stopA = vi.fn();
     const stopB = vi.fn();
     const docker: DockerPort = {
@@ -1834,12 +1997,12 @@ describe("logs slice (story 5.1)", () => {
   });
 });
 
-describe("logs slice: inline service health & restart (story 5.3)", () => {
+describe("logs slice: inline service health & restart", () => {
   async function flushPolls(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 
-  it("subscribeLogsPane polls container health on subscribe and reflects it on the pane badge (I/O matrix HEALTH_UP)", async () => {
+  it("subscribeLogsPane polls container health on subscribe and reflects it on the pane badge", async () => {
     const getContainerHealth = vi.fn(async () => ok("up" as const));
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
@@ -1856,7 +2019,7 @@ describe("logs slice: inline service health & restart (story 5.3)", () => {
     expect(store.getState().logsPanes["/repo/a"]?.health).toBe("up");
   });
 
-  it("a failed health poll keeps last-known health instead of clearing the badge (I/O matrix POLL_ERROR)", async () => {
+  it("a failed health poll keeps last-known health instead of clearing the badge", async () => {
     vi.useFakeTimers();
     try {
       const getContainerHealth = vi.fn(async () => ok("up" as const));
@@ -1945,37 +2108,90 @@ describe("logs slice: inline service health & restart (story 5.3)", () => {
     }
   });
 
-  it("restartLogsPane issues exactly one docker restart for that pane's container and re-polls health immediately (I/O matrix RESTART_COMPLETES)", async () => {
+  function restartDeps(overrides: Partial<AppStoreDeps> = {}) {
+    const containerRestart = vi.fn(async (_container: string) => ok(undefined));
+    const recipeRun = vi.fn(async (_repoPath: string, _command: string) => ok({ output: "" }));
+    const launch = vi.fn((_repoPath: string, _editor: string) => ok(undefined));
     const getContainerHealth = vi.fn(async () => ok("up" as const));
-    const restartContainer = vi.fn(async () => ok(undefined));
     const docker: DockerPort = {
       streamLogs: vi.fn(() => () => {}),
       fetchLogsBefore: vi.fn(async () => ok([])),
       getContainerHealth,
-      restartContainer,
+      restartContainer: vi.fn(async () => ok(undefined)),
     };
-    const store = createAppStore(fakeDeps({ docker }));
+    const deps = fakeDeps({
+      docker,
+      container: { restart: containerRestart },
+      restart: { run: recipeRun },
+      editor: { launch },
+      ...overrides,
+    });
+    return { deps, containerRestart, recipeRun, launch, getContainerHealth, docker };
+  }
+
+  it("restartLogsPane runs the registry's simple restart for that pane's container and re-polls health immediately", async () => {
+    const { deps, containerRestart, getContainerHealth, docker } = restartDeps();
+    const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
     const callsAfterSubscribe = getContainerHealth.mock.calls.length;
 
     await store.getState().restartLogsPane("/repo/a");
 
-    expect(restartContainer).toHaveBeenCalledTimes(1);
-    expect(restartContainer).toHaveBeenCalledWith("ctr-a");
+    expect(containerRestart).toHaveBeenCalledTimes(1);
+    expect(containerRestart).toHaveBeenCalledWith("ctr-a");
+    expect(docker.restartContainer).not.toHaveBeenCalled();
     expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
-    // Health re-polled immediately after the restart resolves.
+    expect(store.getState().logsPanes["/repo/a"]?.notice ?? null).toBeNull();
     expect(getContainerHealth.mock.calls.length).toBeGreaterThan(callsAfterSubscribe);
   });
 
-  it("restartLogsPane is a no-op while that pane is already restarting — never a second concurrent docker restart (I/O matrix RESTART_NOOP)", async () => {
-    const restartContainer = vi.fn(async () => ok(undefined));
-    const docker: DockerPort = {
-      streamLogs: vi.fn(() => () => {}),
-      fetchLogsBefore: vi.fn(async () => ok([])),
-      getContainerHealth: vi.fn(async () => ok("up" as const)),
-      restartContainer,
+  it("restartLogsPane in clean mode runs the manifest recipe and shows no notice", async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async (path: string) => ok({ ...manifestFor(path), restartCommands: ["npm run reset"] })),
     };
-    const store = createAppStore(fakeDeps({ docker }));
+    const { deps, containerRestart, recipeRun } = restartDeps({ manifest });
+    const store = createAppStore(deps);
+    store.setState((s) => ({ settings: { ...s.settings, logs: { ...s.settings.logs, restartMode: "clean" } } }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(recipeRun).toHaveBeenCalledWith("/repo/a", "npm run reset");
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]?.notice ?? null).toBeNull();
+  });
+
+  it("restartLogsPane in clean mode without a recipe falls back to a simple restart and sets the dim notice", async () => {
+    const { deps, containerRestart } = restartDeps();
+    const store = createAppStore(deps);
+    store.setState((s) => ({ settings: { ...s.settings, logs: { ...s.settings.logs, restartMode: "clean" } } }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(containerRestart).toHaveBeenCalledWith("ctr-a");
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("no clean-restart recipe — simple restart");
+    expect(store.getState().logsPanes["/repo/a"]?.streamError).toBeNull();
+  });
+
+  it("restartLogsPane reads the current mode on every call (live change, simple again after clean)", async () => {
+    const { deps, recipeRun, containerRestart } = restartDeps({
+      manifest: { load: vi.fn(async (path: string) => ok({ ...manifestFor(path), restartCommands: ["x"] })) },
+    });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    await store.getState().restartLogsPane("/repo/a");
+    expect(containerRestart).toHaveBeenCalledTimes(1);
+    expect(recipeRun).not.toHaveBeenCalled();
+
+    store.setState((s) => ({ settings: { ...s.settings, logs: { ...s.settings.logs, restartMode: "clean" } } }));
+    await store.getState().restartLogsPane("/repo/a");
+    expect(recipeRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("restartLogsPane is a no-op while that pane is already restarting — never a second concurrent restart", async () => {
+    const { deps, containerRestart } = restartDeps();
+    const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
     store.setState((state) => ({
       logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, restarting: true } },
@@ -1983,23 +2199,18 @@ describe("logs slice: inline service health & restart (story 5.3)", () => {
 
     await store.getState().restartLogsPane("/repo/a");
 
-    expect(restartContainer).not.toHaveBeenCalled();
+    expect(containerRestart).not.toHaveBeenCalled();
   });
 
   it("restartLogsPane surfaces a restart failure inline on the pane while the badge keeps last-known health", async () => {
-    const docker: DockerPort = {
-      streamLogs: vi.fn(() => () => {}),
-      fetchLogsBefore: vi.fn(async () => ok([])),
-      getContainerHealth: vi.fn(async () => ok("up" as const)),
-      restartContainer: vi.fn(async () => err("docker-unavailable", "no such container")),
-    };
-    const store = createAppStore(fakeDeps({ docker }));
+    const { deps } = restartDeps({ container: { restart: vi.fn(async () => err("container-restart-error", "no such container")) } });
+    const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
 
     await store.getState().restartLogsPane("/repo/a");
 
     expect(store.getState().logsPanes["/repo/a"]?.streamError).toEqual({
-      code: "docker-unavailable",
+      code: "container-restart-error",
       message: "no such container",
     });
     expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
@@ -2016,32 +2227,111 @@ describe("logs slice: inline service health & restart (story 5.3)", () => {
         .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
         .mockResolvedValueOnce(err("manifest-not-found", "no manifest here")),
     };
-    const restartContainer = vi.fn(async () => ok(undefined));
-    const docker: DockerPort = {
-      streamLogs: vi.fn(() => () => {}),
-      fetchLogsBefore: vi.fn(async () => ok([])),
-      getContainerHealth: vi.fn(async () => ok("up" as const)),
-      restartContainer,
-    };
-    const store = createAppStore(fakeDeps({ docker, manifest }));
+    const { deps, containerRestart } = restartDeps({ manifest });
+    const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
 
     await store.getState().restartLogsPane("/repo/a");
 
-    // The restart never reached the adapter, the pane shows the failure inline, and the
-    // control is usable again instead of stuck on `[R] restarting…`.
-    expect(restartContainer).not.toHaveBeenCalled();
+    expect(containerRestart).not.toHaveBeenCalled();
     expect(store.getState().logsPanes["/repo/a"]?.streamError).toEqual({
       code: "manifest-not-found",
       message: "no manifest here",
     });
     expect(store.getState().logsPanes["/repo/a"]?.restarting).toBe(false);
   });
+
+  it("restartLogsPane on a manifest without container marks the pane no-container and calls no restart port", async () => {
+    const manifest: ManifestPort = {
+      load: vi
+        .fn()
+        .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
+        .mockResolvedValueOnce(ok(manifestFor("/repo/a")))
+        .mockResolvedValue(ok({ service: "svc-a", sharedBranch: "development", modules: {} })),
+    };
+    const { deps, containerRestart, recipeRun } = restartDeps({ manifest });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    const pane = store.getState().logsPanes["/repo/a"];
+    expect(pane?.health).toBe("no-container");
+    expect(pane?.streamError?.code).toBe("no-container");
+    expect(pane?.restarting).toBe(false);
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(recipeRun).not.toHaveBeenCalled();
+  });
+
+  it("restartLogsPane on a pane already at no-container calls no restart port", async () => {
+    const { deps, containerRestart, recipeRun } = restartDeps();
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    store.setState((state) => ({
+      logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, health: "no-container" as const } },
+    }));
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(recipeRun).not.toHaveBeenCalled();
+  });
+
+  it("a successful restart clears a lingering streamError", async () => {
+    const { deps } = restartDeps();
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    store.setState((state) => ({
+      logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, streamError: { code: "x", message: "old" } } },
+    }));
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(store.getState().logsPanes["/repo/a"]?.streamError).toBeNull();
+  });
+
+  it("a failed restart clears a lingering notice", async () => {
+    const { deps } = restartDeps({ container: { restart: vi.fn(async () => err("container-restart-error", "boom")) } });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    store.setState((state) => ({
+      logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, notice: "old notice" } },
+    }));
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    const pane = store.getState().logsPanes["/repo/a"];
+    expect(pane?.notice).toBeNull();
+    expect(pane?.streamError?.message).toBe("boom");
+  });
+
+  it("openLogsPaneInIde launches the editor on the repo with the configured editor command", async () => {
+    const { deps, launch } = restartDeps();
+    const store = createAppStore(deps);
+    store.setState((s) => ({ settings: { ...s.settings, general: { ...s.settings.general, editorCommand: "code" } } }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    store.getState().openLogsPaneInIde("/repo/a");
+
+    expect(launch).toHaveBeenCalledWith("/repo/a", "code");
+    expect(store.getState().logsPanes["/repo/a"]?.notice ?? null).toBeNull();
+  });
+
+  it("openLogsPaneInIde surfaces a launch failure as a one-line pane notice without throwing", async () => {
+    const { deps } = restartDeps({
+      editor: { launch: vi.fn(() => err("editor-launch-failed", 'Could not launch "nope": ENOENT\nsecond line')) },
+    });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    store.getState().openLogsPaneInIde("/repo/a");
+
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe('Could not launch "nope": ENOENT');
+  });
 });
 
-// Story 5.4: filter-history persistence — mirrors "splitterRatios persistence (story 2.21)"'s
-// own coverage shape in app-store.test.ts.
-describe("logs slice: filter history (story 5.4)", () => {
+// Filter-history persistence — mirrors "splitterRatios persistence"'s coverage shape.
+describe("logs slice: filter history", () => {
   it("commitFilterHistoryEntry pushes onto the exact (scope, mode) list and persists the whole map immediately (no separate save step)", async () => {
     const writeFilterHistory = vi.fn(async () => ok(undefined));
     const state: StatePort = {
@@ -2051,6 +2341,8 @@ describe("logs slice: filter history (story 5.4)", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory,
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2085,7 +2377,7 @@ describe("logs slice: filter history (story 5.4)", () => {
 
   it("commitFilterHistoryEntry with filterHistoryDedup moves a repeat to the front without duplicating it", () => {
     const store = createAppStore(fakeDeps());
-    store.setState((current) => ({ settings: { ...current.settings, logs: { ...current.settings.logs, filterHistoryDedup: true } } }));
+    store.setState((current) => ({ settings: { ...current.settings, logs: { ...current.settings.logs, filterHistoryDedup: true, restartMode: 'simple' as const } } }));
 
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "a");
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "b");
@@ -2105,7 +2397,7 @@ describe("logs slice: filter history (story 5.4)", () => {
     expect(store.getState().filterHistory["global:text"]).toEqual(["a", "b", "a"]);
   });
 
-  it("clearGlobalFilterHistory only touches the two global lists (Boundaries)", async () => {
+  it("clearGlobalFilterHistory only touches the two global lists", async () => {
     const writeFilterHistory = vi.fn(async () => ok(undefined));
     const state: StatePort = {
       readActiveEdt: vi.fn(async () => ok(null)),
@@ -2114,6 +2406,8 @@ describe("logs slice: filter history (story 5.4)", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok(null)),
       writeFilterHistory,
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "g-text");
@@ -2129,7 +2423,7 @@ describe("logs slice: filter history (story 5.4)", () => {
     expect(writeFilterHistory).toHaveBeenLastCalledWith({ "service:/repo/a:text": ["p-text"] });
   });
 
-  it("clearServiceFilterHistory (I/O matrix CLEAR_SERVICE) only touches that one service's two lists", () => {
+  it("clearServiceFilterHistory only touches that one service's two lists", () => {
     const store = createAppStore(fakeDeps());
     store.getState().commitFilterHistoryEntry({ scope: "pane", repoPath: "/repo/a", mode: "text" }, "a-text");
     store.getState().commitFilterHistoryEntry({ scope: "pane", repoPath: "/repo/a", mode: "regex" }, "a-regex");
@@ -2152,6 +2446,8 @@ describe("logs slice: filter history (story 5.4)", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => ok({ "global:text": ["boom"] })),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2160,7 +2456,7 @@ describe("logs slice: filter history (story 5.4)", () => {
     expect(store.getState().filterHistory).toEqual({ "global:text": ["boom"] });
   });
 
-  it("loadFilterHistory on a genuine I/O error or a fresh machine (null) keeps the empty default (RESTART_PERSIST's corrupt-field isolation, never a crash)", async () => {
+  it("loadFilterHistory on a genuine I/O error or a fresh machine (null) keeps the empty default (never a crash)", async () => {
     const state: StatePort = {
       readActiveEdt: vi.fn(async () => ok(null)),
       writeActiveEdt: vi.fn(async () => ok(undefined)),
@@ -2168,6 +2464,8 @@ describe("logs slice: filter history (story 5.4)", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => err("state-invalid-format", "corrupt filterHistory")),
       writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2186,13 +2484,11 @@ describe("logs slice: filter history (story 5.4)", () => {
     await expect(store.getState().loadFilterHistory()).resolves.toBeUndefined();
   });
 
-  // Review fix: mirrors "loadSplitterRatios() discards a stale result superseded by a newer
-  // setSplitterRatio() while it was in flight" above, but for the opposite failure mode —
-  // filterHistoryVersion alone only protects a *stale read* from clobbering a *newer write*; it
-  // does nothing for a *write that fires while the very first (mount-time) loadFilterHistory()
-  // is still in flight*. Without gating, commitFilterHistoryEntry would read/persist the
-  // still-empty pre-load map, permanently discarding whatever was already on disk for every
-  // other scope/service.
+  // Mirrors "loadSplitterRatios() discards a stale result..." above, but for the opposite
+  // failure mode — filterHistoryVersion only protects a *stale read* from clobbering a *newer
+  // write*; it does nothing for a *write that fires while the first (mount-time)
+  // loadFilterHistory() is still in flight*. Without gating, commitFilterHistoryEntry would
+  // persist the still-empty pre-load map, discarding every other scope/service on disk.
   it("commitFilterHistoryEntry awaits an in-flight initial loadFilterHistory() before reading/persisting, so it never wipes out already-persisted history for other keys", async () => {
     let resolveLoad: ((value: { ok: true; data: Record<string, string[]> }) => void) | undefined;
     const loadPromise = new Promise<{ ok: true; data: Record<string, string[]> }>((resolve) => {
@@ -2206,6 +2502,8 @@ describe("logs slice: filter history (story 5.4)", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => loadPromise),
       writeFilterHistory,
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2240,6 +2538,8 @@ describe("logs slice: filter history (story 5.4)", () => {
       writeSplitterRatios: vi.fn(async () => ok(undefined)),
       readFilterHistory: vi.fn(async () => loadPromise),
       writeFilterHistory,
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 

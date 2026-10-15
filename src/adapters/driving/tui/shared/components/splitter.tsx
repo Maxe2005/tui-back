@@ -4,9 +4,8 @@ import { colors } from '../theme/theme.js';
 export type SplitterProps = {
   orientation: 'horizontal' | 'vertical';
   size: number;
-  // Story 2.21: recolors the splitter glyph to `colors.accent` while its boundary is the
-  // Ctrl+W resize-mode's current target — every other boundary (the default, `false`) renders
-  // in the plain `colors.border` (AC: "the targeted boundary recolors to accent").
+  // Recolors the splitter glyph to `colors.accent` while its boundary is the Ctrl+W
+  // resize-mode's current target — otherwise (the default) it renders in `colors.border`.
   targeted?: boolean;
   onResize?: (newSize: number) => void;
 };

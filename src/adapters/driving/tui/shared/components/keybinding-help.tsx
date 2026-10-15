@@ -1,24 +1,24 @@
 import { useEffect, useState } from 'react';
-import { Text, useInput } from 'ink';
-import { KEYBINDINGS, type NavigationKey } from '../../keybindings/index.js';
+import { Text } from 'ink';
+import { useInput } from '../hooks/use-input.js';
+import { KEYBINDINGS, type Keybinding } from '../../keybindings/index.js';
+import type { NavigationKey } from '../keys/navigation-key.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors } from '../theme/theme.js';
+import { useFooterContext } from '../hooks/use-footer-context.js';
 import { ModalDialog } from './modal-dialog.js';
 import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 
 export const DEFAULT_HELP_VISIBLE_LINES = 10;
 
-// Story 5.5: the window/clamp logic itself now lives in bounded-list.tsx
-// (resolveBoundedWindow/clampBoundedOffset — extracted verbatim from what used to be defined
-// here) so every bounded surface in the app shares one implementation. These two names stay
-// exported from this file as thin aliases — no behavior change for keybinding-help.tsx itself
-// (Code Map), and this component deliberately never renders the new shared primitive's
-// more-above/below indicator (KeybindingHelp had none before this story and still has none).
+// The window/clamp logic lives in bounded-list.tsx; these two names stay exported as thin
+// aliases. This component deliberately never renders the shared primitive's more-above/below
+// indicator.
 export const clampHelpOffset = clampBoundedOffset;
 export const resolveHelpWindow = resolveBoundedWindow;
 
-// Story 2.7: canonical navigation contract retires j/k/g/G in favor of arrows/Home/End —
-// arrow/Home/End keys produce an empty `input` string in Ink, only `key` flags are set.
+// Arrows/Home/End only (no j/k/g/G) — these keys produce an empty `input` string in Ink, only
+// `key` flags are set.
 export function resolveHelpScroll(
   key: NavigationKey,
   offset: number,
@@ -39,6 +39,21 @@ export function resolveHelpScroll(
   return offset;
 }
 
+export type HelpItem = { kind: 'heading'; text: string } | { kind: 'row'; entry: Keybinding };
+
+// A heading line before the first visible row of a section (also when the window starts inside
+// it), so the per-context rows stay apart from the plain key rows.
+export function withSectionHeadings(rows: readonly Keybinding[]): HelpItem[] {
+  const items: HelpItem[] = [];
+  rows.forEach((entry, index) => {
+    if (entry.section !== undefined && entry.section !== rows[index - 1]?.section) {
+      items.push({ kind: 'heading', text: entry.section.toUpperCase() });
+    }
+    items.push({ kind: 'row', entry });
+  });
+  return items;
+}
+
 export function KeybindingHelp({
   useStore = useAppStore,
   visibleLines = DEFAULT_HELP_VISIBLE_LINES,
@@ -49,6 +64,7 @@ export function KeybindingHelp({
   const helpOpen = useStore((state) => state.helpOpen);
   const closeHelp = useStore((state) => state.closeHelp);
   const [scrollOffset, setScrollOffset] = useState(0);
+  useFooterContext('help', helpOpen ? 'help' : null, useStore);
 
   useEffect(() => {
     if (helpOpen) {
@@ -70,16 +86,20 @@ export function KeybindingHelp({
   return (
     <ModalDialog
       title="KEYBINDINGS"
-      onConfirm={() => {}}
-      onCancel={closeHelp}
       open={helpOpen}
     >
-      {visible.map((entry) => (
-        <Text key={entry.keys}>
-          <Text color={colors['text-dim']}>[{entry.keys}]</Text>
-          <Text color={colors.text}> {entry.description}</Text>
-        </Text>
-      ))}
+      {withSectionHeadings(visible).map((item) =>
+        item.kind === 'heading' ? (
+          <Text key={`heading:${item.text}`} bold color={colors.accent}>
+            {item.text}
+          </Text>
+        ) : (
+          <Text key={item.entry.keys}>
+            <Text color={colors['text-dim']}>[{item.entry.keys}]</Text>
+            <Text color={colors.text}> {item.entry.description}</Text>
+          </Text>
+        ),
+      )}
     </ModalDialog>
   );
 }

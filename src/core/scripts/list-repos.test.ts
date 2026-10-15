@@ -95,7 +95,7 @@ describe('listRepos', () => {
     expect(result.data.repos.map((r) => r.path)).toEqual(paths);
   });
 
-  it('fills moduleIds in sorted ascending order from the manifest modules keys (AC4)', async () => {
+  it('fills moduleIds in sorted ascending order from the manifest modules keys', async () => {
     const path = '/m/mod';
     const registry = fakeRegistry({ list: async () => ok([path]) });
     const manifest = fakeManifest({
@@ -121,7 +121,7 @@ describe('listRepos', () => {
     });
   });
 
-  it('sets moduleIds to the empty array for a module-free repo (AC4 baseline)', async () => {
+  it('sets moduleIds to the empty array for a module-free repo', async () => {
     const path = '/m/plain';
     const registry = fakeRegistry({ list: async () => ok([path]) });
     const manifest = fakeManifest({
@@ -141,6 +141,75 @@ describe('listRepos', () => {
     expect(result.data.repos[0].moduleIds).toEqual([]);
   });
 
+
+  it('exposes a missing container as null in the JSON data', async () => {
+    const path = '/m/lib';
+    const registry = fakeRegistry({ list: async () => ok([path]) });
+    const manifest = fakeManifest({
+      load: async () =>
+        ok({
+          service: 'shared-types',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+    });
+
+    const result = await listRepos(registry, manifest);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        repos: [{ path, service: 'shared-types', container: null, sharedBranch: 'development', moduleIds: [] }],
+        unreachable: [],
+        errors: [],
+      },
+    });
+  });
+
+  it('accepts a container-less shared-types-source repo as a member', async () => {
+    const path = '/m/shared-types';
+    const registry = fakeRegistry({ list: async () => ok([path]) });
+    const manifest = fakeManifest({
+      load: async () =>
+        ok({
+          service: 'shared-types',
+          sharedBranch: 'development',
+          modules: { 'shared-types-source': { publishCommand: 'npm run v', packageName: '@ianord/shared-types' } },
+        }),
+    });
+
+    const result = await listRepos(registry, manifest);
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        repos: [
+          { path, service: 'shared-types', container: null, sharedBranch: 'development', moduleIds: ['shared-types-source'] },
+        ],
+        unreachable: [],
+        errors: [],
+      },
+    });
+  });
+
+  it('exposes a blank container as null, like a missing one', async () => {
+    const path = '/m/blank';
+    const registry = fakeRegistry({ list: async () => ok([path]) });
+    const manifest = fakeManifest({
+      load: async () =>
+        ok({
+          service: 'svc',
+          container: '   ',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+    });
+
+    const result = await listRepos(registry, manifest);
+
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.repos[0].container).toBeNull();
+  });
 
   it('surfaces a failing manifest as an errors entry, not a crash and not a silent skip', async () => {
     const bad = '/m/bad';

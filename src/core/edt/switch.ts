@@ -1,84 +1,42 @@
-// core/edt/switch: the core use-case for switching the active EDT (FR-6/FR-8, story 2.4;
-// three-state partition and dirty-service resolutions, story 2.39).
-//
-// Classification (story 2.39): every registered repo is classified against the OUTGOING EDT
-// (`classifySwitchRepos`, a pure helper):
-//   - state 1 — a member of the outgoing EDT;
-//   - state 2 — a member of some other EDT (the target included) but not of the outgoing one;
-//   - state 3 — a member of no EDT at all.
-// The DESTINATION stays target-driven (FR-8): a target member goes to its own registered
-// branch (re-verified by `assertAllowedBranch(..., target.ulid)`, AD-8, then its
-// target-tagged stash is popped back in); any other repo goes to its manifest `sharedBranch`,
-// fetched first if absent locally — regardless of stale membership elsewhere.
-//
-// Whose uncommitted work is it? A dirty state-1 repo holds the outgoing EDT's work: it is
-// stashed under `tui-back:<outgoing ulid>` before checkout, no question asked, and is popped
-// back only by a later switch INTO the outgoing EDT (that switch's member path pops its own
-// target-tagged stash). A dirty state-2/3 repo holds work that belongs to no outgoing member,
-// so it is never moved silently: it needs an explicit per-repo `DirtyResolution` —
-//   - `adopt` — the work joins the outgoing EDT: gate the branch (`assertAllowedBranch` with
-//     the outgoing ulid) → stash under the outgoing tag → create the branch from the current
-//     HEAD branch if it differs (never checked out) → register the repo as an outgoing member
-//     (`addMemberUnderLock`, modify.ts's lock-held edts.yaml assembly) → checkout. The stash
-//     then rides the ordinary state-1 return path onto the adopted branch.
-//   - `discard` — the dirty paths are captured (untracked expanded to files), then
-//     `git.discardAll` (reset --hard + clean -fd, never -x) runs, then checkout.
-// This replaces the old fixed `tui-back:shared` round-trip, which popped a non-member's work
-// straight back onto the shared branch (D1) and stashed a target-only member under the
-// outgoing tag (D2).
-//
-// Pre-flight: before ANY git write, the dirtiness of every registered repo is re-read. A
-// failed read just leaves that repo out (the main loop re-reads and reports it `failed`).
-// When a dirty state-2/3 repo exists, resolutions come from the caller's explicit
-// `dirtyResolutions` (CLI path, which skips the seam) or from the `dirtyPolicy` flag sugar (story 2.40) or else from the
-// `onDirtyReposBeforeSwitch` seam (TUI path), invoked once with every dirty repo — state-1 rows
-// flagged `resolution: 'auto-stash'`. `cancel` → `switch-cancelled-by-user`; any dirty
-// state-2/3 repo still without a resolution → `switch-dirty-services-unresolved`; an `adopt`
-// with no outgoing EDT (first switch) → `switch-adopt-without-outgoing`. All three return
-// with zero repos touched and state.json/edts.yaml untouched. With no seam and no
-// resolutions (a bare CLI call), a dirty state-2/3 repo therefore fails safe.
-//
-// Per-repo isolation mirrors create.ts: one repo's failure is a `failed` row, never aborts
-// the others or the state.json write. A repo that turned dirty after the pre-flight with no
-// resolution is a `failed` row (`switch-dirty-unresolved`), left untouched. Once anything is
-// stashed, every failure before the checkout lands restores that stash before reporting.
-// state.json's activeEdt is updated once the target is resolved and no blocking lock
-// applies, independent of individual repo outcomes.
-//
-// The `edt:<outgoingUlid>` lock-peek is a non-blocking, non-mutating read (LockPort.peek) —
-// `--force` past a held lock never aborts or kills anything; it only marks the outgoing EDT
-// `interrupted` and proceeds.
+// core/edt/switch: switches the active EDT (FR-6/FR-8). Every registered repo is classified
+// against the OUTGOING EDT, its uncommitted work is stashed, adopted or discarded per its
+// state, then it is checked out to its target-driven destination. Per-repo failures never
+// abort the others; state.json and edts.yaml are updated once the target is resolved and no
+// blocking lock applies. See switchActiveEdt for the full rules.
+// a `dirtyPolicy` (the CLI's --discard-dirty / --adopt-dirty / --adopt-branch flags)
+// is expanded per dirty state-2/3 repo into resolutions, so the seam is skipped when one is given.
 import { resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
-import type { ManifestPort } from '../ports/manifest.js';
+import type { ManifestCarryPort } from '../ports/manifest-carry.js';
+import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
+import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import { addMemberUnderLock } from './modify.js';
 import { isProtectedBranch } from './shared-branches.js';
 
 export interface SwitchEdtRepoResult {
   service: string;
   outcome: 'switched' | 'adopted' | 'discarded' | 'failed';
-  // `discardedPaths` (story 2.39): on a `discarded` row, exactly the paths the discard removed
-  // (captured before `discardAll`, untracked directories expanded to files).
-  // `adoptedBranch` (story 2.41): on an `adopted` row, the branch the work was adopted onto
-  // in the outgoing EDT (the TUI's action log records it).
+  // `discardedPaths`: on a `discarded` row, exactly the paths the discard removed (captured
+  // before `discardAll`, untracked directories expanded to files).
+  // `adoptedBranch`: on an `adopted` row, the branch the work was adopted onto in the
+  // outgoing EDT (the TUI's action log records it).
   detail?: { code: string; message: string; discardedPaths?: string[]; adoptedBranch?: string };
 }
 
-// Story 2.39: a caller's explicit decision for one dirty state-2/3 repo (see the file header).
-// `confirmedPaths` (story 2.41 review): the exact paths the user confirmed destroying (the TUI's
-// discard confirmation, from the pre-flight `dirtyPaths` snapshot). When set, the discard step
-// refuses — `failed` row `switch-discard-paths-changed`, repo untouched — if its fresh capture
-// holds any path outside it (a file changed while the dialog was open). The CLI never sets it,
-// so its discard behavior is unchanged.
+// A caller's explicit decision for one dirty state-2/3 repo. `confirmedPaths`: the exact paths
+// the user confirmed destroying (the TUI's discard confirmation, from the pre-flight
+// `dirtyPaths` snapshot). When set, the discard refuses — `failed` row
+// `switch-discard-paths-changed`, repo untouched — if its fresh capture holds any path outside
+// it (a file changed while the dialog was open). The CLI never sets it.
 export type DirtyResolution = { kind: 'adopt'; branch: string } | { kind: 'discard'; confirmedPaths?: string[] };
 
-// Story 2.40: the CLI's flag-driven sugar. It is expanded into per-repo `DirtyResolution`s AFTER
+// the CLI's flag-driven sugar. It is expanded into per-repo `DirtyResolution`s AFTER
 // the pre-flight classification (the CLI never classifies repos itself): `discard` discards every
 // dirty state-2/3 repo; `adopt` adopts each onto `branch` when it sits on a shared branch, or
 // keeping its current (non-shared) branch otherwise — `branch` may then be omitted, but a dirty
@@ -87,17 +45,14 @@ export type DirtyPolicy = { kind: 'adopt'; branch?: string } | { kind: 'discard'
 
 export type SwitchDirtyScope = 'outgoing-member' | 'member-of-other-edt' | 'non-member';
 
-// Story 2.39: one row per dirty registered repo, computed before any git write. State-1 rows
+// One row per dirty registered repo, computed before any git write. State-1 rows
 // (`outgoing-member`) carry `resolution: 'auto-stash'` — read-only information, they need no
 // decision. State-2/3 rows are the ones a resolution is required for; `owningEdtTopics` lists
 // the other EDTs claiming the repo (empty for a non-member).
-// Story 2.41: `sharedBranch` is the repo's manifest shared branch (null when the manifest could
-// not be loaded) — the TUI's advisory protected-name check needs it. `dirtyPaths` (state-2/3
-// rows only) is a read-only `listDirtyPaths(..., {expandUntracked: true})` snapshot the TUI's
-// discard confirmation lists; a failed read leaves it unset.
-// Story 2.42: `protectedBranches` is the manifest's own protected list (empty when the
-// manifest declares none or could not be loaded) — with `sharedBranch`, the repo's full FR-7
-// protected set for the TUI's advisory check.
+// `sharedBranch` (null when the manifest could not be loaded) and `protectedBranches` (empty
+// when none or unloadable) form the repo's FR-7 protected set for the TUI's advisory check.
+// `dirtyPaths` (state-2/3 rows only) is a read-only expanded snapshot the TUI's discard
+// confirmation lists; a failed read leaves it unset.
 export interface SwitchDirtyRepo {
   service: string;
   repoPath: string;
@@ -109,6 +64,9 @@ export interface SwitchDirtyRepo {
   owningEdtTopics: string[];
   dirtyPaths?: string[];
   resolution?: 'auto-stash';
+  // True when the repo also has a dirty `.tui-back.yaml`: it is carried over untouched, outside
+  // any resolution, and never listed in `dirtyPaths`.
+  manifestCarried?: boolean;
 }
 
 export type SwitchDirtyReposChoice =
@@ -139,21 +97,22 @@ export interface SwitchActiveEdtParams {
   edtRegistry: EdtRegistryPort;
   registry: RegistryPort;
   manifest: ManifestPort;
+  manifestCarry: ManifestCarryPort;
   git: GitPort;
   lock: LockPort;
   state: StatePort;
-  // Review patch (story 2.4): same resource key create.ts's own registry writes lock under
-  // (AD-9) — this use-case writes edts.yaml too.
+  // Same resource key create.ts's registry writes lock under (AD-9) — this use-case writes
+  // edts.yaml too.
   edtRegistryResourceKey: string;
   topic: string;
   force?: boolean;
-  // Story 2.39: explicit per-repo resolutions keyed by repoPath (the CLI path, story 2.40).
-  // When supplied, the seam below is never invoked.
+  // Explicit per-repo resolutions keyed by repoPath (the CLI path). When supplied, the seam
+  // below is never invoked.
   dirtyResolutions?: Record<string, DirtyResolution>;
-  // Story 2.40: policy sugar for the CLI flags; an explicit `dirtyResolutions` entry for a repo
+  // policy sugar for the CLI flags; an explicit `dirtyResolutions` entry for a repo
   // wins over the policy. When supplied (like dirtyResolutions), the seam is never invoked.
   dirtyPolicy?: DirtyPolicy;
-  // Story 2.39: the TUI's resolution seam — see the file header.
+    // The TUI's resolution seam — see switchActiveEdt.
   onDirtyReposBeforeSwitch?: OnDirtyReposBeforeSwitch;
 }
 
@@ -168,8 +127,8 @@ export interface ClassifiedSwitchRepo {
   owningTopics: string[];
 }
 
-// Story 2.39: the pure three-state classifier (see the file header). Paths are compared
-// resolve()'d on both sides; `targetMember.repoPath` is the resolved path.
+// The pure three-state classifier (see switchActiveEdt). Paths are compared resolve()'d on
+// both sides; `targetMember.repoPath` is the resolved path.
 export function classifySwitchRepos(
   registered: readonly string[],
   outgoing: EdtRegistryEntry | undefined,
@@ -196,8 +155,32 @@ export function classifySwitchRepos(
   });
 }
 
+// Classification against the OUTGOING EDT: state 1 = a member of it; state 2 = a member of
+// another EDT (the target included) but not of the outgoing one; state 3 = a member of no EDT.
+// The destination stays target-driven (FR-8): a target member goes to its own registered
+// branch (re-gated with the target ulid, then its target-tagged stash is popped back in); any
+// other repo goes to its manifest `sharedBranch`, fetched first if absent locally.
+//
+// A dirty state-1 repo holds the outgoing EDT's work: it is stashed under
+// `tui-back:<outgoing ulid>` and popped back only by a later switch INTO the outgoing EDT. A
+// dirty state-2/3 repo is never moved silently — it needs an explicit `DirtyResolution`:
+//   - `adopt`: gate the branch with the outgoing ulid → stash under the outgoing tag → create
+//     the branch from HEAD if it differs (never checked out) → register the repo as an
+//     outgoing member (`addMemberUnderLock`) → checkout. The stash then rides the state-1
+//     return path onto the adopted branch.
+//   - `discard`: capture the dirty paths (untracked expanded), `git.discardAll` (reset --hard
+//     + clean -fd, never -x), then checkout.
+//
+// Pre-flight, before ANY git write: resolutions come from `dirtyResolutions` (CLI) or else the
+// `onDirtyReposBeforeSwitch` seam (TUI), invoked once with every dirty repo. `cancel`, a dirty
+// state-2/3 repo without a resolution, or an `adopt` with no outgoing EDT each return with zero
+// repos touched — so with no seam and no resolutions, a dirty state-2/3 repo fails safe. Once
+// anything is stashed, every failure before the checkout restores that stash.
+//
+// The outgoing lock peek is non-blocking and non-mutating: `--force` past a held lock never
+// aborts anything; it only marks the outgoing EDT `interrupted`.
 export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Result<SwitchActiveEdtData>> {
-  const { edtRegistry, registry, manifest, git, lock, state, edtRegistryResourceKey, force = false } = params;
+  const { edtRegistry, registry, manifest, manifestCarry, git, lock, state, edtRegistryResourceKey, force = false } = params;
 
   const topic = params.topic.trim();
   if (topic === '') {
@@ -269,6 +252,7 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   const context: RepoSwitchContext = {
     git,
     manifest,
+    manifestCarry,
     edtRegistry,
     lock,
     edtRegistryResourceKey,
@@ -278,17 +262,23 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   const results: SwitchEdtRepoResult[] = [];
   for (const repo of classified) {
     const resolution = preflight.data.get(repo.repoPath);
+    const { targetMember } = repo;
+    // A non-member's destination comes from its manifest as it sits on disk now, so it is read
+    // before the carry clears a dirty one.
+    const nonMemberManifest = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
+    const serviceName = targetMember?.service ?? (nonMemberManifest?.ok ? nonMemberManifest.data.service : repo.repoPath);
     results.push(
-      repo.targetMember !== undefined
-        ? await switchMemberRepo(context, repo, repo.targetMember, resolution)
-        : await switchNonMemberRepo(context, repo, resolution),
+      await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, serviceName, () =>
+        targetMember !== undefined
+          ? switchMemberRepo(context, repo, targetMember, resolution)
+          : switchNonMemberRepo(context, repo, resolution, nonMemberManifest as Result<Manifest>),
+      ),
     );
   }
 
-  // Review patch (story 2.4): a target member whose repoPath has since dropped out of the
-  // managed-repo registry used to be silently skipped — never checked out, no failure
-  // reported, quietly breaking "every target member sits on its own registered branch" with
-  // zero signal. Surfaced as `failed`, same per-repo isolation philosophy as every other row.
+  // A target member whose repoPath has dropped out of the managed-repo registry is surfaced as
+  // `failed` rather than skipped — otherwise "every target member sits on its own registered
+  // branch" would break with zero signal.
   for (const member of target.members) {
     if (!registeredPaths.has(resolve(member.repoPath))) {
       results.push(
@@ -302,12 +292,9 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
 
   // state.json and edts.yaml are updated once the target is resolved and no blocking lock
   // applies, independent of individual repo outcomes above (same philosophy as createEdt
-  // still registering an EDT despite member failures) — but the two registry writes below
-  // race with a concurrent `edt create`/`edt switch` on the same edts.yaml (AD-9) without this
-  // lock, and a `setStatus` failure used to be swallowed to console.error while the overall
-  // Result still reported ok:true. Both are review patches: the lock serializes the
-  // read-modify-write the same way create.ts's own registry write does, and a setStatus
-  // failure is now a `failed` row in `results` instead of a silent log line.
+  // still registering an EDT despite member failures). The registry writes run under the
+  // edts.yaml lock so they cannot race a concurrent `edt create`/`edt switch` (AD-9), and a
+  // setStatus failure becomes a `failed` row in `results`, never a silent log line.
   const written = await withActionLock(lock, edtRegistryResourceKey, async () => {
     const wroteState = await state.writeActiveEdt(target.ulid);
     if (!wroteState.ok) {
@@ -338,7 +325,7 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
   return ok({ ulid: target.ulid, topic: target.topic, results, wasInterrupted });
 }
 
-// Story 2.38: exported for activate.ts, which reports its per-repo rows the same way.
+// Exported for activate.ts, which reports its per-repo rows the same way.
 export function failed(service: string, error: ResultError): SwitchEdtRepoResult {
   return { service, outcome: 'failed', detail: { code: error.code, message: error.message } };
 }
@@ -365,7 +352,7 @@ async function resolveDirtyRepos(input: {
 
   const dirtyRows: SwitchDirtyRepo[] = [];
   for (const repo of classified) {
-    const dirty = await git.hasUncommittedChanges(repo.repoPath);
+    const dirty = await git.hasUncommittedChanges(repo.repoPath, { excludePaths: [MANIFEST_FILE] });
     if (!dirty.ok || !dirty.data) {
       continue;
     }
@@ -483,10 +470,14 @@ async function describeDirtyRepo(
     protectedBranches: loaded.ok ? (loaded.data.protectedBranches ?? []) : [],
     owningEdtTopics: repo.owningTopics,
   };
+  const everyDirtyPath = await git.listDirtyPaths(repo.repoPath);
+  if (everyDirtyPath.ok && everyDirtyPath.data.includes(MANIFEST_FILE)) {
+    row.manifestCarried = true;
+  }
   if (repo.state === 1) {
     row.resolution = 'auto-stash';
   } else {
-    const paths = await git.listDirtyPaths(repo.repoPath, { expandUntracked: true });
+    const paths = await git.listDirtyPaths(repo.repoPath, { expandUntracked: true, excludePaths: [MANIFEST_FILE] });
     if (paths.ok) {
       row.dirtyPaths = paths.data;
     }
@@ -494,7 +485,7 @@ async function describeDirtyRepo(
   return row;
 }
 
-// ---- Destination rule (shared with activate.ts, story 2.38) --------------------------------
+// ---- Destination rule (shared with activate.ts) ---------------------------------------------
 
 // Where a repo goes when an EDT becomes active (FR-8): a member of that EDT goes to its own
 // registered branch, any other repo to its manifest `sharedBranch`.
@@ -530,6 +521,7 @@ export async function resolveTargetBranch(git: GitPort, repoPath: string, spec: 
 interface RepoSwitchContext {
   git: GitPort;
   manifest: ManifestPort;
+  manifestCarry: ManifestCarryPort;
   edtRegistry: EdtRegistryPort;
   lock: LockPort;
   edtRegistryResourceKey: string;
@@ -677,9 +669,9 @@ async function executeDirtyPlan(
 // How many unconfirmed paths a `switch-discard-paths-changed` message names.
 const UNCONFIRMED_PATHS_SHOWN = 10;
 
-// The adopt steps, in the AC's order: (1) gate, (2) stash under the outgoing tag, (3) create
-// the branch from the current HEAD branch if it differs (never checked out), (4) register the
-// repo as an outgoing member under the edts.yaml lock. Any failure after the stash restores it.
+// The adopt steps: (1) gate, (2) stash under the outgoing tag, (3) create the branch from the
+// current HEAD branch if it differs (never checked out), (4) register the repo as an outgoing
+// member under the edts.yaml lock. Any failure after the stash restores it.
 async function adoptDirtyWork(
   context: RepoSwitchContext,
   service: string,
@@ -875,11 +867,11 @@ async function switchNonMemberRepo(
   context: RepoSwitchContext,
   repo: ClassifiedSwitchRepo,
   resolution: DirtyResolution | undefined,
+  loaded: Result<Manifest>,
 ): Promise<SwitchEdtRepoResult> {
-  const { git, manifest } = context;
+  const { git } = context;
   const { repoPath } = repo;
 
-  const loaded = await manifest.load(repoPath);
   const service = loaded.ok ? loaded.data.service : repoPath;
   if (!loaded.ok) {
     return failed(service, loaded.error);

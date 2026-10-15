@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ownerAnnotationText, ownerAnnotations, ownerRefusalForBranch, ownerRefusalText } from './branch-owners-text.js';
 
-describe('branch-owners-text (story 2.43)', () => {
+describe('branch-owners-text', () => {
   it('annotates one or several owners', () => {
     expect(ownerAnnotationText(['a'])).toBe('EDT « a »');
     expect(ownerAnnotationText(['a', 'b'])).toBe('EDT « a », « b »');

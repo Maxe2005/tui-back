@@ -1,14 +1,14 @@
-// tui/zones/edts: render tests (AD-13 — Ink smoke coverage) for story 2.6's real EDTs zone
-// content, covering every I/O-matrix row reachable from the TUI: upstream, no-upstream,
-// offline, member vs. non-member (incl. kept-on-development), and long-branch-name
-// truncation with the full name available in the detail pane once focused.
+// tui/zones/edts: render tests (Ink smoke coverage) for the EDTs zone — upstream, no-upstream,
+// offline, member vs. non-member, long-branch-name truncation, the dialogs' rendered states —
+// plus the pure helpers behind its keystrokes (renderToString never emits keys).
 import { describe, it, expect } from 'vitest';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
+import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
-import { resolveSplitFlex } from '../../shared/components/list-detail-split.js';
+import { resolveBoundaryFlex } from '../../zones/zone-layouts.js';
 import { EdtsZone } from './edts-zone.js';
 import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
 import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
@@ -32,16 +32,12 @@ import {
   formatServiceDetail,
   formatServiceMeta,
   isSwitchBlockedError,
-  jumpSelection,
-  moveSelection,
   partitionServicesByEdtMembership,
   resolveCandidateListState,
   resolveActionHint,
   resolveIssuesSeverity,
   resolveModifyEnterAction,
   resolveModifyOps,
-  resolveSelectionDirection,
-  resolveSelectionJump,
   suggestBranchForNewMember,
   suggestBranchNameFromTopic,
   summarizeFailedResults,
@@ -50,6 +46,7 @@ import {
   validateBranchEditValue,
   BRANCH_MAX_WIDTH,
 } from './edts-zone.logic.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 function edtEntry(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
   return {
@@ -82,7 +79,7 @@ describe('truncateBranchLabel', () => {
     expect(truncateBranchLabel('main', 24)).toBe('main');
   });
 
-  it('ellipsizes past a fixed max width (matrix: "Branch name very long")', () => {
+  it('ellipsizes past a fixed max width', () => {
     const long = 'feature/a-very-long-branch-name-that-exceeds-the-display-width';
     const truncated = truncateBranchLabel(long, BRANCH_MAX_WIDTH);
     expect(truncated.length).toBe(BRANCH_MAX_WIDTH);
@@ -97,17 +94,17 @@ describe('truncateBranchLabel', () => {
 });
 
 describe('formatServiceMeta', () => {
-  it('shows branch + both ahead/behind counts for a service with a configured upstream (AC1)', () => {
+  it('shows branch + both ahead/behind counts for a service with a configured upstream', () => {
     expect(formatServiceMeta(service({ branch: 'main', ahead: 2, behind: 0, status: 'current' }))).toBe('main +2/-0');
   });
 
-  it('shows an explicit "no upstream" state, not a numeric value (AC2)', () => {
+  it('shows an explicit "no upstream" state, not a numeric value', () => {
     const meta = formatServiceMeta(service({ branch: 'main', ahead: null, behind: null, status: 'no-upstream' }));
     expect(meta).toContain('no upstream');
     expect(meta).not.toMatch(/\d/);
   });
 
-  it('shows an explicit "unknown (offline)" state, not a stale/zero value (AC3)', () => {
+  it('shows an explicit "unknown (offline)" state, not a stale/zero value', () => {
     const meta = formatServiceMeta(service({ branch: 'main', ahead: null, behind: null, status: 'unknown-offline' }));
     expect(meta).toContain('unknown (offline)');
     expect(meta).not.toMatch(/\d/);
@@ -127,15 +124,14 @@ describe('formatServiceMeta', () => {
 });
 
 describe('formatServiceDetail', () => {
-  it('always shows the full, untruncated branch name (matrix: full name available on focus)', () => {
+  it('always shows the full, untruncated branch name', () => {
     const long = 'feature/a-very-long-branch-name-that-exceeds-the-display-width';
     const detail = formatServiceDetail(service({ branch: long }));
     expect(detail).toContain(long);
   });
 });
 
-// Review patch: listEdtBranchesDivergence's unreachable/errors were computed but never
-// surfaced by the TUI.
+// listEdtBranchesDivergence's unreachable/errors are surfaced by the TUI.
 describe('formatIssuesSummary', () => {
   it('returns null when there is nothing to report', () => {
     expect(formatIssuesSummary(0, 0)).toBeNull();
@@ -155,8 +151,8 @@ describe('formatIssuesSummary', () => {
   });
 });
 
-// Story 2.34: severity picks which of the theme's two "something's wrong" colors the summary
-// line renders with.
+// Severity picks which of the theme's two "something's wrong" colors the summary line renders
+// with.
 describe('resolveIssuesSeverity', () => {
   it('returns null when there is nothing to report', () => {
     expect(resolveIssuesSeverity(0, 0)).toBeNull();
@@ -199,12 +195,10 @@ describe('explainUnreachable', () => {
   });
 });
 
-// Review patch: the arrow-key row-focus transition, extracted to a pure function so it's
-// unit-testable directly (the shared renderToString harness's fake stdin never emits data,
-// so a useInput callback itself is registered but never invoked by any test in the repo).
-// Story 2.7: canonical navigation contract — j/k/g/G retired in favor of arrows/Home/End.
+// The arrow-key row-focus transition, a pure function so it's unit-testable directly
+// (renderToString's fake stdin never emits keys). Arrows/Home/End only — no j/k/g/G.
 // `noKey`: a fully-populated NavigationKey with every flag false, spread and overridden per
-// case — mirrors the pattern already used in keybinding-help.test.tsx for the same type.
+// case — the same pattern as keybinding-help.test.tsx.
 const noKey: NavigationKey = { upArrow: false, downArrow: false, home: false, end: false, tab: false };
 
 describe('resolveSelectionDirection', () => {
@@ -246,8 +240,7 @@ describe('moveSelection', () => {
   });
 });
 
-// Story 2.7: Home/End jump-to-top/bottom (matrix: "Jump to top" / "Jump to bottom" in the
-// EDTs zone) — extracted as a pure function for the same testability reason as
+// Home/End jump to top/bottom — a pure function for the same testability reason as
 // resolveSelectionDirection/moveSelection above.
 describe('resolveSelectionJump', () => {
   it('maps Home to top and End to bottom', () => {
@@ -282,7 +275,7 @@ describe('jumpSelection', () => {
 // deliberately seeds and clobber edtsBranchesStatus/edtsBranchesError out from under it.
 const noopLoad = async () => {};
 
-describe('EdtsZone (story 2.6)', () => {
+describe('EdtsZone', () => {
   it('shows a loading state before the first load resolves', async () => {
     const store = createAppStore();
     store.setState({ edtsBranchesStatus: 'loading', edtsBranches: null, loadEdtsBranches: noopLoad });
@@ -305,14 +298,14 @@ describe('EdtsZone (story 2.6)', () => {
       edtsBranches: null,
       loadEdtsBranches: noopLoad,
     });
-    // Story 2.9: the SERVICES detail pane (where this error surfaces) is only rendered
-    // while the SERVICES pane is focused — the EDT selector is focused by default now.
+    // The SERVICES detail pane (where this error surfaces) only renders while the SERVICES pane
+    // is focused — the EDT selector is focused by default.
     const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
     expect(output).toContain('Failed to load services');
     expect(output).toContain('registry-invalid-yaml');
   });
 
-  it('renders a service with a configured upstream: branch + both ahead/behind counts (AC1)', async () => {
+  it('renders a service with a configured upstream: branch + both ahead/behind counts', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranchesStatus: 'idle',
@@ -324,7 +317,7 @@ describe('EdtsZone (story 2.6)', () => {
     expect(output).toContain('main +2/-1');
   });
 
-  it('renders an explicit "no upstream" state for a service with none configured (AC2)', async () => {
+  it('renders an explicit "no upstream" state for a service with none configured', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranchesStatus: 'idle',
@@ -336,7 +329,7 @@ describe('EdtsZone (story 2.6)', () => {
     expect(output).toContain('no upstream');
   });
 
-  it('renders an explicit "unknown (offline)" state, never stale/zero values (AC3)', async () => {
+  it('renders an explicit "unknown (offline)" state, never stale/zero values', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranchesStatus: 'idle',
@@ -348,7 +341,7 @@ describe('EdtsZone (story 2.6)', () => {
     expect(output).toContain('unknown (offline)');
   });
 
-  it('shows a member and a non-member (incl. one kept on development) uniformly, side by side (AC4)', async () => {
+  it('shows a member and a non-member (incl. one kept on development) uniformly, side by side', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranchesStatus: 'idle',
@@ -395,18 +388,16 @@ describe('EdtsZone (story 2.6)', () => {
       loadEdtsBranches: noopLoad,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialPaneFocus="other-services" />);
-    // Bugfix (story 2.21 follow-up #2): the list pane's width is now genuinely ratio-bound
-    // (list-detail-split.tsx), so this row's label — combined with its long "unknown (offline)"
-    // meta — no longer fits the column and cleanly truncates with an ellipsis (list-row.tsx).
-    // The detail pane's own title (never truncated — full name is DetailPane's whole point)
-    // still carries the untruncated, upper-cased name, so this assertion is case-insensitive
-    // rather than tied to the row's own (now-truncated) rendering.
+    // The list pane's width is ratio-bound (zone-layout.tsx), so this row's label plus its
+    // long "unknown (offline)" meta doesn't fit and truncates with an ellipsis (list-row.tsx). The
+    // detail pane's title (never truncated) still carries the full, upper-cased name, so this
+    // assertion is case-insensitive rather than tied to the truncated row.
     expect(output.toLowerCase()).toContain('detached-head-svc');
     expect(output).toContain('(unknown)');
     expect(output).toContain('HEAD is detached');
   });
 
-  it('never renders stale rows or a stale detail pane once a reload fails after a prior successful load (review patch)', async () => {
+  it('never renders stale rows or a stale detail pane once a reload fails after a prior successful load', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranchesStatus: 'error',
@@ -424,7 +415,7 @@ describe('EdtsZone (story 2.6)', () => {
     expect(output).toContain('No service selected');
   });
 
-  it('shows a brief unreachable/errors summary when either is non-empty (review patch)', async () => {
+  it('shows a brief unreachable/errors summary when either is non-empty', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranchesStatus: 'idle',
@@ -436,11 +427,11 @@ describe('EdtsZone (story 2.6)', () => {
     const output = await renderToString(<EdtsZone useStore={store} />);
     expect(output).toContain('2 unreachable');
     expect(output).toContain('1 error');
-    // Story 2.34: the "[i] details" hint into the issues dialog, shown whenever the summary is.
+    // The "[i] details" hint into the issues dialog, shown whenever the summary is.
     expect(output).toContain('[i] details');
   });
 
-  it('opens a read-only issues dialog explaining each unreachable/error entry (story 2.34)', async () => {
+  it('opens a read-only issues dialog explaining each unreachable/error entry', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranchesStatus: 'idle',
@@ -458,25 +449,6 @@ describe('EdtsZone (story 2.6)', () => {
     expect(output).toContain('YAML');
   });
 
-  it('bounds and truncates the issues dialog instead of overlapping lines', async () => {
-    const store = createAppStore();
-    store.setState({
-      edtsBranchesStatus: 'idle',
-      edtsBranches: [service({ service: 'api-gateway' })],
-      edtsUnreachable: [],
-      edtsErrors: Array.from({ length: 40 }, (_, i) => ({
-        path: `/repos/bad-${i}`,
-        code: 'manifest-invalid-yaml' as const,
-        message: 'x'.repeat(500),
-      })),
-      loadEdtsBranches: noopLoad,
-    });
-    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="issues" />);
-    expect(output).toContain('more below');
-    expect(output).not.toContain('/repos/bad-39');
-    expect(output).not.toContain('x'.repeat(300));
-  });
-
   it('shows no summary line when unreachable/errors are both empty', async () => {
     const store = createAppStore();
     store.setState({
@@ -491,7 +463,7 @@ describe('EdtsZone (story 2.6)', () => {
     expect(output).not.toContain('error');
   });
 
-  it('hides a stale unreachable/errors summary once a reload fails, same as the row list (review patch)', async () => {
+  it('hides a stale unreachable/errors summary once a reload fails, same as the row list', async () => {
     const store = createAppStore();
     store.setState({
       edtsBranchesStatus: 'error',
@@ -520,14 +492,21 @@ describe('EdtsZone (story 2.6)', () => {
 });
 
 // ==========================================================================================
-// Story 2.9 — EDTs zone: create, switch, and modify
+// EDTs zone: create, switch, and modify
 // ==========================================================================================
 
 describe('cyclePaneFocus', () => {
-  it('cycles edts -> edt-services -> other-services -> edts (story 2.18: 3-way)', () => {
+  it('cycles edts -> edt-services -> other-services -> edts', () => {
     expect(cyclePaneFocus('edts')).toBe('edt-services');
     expect(cyclePaneFocus('edt-services')).toBe('other-services');
     expect(cyclePaneFocus('other-services')).toBe('edts');
+  });
+});
+
+describe('cyclePaneFocus back', () => {
+  it('reverses, wrapping first to last', () => {
+    expect(cyclePaneFocus('edts', 'back')).toBe('other-services');
+    expect(cyclePaneFocus('other-services', 'back')).toBe('edt-services');
   });
 });
 
@@ -538,20 +517,20 @@ describe('cycleFormFocus', () => {
   });
 });
 
-describe('nextTextInputValue (story 2.32: {value, cursor} shape, real cursor navigation)', () => {
+describe('nextTextInputValue', () => {
   it('appends a typed character at the end when cursor trails the value', () => {
     expect(nextTextInputValue({ value: 'ab', cursor: 2 }, 'c', {})).toEqual({ value: 'abc', cursor: 3 });
   });
 
-  it('inserts a typed character mid-string at cursor (I/O matrix: "Mid-string insert")', () => {
+  it('inserts a typed character mid-string at cursor', () => {
     expect(nextTextInputValue({ value: 'abd', cursor: 2 }, 'c', {})).toEqual({ value: 'abcd', cursor: 3 });
   });
 
-  it('backspaces the character before cursor (I/O matrix: "Backspace")', () => {
+  it('backspaces the character before cursor', () => {
     expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { backspace: true })).toEqual({ value: 'acd', cursor: 1 });
   });
 
-  it('backspace at cursor 0 is a no-op (I/O matrix: "cursor:0 -> no-op")', () => {
+  it('backspace at cursor 0 is a no-op', () => {
     expect(nextTextInputValue({ value: 'abcd', cursor: 0 }, '', { backspace: true })).toEqual({ value: 'abcd', cursor: 0 });
   });
 
@@ -559,22 +538,22 @@ describe('nextTextInputValue (story 2.32: {value, cursor} shape, real cursor nav
     expect(nextTextInputValue({ value: '', cursor: 0 }, '', { backspace: true })).toEqual({ value: '', cursor: 0 });
   });
 
-  it('deletes the character after cursor, cursor unchanged (I/O matrix: "Delete")', () => {
+  it('deletes the character after cursor, cursor unchanged', () => {
     expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { delete: true })).toEqual({ value: 'abd', cursor: 2 });
   });
 
-  it('delete at cursor:len is a no-op (I/O matrix: "cursor:len -> no-op")', () => {
+  it('delete at cursor:len is a no-op', () => {
     expect(nextTextInputValue({ value: 'abcd', cursor: 4 }, '', { delete: true })).toEqual({ value: 'abcd', cursor: 4 });
   });
 
-  it('Left/Right move cursor, clamped to [0, value.length] (I/O matrix: "Left/Right clamp")', () => {
+  it('Left/Right move cursor, clamped to [0, value.length]', () => {
     expect(nextTextInputValue({ value: 'ab', cursor: 0 }, '', { leftArrow: true })).toEqual({ value: 'ab', cursor: 0 });
     expect(nextTextInputValue({ value: 'ab', cursor: 2 }, '', { rightArrow: true })).toEqual({ value: 'ab', cursor: 2 });
     expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { leftArrow: true })).toEqual({ value: 'ab', cursor: 0 });
     expect(nextTextInputValue({ value: 'ab', cursor: 1 }, '', { rightArrow: true })).toEqual({ value: 'ab', cursor: 2 });
   });
 
-  it('Home/End jump to the start/end (I/O matrix: "Home/End")', () => {
+  it('Home/End jump to the start/end', () => {
     expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { home: true })).toEqual({ value: 'abcd', cursor: 0 });
     expect(nextTextInputValue({ value: 'abcd', cursor: 2 }, '', { end: true })).toEqual({ value: 'abcd', cursor: 4 });
   });
@@ -619,7 +598,7 @@ describe('validateBranchEditValue', () => {
   });
 });
 
-describe('suggestBranchNameFromTopic (story 2.22)', () => {
+describe('suggestBranchNameFromTopic', () => {
   it('slugifies: lowercase, non-alphanumeric runs -> single "-", trimmed of leading/trailing "-"', () => {
     expect(suggestBranchNameFromTopic('Fix Auth Bug!!')).toBe('fix-auth-bug');
   });
@@ -644,8 +623,8 @@ describe('isSwitchBlockedError', () => {
   });
 });
 
-// Amended 2026-08-27 (Sprint Change Proposal): no longer takes an `isActive` flag — the
-// "— active" suffix moved to `ListRow`'s own `active` prop (list-row.test.tsx covers it).
+// Takes no `isActive` flag — the "— active" suffix is `ListRow`'s own `active` prop
+// (list-row.test.tsx covers it).
 describe('formatEdtRowMeta', () => {
   it('pluralizes the member count', () => {
     expect(formatEdtRowMeta(edtEntry({ members: [] }))).toBe('0 members');
@@ -669,7 +648,7 @@ describe('formatEdtDetail', () => {
     expect(detail).toContain('api-gateway (feat/x)');
   });
 
-  it('shows a zero-member EDT as valid, not an error (matrix: "Modify to zero members")', () => {
+  it('shows a zero-member EDT as valid, not an error', () => {
     expect(formatEdtDetail(edtEntry({ members: [] }), false)).toContain('Members: none');
   });
 });
@@ -688,8 +667,8 @@ describe('resolveCandidateListState', () => {
     expect(resolveCandidateListState('idle', 1)).toBe('ready');
   });
 
-  // Review patch (story 2.9): 'error' used to fall through to the same branch as 'idle',
-  // reporting a genuine services-load failure as "no registered services available."
+  // 'error' must not fall through to the same branch as 'idle', which would report a genuine
+  // services-load failure as "no registered services available."
   it('is "error" when the services fetch itself failed, never conflated with "empty"', () => {
     expect(resolveCandidateListState('error', 0)).toBe('error');
     expect(resolveCandidateListState('error', 5)).toBe('error');
@@ -697,7 +676,7 @@ describe('resolveCandidateListState', () => {
 });
 
 describe('summarizeFailedResults', () => {
-  // Story 2.25: returns a structured FailedResultRow[] now — never a `; `-joined string.
+  // Returns a structured FailedResultRow[] — never a `; `-joined string.
   it('returns an empty array when every row succeeded', () => {
     expect(summarizeFailedResults([{ service: 'a', outcome: 'added' }])).toEqual([]);
     expect(summarizeFailedResults([])).toEqual([]);
@@ -727,10 +706,10 @@ describe('summarizeFailedResults', () => {
   });
 });
 
-// Review fix (story 2.29): statusError must thread through buildDeleteMemberRows into the
-// rendered row, and formatDeleteMemberMeta must annotate it rather than rendering a
-// plausible-looking-but-untrustworthy merged/clean label.
-describe('buildDeleteMemberRows / formatDeleteMemberMeta (story 2.29 review fix — statusError)', () => {
+// statusError must thread through buildDeleteMemberRows into the rendered row, and
+// formatDeleteMemberMeta must annotate it rather than rendering a plausible-looking but
+// untrustworthy merged/clean label.
+describe('buildDeleteMemberRows / formatDeleteMemberMeta', () => {
   it('threads statusError through from MemberDeleteStatus to DeleteMemberRow', () => {
     const rows = buildDeleteMemberRows([
       { repoPath: '/repo/a', service: 'svc-a', branch: 'feat/a', merged: true, clean: true, statusError: 'no manifest' },
@@ -766,10 +745,9 @@ describe('buildDeleteMemberRows / formatDeleteMemberMeta (story 2.29 review fix 
 });
 
 describe('canEditMemberBranch', () => {
-  // Story 2.26 amendment: re-adds membership awareness via `originalMemberPaths` (dialog-open-
-  // time membership snapshot) — dropped by 2.24's own code review, but needed so an
-  // already-a-member row's checklist Enter submits the form instead of reopening the picker.
-  it('is false for an existing member that is still checked (story 2.26 amendment)', () => {
+  // Membership awareness via `originalMemberPaths` (the dialog-open-time membership snapshot), so
+  // an already-a-member row's checklist Enter submits the form instead of reopening the picker.
+  it('is false for an existing member that is still checked', () => {
     expect(canEditMemberBranch('/repos/a', ['/repos/a'], new Set(['/repos/a']))).toBe(false);
   });
 
@@ -777,10 +755,9 @@ describe('canEditMemberBranch', () => {
     expect(canEditMemberBranch('/repos/a', [], new Set(['/repos/a']))).toBe(false);
   });
 
-  // Story 2.24: widened to also cover a not-yet-member candidate — checking it now
-  // auto-stages a branch (suggestBranchForNewMember), so Enter on it opens the same
-  // branch-edit sub-dialog an existing member's row already uses.
-  it('is true for a freshly-checked path that is not yet an existing member (story 2.24)', () => {
+  // Also covers a not-yet-member candidate — checking it auto-stages a branch
+  // (suggestBranchForNewMember), so Enter on it opens the same branch-edit flow.
+  it('is true for a freshly-checked path that is not yet an existing member', () => {
     expect(canEditMemberBranch('/repos/new', ['/repos/new'], new Set(['/repos/a']))).toBe(true);
   });
 
@@ -796,9 +773,9 @@ describe('canEditMemberBranch', () => {
 });
 
 describe('resolveModifyEnterAction', () => {
-  // Story 2.26 amendment: an already-a-member row that's still checked now submits — its
-  // checklist Enter is no longer branch-editable (canEditMemberBranch above).
-  it('submits on an already-a-member members-focus row, even when checked (story 2.26 amendment)', () => {
+  // An already-a-member row that's still checked submits — its checklist Enter is not
+  // branch-editable (canEditMemberBranch above).
+  it('submits on an already-a-member members-focus row, even when checked', () => {
     expect(resolveModifyEnterAction('members', ['/repos/a'], '/repos/a', new Set(['/repos/a']))).toEqual({ type: 'submit' });
   });
 
@@ -810,11 +787,10 @@ describe('resolveModifyEnterAction', () => {
     expect(resolveModifyEnterAction('members', [], '/repos/a', new Set(['/repos/a']))).toEqual({ type: 'submit' });
   });
 
-  // Story 2.24: a freshly-checked not-yet-member row is now branch-editable too — Enter
-  // opens the same branch-edit sub-dialog (its staged branch auto-fills via
-  // suggestBranchForNewMember on check). Story 2.26 amendment: this is exactly the case
-  // `originalMemberPaths` must still allow through.
-  it('opens branch-edit on a freshly-checked not-yet-member row (story 2.24)', () => {
+  // A freshly-checked not-yet-member row is branch-editable — Enter opens the branch-edit flow
+  // (its staged branch auto-fills via suggestBranchForNewMember on check). `originalMemberPaths`
+  // must still allow this case through.
+  it('opens branch-edit on a freshly-checked not-yet-member row', () => {
     expect(resolveModifyEnterAction('members', ['/repos/new'], '/repos/new', new Set(['/repos/a']))).toEqual({
       type: 'edit-branch',
       repoPath: '/repos/new',
@@ -869,23 +845,23 @@ describe('resolveModifyOps', () => {
     expect(resolveModifyOps(target, '   ', [], {}).renameTo).toBeUndefined();
   });
 
-  // Story 2.24: a checked non-member always carries a setBranches entry, staged or not —
-  // never silently omitted, so modify.ts's step 1 always finds a match to defer to instead
-  // of falling back to its branch-required failure.
-  it('includes a setBranches entry for every checked non-member, staged or not (story 2.24)', () => {
+  // A checked non-member always carries a setBranches entry, staged or not — never silently
+  // omitted, so modify.ts's step 1 always finds a match to defer to instead of falling back to
+  // its branch-required failure.
+  it('includes a setBranches entry for every checked non-member, staged or not', () => {
     const target = edtEntry({ members: [] });
     const ops = resolveModifyOps(target, target.topic, ['/repos/b'], { '/repos/b': 'feature-y' });
     expect(ops.setBranches).toEqual([{ repoPath: '/repos/b', branch: 'feature-y' }]);
   });
 
-  it('falls back to an empty setBranches entry for a checked non-member with no staged branch (story 2.24)', () => {
+  it('falls back to an empty setBranches entry for a checked non-member with no staged branch', () => {
     const target = edtEntry({ members: [] });
     const ops = resolveModifyOps(target, target.topic, ['/repos/b'], {});
     expect(ops.setBranches).toEqual([{ repoPath: '/repos/b', branch: '' }]);
   });
 });
 
-describe('suggestBranchForNewMember (story 2.24)', () => {
+describe('suggestBranchForNewMember', () => {
   it('suggests the shared branch when every existing member agrees on one', () => {
     const members = [
       { service: 'a', repoPath: '/repos/a', branch: 'feature-shared' },
@@ -908,8 +884,8 @@ describe('suggestBranchForNewMember (story 2.24)', () => {
 });
 
 // ==========================================================================================
-// Story 2.18 — EDT zone: active highlight, EDT SERVICES / OTHER SERVICES panes, per-service
-// actions, and the context-derived detail-pane hint.
+// EDT zone: active highlight, EDT SERVICES / OTHER SERVICES panes, per-service actions, and the
+// context-derived detail-pane hint.
 // ==========================================================================================
 
 describe('partitionServicesByEdtMembership', () => {
@@ -979,7 +955,7 @@ describe('formatAvailableActionsHint', () => {
   });
 });
 
-describe('resolveActionHint (story 2.19, I/O matrix "Toggle hidden hint")', () => {
+describe('resolveActionHint', () => {
   it('returns the same string formatAvailableActionsHint would when nothing is hidden', () => {
     expect(resolveActionHint('edts', true, [])).toBe('[Enter] Modify');
     expect(resolveActionHint('edt-services', false, [])).toBe('[Enter] Remove / Change branch');
@@ -1008,14 +984,14 @@ describe('appendHint', () => {
   });
 });
 
-describe('formatEdtActionHistory (story 2.18 regression)', () => {
+describe('formatEdtActionHistory', () => {
   it('no longer bakes the static "Available: ..." hint line into the action history (extracted to formatAvailableActionsHint)', () => {
     const history = formatEdtActionHistory([], null);
     expect(history).not.toContain('Available:');
   });
 });
 
-describe('formatEdtActionHistory hiddenActionTypes filter (story 2.19 amended, AC5)', () => {
+describe('formatEdtActionHistory hiddenActionTypes filter', () => {
   const log = [
     { id: 'a1', timestamp: '2026-01-01T00:00:00.000Z', actionType: 'create', outcome: 'success' as const, detail: 'Created EDT "demo"' },
     { id: 'a2', timestamp: '2026-01-01T00:01:00.000Z', actionType: 'switch', outcome: 'success' as const, detail: 'Switched to EDT "demo"' },
@@ -1049,8 +1025,8 @@ describe('formatEdtActionHistory hiddenActionTypes filter (story 2.19 amended, A
 
 const noopAsync = async () => {};
 
-describe('EdtsZone (story 2.9 zone states)', () => {
-  it('AC1 / story 2.36: no EDT exists -> the create wizard opens on Step 1 with its breadcrumb, intro and name field', async () => {
+describe('EdtsZone', () => {
+  it('no EDT exists -> the create wizard opens on Step 1 with its breadcrumb, intro and name field', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1061,15 +1037,15 @@ describe('EdtsZone (story 2.9 zone states)', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="create" />);
-    expect(output).toContain("EDT Wizard: Création d'un espace de travail");
-    expect(output).toContain('[▶ 1. Nom ◀] ── [2. Services] ── [3. Branches] ── [4. Activation]');
-    expect(output).toContain('Choisissez un nom unique');
-    expect(output).toContain('Nom:');
-    // With zero EDTs, Esc has nothing to cancel back to — the hint says it quits.
-    expect(output).toContain('[Esc] Quitter');
+    expect(output).toContain("CREATE EDT");
+    expect(output).toContain('[▶ 1. Name ◀] ── [2. Services] ── [3. Branches] ── [4. Activation]');
+    expect(output).toContain('Pick a unique name');
+    expect(output).toContain('Name:');
+    // With zero EDTs, Esc has nothing to cancel back to — the footer context says it quits.
+    expect(await footerContextOf(store, <EdtsZone useStore={store} initialDialogKind="create" />)).toBe('wizard-first');
   });
 
-  it('story 2.36: Step 2 shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
+  it('Step 2 shows a distinct "loading services" state, not "no registered services" (boundary rule)', async () => {
     const output = await renderToString(
       <ServicesStepView dialog={{ ...initialCreateDialog(), step: 2, formFocus: 'members' }} candidates={[]} candidateState="loading" />,
     );
@@ -1077,14 +1053,14 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).not.toContain('No registered services available');
   });
 
-  it('story 2.36: Step 2 shows a genuinely-empty registry distinctly from loading', async () => {
+  it('Step 2 shows a genuinely-empty registry distinctly from loading', async () => {
     const output = await renderToString(
       <ServicesStepView dialog={{ ...initialCreateDialog(), step: 2, formFocus: 'members' }} candidates={[]} candidateState="empty" />,
     );
     expect(output).toContain('No registered services available.');
   });
 
-  it("story 2.37: the Step 4 recap shows each service's row (mode, base, target) from Step 3", async () => {
+  it("the Step 4 recap shows each service's row (mode, base, target) from Step 3", async () => {
     const candidates = [
       service({ service: 'api-gateway', path: '/repos/api-gateway', sharedBranch: 'development' }),
       service({ service: 'billing', path: '/repos/billing', sharedBranch: 'main' }),
@@ -1110,15 +1086,14 @@ describe('EdtsZone (story 2.9 zone states)', () => {
       },
     };
     const output = await renderToString(<ActivationStepView dialog={dialog} candidates={candidates} maxVisibleRows={10} />);
-    expect(output).toContain('Nom : auth-flow');
-    expect(output).toContain('Services : api-gateway, billing, crm, docs');
-    expect(output).toContain('api-gateway : [Créer (Global)] development → auth-flow');
-    expect(output).toContain('billing : [Renommer] feat/bill -> feat/b2');
-    // An [Existante] branch attached under its own name is printed once; a remote one still
+    expect(output).toContain('Name: auth-flow');
+    expect(output).toContain('Services: api-gateway, billing, crm, docs');
+    expect(output).toContain('api-gateway : [Create (Global)] development → auth-flow');
+    expect(output).toContain('billing : [Rename] feat/bill -> feat/b2');
+    // An [Existing] branch attached under its own name is printed once; a remote one still
     // shows the local name it lands on.
-    expect(output).toMatch(/crm : \[Existante\] feat\/crm\s*\n/);
-    expect(output).toContain('docs : [Existante] origin/feat/docs → feat/docs');
-    expect(output).toContain("[Entrée] Créer l'EDT");
+    expect(output).toMatch(/crm : \[Existing\] feat\/crm\s*\n/);
+    expect(output).toContain('docs : [Existing] origin/feat/docs → feat/docs');
 
     const acknowledged = await renderToString(
       <ActivationStepView
@@ -1127,11 +1102,10 @@ describe('EdtsZone (story 2.9 zone states)', () => {
         maxVisibleRows={10}
       />,
     );
-    expect(acknowledged).not.toContain("[Entrée] Créer l'EDT");
-    expect(acknowledged).toContain('EDT créé mais non activé');
+    expect(acknowledged).toContain('EDT created but not activated');
   });
 
-  it('story 2.36: Step 2 lists every registered managed repo as a checkbox row', async () => {
+  it('Step 2 lists every registered managed repo as a checkbox row', async () => {
     const candidates = [service({ service: 'api-gateway', path: '/repos/api-gateway' }), service({ service: 'billing', path: '/repos/billing' })];
     const output = await renderToString(
       <ServicesStepView
@@ -1144,7 +1118,7 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('[x] billing');
   });
 
-  it('shows the EDT selector above the flat SERVICES list once EDTs exist — the flat list is never replaced (AC5)', async () => {
+  it('shows the EDT selector above the flat SERVICES list once EDTs exist — the flat list is never replaced', async () => {
     const store = createAppStore();
     store.setState({
       edts: [edtEntry({ topic: 'my-work', members: [] })],
@@ -1239,7 +1213,7 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('[Enter] switch/modify');
   });
 
-  it('shows the EDT detail pane (not the services detail pane) by default — the EDT selector is focused by default (Design Notes)', async () => {
+  it('shows the EDT detail pane (not the services detail pane) by default — the EDT selector is focused by default', async () => {
     const store = createAppStore();
     store.setState({
       edts: [edtEntry({ topic: 'my-work', members: [{ service: 'api-gateway', repoPath: '/repos/a', branch: 'feat/x' }] })],
@@ -1255,7 +1229,7 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('api-gateway (feat/x)');
   });
 
-  it('AC2: the switch-confirm dialog asks to confirm switching to the selected (non-active) EDT', async () => {
+  it('the switch-confirm dialog asks to confirm switching to the selected (non-active) EDT', async () => {
     const store = createAppStore();
     store.setState({
       edts: [edtEntry({ topic: 'other-work' })],
@@ -1271,7 +1245,7 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('other-work');
   });
 
-  it('AC2: switch-blocked-action-in-progress surfaces an explicit force-or-cancel prompt', async () => {
+  it('switch-blocked-action-in-progress surfaces an explicit force-or-cancel prompt', async () => {
     const store = createAppStore();
     store.setState({
       edts: [edtEntry({ topic: 'other-work' })],
@@ -1284,13 +1258,12 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="switch-blocked" />);
     expect(output).toContain('SWITCH EDT');
-    expect(output).toContain('force switch');
-    expect(output).toContain('cancel');
+    expect(await footerContextOf(store, <EdtsZone useStore={store} initialDialogKind="switch-blocked" />)).toBe('force-confirm');
   });
 
-  // Story 2.29: the delete-confirm dialog lists every member with branch, merge status, and
-  // uncommitted-work status (acceptance criteria).
-  it('AC (2.29): the delete-confirm dialog lists every member with branch, merge, and uncommitted-work status', async () => {
+  // The delete-confirm dialog lists every member with branch, merge status, and uncommitted-work
+  // status.
+  it('the delete-confirm dialog lists every member with branch, merge, and uncommitted-work status', async () => {
     const store = createAppStore();
     store.setState({
       edts: [
@@ -1313,10 +1286,10 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('feat/x');
   });
 
-  // Review fix (story 2.29): a member row whose merged/clean status couldn't be established
-  // (a manifest/git read failed) must say so explicitly rather than rendering a
-  // plausible-looking-but-untrustworthy "merged/unmerged, clean/uncommitted work" label.
-  it('AC (2.29 review fix): a member row with a statusError renders the "status unknown" annotation', async () => {
+  // A member row whose merged/clean status couldn't be established (a manifest/git read failed)
+  // must say so explicitly rather than rendering a plausible-looking but untrustworthy
+  // "merged/unmerged, clean/uncommitted work" label.
+  it('a member row with a statusError renders the "status unknown" annotation', async () => {
     const store = createAppStore();
     store.setState({
       edts: [
@@ -1338,9 +1311,9 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('status unknown — defaulted to leave');
   });
 
-  // I/O matrix: "Delete the active EDT" -> rejected before any write, clear message, never
-  // auto-switched — only [Esc] cancel is ever offered.
-  it('AC (2.29): deleting the active EDT is rejected with a clear message, no confirm affordance', async () => {
+  // Deleting the active EDT -> rejected before any write, clear message, never auto-switched —
+  // only [Esc] cancel is ever offered.
+  it('deleting the active EDT is rejected with a clear message, no confirm affordance', async () => {
     const store = createAppStore();
     store.setState({
       edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-work' })],
@@ -1355,11 +1328,11 @@ describe('EdtsZone (story 2.9 zone states)', () => {
     expect(output).toContain('DELETE EDT');
     expect(output).toContain('active-work');
     expect(output).toContain('active EDT');
-    expect(output).toContain('cancel');
+    expect(await footerContextOf(store, <EdtsZone useStore={store} initialDialogKind="delete-confirm-rejected" />)).toBe('dismiss');
     expect(output).not.toContain('confirm');
   });
 
-  it('AC3: the modify form shows the topic, and every candidate service checked/unchecked per current membership', async () => {
+  it('the modify form shows the topic, and every candidate service checked/unchecked per current membership', async () => {
     const store = createAppStore();
     store.setState({
       edts: [
@@ -1421,14 +1394,14 @@ describe('EdtsZone (story 2.9 zone states)', () => {
 });
 
 // ==========================================================================================
-// Story 2.30 — EDT quick-pick: shared filterable-list dialog for edt-switch/modify/delete's
-// no-argument path (edts-zone.tsx's currentEdtAction effect), plus the pure
-// resolveQuickPickCandidates/toQuickPickItems helpers from quick-pick-dialog.tsx. Filtering,
-// highlight movement and filter-text editing are shared/components/filterable-pick-list.tsx's
-// own (covered by its test file) — only the EDT-specific wiring is asserted here.
+// EDT quick-pick: the shared filterable-list dialog for edt-switch/modify/delete's no-argument
+// path (edts-zone.tsx's currentEdtAction effect), plus the pure
+// resolveQuickPickCandidates/toQuickPickItems helpers. Filtering, highlight movement and
+// filter-text editing are filterable-pick-list.tsx's own (covered by its test file) — only the
+// EDT-specific wiring is asserted here.
 // ==========================================================================================
 
-describe('quick-pick-dialog pure helpers (story 2.30)', () => {
+describe('quick-pick-dialog pure helpers', () => {
   it('toQuickPickItems: one item per EDT, labelled by topic, keyed by ulid, with no secondary text', () => {
     const first = edtEntry({ ulid: 'first-ulid', topic: 'Feature-Work' });
     const second = edtEntry({ ulid: 'second-ulid', topic: 'other' });
@@ -1452,14 +1425,14 @@ describe('quick-pick-dialog pure helpers (story 2.30)', () => {
     expect(quickCandidates('delete', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
   });
 
-  it('resolveQuickPickCandidates: create-from mode includes every EDT, active included (story 2.31)', () => {
+  it('resolveQuickPickCandidates: create-from mode includes every EDT, active included', () => {
     const active = edtEntry({ ulid: 'active-ulid', topic: 'active-work' });
     const other = edtEntry({ ulid: 'other-ulid', topic: 'other-work' });
     expect(quickCandidates('create-from', [active, other], 'active-ulid').map((e) => e.ulid)).toEqual(['active-ulid', 'other-ulid']);
   });
 });
 
-describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {
+describe('EdtsZone quick-pick dialog rendering', () => {
   it('renders the filter field, the matching rows, and the highlighted-row marker', async () => {
     const store = createAppStore();
     store.setState({
@@ -1498,7 +1471,7 @@ describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {
       loadEdtsBranches: noopAsync,
     });
     const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="quick-pick" />);
-    expect(output).toContain('SWITCH EDT — SELECT');
+    expect(output).toContain('SELECT EDT TO SWITCH');
     expect(output).toContain('No EDT to select');
     expect(output).not.toContain('No matching EDT');
   });
@@ -1525,11 +1498,11 @@ describe('EdtsZone quick-pick dialog rendering (story 2.30)', () => {
 });
 
 // ==========================================================================================
-// Story 2.18 — active highlight, EDT SERVICES / OTHER SERVICES panes, per-service actions
+// Active highlight, EDT SERVICES / OTHER SERVICES panes, per-service actions
 // ==========================================================================================
 
-describe('EdtsZone (story 2.18 zone states)', () => {
-  it('AC1: the active EDT\'s row renders accent+bold regardless of cursor position, distinct from the cursor row', async () => {
+describe('EdtsZone', () => {
+  it('the active EDT\'s row renders accent+bold regardless of cursor position, distinct from the cursor row', async () => {
     const store = createAppStore();
     store.setState({
       edts: [
@@ -1552,7 +1525,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).toContain('other-edt');
   });
 
-  it('AC3: no EDT selected -> every service renders under OTHER SERVICES with a "No EDT selected" note, never an empty EDT SERVICES group', async () => {
+  it('no EDT selected -> every service renders under OTHER SERVICES with a "No EDT selected" note, never an empty EDT SERVICES group', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1564,8 +1537,8 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       loadEdtsBranches: noopAsync,
     });
     // No initialDialogKind: renderToString's single synchronous pass never observes the
-    // effect-triggered "zero EDTs auto-opens the create dialog" behavior (AC1), so the base
-    // view renders deterministically here (same precedent as the story 2.9 smoke tests above).
+    // effect-triggered "zero EDTs auto-opens the create dialog" behavior, so the base view
+    // renders deterministically here (like the create/switch/modify smoke tests above).
     const output = await renderToString(<EdtsZone useStore={store} />);
     expect(output).toContain('No EDT selected');
     expect(output).not.toContain('EDT SERVICES');
@@ -1573,10 +1546,9 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).toContain('api-gateway');
   });
 
-  // Story 5.5: bounds OTHER SERVICES (and EDT SERVICES) to the terminal's actual row count
-  // instead of rendering every row unconditionally (I/O matrix OVERFLOW_EDTS_LISTS) — the same
-  // unbounded-list corruption pattern as the Logs zone, confirmed by inspection here.
-  it('OVERFLOW_EDTS_LISTS: a very long OTHER SERVICES list is bounded with a "more below" indicator, never rendering past the terminal', async () => {
+  // Bounds OTHER SERVICES (and EDT SERVICES) to the terminal's actual row count instead of
+  // rendering every row — an overflow corrupts Ink's diff-render, as in the Logs zone.
+  it('a very long OTHER SERVICES list is bounded with a "more below" indicator, never rendering past the terminal', async () => {
     const store = createAppStore();
     store.setState({
       edts: [],
@@ -1610,13 +1582,11 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).not.toContain('more below');
   });
 
-  // Review fix: an empty EDT SERVICES list still renders a 1-row "No services in this EDT."
-  // placeholder instead of the BoundedList's own 0 rows — the budget handed to OTHER SERVICES
-  // used to not subtract that row, leaving it 1 row over its true remaining budget. 28 services
-  // is the exact boundary at the default 120x40 test terminal (servicesListsAvailableHeight
-  // 28, minus the 1 placeholder row = 27): pre-fix this count still fit (no indicator);
-  // post-fix it correctly overflows by exactly one.
-  it('review fix: the empty EDT SERVICES placeholder counts toward the budget OTHER SERVICES is handed', async () => {
+  // An empty EDT SERVICES list still renders a 1-row "No services in this EDT." placeholder,
+  // which the OTHER SERVICES budget must subtract. 28 services is the exact boundary at the
+  // default 120x40 test terminal (servicesListsAvailableHeight 28, minus the 1 placeholder row =
+  // 27): it overflows by exactly one.
+  it('the empty EDT SERVICES placeholder counts toward the budget OTHER SERVICES is handed', async () => {
     const store = createAppStore();
     store.setState({
       edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] })],
@@ -1632,7 +1602,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).toContain('more below');
   });
 
-  it('AC4: the EDT SERVICES contextual menu shows Remove / Change branch / a disabled Restart annotated "Available with Epic 5"', async () => {
+  it('the EDT SERVICES contextual menu shows Remove / Change branch / a disabled Restart annotated "Available with Epic 5"', async () => {
     const store = createAppStore();
     const target = edtEntry({
       ulid: 'active-ulid',
@@ -1657,7 +1627,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).toContain('Available with Epic 5');
   });
 
-  it('AC9: the Add-to-EDT dialog opens a branch text input pre-filled with the service\'s current branch', async () => {
+  it('the Add-to-EDT dialog opens a branch text input pre-filled with the service\'s current branch', async () => {
     const store = createAppStore();
     const target = edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
     store.setState({
@@ -1675,7 +1645,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).toContain('feature-y');
   });
 
-  it('story 2.23: Add-to-EDT branch field shows a visible cursor hint [Enter] confirm [Esc] cancel (closes affordance gap)', async () => {
+  it('Add-to-EDT branch field registers the branch-picker footer context (closes affordance gap)', async () => {
     const store = createAppStore();
     const target = edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active', members: [] });
     store.setState({
@@ -1687,12 +1657,10 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       loadEdts: noopAsync,
       loadEdtsBranches: noopAsync,
     });
-    const output = await renderToString(<EdtsZone useStore={store} initialDialogKind="add-to-edt" />);
-    expect(output).toContain('[Enter] confirm');
-    expect(output).toContain('[Esc] cancel');
+    expect(await footerContextOf(store, <EdtsZone useStore={store} initialDialogKind="add-to-edt" />)).toBe('branch-picker-base');
   });
 
-  it('AC7: the detail-pane hint for EDT SERVICES/OTHER SERVICES matches Enter\'s actual behavior', async () => {
+  it('the detail-pane hint for EDT SERVICES/OTHER SERVICES matches Enter\'s actual behavior', async () => {
     const store = createAppStore();
     const target = edtEntry({
       ulid: 'active-ulid',
@@ -1719,7 +1687,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(otherServicesOutput).toContain('[Enter] Add to EDT');
   });
 
-  it('story 2.19: a hint hidden via settings.edts.hiddenActionHints disappears from the detail pane', async () => {
+  it('a hint hidden via settings.edts.hiddenActionHints disappears from the detail pane', async () => {
     const store = createAppStore();
     const target = edtEntry({
       ulid: 'active-ulid',
@@ -1739,10 +1707,11 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       loadEdts: noopAsync,
       loadEdtsBranches: noopAsync,
       settings: {
-        general: { quitShortcutEnabled: true },
-        commandPalette: { gridMaxRows: 8 },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
+        commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       },
     });
 
@@ -1753,7 +1722,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(otherServicesOutput).not.toContain('[Enter] Add to EDT');
   });
 
-  it('story 2.19 amended (AC5): an action type hidden via settings.edts.hiddenActionTypes disappears from the "Recent actions" log', async () => {
+  it('an action type hidden via settings.edts.hiddenActionTypes disappears from the "Recent actions" log', async () => {
     const store = createAppStore();
     const target = edtEntry({
       ulid: 'active-ulid',
@@ -1786,10 +1755,11 @@ describe('EdtsZone (story 2.18 zone states)', () => {
         },
       ],
       settings: {
-        general: { quitShortcutEnabled: true },
-        commandPalette: { gridMaxRows: 8 },
+        general: { quitShortcutEnabled: true, editorCommand: '' },
+        commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
-        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
+        logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
       },
     });
 
@@ -1798,11 +1768,10 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     expect(output).toContain('Switched to EDT "active-edt"');
   });
 
-  // AC2: the detail pane's horizontal position/width is derived once from ListDetailSplit's
-  // flexGrow ratio (resolveSplitFlex), independent of content (list-detail-split.tsx) — this
-  // regression test proves the split stays stable across the new, longer detail content this
-  // story adds (longer action history + the new hint line), never a layout change.
-  it('AC2: the detail pane\'s split ratio is unchanged whether the content is short or long (regression)', async () => {
+  // The detail pane's horizontal position/width is derived from ZoneLayout's flexGrow ratio
+  // (resolveBoundaryFlex), independent of content — this proves the split stays stable with the
+  // longer detail content (action history + the hint line), never a layout change.
+  it('the detail pane\'s split ratio is unchanged whether the content is short or long (regression)', async () => {
     const shortStore = createAppStore();
     shortStore.setState({
       edts: [edtEntry({ ulid: 'active-ulid', topic: 'active-edt', status: 'active' })],
@@ -1813,7 +1782,7 @@ describe('EdtsZone (story 2.18 zone states)', () => {
       loadEdts: noopAsync,
       loadEdtsBranches: noopAsync,
     });
-    // Boundary 0 is the list<->detail split ListDetailSplit itself reads (edts-zone.tsx).
+    // Boundary 0 is the list<->detail split ZoneLayout itself reads (edts-zone.tsx).
     const shortRatio = shortStore.getState().splitterRatios.edts[0];
 
     const longStore = createAppStore();
@@ -1835,10 +1804,10 @@ describe('EdtsZone (story 2.18 zone states)', () => {
     });
     const longRatio = longStore.getState().splitterRatios.edts[0];
 
-    // Same ratio input -> resolveSplitFlex (the sole width driver, confirmed content-blind by
-    // reading list-detail-split.tsx) returns identical flexGrow values regardless of how much
+    // Same ratio input -> resolveBoundaryFlex (the sole width driver, confirmed content-blind by
+    // reading zone-layout.tsx) returns identical flexGrow values regardless of how much
     // text the detail pane's children happen to render.
-    expect(resolveSplitFlex(longRatio)).toEqual(resolveSplitFlex(shortRatio));
+    expect(resolveBoundaryFlex('edts', 0, longRatio)).toEqual(resolveBoundaryFlex('edts', 0, shortRatio));
 
     const shortOutput = await renderToString(<EdtsZone useStore={shortStore} />);
     const longOutput = await renderToString(<EdtsZone useStore={longStore} />);

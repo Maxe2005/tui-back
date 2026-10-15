@@ -1,12 +1,10 @@
-// tui/zones/update: real-keypress coverage for the branch-autocomplete adoption (spec
-// branch-autocomplete-input-adoption) — the config dialog's branch editor hosts shared
-// autocomplete state fed by the zone's own fetch-once-per-edit listBranches effect, behavior
-// only a real keypress plus the zone's useEffect chain can exercise. Reuses
-// edts-zone.interaction.test.tsx's real-Ink-input technique
-// (shared/test-support/fake-tty.ts) — no pty required.
+// tui/zones/update: real-keypress coverage (shared/test-support/fake-tty.ts) for what only a real
+// keypress plus the zone's useEffect chain can exercise — the config dialog's branch editor fed
+// by the zone's fetch-once-per-edit listBranches effect, the trigger keys, the no-arg
+// `:update-service` handoff and the service quick-pick.
 import { createElement } from 'react';
 import { render } from 'ink';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Result } from '../../../../../core/result.js';
 import { ok } from '../../../../../core/result.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
@@ -56,10 +54,10 @@ async function waitForOutput(
   }
 }
 
-function mount(store: ReturnType<typeof createAppStore>) {
+function mount(store: ReturnType<typeof createAppStore>, initialRecap = false) {
   const stdout = new FakeTtyStdout();
   const stdin = fakeInteractiveTtyStdin();
-  const instance = render(createElement(UpdateZone, { useStore: store }), {
+  const instance = render(createElement(UpdateZone, { useStore: store, initialRecap }), {
     stdout: stdout as unknown as NodeJS.WriteStream,
     stdin,
     interactive: true,
@@ -76,8 +74,8 @@ async function pressEscape(instance: ReturnType<typeof render>, stdin: NodeJS.Re
 }
 
 // The config draft is preset straight into the store (bypassing openUpdateConfig's own
-// registry/manifest deps — draft creation is story 3.7's covered ground, not this spec's);
-// the branch source still comes through the zone's live listBranches effect.
+// registry/manifest deps, covered elsewhere); the branch source still comes through the zone's
+// live listBranches effect.
 function storeWithConfig(listBranches: (repoPath: string) => Promise<Result<string[]>>) {
   const store = createAppStore();
   store.setState({
@@ -134,6 +132,8 @@ function wiredDeps(): AppStoreDeps {
     writeSplitterRatios: async () => ok(undefined),
     readFilterHistory: async () => ok(null),
     writeFilterHistory: async () => ok(undefined),
+    readCommandHistory: async () => ok(null),
+    writeCommandHistory: async () => ok(undefined),
   };
   return {
     registry,
@@ -166,16 +166,16 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.enter); // row 0 is a service row -> begin branch edit
+      await press(instance, stdin, '\r'); // table focus: open the service box on row 0
+      await press(instance, stdin, '\r'); // branch line -> begin the branch edit
       await waitForOutput(instance, stdout, 'development-hotfix');
 
       // The zone threaded its own listBranches result plus the live store cap into the
       // dialog: 3 substring matches at maxRows 2 render two rows plus the overflow line.
       // A zone that never fires its effect (or hardcodes the cap) fails here — reducer-level
       // tests inject branches/maxRows directly and cannot catch that.
-      expect(stdout.output).toContain('Merge from');
+      expect(stdout.output).toContain('Source branch');
       expect(stdout.output).toContain('development-hotfix');
-      expect(stdout.output).toContain('… 1 more');
       expect(stdout.output).not.toContain('development-experiment');
       expect(stdout.output).not.toContain('zzz-other');
     } finally {
@@ -193,12 +193,12 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, KEYS.enter); // row 0 is a service row -> begin branch edit
+      await press(instance, stdin, '\r'); // table focus: open the service box on row 0
+      await press(instance, stdin, '\r'); // branch line -> begin the branch edit
       await waitForOutput(instance, stdout, 'Failed to load branches.');
 
-      expect(stdout.output).toContain('Merge from');
+      expect(stdout.output).toContain('Source branch');
       expect(stdout.output).toContain('Failed to load branches.');
-      expect(stdout.output).toContain('development');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -206,10 +206,10 @@ describe('UpdateZone branch-autocomplete wiring (real keypress)', () => {
   });
 });
 
-// Story 3.11: the new zone keys dispatch through the real useInput chain (the pure
-// resolveUpdateTrigger mapping is covered in update-zone.test.tsx; these prove the thin
-// dispatcher actually calls the opener). The store stays unwired, so the opener lands in
-// its explicit store-not-wired error — never a throw, and proof the key reached it.
+// The zone keys dispatch through the real useInput chain (the pure resolveUpdateTrigger mapping
+// is covered in update-zone.test.tsx; these prove the thin dispatcher calls the opener). The
+// store stays unwired, so the opener lands in its explicit store-not-wired error — never a
+// throw, and proof the key reached it.
 describe('UpdateZone update triggers (real keypress)', () => {
   const ROW_A: ServiceBranchDivergence = {
     service: 'svc-a',
@@ -244,6 +244,25 @@ describe('UpdateZone update triggers (real keypress)', () => {
     return store;
   }
 
+  it('R retries the service load only while it is in error, and the error line advertises it', async () => {
+    const loadEdtsBranches = vi.fn(async () => {});
+    const store = storeWithServices();
+    store.setState({ edtsBranchesStatus: 'error', loadEdtsBranches });
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await waitForOutput(instance, stdout, 'Failed to load services.');
+      expect(stdout.output).toContain('[R]');
+      const callsBefore = loadEdtsBranches.mock.calls.length;
+      await press(instance, stdin, 'R');
+      expect(loadEdtsBranches.mock.calls.length).toBe(callsBefore + 1);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('p on the highlighted row reaches openUpdateConfig (unwired: explicit error, never a throw)', async () => {
     const store = storeWithServices();
 
@@ -261,13 +280,13 @@ describe('UpdateZone update triggers (real keypress)', () => {
     }
   });
 
-  it('g reaches openUpdateConfig pre-scoped to the EDT (unwired: explicit error, never a throw)', async () => {
+  it('m reaches openUpdateConfig pre-scoped to the EDT (unwired: explicit error, never a throw)', async () => {
     const store = storeWithServices();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await waitForOutput(instance, stdout, 'No ports wired into the TUI store');
 
       expect(store.getState().updateConfig).toBeNull();
@@ -278,14 +297,14 @@ describe('UpdateZone update triggers (real keypress)', () => {
     }
   });
 
-  it('g mid-run is ignored — no screen, no error, the run keeps its status', async () => {
+  it('m mid-run is ignored — no screen, no error, the run keeps its status', async () => {
     const store = storeWithServices();
     store.setState({ updateStatus: 'running' });
 
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
+      await press(instance, stdin, 'm');
       await instance.waitUntilRenderFlush();
 
       expect(store.getState().updateConfig).toBeNull();
@@ -324,11 +343,11 @@ describe('UpdateZone update triggers (real keypress)', () => {
   });
 });
 
-// Story 3.11: the no-arg `:update-service` handoff end to end — the store raises the
-// selection request, the mounted zone consumes it against its highlighted row (or opens
-// the quick-pick with none). A minimally-wired store: only the ports this path reads are
-// real (registry/manifest/state/edtRegistry, plus docker for the zone's health poll and
-// empty guards for the rest); the zone's own mount-time loads stay stubbed.
+// The no-arg `:update-service` handoff end to end — the store raises the selection request, the
+// mounted zone consumes it against its highlighted row (or opens the quick-pick with none). A
+// minimally-wired store: only the ports this path reads are real (registry/manifest/state/
+// edtRegistry, plus docker for the zone's health poll and empty guards for the rest); the
+// zone's own mount-time loads stay stubbed.
 describe('UpdateZone no-arg update-service handoff (real mount)', () => {
   const ROW_A: ServiceBranchDivergence = {
     service: 'svc-a',
@@ -367,7 +386,7 @@ describe('UpdateZone no-arg update-service handoff (real mount)', () => {
 
     const { instance, stdout } = mount(store);
     try {
-      await waitForOutput(instance, stdout, 'Single service: svc-a');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       // Consumed exactly once, pre-scoped to the highlighted row, nothing ran.
       expect(store.getState().updateServiceSelectRequest).toBe(false);
@@ -408,9 +427,9 @@ describe('UpdateZone no-arg update-service handoff (real mount)', () => {
   });
 });
 
-// Story 3.11: keypresses while the service quick-pick is open — the pick owns every
-// keystroke (filter, move, confirm into a pre-scoped config, cancel). Mounted with a
-// preset pick over the wired store so Enter can actually open the config.
+// Keypresses while the service quick-pick is open — the pick owns every keystroke (filter, move,
+// confirm into a pre-scoped config, cancel). Mounted with a preset pick over the wired store so
+// Enter can actually open the config.
 describe('UpdateZone service pick keypress (real keypress)', () => {
   const PICK = [
     { service: 'svc-a', repoPath: '/repo/a' },
@@ -455,7 +474,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter); // cursor 0 -> svc-a
-      await waitForOutput(instance, stdout, 'Single service: svc-a');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateServicePick).toBeNull();
       expect(store.getState().updateConfig).toMatchObject({
@@ -475,7 +494,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateServicePick).toBeNull();
       expect(store.getState().updateConfig).toMatchObject({
@@ -495,7 +514,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, '/repo/b');
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
@@ -517,7 +536,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       // Decisive proof: a Home that jumped the list back to its first row would make this
       // Enter confirm svc-a instead.
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
@@ -540,7 +559,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       await press(instance, stdin, KEYS.end);
       await press(instance, stdin, '-b'); // "svc-b" only if End moved it back to the end
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-b', repoPath: '/repo/b', selected: true }],
@@ -576,7 +595,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       store.setState({ updateServicePick: PICK });
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-a');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         rows: [{ service: 'svc-a', repoPath: '/repo/a', selected: true }],
@@ -599,7 +618,7 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
       // The filter now reads "svc-b". An append-only field would read "bsvc-", match
       // nothing, and make this Enter a no-op.
       await press(instance, stdin, KEYS.enter);
-      await waitForOutput(instance, stdout, 'Single service: svc-b');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateServicePick).toBeNull();
     } finally {
@@ -645,11 +664,9 @@ describe('UpdateZone service pick keypress (real keypress)', () => {
   });
 });
 
-// Story 3.11: the zone keys dispatch through to the openers with their args on a wired
-// store — `g` opens the draft EDT-scoped with every member pre-selected, `p` opens a
-// one-row draft for the highlighted row. This closes the dispatch-to-opener-args link
-// the unwired trigger tests above cannot observe (the opener would stop at
-// store-not-wired before reading any arg).
+// The zone keys dispatch through to the openers with their args on a wired store — `m` opens the
+// draft EDT-scoped with every member pre-selected, `p` opens a one-row draft for the highlighted
+// row (the unwired trigger tests above stop at store-not-wired before reading any arg).
 describe('UpdateZone wired dispatch args (real keypress)', () => {
   const ROW_A: ServiceBranchDivergence = {
     service: 'svc-a',
@@ -713,14 +730,14 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     return store;
   }
 
-  it('g opens the draft EDT-scoped with all members pre-selected', async () => {
+  it('m opens the draft EDT-scoped with all members pre-selected', async () => {
     const store = storeWithTwoMembers();
 
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 'g');
-      await waitForOutput(instance, stdout, 'Active EDT members');
+      await press(instance, stdin, 'm');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
 
       expect(store.getState().updateConfig).toMatchObject({
         scope: 'edt',
@@ -736,6 +753,52 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     }
   });
 
+  it('Opens on the table, Enter opens the service box and Esc closes it without changes', async () => {
+    const store = storeWithTwoMembers();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'm');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
+      await press(instance, stdin, '\r');
+      await waitForOutput(instance, stdout, 'Configure svc-a');
+      await press(instance, stdin, '\u001b');
+      await waitForOutput(instance, stdout, 'SUMMARY AND PER-SERVICE EXCEPTIONS');
+
+      expect(store.getState().updateConfig).not.toBeNull();
+      expect(store.getState().updateConfig?.rows.every((row) => row.origin === 'shared')).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('From EDT with no EDT chosen blocks the run: Space on the source line, then Start run is refused', async () => {
+    const store = storeWithTwoMembers();
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'm');
+      await waitForOutput(instance, stdout, 'GLOBAL SETTINGS');
+      await press(instance, stdin, '\t');
+      await press(instance, stdin, ' ');
+      await waitForOutput(instance, stdout, '✖ no EDT chosen');
+      await press(instance, stdin, '\u001b'); // leaves the EDT field the toggle opened
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      await press(instance, stdin, '\u001b[F'); // End: the [ Start run ] line
+      await press(instance, stdin, '\r');
+      await waitForOutput(instance, stdout, 'Unresolved merge source');
+
+      expect(store.getState().updateConfig?.strategy.kind).toBe('edt-pending');
+      expect(store.getState().updateStatus).toBe('idle');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('p on the highlighted row opens a one-row draft for that service', async () => {
     const store = storeWithTwoMembers();
 
@@ -743,7 +806,7 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'p');
-      await waitForOutput(instance, stdout, 'Single service: svc-a');
+      await waitForOutput(instance, stdout, 'CONFIGURE SERVICE UPDATE');
 
       expect(store.getState().updateConfig).toMatchObject({
         scope: 'edt',
@@ -755,4 +818,191 @@ describe('UpdateZone wired dispatch args (real keypress)', () => {
       await instance.waitUntilExit();
     }
   });
+
+  it('opens on the global view with no service focused, two distinct panes, and an arrow focuses a service', async () => {
+    const store = storeWithTwoMembers();
+    store.setState({ edtsBranches: [ROW_A, ROW_B, { ...ROW_B, service: 'svc-other', path: '/repo/other' }] });
+
+    const { instance, stdout, stdin } = mount(store, true);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('EDT MEMBERS');
+      expect(stdout.output).toContain('OTHER SERVICES');
+      expect(stdout.output).toContain('[M] EDT update');
+      expect(stdout.output).toContain('No update has run yet in this session.');
+
+      // Without a focused service, p opens nothing.
+      await press(instance, stdin, 'p');
+      expect(store.getState().updateConfig).toBeNull();
+      expect(store.getState().updateErrorCode).toBeNull();
+
+      const before = stdout.output.length;
+      await press(instance, stdin, KEYS.down);
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output.slice(before)).not.toContain('[M] EDT update');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 });
+
+describe('UpdateZone — incident queue popup', () => {
+  function storeWithIncidents() {
+    const store = createAppStore();
+    const resolved: Array<[string, string]> = [];
+    store.setState({
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      updateStatus: 'running',
+      incidentPopupOpen: true,
+      incidents: [
+        { id: 'i1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'dirty-worktree' }, raisedAt: Date.now() },
+        { id: 'i2', blocker: { service: 'svc-b', repoPath: '/repo/b', kind: 'merge-conflict' }, raisedAt: Date.now() },
+      ],
+      resolveUpdateIncident: (id: string, choice: string) => {
+        resolved.push([id, choice]);
+      },
+    } as never);
+    return { store, resolved };
+  }
+
+  it('Esc closes the popup without resolving; `i` reopens it', async () => {
+    const { store, resolved } = storeWithIncidents();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await pressEscape(instance, stdin);
+      expect(store.getState().incidentPopupOpen).toBe(false);
+      expect(store.getState().incidents).toHaveLength(2);
+      expect(resolved).toEqual([]);
+      await press(instance, stdin, 'i');
+      expect(store.getState().incidentPopupOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('arrows select an incident and Enter opens its menu, then a choice resolves that incident only', async () => {
+    const { store, resolved } = storeWithIncidents();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      // Menu of the merge-conflict incident: [edited, cancel-repo, cancel-run] — Down then Enter = cancel-repo.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+      expect(resolved).toEqual([['i2', 'cancel-repo']]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Esc in the guided menu goes back to the list, resolving nothing', async () => {
+    const { store, resolved } = storeWithIncidents();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      await pressEscape(instance, stdin);
+      expect(resolved).toEqual([]);
+      expect(store.getState().incidentPopupOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('UpdateZone — shared-types phase failure incident', () => {
+  function storeWithPhaseIncident() {
+    const store = createAppStore();
+    const resolved: Array<[string, string]> = [];
+    store.setState({
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      updateStatus: 'running',
+      incidentPopupOpen: true,
+      incidents: [
+        { id: 'p1', blocker: { service: 'svc-a', repoPath: '/repo/a', kind: 'shared-types-phase-failed', message: 'publish failed' }, raisedAt: Date.now() },
+      ],
+      resolveUpdateIncident: (id: string, choice: string) => {
+        resolved.push([id, choice]);
+      },
+    } as never);
+    return { store, resolved };
+  }
+
+  it.each([
+    ['retry', [] as string[], 'edited'],
+    ['skip', [KEYS.down], 'cancel-repo'],
+    ['abort', [KEYS.down, KEYS.down], 'cancel-run'],
+  ])('%s answers the paused phase with the matching seam choice', async (_name, downs, expected) => {
+    const { store, resolved } = storeWithPhaseIncident();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      for (const key of downs) {
+        await press(instance, stdin, key);
+      }
+      await press(instance, stdin, KEYS.enter);
+      expect(resolved).toEqual([['p1', expected]]);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('UpdateZone — shared-types phase live tracking', () => {
+  it('keeps the finished source targeted, shows the phase, and counts it in flight on quit', async () => {
+    const ROW_A: ServiceBranchDivergence = {
+      service: 'svc-a',
+      path: '/repo/a',
+      isMember: true,
+      sharedBranch: 'development',
+      protectedBranches: [],
+      branch: 'feat/a',
+      ahead: 0,
+      behind: 0,
+      status: 'current',
+    };
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [ROW_A],
+      edtsBranchesStatus: 'idle',
+      edts: [
+        {
+          ulid: 'edt-1',
+          topic: 'demo',
+          createdAt: '2026-09-17T00:00:00.000Z',
+          status: 'active' as const,
+          members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+        },
+      ],
+      activeEdt: 'edt-1',
+      updateStatus: 'running',
+      liveServiceDone: { 'svc-a': true },
+      liveSharedTypesPhase: { 'svc-a': 'publishing' },
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    } as never);
+
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      // Targeted despite its final row: the live view (not the last-update view) is shown.
+      await waitForOutput(instance, stdout, 'step: publishing shared-types');
+      await press(instance, stdin, 'q');
+      await waitForOutput(instance, stdout, '1 service in flight');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+

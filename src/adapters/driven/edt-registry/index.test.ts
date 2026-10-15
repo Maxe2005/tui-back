@@ -1,9 +1,6 @@
-// adapters/driven/edt-registry: integration tests against real temp files (AD-13 driven
-// layer). The schema is strict on purpose — story 2.2 evolved the entry shape in place
-// (AD-7), replacing the 2.1 single `branch` placeholder with `topic` + per-member
-// `members: [...]`. No real 2.1-shape data exists (verified at review time), so a legacy
-// 2.1 entry is intentionally rejected as edt-registry-invalid-format rather than migrated;
-// a migration decision is tracked separately.
+// adapters/driven/edt-registry: integration tests against real temp files. The schema is
+// strict on purpose: an entry without `topic` + `members` is rejected as
+// edt-registry-invalid-format rather than migrated.
 import { describe, expect, it, afterEach } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -85,7 +82,7 @@ describe('edt-registry list()', () => {
   });
 });
 
-// Story 2.4: setStatus is a read/find/replace/write, mirroring addEdtRegistryEntry's shape.
+// setStatus is a read/find/replace/write, mirroring addEdtRegistryEntry's shape.
 describe('edt-registry setStatus()', () => {
   it('updates only the matching entry, leaving others and their fields untouched', async () => {
     const { file, edtsBaseDir } = await makeRegistryFile();
@@ -143,8 +140,8 @@ describe('edt-registry setStatus()', () => {
   });
 });
 
-// Story 2.29: remove() is a read/find/filter/write, mirroring updateEdtEntry's shape above —
-// removes the matching entry entirely (no soft-delete/undo, per the story's Boundaries).
+// remove() is a read/find/filter/write, mirroring updateEdtEntry's shape above — removes the
+// matching entry entirely (no soft-delete/undo).
 describe('edt-registry remove()', () => {
   it('removes only the matching entry, leaving others and their fields untouched', async () => {
     const { file, edtsBaseDir } = await makeRegistryFile();
@@ -208,7 +205,7 @@ describe('edt-registry remove()', () => {
   });
 });
 
-// Story 2.5: update() is a read/find/replace/write, mirroring setStatus's shape.
+// update() is a read/find/replace/write, mirroring setStatus's shape.
 describe('edt-registry update()', () => {
   it('updates only the topic', async () => {
     const { file, edtsBaseDir } = await makeRegistryFile();
@@ -330,13 +327,10 @@ describe('edt-registry update()', () => {
   });
 });
 
-// Story 2.9 regression: modify.ts computed added members / branch changes into `results`
-// but never fed them back into the patch it wrote to the registry. This test drives
-// modifyEdt end-to-end against a *real* createEdtRegistryPort (temp file, real update()) —
-// not a mock that just echoes ok(undefined) — so a re-introduction of the bug (persisted
-// entry silently missing the add/branch-change) fails this test instead of shipping
-// undetected, the way it did the first time (see deferred-work.md, code review of 2-5).
-describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
+// Drives modifyEdt end-to-end against a *real* createEdtRegistryPort (temp file, real
+// update()) — not a mock that echoes ok(undefined) — so a persisted entry silently missing
+// an add or branch change fails here instead of shipping undetected.
+describe('modifyEdt persistence (real update())', () => {
   function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     return {
       assertAllowedBranch: async () => ok(undefined),
@@ -358,16 +352,28 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       discardPaths: async () => ok(undefined),
       discardAll: async () => ok(undefined),
       diffNameOnly: async () => ok([]),
+      headRevision: async () => ok('head-a'),
+      diffStat: async () => ok({ files: 0, insertions: 0, deletions: 0 }),
       discardPathsToHead: async () => ok(undefined),
       isRebaseInProgress: async () => ok(false),
       hasUnmergedPaths: async () => ok(false),
+      listUnmergedPaths: async () => ok([] as string[]),
+      readWorktreeFile: async () => ok(""),
+      writeResolvedFile: async () => ok(undefined),
+      checkoutSide: async () => ok(undefined),
       finalizeMerge: async () => ok(undefined),
       listBranches: async () => ok([]),
       renameBranch: async () => ok(undefined),
       listRemoteBranches: async () => ok([]),
       createTrackingBranch: async () => ok(undefined),
+      stagePaths: async () => ok(undefined),
+      commit: async () => ok(undefined),
       isBranchMerged: async () => ok(true),
       hasStash: async () => ok(false),
+      fetchRemote: async () => ok(undefined),
+      listUnpushedCommits: async () => ok([] as string[]),
+      listVersionBumpCommits: async () => ok({ endedBy: "exhausted" as const, scanned: 0 }),
+      listBranchesContaining: async () => ok([] as string[]),
       ...overrides,
     };
   }
@@ -425,8 +431,8 @@ describe('modifyEdt persistence (story 2.9 regression, real update())', () => {
       topic: 'demo',
       addMembers: ['/repos/new-member'],
       removeMembers: [],
-      // Story 2.24: addMembers no longer silently defaults to the repo's currentBranch — a
-      // matching setBranches entry is required to name the requested branch explicitly.
+      // addMembers never defaults to the repo's currentBranch — a matching setBranches entry
+      // must name the requested branch explicitly.
       setBranches: [{ repoPath: '/repos/new-member', branch: 'feature-new' }],
       renameTo: undefined,
     });

@@ -1,7 +1,6 @@
-// core/scripts/group-update: unit tests against fake ports (AD-13 core layer) — every
-// I/O-matrix row of story 3.1 plus the lock-nesting and per-service-isolation guarantees.
-// Real git/container behavior lives in adapters/driven/git|container's own integration
-// tests and the black-box e2e; here only the use-case's orchestration is exercised.
+// core/scripts/group-update: unit tests against fake ports — the use-case's orchestration:
+// per-service flow, lock nesting, per-service isolation, assisted resolution, pre-run
+// configuration, clean restart and live phase tracking.
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { err, ok } from '../result.js';
 import type { ContainerPort } from '../ports/container.js';
@@ -18,6 +17,7 @@ import {
   edtUpdateLockKey,
   groupUpdate,
   markGroupUpdateInterrupted,
+  type AutoResolveConflict,
   type GroupUpdateParams,
   type OnUpdateBlocker,
   type UpdateBlocker,
@@ -52,7 +52,7 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     createBranch: vi.fn(async () => ok(undefined)),
     deleteBranch: vi.fn(async () => ok(undefined)),
     // Matches ACTIVE's own recorded branches per repo — anything else exercises the
-    // `unexpected-branch` row (P1), never a silent merge into the wrong branch.
+    // `unexpected-branch` row, never a silent merge into the wrong branch.
     currentBranch: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b' ? 'feat/b' : 'feat/a')),
     aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
     checkout: vi.fn(async () => ok(undefined)),
@@ -69,16 +69,28 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     discardPaths: vi.fn(async () => ok(undefined)),
     discardAll: vi.fn(async () => ok(undefined)),
     diffNameOnly: vi.fn(async () => ok([])),
+    headRevision: vi.fn(async () => ok('head-a')),
+    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
     discardPathsToHead: vi.fn(async () => ok(undefined)),
     isRebaseInProgress: vi.fn(async () => ok(false)),
     hasUnmergedPaths: vi.fn(async () => ok(false)),
+    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+    readWorktreeFile: vi.fn(async () => ok("")),
+    writeResolvedFile: vi.fn(async () => ok(undefined)),
+    checkoutSide: vi.fn(async () => ok(undefined)),
     finalizeMerge: vi.fn(async () => ok(undefined)),
     listBranches: vi.fn(async () => ok([])),
     renameBranch: vi.fn(async () => ok(undefined)),
     listRemoteBranches: vi.fn(async () => ok([])),
     createTrackingBranch: vi.fn(async () => ok(undefined)),
+    stagePaths: vi.fn(async () => ok(undefined)),
+    commit: vi.fn(async () => ok(undefined)),
     isBranchMerged: vi.fn(async () => ok(true)),
     hasStash: vi.fn(async () => ok(false)),
+    fetchRemote: vi.fn(async () => ok(undefined)),
+    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
+    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
+    listBranchesContaining: vi.fn(async () => ok([] as string[])),
     ...overrides,
   };
 }
@@ -131,6 +143,8 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
     writeSplitterRatios: vi.fn(async () => ok(undefined)),
     readFilterHistory: vi.fn(async () => ok(null)),
     writeFilterHistory: vi.fn(async () => ok(undefined)),
+    readCommandHistory: vi.fn(async () => ok(null)),
+    writeCommandHistory: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -176,6 +190,11 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     ...(overrides.runMigrations !== undefined ? { runMigrations: overrides.runMigrations } : {}),
     ...(overrides.cleanRestart !== undefined ? { cleanRestart: overrides.cleanRestart } : {}),
     ...(overrides.onPhase !== undefined ? { onPhase: overrides.onPhase } : {}),
+    ...(overrides.onServiceResult !== undefined ? { onServiceResult: overrides.onServiceResult } : {}),
+    ...(overrides.concurrency !== undefined ? { concurrency: overrides.concurrency } : {}),
+    ...(overrides.ordering !== undefined ? { ordering: overrides.ordering } : {}),
+    ...(overrides.afterStage !== undefined ? { afterStage: overrides.afterStage } : {}),
+    ...(overrides.autoResolveConflict !== undefined ? { autoResolveConflict: overrides.autoResolveConflict } : {}),
   };
 }
 
@@ -247,8 +266,8 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
         ulid: 'edt-active',
         topic: 'demo',
         results: [
-          { service: 'svc-a', outcome: 'updated' },
-          { service: 'svc-b', outcome: 'updated' },
+          { service: 'svc-a', outcome: 'updated', run: expect.anything() },
+          { service: 'svc-b', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'edt',
       },
@@ -314,7 +333,7 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
       data: {
         ulid: 'edt-shared',
         topic: 'shared',
-        results: [{ service: 'svc-a', outcome: 'updated' }],
+        results: [{ service: 'svc-a', outcome: 'updated', run: expect.anything() }],
         scope: 'edt',
       },
     });
@@ -634,7 +653,7 @@ describe('groupUpdate — per-service pull-or-merge then restart', () => {
   });
 });
 
-describe('groupUpdate — migrate phase (story 3.2)', () => {
+describe('groupUpdate — migrate phase', () => {
   // The invocation index of fn's call for path, comparable across different mocks
   // (vitest's invocationCallOrder is a global sequence shared by every mock).
   function callOrder(fn: unknown, path: string): number {
@@ -914,8 +933,8 @@ describe('groupUpdate — interrupted-status clearing', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'edt-registry-write-error' } });
     if (!result.ok) {
       const details = result.error.details as { results: unknown[] };
-      expect(details.results).toContainEqual({ service: 'svc-a', outcome: 'updated' });
-      expect(details.results).toContainEqual({ service: 'svc-b', outcome: 'updated' });
+      expect(details.results).toContainEqual({ service: 'svc-a', outcome: 'updated', run: expect.anything() });
+      expect(details.results).toContainEqual({ service: 'svc-b', outcome: 'updated', run: expect.anything() });
     }
   });
 });
@@ -1009,7 +1028,7 @@ describe('markGroupUpdateInterrupted', () => {
   });
 });
 
-describe('groupUpdate — all-repos scope (story 3.3)', () => {
+describe('groupUpdate — all-repos scope', () => {
   function allParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdateParams {
     return {
       ...makeParams(),
@@ -1018,6 +1037,27 @@ describe('groupUpdate — all-repos scope (story 3.3)', () => {
       ...overrides,
     };
   }
+
+  it('forwards ordering and afterStage: the hook sees the stage rows and a cancel there cancels later stages', async () => {
+    const seen: string[] = [];
+    const result = await groupUpdate(
+      allParams({
+        concurrency: 3,
+        ordering: ({ repoPath }) => (repoPath === '/repo/b' ? 0 : 1),
+        afterStage: (stage, rows, control) => {
+          seen.push(`${stage}:${rows.map((row) => row.service).join(',')}`);
+          if (stage === 0) {
+            control.cancel();
+          }
+        },
+      }),
+    );
+    expect(seen).toEqual(['0:b']);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'a', outcome: 'skipped', detail: { code: 'run-cancelled' } }, { service: 'b', outcome: 'updated' }] },
+    });
+  });
 
   it('runs the same per-service flow for every managed repo, each in results', async () => {
     const git = fakeGit();
@@ -1032,8 +1072,8 @@ describe('groupUpdate — all-repos scope (story 3.3)', () => {
         ulid: 'all',
         topic: 'all-repos',
         results: [
-          { service: 'a', outcome: 'updated' },
-          { service: 'b', outcome: 'updated' },
+          { service: 'a', outcome: 'updated', run: expect.anything() },
+          { service: 'b', outcome: 'updated', run: expect.anything() },
         ],
         scope: 'all',
       },
@@ -1232,10 +1272,9 @@ describe('groupUpdate — all-repos scope (story 3.3)', () => {
   });
 });
 
-describe('groupUpdate — assisted resolution (story 3.4)', () => {
+describe('groupUpdate — assisted resolution', () => {
   // A scripted seam: answers each blocker with the next scripted choice, recording every
-  // blocker raised (the Code Map's "scripted seam callbacks test the same way" as fakeGit
-  // overrides + call-order assertions).
+  // blocker raised.
   function scriptedSeam(choices: UpdateBlockerChoice[]): { seam: OnUpdateBlocker; blockers: UpdateBlocker[] } {
     const blockers: UpdateBlocker[] = [];
     let index = 0;
@@ -1249,6 +1288,39 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
       return choice;
     };
     return { seam, blockers };
+  }
+
+  // A git fake that models the mid-merge state a real conflicting merge leaves behind:
+  // `conflicts(repoPath, attempt)` decides whether the n-th merge of a repo conflicts; a
+  // conflict sets the repo mid-merge, `abortMerge`/`finalizeMerge` clear it.
+  function midMergeGit(
+    conflicts: (repoPath: string, attempt: number) => boolean,
+    overrides: Partial<GitPort> = {},
+  ): { git: GitPort; merging: Set<string> } {
+    const merging = new Set<string>();
+    const attempts = new Map<string, number>();
+    const git = fakeGit({
+      mergeBranch: vi.fn(async (repoPath: string) => {
+        const attempt = (attempts.get(repoPath) ?? 0) + 1;
+        attempts.set(repoPath, attempt);
+        if (conflicts(repoPath, attempt)) {
+          merging.add(repoPath);
+          return err('merge-conflict', 'Automatic merge failed');
+        }
+        return ok(undefined);
+      }),
+      isMergeInProgress: vi.fn(async (repoPath: string) => ok(merging.has(repoPath))),
+      abortMerge: vi.fn(async (repoPath: string) => {
+        merging.delete(repoPath);
+        return ok(undefined);
+      }),
+      finalizeMerge: vi.fn(async (repoPath: string) => {
+        merging.delete(repoPath);
+        return ok(undefined);
+      }),
+      ...overrides,
+    });
+    return { git, merging };
   }
 
   it('auto-discards lockfile-only dirt silently and proceeds through merge → migrate → restart', async () => {
@@ -1324,6 +1396,102 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
     expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(1);
   });
 
+  // A rejected `fetch origin <b>:<b>` caused by local-only commits: the fake fails the strict
+  // fetch of svc-a, then lists the commits the plain-fetch-refreshed origin ref lacks.
+  function unpushedGit(strictFetchFailures: number): GitPort {
+    let strictFetches = 0;
+    return fakeGit({
+      fetch: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/a') {
+          strictFetches += 1;
+        }
+        if (repoPath === '/repo/a' && strictFetches <= strictFetchFailures) {
+          return err('git-fetch-error', 'rejected (non-fast-forward)');
+        }
+        return ok(undefined);
+      }),
+      listUnpushedCommits: vi.fn(async (repoPath: string) =>
+        ok(repoPath === '/repo/a' && strictFetches <= strictFetchFailures ? ['45ce145 chore(deps): bump shared-types'] : []),
+      ),
+    });
+  }
+
+  it('unpushed commits without seam: stops the service with an explicit message naming the commits', async () => {
+    const git = unpushedGit(1);
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          {
+            service: 'svc-a',
+            outcome: 'failed',
+            detail: { code: 'unpushed-commits', message: expect.stringContaining('45ce145 chore(deps): bump shared-types') },
+          },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(git.fetchRemote)).toContainEqual(['/repo/a', expect.any(String)]);
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+  });
+
+  it('unpushed commits with seam: raises the blocker with branch and commits, `fetch` resumes the merge', async () => {
+    const { seam, blockers } = scriptedSeam(['fetch']);
+    const git = unpushedGit(1);
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers).toHaveLength(1);
+    expect(blockers[0]).toMatchObject({
+      service: 'svc-a',
+      kind: 'unpushed-commits',
+      commits: ['45ce145 chore(deps): bump shared-types'],
+    });
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+  });
+
+  it('unpushed commits with seam: edited retries the strict fetch, re-presenting while still blocked', async () => {
+    const { seam, blockers } = scriptedSeam(['edited', 'edited']);
+    const git = unpushedGit(2);
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b' }] } });
+    expect(blockers).toHaveLength(2);
+    expect(blockers[1]).toMatchObject({ kind: 'unpushed-commits', retry: 1 });
+  });
+
+  it('unpushed commits with seam: cancel-repo skips the service, cancel-run stops the run', async () => {
+    const skipRepo = await groupUpdate(makeParams({ git: unpushedGit(1), onUpdateBlocker: scriptedSeam(['cancel-repo']).seam }));
+    expect(skipRepo).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'unpushed-commits' } }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+
+    const git = unpushedGit(1);
+    const stopRun = await groupUpdate(makeParams({ git, onUpdateBlocker: scriptedSeam(['cancel-run']).seam }));
+    expect(stopRun).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'skipped' }, { service: 'svc-b', outcome: 'skipped' }] } });
+  });
+
+  it('a fetch failure with no unpushed commits stays a plain git-fetch-error', async () => {
+    const { seam, blockers } = scriptedSeam([]);
+    const git = fakeGit({
+      fetch: vi.fn(async (repoPath: string) => (repoPath === '/repo/a' ? err('git-fetch-error', 'offline') : ok(undefined))),
+    });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'failed', detail: { code: 'git-fetch-error' } }, { service: 'svc-b' }] } });
+    expect(blockers).toHaveLength(0);
+  });
+
   it('dirty with seam: edited re-verifies before resuming', async () => {
     const { seam, blockers } = scriptedSeam(['edited']);
     const git = fakeGit();
@@ -1395,67 +1563,17 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
     expect(result).toMatchObject({
       ok: true,
       data: {
-        results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree' } }],
-      },
-    });
-    if (result.ok) {
-      expect(result.data.results).toHaveLength(1);
-    }
-    // The run stopped: the second repo was never even read.
-    expect(calls(git.currentBranch).filter(([path]) => path === '/repo/b')).toHaveLength(0);
-  });
-
-  it('mid-run conflict with seam: edited with zero unmerged paths finalizes the merge and continues', async () => {
-    const { seam, blockers } = scriptedSeam(['edited']);
-    const migration = fakeMigration();
-    const container = fakeContainer();
-    const git = fakeGit({
-      mergeBranch: vi.fn(async (repoPath: string) =>
-        repoPath === '/repo/a' ? err('merge-conflict', 'Automatic merge failed') : ok(undefined),
-      ),
-      hasUnmergedPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
-    });
-
-    const result = await groupUpdate(makeParams({ git, migration, container, onUpdateBlocker: seam }));
-
-    expect(result).toMatchObject({
-      ok: true,
-      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
-    });
-    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
-    expect(calls(git.finalizeMerge)).toEqual([['/repo/a']]);
-    // Finalized, not aborted — and the pipeline continued through migrate + restart.
-    expect(calls(git.abortMerge)).toHaveLength(0);
-    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(1);
-    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(1);
-  });
-
-  it('mid-run conflict with seam: a still-conflicted retry ends failed with no second prompt', async () => {
-    const { seam, blockers } = scriptedSeam(['edited', 'edited']);
-    const migration = fakeMigration();
-    const git = fakeGit({
-      mergeBranch: vi.fn(async () => err('merge-conflict', 'Automatic merge failed')),
-      hasUnmergedPaths: vi.fn(async () => ok(true)),
-    });
-
-    const result = await groupUpdate(makeParams({ git, migration, onUpdateBlocker: seam }));
-
-    expect(result).toMatchObject({
-      ok: true,
-      data: {
         results: [
-          { service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict' } },
-          { service: 'svc-b', outcome: 'failed', detail: { code: 'merge-conflict' } },
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'dirty-worktree' } },
+          { service: 'svc-b', outcome: 'skipped', detail: { code: 'run-cancelled' } },
         ],
       },
     });
-    // Exactly one prompt per conflicted repo (two repos conflict here, one prompt each —
-    // never a second prompt for the same repo).
-    expect(blockers.filter((blocker) => blocker.repoPath === '/repo/a')).toHaveLength(1);
-    // One initial merge + one bounded retry per repo, then abort.
-    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(2);
-    expect(calls(git.abortMerge).filter(([path]) => path === '/repo/a')).toHaveLength(1);
-    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+    if (result.ok) {
+      expect(result.data.results).toHaveLength(2);
+    }
+    // The run stopped: the second repo was never even read.
+    expect(calls(git.currentBranch).filter(([path]) => path === '/repo/b')).toHaveLength(0);
   });
 
   it('mid-run conflict with seam: cancel-repo aborts the own-started merge into a skipped row', async () => {
@@ -1480,29 +1598,132 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
     expect(calls(git.abortMerge)).toEqual([['/repo/a']]);
   });
 
-  it('mid-run conflict with seam: stash with a clean re-verification resumes the merge once', async () => {
-    const single = edtEntry('edt-single', 'demo', [member('svc-a', '/repo/a', 'feat/a')]);
-    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([single])) });
-    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-single')) });
-    const { seam, blockers } = scriptedSeam(['stash']);
-    let merges = 0;
-    const git = fakeGit({
-      mergeBranch: vi.fn(async () => {
-        merges += 1;
-        return merges <= 1 ? err('merge-conflict', 'Automatic merge failed') : ok(undefined);
-      }),
-    });
+  it('mid-run conflict with seam: a stash answer never stashes — it re-presents the menu', async () => {
+    const { seam, blockers } = scriptedSeam(['stash', 'edited']);
+    const { git } = midMergeGit((repoPath) => repoPath === '/repo/a');
 
-    const result = await groupUpdate(makeParams({ edtRegistry, state, git, onUpdateBlocker: seam }));
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
 
     expect(result).toMatchObject({
       ok: true,
-      data: { results: [{ service: 'svc-a', outcome: 'updated' }] },
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
+    expect(blockers[1]?.retryReason).toMatch(/stash is not available/i);
+    expect(calls(git.stashSave)).toHaveLength(0);
+    expect(calls(git.abortMerge)).toHaveLength(0);
+  });
+
+  it('mid-run conflict with seam: edited with zero unmerged paths finalizes the merge and continues', async () => {
+    const { seam, blockers } = scriptedSeam(['edited']);
+    const migration = fakeMigration();
+    const container = fakeContainer();
+    const { git } = midMergeGit((repoPath) => repoPath === '/repo/a');
+
+    const result = await groupUpdate(makeParams({ git, migration, container, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
     });
     expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
-    expect(calls(git.stashSave)).toEqual([['/repo/a', 'tui-back:update']]);
-    expect(calls(git.mergeBranch)).toHaveLength(2);
+    expect(calls(git.finalizeMerge)).toEqual([['/repo/a']]);
+    // Finalized, not aborted — and the pipeline continued through migrate + restart.
     expect(calls(git.abortMerge)).toHaveLength(0);
+    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(1);
+  });
+
+  it('mid-run conflict with seam: a still-conflicted edited re-presents the menu with a growing retry counter until cancel-repo', async () => {
+    const { seam, blockers } = scriptedSeam(['edited', 'edited', 'edited', 'cancel-repo']);
+    const migration = fakeMigration();
+    const { git } = midMergeGit((repoPath) => repoPath === '/repo/a', { hasUnmergedPaths: vi.fn(async () => ok(true)) });
+
+    const result = await groupUpdate(makeParams({ git, migration, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'merge-conflict' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1, 2, 3]);
+    expect(blockers[1]?.retryReason).toMatch(/unmerged paths remain/i);
+    // Never a re-merge on top of a live merge, never finalized, aborted only by the cancel.
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(1);
+    expect(calls(git.finalizeMerge)).toHaveLength(0);
+    expect(calls(git.abortMerge)).toEqual([['/repo/a']]);
+    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+  });
+
+  it('mid-run conflict with seam: cancel-run after retries aborts the merge and stops the run', async () => {
+    const { seam, blockers } = scriptedSeam(['edited', 'cancel-run']);
+    const { git } = midMergeGit((repoPath) => repoPath === '/repo/a', { hasUnmergedPaths: vi.fn(async () => ok(true)) });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'skipped', detail: { code: 'merge-conflict' } },
+          { service: 'svc-b', outcome: 'skipped', detail: { code: 'run-cancelled' } },
+        ],
+      },
+    });
+    expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
+    expect(calls(git.abortMerge)).toEqual([['/repo/a']]);
+    expect(calls(git.currentBranch).filter(([path]) => path === '/repo/b')).toHaveLength(0);
+  });
+
+  it('mid-run conflict with seam: a merge aborted from the editor is retried, and a fresh conflict re-presents', async () => {
+    const { git, merging } = midMergeGit((repoPath, attempt) => repoPath === '/repo/a' && attempt <= 2);
+    const blockers: UpdateBlocker[] = [];
+    const seam: OnUpdateBlocker = async (blocker) => {
+      blockers.push(blocker);
+      // Each prompt: the developer runs `git merge --abort` from the editor.
+      merging.delete(blocker.repoPath);
+      return 'edited';
+    };
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    // Merge 1 conflicts, retry merge 2 conflicts again (prompt #2, retry 1), retry merge 3 lands.
+    expect(calls(git.mergeBranch).filter(([path]) => path === '/repo/a')).toHaveLength(3);
+    expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
+    expect(blockers[1]?.retryReason).toMatch(/conflicted again/i);
+  });
+
+  it('a failing merge finalization re-presents the menu with its reason, never aborted', async () => {
+    let finalizes = 0;
+    const { seam, blockers } = scriptedSeam(['edited', 'edited']);
+    const migration = fakeMigration();
+    const container = fakeContainer();
+    const { git } = midMergeGit((repoPath) => repoPath === '/repo/a');
+    const finalizeMerge = vi.fn(async () => {
+      finalizes += 1;
+      return finalizes <= 1 ? err('git-commit-error', 'pre-commit hook failed') : ok(undefined);
+    });
+    git.finalizeMerge = finalizeMerge;
+
+    const result = await groupUpdate(makeParams({ git, migration, container, onUpdateBlocker: seam }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
+    expect(blockers[1]?.retryReason).toBe('pre-commit hook failed');
+    // The tree carries the developer's own resolution — aborting it away is forbidden.
+    expect(calls(git.abortMerge)).toHaveLength(0);
+    expect(calls(finalizeMerge)).toHaveLength(2);
   });
 
   it('pre-existing mid-merge without a seam is a distinct skipped row, never aborted', async () => {
@@ -1653,36 +1874,6 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
     expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(0);
   });
 
-  it('a failing merge finalization is a failed row with its code, never aborted', async () => {
-    const { seam, blockers } = scriptedSeam(['edited']);
-    const migration = fakeMigration();
-    const container = fakeContainer();
-    const git = fakeGit({
-      mergeBranch: vi.fn(async (repoPath: string) =>
-        repoPath === '/repo/a' ? err('merge-conflict', 'Automatic merge failed') : ok(undefined),
-      ),
-      hasUnmergedPaths: vi.fn(async () => ok(false)),
-      finalizeMerge: vi.fn(async () => err('git-commit-error', 'nothing to commit')),
-    });
-
-    const result = await groupUpdate(makeParams({ git, migration, container, onUpdateBlocker: seam }));
-
-    expect(result).toMatchObject({
-      ok: true,
-      data: {
-        results: [
-          { service: 'svc-a', outcome: 'failed', detail: { code: 'git-commit-error' } },
-          { service: 'svc-b', outcome: 'updated' },
-        ],
-      },
-    });
-    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
-    // The tree carries the developer's own resolution — aborting it away is forbidden.
-    expect(calls(git.abortMerge)).toHaveLength(0);
-    expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
-    expect(calls(container.restart).filter(([ctr]) => ctr === 'ctr-a')).toHaveLength(0);
-  });
-
   it('pull-path conflict with seam: edited finalizes via pull, never mergeBranch', async () => {
     const onShared = edtEntry('edt-shared', 'shared', [member('svc-a', '/repo/a', 'development')]);
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([onShared])) });
@@ -1700,6 +1891,10 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
       }),
       isMergeInProgress: vi.fn(async () => ok(pullCalled)),
       hasUnmergedPaths: vi.fn(async () => ok(false)),
+      listUnmergedPaths: vi.fn(async () => ok([] as string[])),
+      readWorktreeFile: vi.fn(async () => ok("")),
+      writeResolvedFile: vi.fn(async () => ok(undefined)),
+      checkoutSide: vi.fn(async () => ok(undefined)),
     });
 
     const result = await groupUpdate(makeParams({ edtRegistry, state, git, migration, container, onUpdateBlocker: seam }));
@@ -1717,19 +1912,18 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
     expect(calls(container.restart)).toEqual([['ctr-a']]);
   });
 
-  it('pull-path conflict with seam: a still-conflicted edited earns one re-pull, then updated', async () => {
+
+  it('pull-path conflict with seam: a still-conflicted edited re-presents, never re-pulls on a live merge', async () => {
     const onShared = edtEntry('edt-shared', 'shared', [member('svc-a', '/repo/a', 'development')]);
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([onShared])) });
     const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-shared')) });
-    const { seam, blockers } = scriptedSeam(['edited']);
-    let pulls = 0;
+    const { seam, blockers } = scriptedSeam(['edited', 'cancel-repo']);
     let pullCalled = false;
     const git = fakeGit({
       currentBranch: vi.fn(async () => ok('development')),
       pull: vi.fn(async () => {
-        pulls += 1;
         pullCalled = true;
-        return pulls <= 1 ? err('git-pull-error', 'pull conflicts') : ok(undefined);
+        return err('git-pull-error', 'pull conflicts');
       }),
       isMergeInProgress: vi.fn(async () => ok(pullCalled)),
       hasUnmergedPaths: vi.fn(async () => ok(true)),
@@ -1739,15 +1933,15 @@ describe('groupUpdate — assisted resolution (story 3.4)', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      data: { results: [{ service: 'svc-a', outcome: 'updated' }] },
+      data: { results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'merge-conflict' } }] },
     });
-    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
-    expect(calls(git.pull)).toHaveLength(2);
+    expect(blockers.map((blocker) => blocker.retry)).toEqual([undefined, 1]);
+    expect(calls(git.pull)).toHaveLength(1);
     expect(calls(git.mergeBranch)).toHaveLength(0);
   });
 });
 
-describe('groupUpdate — pre-run configuration (story 3.7)', () => {
+describe('groupUpdate — pre-run configuration', () => {
   it('an EDT-scoped selection runs only the selected service: the deselected one is never touched and absent from results', async () => {
     const git = fakeGit();
     const container = fakeContainer();
@@ -1760,7 +1954,7 @@ describe('groupUpdate — pre-run configuration (story 3.7)', () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { ulid: 'edt-active', topic: 'demo', results: [{ service: 'svc-a', outcome: 'updated' }], scope: 'edt' },
+      data: { ulid: 'edt-active', topic: 'demo', results: [{ service: 'svc-a', outcome: 'updated', run: expect.anything() }], scope: 'edt' },
     });
     // The deselected service never reached git, migration, or container at all.
     for (const fn of [git.currentBranch, git.fetch, git.pull, git.mergeBranch, git.assertAllowedBranch]) {
@@ -1885,6 +2079,49 @@ describe('groupUpdate — pre-run configuration (story 3.7)', () => {
     expect(calls(container.restart)).toHaveLength(2);
   });
 
+  it('a per-service runMigrations override beats the run-wide toggle in both directions', async () => {
+    const migration = fakeMigration();
+
+    await groupUpdate(
+      makeParams({
+        migration,
+        runMigrations: true,
+        selection: [
+          { service: 'svc-a', repoPath: '/repo/a', runMigrations: false },
+          { service: 'svc-b', repoPath: '/repo/b' },
+        ],
+      }),
+    );
+    expect(calls(migration.run).map(([path]) => path)).toEqual(['/repo/b']);
+
+    const second = fakeMigration();
+    await groupUpdate(
+      makeParams({
+        migration: second,
+        runMigrations: false,
+        selection: [{ service: 'svc-a', repoPath: '/repo/a', runMigrations: true }, { service: 'svc-b', repoPath: '/repo/b' }],
+      }),
+    );
+    expect(calls(second.run).map(([path]) => path)).toEqual(['/repo/a']);
+  });
+
+  it('a per-service cleanRestart: false keeps the plain restart even when the run asks for a clean one', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+
+    await groupUpdate(
+      makeParams({
+        container,
+        restart,
+        cleanRestart: true,
+        selection: [{ service: 'svc-a', repoPath: '/repo/a', cleanRestart: false }],
+      }),
+    );
+
+    expect(calls(container.restart)).toEqual([['ctr-a']]);
+    expect(calls(restart.run)).toHaveLength(0);
+  });
+
   it('cleanRestart: true without a declared recipe falls back to the plain container restart', async () => {
     const container = fakeContainer();
     const restart = fakeRestart();
@@ -1991,9 +2228,28 @@ describe('groupUpdate — pre-run configuration (story 3.7)', () => {
     expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'release/1']);
     expect(calls(git.fetch)).toContainEqual(['/repo/b', 'development']);
   });
+
+  it('an all-repos per-service toggle override beats the run-wide toggle', async () => {
+    const migration = fakeMigration();
+    const container = fakeContainer();
+    const params: GroupUpdateParams = {
+      ...makeParams({ migration, container }),
+      registry: fakeRegistry(['/repo/a', '/repo/b']),
+      scope: 'all',
+      runMigrations: true,
+      selection: [
+        { service: 'a', repoPath: '/repo/a', runMigrations: false },
+        { service: 'b', repoPath: '/repo/b' },
+      ],
+    };
+
+    await groupUpdate(params);
+
+    expect(calls(migration.run).map(([path]) => path)).toEqual(['/repo/b']);
+  });
 });
 
-describe('groupUpdate — clean-restart recipe (story 3.8)', () => {
+describe('groupUpdate — clean-restart recipe', () => {
   const RECIPE = ['npm ci', 'docker compose up -d --build'];
 
   function fakeManifestWithRecipe(restartCommands: string[]): ManifestPort {
@@ -2237,7 +2493,149 @@ describe('groupUpdate — clean-restart recipe (story 3.8)', () => {
   });
 });
 
-describe('groupUpdate — live per-service phase tracking (story 3.10)', () => {
+describe('groupUpdate — services without a declared container', () => {
+  const RECIPE = ['npm ci', 'docker compose up -d --build'];
+
+  function containerLessManifest(service: string, restartCommands?: string[]): Manifest {
+    return {
+      service,
+      migrationCommand: 'npm run migration:run',
+      ...(restartCommands !== undefined ? { restartCommands } : {}),
+      sharedBranch: 'development',
+      modules: {},
+    };
+  }
+
+  it('a container-less service without a recipe skips the restart with a repo-naming row, never failed, and the container port is never called', async () => {
+    const git = fakeGit();
+    const container = fakeContainer();
+    const restart = fakeRestart();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        repoPath === '/repo/a' ? ok(containerLessManifest('svc-a')) : ok(manifestFor(repoPath.split('/').pop() ?? repoPath)),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, git, container, restart }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'updated' },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    // Pull/merge and migrations still ran for the container-less service — only the restart
+    // phase was skipped.
+    expect(calls(git.mergeBranch)).toContainEqual(['/repo/a', 'development']);
+    expect(calls(container.restart)).toEqual([['ctr-b']]);
+    expect(calls(restart.run)).toHaveLength(0);
+  });
+
+  it('a container-less service with a declared recipe runs the recipe when clean-restart is on', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok(containerLessManifest(repoPath.split('/').pop() ?? repoPath, RECIPE)),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, restart, container, cleanRestart: true }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }],
+      },
+    });
+    expect(calls(restart.run)).toEqual([
+      ['/repo/a', 'npm ci'],
+      ['/repo/a', 'docker compose up -d --build'],
+      ['/repo/b', 'npm ci'],
+      ['/repo/b', 'docker compose up -d --build'],
+    ]);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+
+  it('a container-less service with a declared recipe still skips when clean-restart is off', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart();
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok(containerLessManifest(repoPath.split('/').pop() ?? repoPath, RECIPE)),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, restart, container, cleanRestart: false }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'updated' },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+    expect(calls(restart.run)).toHaveLength(0);
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+
+  it('a failing recipe on a container-less service fails the row like any other recipe failure', async () => {
+    const container = fakeContainer();
+    const restart = fakeRestart({
+      run: vi.fn(async () => err('restart-failed', 'compose up blew up')),
+    });
+    const manifest: ManifestPort = {
+      load: vi.fn(async (repoPath: string) =>
+        ok(containerLessManifest(repoPath.split('/').pop() ?? repoPath, RECIPE)),
+      ),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest, restart, container, cleanRestart: true }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'restart-failed' } },
+          { service: 'svc-b', outcome: 'failed', detail: { code: 'restart-failed' } },
+        ],
+      },
+    });
+    expect(calls(container.restart)).toHaveLength(0);
+  });
+});
+
+describe('groupUpdate — per-service result observer', () => {
+  it('emits each service row as soon as it is final, in order, before the run returns', async () => {
+    const rows: string[] = [];
+    const onServiceResult = vi.fn((row: { service: string; outcome: string }) => {
+      rows.push(`${row.service}:${row.outcome}`);
+    });
+
+    const result = await groupUpdate(makeParams({ onServiceResult }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(rows).toEqual(['svc-a:updated', 'svc-b:updated']);
+  });
+
+  it('a throwing observer never breaks the run', async () => {
+    const onServiceResult = vi.fn(() => {
+      throw new Error('observer bug');
+    });
+
+    const result = await groupUpdate(makeParams({ onServiceResult }));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(onServiceResult).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('groupUpdate — live per-service phase tracking', () => {
   function recordPhases() {
     const seen: Array<[string, UpdatePhase]> = [];
     const onPhase = vi.fn((service: string, phase: UpdatePhase) => {
@@ -2403,3 +2801,498 @@ describe('groupUpdate — live per-service phase tracking (story 3.10)', () => {
     });
   });
 });
+
+describe('groupUpdate — per-service run detail', () => {
+  const headSequence = (before: string, after: string) => {
+    const fn = vi.fn();
+    fn.mockResolvedValueOnce(ok(before)).mockResolvedValue(ok(after));
+    return fn as unknown as GitPort['headRevision'];
+  };
+  const rowOf = (result: Awaited<ReturnType<typeof groupUpdate>>, service: string) =>
+    result.ok ? result.data.results.find((row) => row.service === service) : undefined;
+
+  it('reports up-to-date with no diffstat when HEAD is unchanged', async () => {
+    const git = fakeGit();
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(rowOf(result, 'svc-a')?.run?.merge).toEqual({ kind: 'up-to-date' });
+    expect(calls(git.diffStat)).toHaveLength(0);
+  });
+
+  it('reports the advanced diffstat between the before and after HEAD', async () => {
+    const git = fakeGit({
+      headRevision: headSequence('aaa', 'bbb'),
+      diffStat: vi.fn(async () => ok({ files: 3, insertions: 10, deletions: 4 })),
+    });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(rowOf(result, 'svc-a')?.run?.merge).toEqual({ kind: 'advanced', files: 3, insertions: 10, deletions: 4 });
+    expect(calls(git.diffStat)[0]).toEqual(['/repo/a', 'aaa', 'bbb']);
+  });
+
+  it('keeps advanced without counts when the diff read fails, never failing the row', async () => {
+    const git = fakeGit({
+      headRevision: headSequence('aaa', 'bbb'),
+      diffStat: vi.fn(async () => err('git-diff-error', 'boom')),
+    });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(rowOf(result, 'svc-a')).toMatchObject({ outcome: 'updated', run: { merge: { kind: 'advanced' } } });
+    expect(rowOf(result, 'svc-a')?.run?.merge).toEqual({ kind: 'advanced' });
+  });
+
+  it('omits merge detail when HEAD is unreadable, without failing the row', async () => {
+    const git = fakeGit({ headRevision: vi.fn(async () => err('git-rev-parse-error', 'no head')) });
+
+    const result = await groupUpdate(makeParams({ git }));
+
+    expect(rowOf(result, 'svc-a')).toMatchObject({ outcome: 'updated' });
+    expect(rowOf(result, 'svc-a')?.run?.merge).toBeUndefined();
+  });
+
+  it('reports a ran migration with its command and the last three non-empty output lines', async () => {
+    const migration = fakeMigration({
+      run: vi.fn(async () => ok({ output: 'one\n\ntwo\nthree\nfour\n' })),
+    });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    expect(rowOf(result, 'svc-a')?.run?.migrations).toEqual({
+      kind: 'ran',
+      command: 'npm run migration:run',
+      outputExcerpt: 'two\nthree\nfour',
+    });
+  });
+
+  it('caps the output excerpt at 200 characters', async () => {
+    const migration = fakeMigration({ run: vi.fn(async () => ok({ output: 'x'.repeat(500) })) });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    const migrations = rowOf(result, 'svc-a')?.run?.migrations;
+    expect(migrations?.kind === 'ran' && migrations.outputExcerpt.length).toBe(200);
+  });
+
+  it('keeps the tail of a long excerpt and strips ANSI escapes', async () => {
+    const output = `${'x'.repeat(300)}\u001b[31mDONE\u001b[0m`;
+    const migration = fakeMigration({ run: vi.fn(async () => ok({ output })) });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    const migrations = rowOf(result, 'svc-a')?.run?.migrations;
+    expect(migrations?.kind === 'ran' && migrations.outputExcerpt.endsWith('xxDONE')).toBe(true);
+    expect(migrations?.kind === 'ran' && migrations.outputExcerpt.includes('\u001b')).toBe(false);
+  });
+
+  it('reports migrations none when disabled or undeclared', async () => {
+    const disabled = await groupUpdate(makeParams({ runMigrations: false }));
+    const manifest = fakeManifest({
+      load: vi.fn(async () => ok({ ...manifestFor('svc-x'), migrationCommand: '  ' })),
+    });
+    const blank = await groupUpdate(makeParams({ manifest }));
+
+    expect(rowOf(disabled, 'svc-a')?.run?.migrations).toEqual({ kind: 'none' });
+    expect(rowOf(blank, 'svc-a')?.run?.migrations).toEqual({ kind: 'none' });
+  });
+
+  it('keeps the run detail on a container-less updated row', async () => {
+    const manifest: ManifestPort = {
+      load: vi.fn(async () => ok({ service: 'svc-x', migrationCommand: 'm', sharedBranch: 'development', modules: {} })),
+    };
+
+    const result = await groupUpdate(makeParams({ manifest }));
+
+    expect(rowOf(result, 'svc-a')).toMatchObject({
+      outcome: 'updated',
+      run: { merge: { kind: 'up-to-date' }, migrations: { kind: 'ran', command: 'm' } },
+    });
+  });
+
+  it('carries no run detail on a failed migration row', async () => {
+    const migration = fakeMigration({ run: vi.fn(async () => err('migration-failed', 'nope')) });
+
+    const result = await groupUpdate(makeParams({ migration }));
+
+    expect(rowOf(result, 'svc-a')?.outcome).toBe('failed');
+    expect(rowOf(result, 'svc-a')?.run).toBeUndefined();
+  });
+});
+
+describe('groupUpdate — parallel pool', () => {
+  const tickMs = () => new Promise<void>((resolveTick) => setTimeout(resolveTick, 2));
+
+  function trackedMigration(): { migration: MigrationPort; peak: () => number } {
+    let inFlight = 0;
+    let peak = 0;
+    const migration = fakeMigration({
+      run: vi.fn(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await tickMs();
+        inFlight -= 1;
+        return ok({ output: '' });
+      }),
+    });
+    return { migration, peak: () => peak };
+  }
+
+  it('runs the services in parallel up to the concurrency and keeps configuration order', async () => {
+    const { migration, peak } = trackedMigration();
+    const result = await groupUpdate(makeParams({ migration, concurrency: 2 }));
+    expect(peak()).toBe(2);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+  });
+
+  it('concurrency 1 never overlaps services', async () => {
+    const { migration, peak } = trackedMigration();
+    await groupUpdate(makeParams({ migration, concurrency: 1 }));
+    expect(peak()).toBe(1);
+  });
+
+  it('a worker that throws becomes that service failed row, the other still runs', async () => {
+    const git = fakeGit({
+      currentBranch: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/a') {
+          throw new Error('git exploded');
+        }
+        return ok('feat/b');
+      }),
+    });
+    const result = await groupUpdate(makeParams({ git, concurrency: 2 }));
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        results: [
+          { service: 'svc-a', outcome: 'failed', detail: { code: 'internal-error' } },
+          { service: 'svc-b', outcome: 'updated' },
+        ],
+      },
+    });
+  });
+
+  it('a service waiting on the developer does not stop the others (pool > 1)', async () => {
+    let answer: (choice: UpdateBlockerChoice) => void = () => {};
+    const seam: OnUpdateBlocker = (blocker) =>
+      blocker.service === 'svc-a'
+        ? new Promise<UpdateBlockerChoice>((resolveChoice) => {
+            answer = resolveChoice;
+          })
+        : Promise.resolve('cancel-repo');
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    });
+    const done: string[] = [];
+    const run = groupUpdate(
+      makeParams({ git, onUpdateBlocker: seam, concurrency: 2, onServiceResult: (row) => done.push(row.service) }),
+    );
+    await tickMs();
+    await tickMs();
+    // svc-b completed while svc-a waited on the developer.
+    expect(done).toEqual(['svc-b']);
+    answer('cancel-repo');
+    const result = await run;
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped' }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+  });
+
+  it('cancel-run lets in-flight services finish their step and skips the rest', async () => {
+    const seam: OnUpdateBlocker = async () => 'cancel-run';
+    const git = fakeGit({
+      listDirtyPaths: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? ['wip.txt'] : [])),
+    });
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, concurrency: 1 }));
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped' }, { service: 'svc-b', outcome: 'skipped', detail: { code: 'run-cancelled' } }] },
+    });
+  });
+
+  it('the ordering hook runs a stage alone before the next one', async () => {
+    const started: string[] = [];
+    const migration = fakeMigration({
+      run: vi.fn(async (repoPath: string) => {
+        started.push(`start:${repoPath}`);
+        await tickMs();
+        started.push(`end:${repoPath}`);
+        return ok({ output: '' });
+      }),
+    });
+    await groupUpdate(makeParams({ migration, concurrency: 3, ordering: ({ service }) => (service === 'svc-b' ? 0 : 1) }));
+    expect(started).toEqual(['start:/repo/b', 'end:/repo/b', 'start:/repo/a', 'end:/repo/a']);
+  });
+
+  it('afterStage sees the stage rows; a cancel there skips the later stage and its hook', async () => {
+    const seen: string[] = [];
+    const result = await groupUpdate(
+      makeParams({
+        concurrency: 3,
+        ordering: ({ service }) => (service === 'svc-b' ? 0 : 1),
+        afterStage: (stage, rows, control) => {
+          seen.push(`${stage}:${rows.map((row) => row.service).join(',')}`);
+          if (stage === 0) {
+            control.cancel();
+          }
+        },
+      }),
+    );
+    expect(seen).toEqual(['0:svc-b']);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'skipped', detail: { code: 'run-cancelled' } }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+  });
+});
+
+describe('groupUpdate — conflict auto-resolution seam', () => {
+  function seamOf(choices: UpdateBlockerChoice[]): { seam: OnUpdateBlocker; blockers: UpdateBlocker[] } {
+    const blockers: UpdateBlocker[] = [];
+    let index = 0;
+    const seam: OnUpdateBlocker = async (blocker) => {
+      blockers.push(blocker);
+      const choice = choices[index];
+      index += 1;
+      if (choice === undefined) {
+        throw new Error('seam script exhausted');
+      }
+      return choice;
+    };
+    return { seam, blockers };
+  }
+
+  // Merge of /repo/a conflicts once (pull path: when `pulling`), leaving it mid-merge until finalized.
+  function conflictGit(overrides: Partial<GitPort> = {}): GitPort {
+    const merging = new Set<string>();
+    return fakeGit({
+      mergeBranch: vi.fn(async (repoPath: string) => {
+        if (repoPath === '/repo/a' && !merging.has('done')) {
+          merging.add(repoPath);
+          return err('merge-conflict', 'Automatic merge failed');
+        }
+        return ok(undefined);
+      }),
+      isMergeInProgress: vi.fn(async (repoPath: string) => ok(merging.has(repoPath))),
+      finalizeMerge: vi.fn(async (repoPath: string) => {
+        merging.delete(repoPath);
+        merging.add('done');
+        return ok(undefined);
+      }),
+      ...overrides,
+    });
+  }
+
+  it('settling everything finalizes the merge with no menu and marks the row auto-resolved', async () => {
+    const { seam, blockers } = seamOf([]);
+    const git = conflictGit();
+    const autoResolveConflict: AutoResolveConflict = vi.fn(async () => ({ touched: true }));
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated', run: { conflict: 'auto-resolved' } }, { service: 'svc-b', outcome: 'updated' }] },
+    });
+    expect(blockers).toEqual([]);
+    expect(calls(git.finalizeMerge)).toEqual([['/repo/a']]);
+    expect(autoResolveConflict).toHaveBeenCalledWith({ service: 'svc-a', repoPath: '/repo/a' });
+    const rows = (result as { ok: true; data: { results: { run?: { conflict?: string } }[] } }).data.results;
+    expect(rows[1]?.run?.conflict).toBeUndefined();
+  });
+
+  it('presents only the rest when unmerged paths remain, reruns after edited, and marks the row partial', async () => {
+    const { seam, blockers } = seamOf(['edited']);
+    const hasUnmergedPaths = vi.fn().mockResolvedValueOnce(ok(true)).mockResolvedValue(ok(false));
+    const git = conflictGit({ hasUnmergedPaths: hasUnmergedPaths as unknown as GitPort['hasUnmergedPaths'] });
+    const autoResolveConflict: AutoResolveConflict = vi.fn(async () => ({ touched: true }));
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'updated', run: { conflict: 'partial' } }, { service: 'svc-b' }] } });
+    expect(blockers).toEqual([{ service: 'svc-a', repoPath: '/repo/a', kind: 'merge-conflict' }]);
+    // Before the menu, then once more after the developer's `edited`.
+    expect(autoResolveConflict).toHaveBeenCalledTimes(2);
+    expect(calls(git.finalizeMerge)).toEqual([['/repo/a']]);
+  });
+
+  it('runs the seam again after edited so the lockfile is regenerated before finalization', async () => {
+    const { seam } = seamOf(['edited']);
+    const events: string[] = [];
+    const git = conflictGit({
+      hasUnmergedPaths: vi.fn(async () => ok(events.includes('npm-i') ? false : true)),
+      finalizeMerge: vi.fn(async () => {
+        events.push('finalize');
+        return ok(undefined);
+      }),
+    });
+    let pass = 0;
+    const autoResolveConflict: AutoResolveConflict = async () => {
+      pass += 1;
+      if (pass === 2) {
+        events.push('npm-i');
+      }
+      return { touched: pass === 2 };
+    };
+
+    await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(events).toEqual(['npm-i', 'finalize']);
+  });
+
+  it('carries the resolver issue note on the incident and marks the row left-to-user', async () => {
+    const { seam, blockers } = seamOf(['edited']);
+    const git = conflictGit();
+    const autoResolveConflict: AutoResolveConflict = vi.fn(async () => ({ touched: false, issue: 'the line sits in a mixed block' }));
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(blockers[0]).toMatchObject({ kind: 'merge-conflict', autoResolveNote: 'the line sits in a mixed block' });
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', run: { conflict: 'left-to-user' } }, { service: 'svc-b' }] } });
+  });
+
+  it('a throwing seam becomes an issue note, never a failed run', async () => {
+    const { seam, blockers } = seamOf(['edited']);
+    const git = conflictGit();
+    const autoResolveConflict: AutoResolveConflict = async () => {
+      throw new Error('boom');
+    };
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(blockers[0]?.autoResolveNote).toContain('boom');
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b' }] } });
+  });
+
+  it('applies to a conflicting pull as well, finalizing via the same path', async () => {
+    const onShared = edtEntry('edt-shared', 'shared', [member('svc-a', '/repo/a', 'development')]);
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([onShared])) });
+    const state = fakeState({ readActiveEdt: vi.fn(async () => ok('edt-shared')) });
+    const { seam, blockers } = seamOf([]);
+    let pulled = false;
+    const git = fakeGit({
+      currentBranch: vi.fn(async () => ok('development')),
+      pull: vi.fn(async () => {
+        pulled = true;
+        return err('git-pull-error', 'pull conflicts');
+      }),
+      isMergeInProgress: vi.fn(async () => ok(pulled)),
+    });
+    const autoResolveConflict: AutoResolveConflict = vi.fn(async () => ({ touched: true }));
+
+    const result = await groupUpdate(makeParams({ edtRegistry, state, git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'updated', run: { conflict: 'auto-resolved' } }] } });
+    expect(blockers).toEqual([]);
+    expect(calls(git.mergeBranch)).toHaveLength(0);
+    expect(calls(git.finalizeMerge)).toEqual([['/repo/a']]);
+  });
+
+  it('never runs without the blocker seam: the conflicting merge is aborted as before', async () => {
+    const git = conflictGit({ abortMerge: vi.fn(async () => ok(undefined)) });
+    const autoResolveConflict: AutoResolveConflict = vi.fn(async () => ({ touched: true }));
+
+    const result = await groupUpdate(makeParams({ git, autoResolveConflict }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'failed', detail: { code: 'merge-conflict' } }, { service: 'svc-b' }] } });
+    expect(autoResolveConflict).not.toHaveBeenCalled();
+  });
+
+  it('a finalize read failing after a touching pre-menu pass ends the repo as a failed row', async () => {
+    const { seam, blockers } = seamOf([]);
+    const git = conflictGit({ hasUnmergedPaths: vi.fn(async () => err('git-unmerged-check-error', 'cannot check')) });
+    const autoResolveConflict: AutoResolveConflict = async () => ({ touched: true });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'failed', detail: { code: 'git-unmerged-check-error' }, run: { conflict: 'partial' } }, { service: 'svc-b' }] },
+    });
+    expect(blockers).toEqual([]);
+  });
+
+  it('never labels a row auto-resolved when the last pass carried an issue (npm i failure)', async () => {
+    const { seam } = seamOf([]);
+    const git = conflictGit();
+    const autoResolveConflict: AutoResolveConflict = async () => ({ touched: true, issue: 'npm i failed while regenerating package-lock.json' });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'updated', run: { conflict: 'partial' } }, { service: 'svc-b' }] } });
+  });
+
+  it('attaches the conflict value to a cancelled (skipped) row', async () => {
+    const { seam } = seamOf(['cancel-repo']);
+    const git = conflictGit({ hasUnmergedPaths: vi.fn(async () => ok(true)), abortMerge: vi.fn(async () => ok(undefined)) });
+    const autoResolveConflict: AutoResolveConflict = async () => ({ touched: true });
+
+    const result = await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(result).toMatchObject({ ok: true, data: { results: [{ service: 'svc-a', outcome: 'skipped', run: { conflict: 'partial' } }, { service: 'svc-b' }] } });
+  });
+
+  it('keeps an earlier issue note when a later pass has none while the conflict is unresolved', async () => {
+    const { seam, blockers } = seamOf(['stash', 'edited']);
+    const git = conflictGit();
+    let pass = 0;
+    const autoResolveConflict: AutoResolveConflict = async () => {
+      pass += 1;
+      return pass === 1 ? { touched: false, issue: 'first issue' } : { touched: false };
+    };
+
+    await groupUpdate(makeParams({ git, onUpdateBlocker: seam, autoResolveConflict }));
+
+    expect(blockers[0]?.autoResolveNote).toBe('first issue');
+    expect(blockers[1]).toMatchObject({ retry: 1, autoResolveNote: 'first issue' });
+  });
+
+  it('never starts a pass once the run is stopped', async () => {
+    let releaseA: (choice: UpdateBlockerChoice) => void = () => undefined;
+    const aAnswer = new Promise<UpdateBlockerChoice>((resolveChoice) => {
+      releaseA = resolveChoice;
+    });
+    const seam: OnUpdateBlocker = async (blocker) => (blocker.service === 'svc-a' ? aAnswer : 'cancel-run');
+    const merging = new Set<string>();
+    const git = fakeGit({
+      mergeBranch: vi.fn(async (repoPath: string) => {
+        merging.add(repoPath);
+        return err('merge-conflict', 'Automatic merge failed');
+      }),
+      isMergeInProgress: vi.fn(async (repoPath: string) => ok(merging.has(repoPath))),
+      abortMerge: vi.fn(async (repoPath: string) => {
+        merging.delete(repoPath);
+        return ok(undefined);
+      }),
+      finalizeMerge: vi.fn(async (repoPath: string) => {
+        merging.delete(repoPath);
+        return ok(undefined);
+      }),
+    });
+    const autoResolveConflict = vi.fn<AutoResolveConflict>(async () => ({ touched: false }));
+
+    const result = await groupUpdate(
+      makeParams({
+        git,
+        concurrency: 2,
+        onUpdateBlocker: seam,
+        autoResolveConflict,
+        onServiceResult: (row) => {
+          if (row.service === 'svc-b') {
+            releaseA('edited');
+          }
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    const forA = autoResolveConflict.mock.calls.filter(([target]) => target.service === 'svc-a');
+    expect(forA).toHaveLength(1);
+  });
+});
+

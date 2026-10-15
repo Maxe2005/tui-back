@@ -1,13 +1,6 @@
-// Story 2.8: alt-screen enter/exit and resize re-render are otherwise unautomatable — the
-// repo has no pty library (AGENTS.md), so `tui-back.e2e.test.ts` only exercises the CLI's
-// non-TTY branch and `render-to-string.ts`'s harness deliberately renders `interactive:
-// false` (alternateScreen is a documented no-op there). This file closes that gap without a
-// real pty: a fake stdout/stdin that report `isTTY: true` is enough to drive Ink's actual
-// alternate-screen and resize machinery — the same technique `render-to-string.ts` already
-// uses for its fake TTY stdin, just with `interactive: true` instead of `false`.
-// Story 2.9 extracted the fakes themselves to `shared/test-support/fake-tty.ts` so the new
-// real-keypress interaction tests (edts-zone.interaction.test.tsx) reuse this exact
-// technique instead of re-declaring it.
+// Alt-screen enter/exit and resize re-render, without a pty library: a fake stdout/stdin
+// reporting `isTTY: true` (shared/test-support/fake-tty.ts) drives Ink's real alternate-screen
+// and resize machinery, which renderToString's `interactive: false` harness skips.
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
@@ -15,7 +8,7 @@ import { AppShell } from './app-shell.js';
 import { createAppStore } from './store/app-store.js';
 import { FakeTtyStdout, fakeTtyStdin } from './shared/test-support/fake-tty.js';
 
-describe('AppShell alternate-screen rendering (AC1, AC2, AC3)', () => {
+describe('AppShell alternate-screen rendering', () => {
   it('enters the alternate screen on mount and exits it on unmount', async () => {
     const stdout = new FakeTtyStdout();
     const stdin = fakeTtyStdin();
@@ -39,17 +32,17 @@ describe('AppShell alternate-screen rendering (AC1, AC2, AC3)', () => {
       // trailing edge under CI load. waitUntilRenderFlush() resolves once the current
       // frame is actually written to stdout.
       await instance.waitUntilRenderFlush();
-      // AC1: alt-screen entered on mount (ansi-escapes' enterAlternativeScreen = ESC + '?1049h').
+      // Alt-screen entered on mount (ansi-escapes' enterAlternativeScreen = ESC + '?1049h').
       expect(stdout.output).toContain('[?1049h');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
     }
-    // AC3: alt-screen restored on exit (exitAlternativeScreen = ESC + '?1049l').
+    // Alt-screen restored on exit (exitAlternativeScreen = ESC + '?1049l').
     expect(stdout.output).toContain('[?1049l');
   });
 
-  it('clips content to the terminal height on resize instead of spilling past it (AC2)', async () => {
+  it('clips content to the terminal height on resize instead of spilling past it', async () => {
     // Isolating rows alone (columns held fixed) matters: Ink's own internal resize
     // handler re-triggers layout/render on ANY 'resize' event regardless of what
     // changed, so an assertion that only checks "did output grow" would still pass even

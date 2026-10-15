@@ -1,8 +1,6 @@
-// adapters/driven/docker: integration tests against a real, disposable `busybox` container
-// (AD-13 driven layer) — mirrors adapters/driven/git/index.test.ts's own "don't mock the
-// binary, exercise the real contract" convention. Skipped entirely when no docker daemon is
-// reachable (e.g. a sandboxed CI runner) rather than failing — this suite's whole point is
-// verifying the real `docker` CLI's behavior, which has nothing to assert without it.
+// adapters/driven/docker: integration tests against a real, disposable `busybox` container —
+// the binary is not mocked. Skipped entirely when no docker daemon is reachable (e.g. a
+// sandboxed CI runner): there is nothing to assert about the real `docker` CLI without one.
 import { afterEach, describe, expect, it } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -128,7 +126,7 @@ describe.skipIf(!dockerAvailable)('createDockerPort (real docker integration)', 
     expect(result).toMatchObject({ ok: false, error: { code: 'docker-unavailable' } });
   });
 
-  it('getContainerHealth returns up for a running container (story 5.3)', async () => {
+  it('getContainerHealth returns up for a running container', async () => {
     const name = startContainer('sleep 30');
     const port = createDockerPort();
 
@@ -138,7 +136,7 @@ describe.skipIf(!dockerAvailable)('createDockerPort (real docker integration)', 
   });
 
   it(
-    'getContainerHealth returns down for a stopped (exited) container (story 5.3)',
+    'getContainerHealth returns down for a stopped (exited) container',
     async () => {
       // No `--rm` here (unlike startContainer): a removed container would exercise the
       // missing-name path below instead of the stopped-but-present mapping.
@@ -155,7 +153,7 @@ describe.skipIf(!dockerAvailable)('createDockerPort (real docker integration)', 
     15000,
   );
 
-  it('getContainerHealth returns down for a container that does not exist (story 5.3)', async () => {
+  it('getContainerHealth returns down for a container that does not exist', async () => {
     const port = createDockerPort();
 
     const result = await port.getContainerHealth('tui-back-docker-test-does-not-exist');
@@ -164,7 +162,7 @@ describe.skipIf(!dockerAvailable)('createDockerPort (real docker integration)', 
   });
 
   it(
-    'restartContainer restarts a running container, which reads up before and after (story 5.3)',
+    'restartContainer restarts a running container, which reads up before and after',
     async () => {
       const name = startContainer('sleep 30');
       const port = createDockerPort();
@@ -181,7 +179,7 @@ describe.skipIf(!dockerAvailable)('createDockerPort (real docker integration)', 
     20000,
   );
 
-  it('restartContainer returns a docker-unavailable error for a container that does not exist (story 5.3)', async () => {
+  it('restartContainer returns a docker-unavailable error for a container that does not exist', async () => {
     const port = createDockerPort();
 
     const result = await port.restartContainer('tui-back-docker-test-does-not-exist');
@@ -196,9 +194,8 @@ describe.skipIf(dockerAvailable)('createDockerPort (docker unavailable in this e
   });
 });
 
-// Mirrors adapters/driven/git/index.test.ts's own "spawn failure diagnostics (status === null)"
-// section — runs regardless of whether a real docker daemon is reachable, since this only
-// needs the `docker` binary itself to be absent from PATH.
+// Spawn failure diagnostics — runs whether or not a docker daemon is reachable, since it only
+// needs the `docker` binary to be absent from PATH.
 describe('spawn failure diagnostics (status === null)', () => {
   it('streamLogs reports the real ENOENT cause, not a bare/empty message, when docker is missing from PATH', () => {
     const originalPath = process.env.PATH;

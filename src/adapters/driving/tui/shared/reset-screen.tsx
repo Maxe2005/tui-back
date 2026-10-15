@@ -1,16 +1,17 @@
-// tui/shared/reset-screen: the `:reset` full-screen overlay — reachable exclusively through
-// the registered `reset` command inside the `:` command bar (never a raw keypress). Three
-// steps (select categories -> review the exact summary -> type `reset`) then a result view
-// listing each category's outcome and every git branch left behind.
-//
-// Self-contained useInput + pure key handling (mirrors settings-screen.tsx): every decision
-// lives in reset-screen.logic.ts; this component only feeds it raw Ink keys and applies the
-// returned state/action. Danger styling: error-colored border and title, never the accent.
-import { useRef, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+// tui/shared/reset-screen: the `:reset` full-screen overlay, reachable only through the `reset`
+// command. Select categories -> review the exact summary -> type `reset`, then a result view of
+// each category's outcome and every git branch left behind. Every decision lives in
+// reset-screen.logic.ts; this component feeds it raw Ink keys. Danger styling: error-colored
+// border and title, never the accent.
+import { useRef, useState, type ReactNode } from 'react';
+import { Box, Text } from 'ink';
+import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { TextInputLine } from './components/text-input-line.js';
+import { StateLine } from './components/state-line.js';
+import { useFooterContext } from './hooks/use-footer-context.js';
+import type { FooterContextId } from '../keybindings/index.js';
 import { colors, spacing } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import {
@@ -26,6 +27,7 @@ import {
   type ResetLine,
   type ResetScreenState,
 } from './reset-screen.logic.js';
+import { BoundedList } from './components/bounded-list.js';
 
 const TONE_COLORS: Record<ResetLine['tone'], string> = {
   text: colors.text,
@@ -43,14 +45,21 @@ export type ResetScreenProps = {
   initialState?: ResetScreenState;
 };
 
+// Rows the reset frame and its prompts keep around a line list.
+const RESET_LIST_CHROME_ROWS = 12;
+
 function Lines({ lines }: { lines: ResetLine[] }) {
   return (
     <Box flexDirection="column">
-      {lines.map((line, index) => (
-        <Text key={index} color={TONE_COLORS[line.tone]}>
-          {line.text}
-        </Text>
-      ))}
+      <BoundedList
+        items={lines}
+        chromeRows={RESET_LIST_CHROME_ROWS}
+        renderItem={(line, index) => (
+          <Text key={index} color={TONE_COLORS[line.tone]} wrap="truncate-end">
+            {line.text}
+          </Text>
+        )}
+      />
     </Box>
   );
 }
@@ -91,13 +100,15 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
   });
 
   let body;
-  let hint: string;
+  let note: ReactNode = null;
+  let context: FooterContextId | null;
   if (status === 'running') {
     body = <Text color={colors.warning}>Resetting…</Text>;
-    hint = 'Please wait.';
+    note = 'Please wait.';
+    context = 'busy';
   } else if (status === 'done') {
     body = <Lines lines={buildResetResultLines(result, error)} />;
-    hint = 'Enter or Esc to close.';
+    context = 'close';
   } else if (screen.step === 'select') {
     const locked = isEdtsLocked(screen);
     body = (
@@ -107,7 +118,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
           const highlighted = index === screen.cursor;
           return (
             <Box key={category} flexDirection="row">
-              <Text color={colors.accent}>{highlighted ? '›' : ' '}</Text>
+              <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
               <CheckboxListItem
                 label={RESET_CATEGORY_LABELS[category]}
                 state={screen.checked[category] ? 'checked' : 'unchecked'}
@@ -118,9 +129,9 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
         })}
       </Box>
     );
-    hint = selectedCategories(screen).length > 0
-      ? 'Space to toggle, Enter to review, Esc to cancel.'
-      : 'Space to toggle (check at least one), Esc to cancel.';
+    const anyChecked = selectedCategories(screen).length > 0;
+    context = anyChecked ? 'reset-select' : 'reset-select-empty';
+    note = anyChecked ? null : 'Check at least one.';
   } else if (screen.step === 'summary') {
     body = (
       <Box flexDirection="column">
@@ -128,23 +139,26 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
         <Lines lines={buildResetSummaryLines(selectedCategories(screen), preview)} />
       </Box>
     );
-    hint =
-      preview?.status === 'ready'
-        ? 'Enter to continue, Esc to cancel.'
-        : preview?.status === 'error'
-          ? 'The summary could not be loaded, so the reset cannot continue. Esc to cancel.'
-          : 'Loading the summary… Esc to cancel.';
+    context = preview?.status === 'ready' ? 'reset-summary' : 'reset-wait';
+    if (preview?.status === 'error') {
+      note = <StateLine kind="error" subject="the summary" />;
+    } else if (preview?.status !== 'ready') {
+      note = <StateLine kind="loading" subject="the summary" />;
+    }
   } else {
     body = (
       <Box flexDirection="column">
-        <Text color={colors.text}>
-          Type <Text color={colors.error}>{RESET_CONFIRM_WORD}</Text> and press Enter to delete. This cannot be undone.
+        <Text color={colors.text} wrap="truncate-end">
+          Type <Text color={colors.error}>{RESET_CONFIRM_WORD}</Text> and press Enter. This permanently deletes the data and cannot be undone.
         </Text>
         <TextInputLine label="Confirm" value={screen.confirm.value} cursor={screen.confirm.cursor} focused />
       </Box>
     );
-    hint = 'Only the exact word executes. Esc to cancel.';
+    context = 'reset-confirm';
+    note = 'Only the exact word executes.';
   }
+
+  useFooterContext('reset', context, useStore);
 
   return (
     <Box
@@ -159,7 +173,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
       </Text>
       <Text color={colors.text}>──</Text>
       {body}
-      <DimAnnotation text={hint} />
+      {typeof note === 'string' ? <DimAnnotation text={note} /> : note}
     </Box>
   );
 }

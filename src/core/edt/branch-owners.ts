@@ -1,4 +1,4 @@
-// core/edt/branch-owners: Story 2.43 — pure lookup of which EDTs register a given branch of
+// core/edt/branch-owners: pure lookup of which EDTs register a given branch of
 // a given repo as one of their own member branches. Single source for the git adapter's
 // rename gate and the TUI's chooser annotations / inline refusals. Paths are compared after
 // resolve() so a registry-stored shape (trailing slash, relative segments) still matches.
@@ -21,7 +21,7 @@ export function branchOwners(
     .map((edt) => edt.topic);
 }
 
-// Story 2.43: owners of every candidate that has at least one — branch -> topics (registry
+// owners of every candidate that has at least one — branch -> topics (registry
 // order). Branches nobody owns are absent, so a lookup doubles as the "owned?" test. Feeds the
 // choosers' annotations without the pickers/inputs ever importing the EDT list.
 export function branchOwnersMap(

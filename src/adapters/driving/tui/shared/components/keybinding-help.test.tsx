@@ -9,19 +9,19 @@ import {
 } from './index.js';
 import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
 import { renderToString } from './render-to-string.js';
+import { footerContextOf } from '../test-support/mount-for-test.js';
+import { withSectionHeadings } from './keybinding-help.js';
 
-// Story 5.5: clampHelpOffset/resolveHelpWindow are now thin aliases for bounded-list.tsx's own
-// clampBoundedOffset/resolveBoundedWindow (the shared primitive every bounded surface in the
-// app reuses) — proves the extraction genuinely removed the duplicated window logic rather
-// than just renaming a second copy of it.
-describe('keybinding-help delegates to the shared bounded-list primitive (story 5.5)', () => {
+// clampHelpOffset/resolveHelpWindow are thin aliases for bounded-list.tsx's
+// clampBoundedOffset/resolveBoundedWindow, not a second copy of the window logic.
+describe('keybinding-help delegates to the shared bounded-list primitive', () => {
   it('clampHelpOffset/resolveHelpWindow are literally bounded-list.tsx\'s own exports', () => {
     expect(clampHelpOffset).toBe(clampBoundedOffset);
     expect(resolveHelpWindow).toBe(resolveBoundedWindow);
   });
 });
 
-describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
+describe('keybinding-help scroll window (UX-DR15)', () => {
   it('clamps negative and non-finite offsets to 0', () => {
     expect(clampHelpOffset(-3, 10)).toBe(0);
     expect(clampHelpOffset(Number.NaN, 10)).toBe(0);
@@ -50,9 +50,8 @@ describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
     expect(down.visible[0].keys).toBe('Home / End');
     expect(down.scrollOffset).toBe(1);
 
-    const atBottom = resolveHelpWindow(KEYBINDINGS, 100, 10);
-    // Story 2.41 appended the switch resolution view's keys, its Esc row last.
-    expect(atBottom.visible.at(-1)?.keys).toBe('Esc (switch resolution)');
+    const atBottom = resolveHelpWindow(KEYBINDINGS, KEYBINDINGS.length + 100, 10);
+    expect(atBottom.visible.at(-1)?.keys).toBe(KEYBINDINGS.at(-1)?.keys);
     expect(atBottom.scrollOffset).toBe(KEYBINDINGS.length - 10);
 
     const backUp = resolveHelpWindow(KEYBINDINGS, atBottom.scrollOffset - 1, 10);
@@ -60,9 +59,9 @@ describe('keybinding-help scroll window (AC3, UX-DR15)', () => {
   });
 });
 
-// Story 2.7: canonical navigation contract — resolveHelpScroll reads key flags
-// (upArrow/downArrow/home/end) instead of input==='j'/'k', and j/k/g/G are inert.
-describe('resolveHelpScroll (story 2.7)', () => {
+// resolveHelpScroll reads key flags (upArrow/downArrow/home/end), never input==='j'/'k'; j/k/g/G
+// are inert.
+describe('resolveHelpScroll', () => {
   const noKey = { upArrow: false, downArrow: false, home: false, end: false, tab: false };
 
   it('moves the offset down on downArrow and up on upArrow', () => {
@@ -89,7 +88,7 @@ describe('resolveHelpScroll (story 2.7)', () => {
   });
 });
 
-describe('KeybindingHelp modal (AC2, AC3)', () => {
+describe('KeybindingHelp modal', () => {
   it('renders the keybinding list while open and nothing when closed', async () => {
     const store = createAppStore();
     let output = await renderToString(<KeybindingHelp useStore={store} />);
@@ -102,7 +101,7 @@ describe('KeybindingHelp modal (AC2, AC3)', () => {
     expect(output).toContain('Open the keybinding-help screen');
   });
 
-  it('renders only the visible slice of keybindings (AC3)', async () => {
+  it('renders only the visible slice of keybindings', async () => {
     const store = createAppStore();
     store.getState().openHelp();
     const output = await renderToString(
@@ -111,5 +110,25 @@ describe('KeybindingHelp modal (AC2, AC3)', () => {
     expect(output).toContain('[↑ / ↓]');
     expect(output).toContain('[Home / End]');
     expect(output).not.toContain('Open command entry');
+  });
+});
+
+describe('KeybindingHelp footer context and grouping', () => {
+  it('registers the help context while open and nothing while closed', async () => {
+    const closed = createAppStore();
+    expect(await footerContextOf(closed, <KeybindingHelp useStore={closed} />)).toBeUndefined();
+    const open = createAppStore();
+    open.getState().openHelp();
+    expect(await footerContextOf(open, <KeybindingHelp useStore={open} />)).toBe('help');
+  });
+
+  it('puts one heading before the per-context rows, also when the window starts inside them', () => {
+    const firstContext = KEYBINDINGS.findIndex((entry) => entry.section !== undefined);
+    const around = withSectionHeadings(KEYBINDINGS.slice(firstContext - 1, firstContext + 3));
+    expect(around.filter((item) => item.kind === 'heading')).toHaveLength(1);
+    expect(around.findIndex((item) => item.kind === 'heading')).toBe(1);
+    const inside = withSectionHeadings(KEYBINDINGS.slice(firstContext + 2, firstContext + 5));
+    expect(inside[0]).toMatchObject({ kind: 'heading' });
+    expect(withSectionHeadings(KEYBINDINGS.slice(0, 5)).some((item) => item.kind === 'heading')).toBe(false);
   });
 });

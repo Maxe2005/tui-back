@@ -1,24 +1,10 @@
-// tui/zones/edts/dialogs/create-wizard: Story 2.38 — the create wizard's Step 4 key reducer, kept
-// pure and unit-tested apart from its Ink view (step-activation.tsx), the same pattern as
-// switch-resolution.logic.ts: the reducer runs inside the setDialog updater (so keys arriving
-// in one input chunk each see the previous key's result) and only RAISES a `decision`; the
-// zone's effect hands it to the wizard's effectful handler exactly once.
-//
-//   - Before the create: `Space`/`↑`/`↓` move the radio (switch now / create without switching)
-//     — inert on a first EDT, whose activation is locked on. `Enter`/`Esc`/step keys stay the
-//     wizard's own (create-wizard.tsx).
-//   - The pause panel (first-EDT pre-flight found files at risk): `R` retry, `E` open the
-//     overwrite confirmation, `Esc` stop (the EDT stays created, not active).
-//   - The overwrite confirmation (mirrors Story 2.41's discard confirmation): lists every file,
-//     `↑`/`↓` scroll it, `Ctrl+E` confirms, `Enter`/`Esc` mean Retour.
+// tui/zones/edts/dialogs/create-wizard: the create wizard's Step 4 key reducer, pure and kept apart
+// from its Ink view (step-activation.tsx). It runs inside the setDialog updater (so keys arriving
+// in one input chunk each see the previous key's result) and only RAISES a `decision`; the zone's
+// effect hands it to the wizard's effectful handler exactly once.
 import type { ActivationBlockedRepo } from '../../../../../../../core/edt/activate.js';
 import type { TextEditKey } from '../../../../shared/components/text-edit.js';
 import type { ActivationState } from '../../edts-zone.logic.js';
-
-export const ACTIVATION_PAUSE_FOOTER = "[R] Réessayer • [E] Écraser • [Esc] Arrêter (l'EDT reste créé mais inactif)";
-export const OVERWRITE_CONFIRM_FOOTER = '[Ctrl+E] Écraser définitivement • [Entrée] / [Esc] Retour';
-export const ACTIVATION_RADIO_FOOTER = "[Espace/↑↓] Choisir • [Entrée] Créer l'EDT";
-export const ACTIVATION_FIRST_FOOTER = "[Entrée] Créer et activer l'EDT";
 
 export type ActivationConfirmLine = { key: string; text: string; kind: 'head' | 'file' };
 
@@ -26,7 +12,7 @@ export type ActivationConfirmLine = { key: string; text: string; kind: 'head' | 
 export function overwriteConfirmLines(blocked: readonly ActivationBlockedRepo[]): ActivationConfirmLine[] {
   const lines: ActivationConfirmLine[] = [];
   for (const repo of blocked) {
-    lines.push({ key: `${repo.repoPath}:head`, text: `${repo.service} (${repo.paths.length} fichier(s))`, kind: 'head' });
+    lines.push({ key: `${repo.repoPath}:head`, text: `${repo.service} (${repo.paths.length} file(s))`, kind: 'head' });
     for (const path of repo.paths) {
       lines.push({ key: `${repo.repoPath}:${path}`, text: `    ${path}`, kind: 'file' });
     }
@@ -47,6 +33,12 @@ function isCtrl(input: string, key: TextEditKey, letter: string): boolean {
   return key.ctrl === true && input.toLowerCase() === letter;
 }
 
+//   - Before the create: `Space`/`↑`/`↓` move the radio (switch now / create without switching)
+//     — inert on a first EDT, whose activation is locked on.
+//   - The pause panel (first-EDT pre-flight found files at risk): `R` retry, `E` open the
+//     overwrite confirmation, `Esc` stop (the EDT stays created, not active).
+//   - The overwrite confirmation: lists every file, `↑`/`↓` scroll it, `Ctrl+E` confirms,
+//     `Enter`/`Esc` go back.
 export function reduceActivationKey(state: ActivationState, input: string, key: TextEditKey): ActivationState {
   if (state.decision !== null || state.outcome !== null) {
     return state;

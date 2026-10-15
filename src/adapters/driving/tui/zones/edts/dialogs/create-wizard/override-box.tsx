@@ -1,5 +1,5 @@
-// tui/zones/edts/dialogs/create-wizard: Story 2.37 — the "Configurer <service>" override
-// box's Ink view. Its state, key reducer and Apply validation live in override-box.logic.ts.
+// tui/zones/edts/dialogs/create-wizard: the "Configure <service>" override box's Ink view. Its
+// state, key reducer and Apply validation live in override-box.logic.ts.
 import { Box, Text } from 'ink';
 import {
   BranchAutocompleteInput,
@@ -17,9 +17,10 @@ import {
   type OverrideBoxLine,
   type OverrideBoxState,
 } from './override-box.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 
 function LineMarker({ focused }: { focused: boolean }) {
-  return <Text color={colors.accent}>{focused ? '› ' : '  '}</Text>;
+  return <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>;
 }
 
 function BoxField({
@@ -49,7 +50,7 @@ function BoxField({
           state={autocomplete}
           branches={overrideBoxBranches(context)}
           branchesStatus={status}
-          maxRows={maxRows}
+          maxLines={maxRows}
           focused={true}
           annotations={ownerAnnotations(context.owners)}
         />
@@ -63,9 +64,6 @@ function BoxField({
     </Box>
   );
 }
-
-export const OVERRIDE_BOX_FOOTER =
-  "[↑/↓] Ligne • [Entrée] Éditer / Valider • [Espace/Tab] Mode • [Ctrl+R] Revenir à la stratégie globale • [Esc] Fermer";
 
 export function OverrideBoxView({
   box,
@@ -82,19 +80,19 @@ export function OverrideBoxView({
   const newNameProtected = box.mode === 'existing' && box.rename && box.newName.value.trim() !== '' && isProtectedTarget(box.newName.value, context);
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={colors.accent} paddingX={1}>
-      <Text color={colors.accent} bold>
-        Configurer {context.service}
+      <Text color={colors.accent} bold wrap="truncate-end">
+        Configure {context.service}
       </Text>
       <Box>
         <LineMarker focused={focused('mode')} />
-        <Text color={focused('mode') ? colors.accent : colors.text}>
-          Mode : {box.mode === 'create' ? '(•)' : '( )'} Créer nouvelle {box.mode === 'existing' ? '(•)' : '( )'} Choisir existante
+        <Text color={focused('mode') ? colors.accent : colors.text} wrap="truncate-end">
+          Mode: {box.mode === 'create' ? '(•)' : '( )'} Create new {box.mode === 'existing' ? '(•)' : '( )'} Choose existing
         </Text>
       </Box>
       {box.mode === 'create' ? (
         <>
           <BoxField
-            label="Branche de base (source)"
+            label="Base branch (source)"
             focused={focused('base')}
             editing={box.editing}
             autocomplete={box.base}
@@ -102,13 +100,13 @@ export function OverrideBoxView({
             context={context}
             maxRows={maxRows}
           />
-          <BoxField label="Nom de la branche" focused={focused('name')} editing={box.editing} value={box.name} context={context} maxRows={maxRows} />
-          {nameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.name.value.trim(), context.service)}</Text> : null}
+          <BoxField label="Branch name" focused={focused('name')} editing={box.editing} value={box.name} context={context} maxRows={maxRows} />
+          {nameProtected ? <Text color={colors.error} wrap="truncate-end">✖ {protectedNameError(box.name.value.trim(), context.service)}</Text> : null}
         </>
       ) : (
         <>
           <BoxField
-            label="Branche existante"
+            label="Existing branch"
             focused={focused('existing')}
             editing={box.editing}
             autocomplete={box.existing}
@@ -118,22 +116,21 @@ export function OverrideBoxView({
           />
           <Box>
             <LineMarker focused={focused('rename')} />
-            <Text color={focused('rename') ? colors.accent : colors.text}>{box.rename ? '[x]' : '[ ]'} Renommer la branche locale</Text>
+            <Text color={focused('rename') ? colors.accent : colors.text} wrap="truncate-end">{box.rename ? '[x]' : '[ ]'} Rename the local branch</Text>
           </Box>
           {box.rename ? (
-            <BoxField label="Nouveau nom" focused={focused('newName')} editing={box.editing} value={box.newName} context={context} maxRows={maxRows} />
+            <BoxField label="New name" focused={focused('newName')} editing={box.editing} value={box.newName} context={context} maxRows={maxRows} />
           ) : null}
-          {newNameProtected ? <Text color={colors.error}>✖ {protectedNameError(box.newName.value.trim(), context.service)}</Text> : null}
+          {newNameProtected ? <Text color={colors.error} wrap="truncate-end">✖ {protectedNameError(box.newName.value.trim(), context.service)}</Text> : null}
         </>
       )}
       <Box>
         <LineMarker focused={focused('apply')} />
         <Text color={focused('apply') ? colors.accent : colors.text} bold={focused('apply')}>
-          [ Appliquer ]
+          [ Apply ]
         </Text>
       </Box>
-      {box.error !== null ? <Text color={colors.error}>✖ {box.error}</Text> : null}
-      <Text color={colors['text-dim']}>{OVERRIDE_BOX_FOOTER}</Text>
+      {box.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${box.error}`}</ClampedParagraph> : null}
     </Box>
   );
 }

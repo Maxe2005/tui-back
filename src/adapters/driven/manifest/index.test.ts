@@ -29,7 +29,7 @@ afterEach(async () => {
 });
 
 describe('loadManifest', () => {
-  it('loads a valid manifest and exposes identity/modules as-is (AC1, AC5)', async () => {
+  it('loads a valid manifest and exposes identity/modules as-is', async () => {
     const repo = await tempRepo(
       [
         'service: route-explorer',
@@ -58,13 +58,13 @@ describe('loadManifest', () => {
         sharedBranch: 'development',
         modules: {
           'route-explorer': { scanner: 'nestjs-openapi', auth: 'jose-dev-jwt' },
-          'shared-types-consumer': {},
+          'shared-types-consumer': { dependency: '@ianord/shared-types', packageJsonPath: 'package.json' },
         },
       },
     });
   });
 
-  it('fails with a clear validation error naming the missing field (AC2), no throw', async () => {
+  it('fails with a clear validation error naming the missing field, no throw', async () => {
     const repo = await tempRepo(
       ['container: route-explorer', 'migrationCommand: migrate', 'modules: {}'].join('\n'),
     );
@@ -82,6 +82,45 @@ describe('loadManifest', () => {
       expect(result.error.details).toBeDefined();
       expect(result.error.details).toHaveProperty('issues');
     }
+  });
+
+  it('loads a manifest omitting container as having no Docker runtime', async () => {
+    const repo = await tempRepo(['service: shared-types', 'modules: {}'].join('\n'));
+
+    const result = await loadManifest(repo);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.container).toBeUndefined();
+    }
+  });
+
+  it.each([['""'], ['"   "']])('rejects a present-but-blank container (%s) naming the field', async (entry) => {
+    const repo = await tempRepo(['service: shared-types', `container: ${entry}`, 'modules: {}'].join('\n'));
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('container'),
+      },
+    });
+  });
+
+  it('rejects an explicit null container naming the field (omit the key instead)', async () => {
+    const repo = await tempRepo(['service: shared-types', 'container: null', 'modules: {}'].join('\n'));
+
+    const result = await loadManifest(repo);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'manifest-validation-failed',
+        message: expect.stringContaining('container'),
+      },
+    });
   });
 
   it('loads a manifest omitting migrationCommand as having no migrations', async () => {
@@ -174,7 +213,7 @@ describe('loadManifest', () => {
     });
   });
 
-  describe('protectedBranches (story 2.42)', () => {
+  describe('protectedBranches', () => {
     const base = ['service: route-explorer', 'container: route-explorer', 'modules: {}'];
 
     it('leaves protectedBranches undefined when the manifest omits it', async () => {
@@ -230,7 +269,7 @@ describe('loadManifest', () => {
     });
   });
 
-  it('treats a repo with no .tui-back.yaml as unmanaged (AC3), no throw', async () => {
+  it('treats a repo with no .tui-back.yaml as unmanaged, no throw', async () => {
     const repo = await tempRepo(null);
 
     const result = await loadManifest(repo);
@@ -238,7 +277,7 @@ describe('loadManifest', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'manifest-not-found' } });
   });
 
-  it('defaults sharedBranch to development when absent (AC4)', async () => {
+  it('defaults sharedBranch to development when absent', async () => {
     const repo = await tempRepo(
       ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules: {}'].join('\n'),
     );
@@ -318,7 +357,7 @@ describe('loadManifest', () => {
     }
   });
 
-  it('rejects unknown top-level keys (strict decision, 2026-08-12)', async () => {
+  it('rejects unknown top-level keys (strict schema)', async () => {
     const repo = await tempRepo(
       [
         'service: route-explorer',
@@ -433,7 +472,7 @@ describe('loadManifest', () => {
     }
   });
 
-  it('loads an empty modules map against the empty production registry (AC2 baseline)', async () => {
+  it('loads an empty modules map against the empty production registry', async () => {
     const repo = await tempRepo(
       ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules: {}'].join('\n'),
     );
@@ -443,7 +482,7 @@ describe('loadManifest', () => {
     expect(result).toMatchObject({ ok: true, data: { modules: {} } });
   });
 
-  it('fails with unknown-module naming the id and repo path for an unknown id (AC3)', async () => {
+  it('fails with unknown-module naming the id and repo path for an unknown id', async () => {
     const repo = await tempRepo(
       ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules:', '  bogus-module: {}'].join('\n'),
     );
@@ -457,7 +496,7 @@ describe('loadManifest', () => {
     }
   });
 
-  it('loads a known module id when the registry is injected (AC2 via D1 seam)', async () => {
+  it('loads a known module id when the registry is injected', async () => {
     const repo = await tempRepo(
       ['service: route-explorer', 'container: route-explorer', 'migrationCommand: migrate', 'modules:', '  route-explorer: {}'].join('\n'),
     );
@@ -491,6 +530,58 @@ describe('loadManifest', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'unknown-module' } });
     if (!result.ok) {
       expect(result.error.message).toContain('unknown-x');
+    }
+  });
+});
+
+describe('loadManifest shared-types module parameters', () => {
+  const head = ['service: svc', 'migrationCommand: migrate', 'modules:'];
+
+  it('fills source defaults for an empty config, with no container', async () => {
+    const repo = await tempRepo([...head, '  shared-types-source: {}'].join('\n'));
+    const result = await loadManifest(repo);
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        modules: { 'shared-types-source': { publishCommand: 'npm run v', packageName: '@ianord/shared-types', registry: 'https://npm.ianord.fr' } },
+      },
+    });
+  });
+
+  it('loads a custom source registry and rejects a blank one', async () => {
+    const custom = await loadManifest(await tempRepo([...head, '  shared-types-source:', '    registry: https://npm.example'].join('\n')));
+    expect(custom).toMatchObject({ ok: true, data: { modules: { 'shared-types-source': { registry: 'https://npm.example' } } } });
+    const blank = await loadManifest(await tempRepo([...head, '  shared-types-source:', '    registry: ""'].join('\n')));
+    expect(blank).toMatchObject({ ok: false });
+  });
+
+  it('loads custom consumer parameters as given', async () => {
+    const repo = await tempRepo(
+      [...head, '  shared-types-consumer:', '    dependency: "@x/y"', '    packageJsonPath: api/package.json'].join('\n'),
+    );
+    const result = await loadManifest(repo);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { modules: { 'shared-types-consumer': { dependency: '@x/y', packageJsonPath: 'api/package.json' } } },
+    });
+  });
+
+  it('rejects an unknown parameter naming the module and the parameter', async () => {
+    const repo = await tempRepo([...head, '  shared-types-consumer:', '    bogus: 1'].join('\n'));
+    const result = await loadManifest(repo);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-validation-failed' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('shared-types-consumer');
+      expect(result.error.message).toContain('bogus');
+    }
+  });
+
+  it('rejects a blank parameter', async () => {
+    const repo = await tempRepo([...head, '  shared-types-source:', '    publishCommand: ""'].join('\n'));
+    const result = await loadManifest(repo);
+    expect(result).toMatchObject({ ok: false, error: { code: 'manifest-validation-failed' } });
+    if (!result.ok) {
+      expect(result.error.message).toContain('publishCommand');
     }
   });
 });

@@ -1,20 +1,15 @@
-// shared/components/text-edit: the hand-rolled controlled text-input pure interpreter
-// (topic field, branch-edit field, autocomplete filter) — no new npm dependency, per the
-// spec's Boundaries. Defensively filters every non-character key itself (not just the
-// arrow/Home/End/Tab/Return/Escape the useInput dispatcher already intercepts first) so
-// it's safe to unit-test directly against any Ink `Key`-shaped object.
-//
-// Leaf-home history: this lived in zones/edts/edts-zone.logic.ts until the shared
-// branch-autocomplete input needed it too — importing it from there would have closed an
-// import cycle (autocomplete -> edts-zone.logic -> branch-picker -> autocomplete), the exact
-// cycle story 2.32 kept branch-picker's local copy out of. Every importer (including
-// edts-zone.logic's own former consumers) reads it from here now.
+// shared/components/text-edit: the hand-rolled controlled text-input interpreter (topic field,
+// branch-edit field, autocomplete filter), no npm dependency. It filters every non-character
+// key itself, so it's safe to unit-test against any Ink `Key`-shaped object. It lives here, not
+// in edts-zone.logic, because importing it from there would close an import cycle
+// (autocomplete -> edts-zone.logic -> branch-picker -> autocomplete).
 export type TextEditKey = {
   backspace?: boolean;
   delete?: boolean;
   return?: boolean;
   escape?: boolean;
   tab?: boolean;
+  shift?: boolean;
   upArrow?: boolean;
   downArrow?: boolean;
   leftArrow?: boolean;
@@ -25,24 +20,20 @@ export type TextEditKey = {
   meta?: boolean;
 };
 
-// Story 2.32: the controlled value/caret pair every `TextInputLine`-driving field now carries —
-// paired sibling of the bare-string field it replaces, exactly like the existing
-// `branchNamesTouched` paired-map convention (Code Map).
+// The controlled value/caret pair every `TextInputLine`-driving field carries.
 export type TextInputState = {
   value: string;
   cursor: number;
 };
 
-// Story 2.32: retargeted from a bare-string interpreter to `{value, cursor}` in, `{value,
-// cursor}` out — Left/Right/Home/End now actually move `cursor` (clamped to [0, value.length])
-// instead of being silent no-ops, and Backspace/Delete/typed-char apply at `cursor` rather than
-// always at the end. Every other key stays exactly as inert as before.
+// `{value, cursor}` in, `{value, cursor}` out — Left/Right/Home/End move `cursor` (clamped to
+// [0, value.length]) and Backspace/Delete/typed-char apply at `cursor`. Every other key is
+// inert.
 export function nextTextInputValue(current: TextInputState, input: string, key: TextEditKey): TextInputState {
   const { value, cursor } = current;
-  // Code review fix: ctrl/meta must stay fully inert even when combined with an arrow/Home/
-  // End/Backspace/Delete flag (Ink reports Ctrl+Left etc. with both set) — checked first, before
-  // any of the new navigation/edit branches below, so Ctrl/Meta+<key> never moves or edits the
-  // caret, matching every other key's pre-story no-op behavior.
+  // Ctrl/meta stay fully inert even combined with an arrow/Home/End/Backspace/Delete flag (Ink
+  // reports Ctrl+Left etc. with both set) — checked first, so Ctrl/Meta+<key> never moves or
+  // edits the caret.
   if (key.ctrl || key.meta) {
     return current;
   }

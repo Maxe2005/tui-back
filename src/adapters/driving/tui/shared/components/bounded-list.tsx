@@ -1,33 +1,11 @@
-// tui/shared/components/bounded-list: story 5.5 — the shared scrollable-window primitive that
-// replaces the reported-live/inspection-confirmed unbounded-list corruption pattern (Logs
-// zone's two service lists, its always-visible hints panel, LogFilterEditor's body, and the
-// EDTs zone's two service lists all used to render an unbounded number of rows; when their
-// combined content exceeded the terminal's actual row count, Ink's diff-render desynced from
-// the real terminal cursor and corrupted already-painted lines).
-//
-// `resolveBoundedWindow`/`clampBoundedOffset` are keybinding-help.tsx's own
-// `resolveHelpWindow`/`clampHelpOffset`, extracted verbatim (same slice-based windowing,
-// generic over `T`) so every bounded surface in the app shares one implementation instead of
-// each reimplementing it — keybinding-help.tsx now re-exports these two names as thin aliases
-// (Code Map: "no behavior change for keybinding-help.tsx itself").
-//
-// `BoundedList<T>` is the thin, stateless component every other touched surface renders
-// through: given `items`/`renderItem`/`maxVisibleRows` (a *total* row budget that already
-// includes room for the indicator lines below), it slices to what fits and renders a subtle
-// dim "more above"/"more below" line — glyph+text, never color alone, matching the closed
-// status-badge convention (Design Notes) — whenever the window is scrolled away from either
-// end; nothing renders when everything already fits (NO_OVERFLOW: identical to before this
-// story). An optional `cursorIndex` (a list's own currently-selected/focused row) keeps that
-// row inside the visible window by centering the window on it once scrolling is unavoidable —
-// callers with no such concept (e.g. the static hints panel) omit it and the window simply
-// anchors to the top, only ever growing a "more below" indicator.
-//
-// Scroll state is never owned here (mirrors keybinding-help.tsx's own scrollOffset living in
-// KeybindingHelp, not ModalDialog) — every render recomputes the window fresh from
-// `items`/`maxVisibleRows`/`cursorIndex`, which callers derive live from Ink's `useWindowSize()`
-// on every resize (never a value computed once at mount).
+// tui/shared/components/bounded-list: the shared scrollable-window primitive. Any list that
+// can outgrow the terminal renders through it: Ink's diff-render desyncs from the real cursor
+// and corrupts painted lines when content exceeds the terminal's rows. `maxVisibleRows` is a
+// total budget including the dim "more above/below" lines; `cursorIndex` keeps a selected row
+// visible. Scroll state is never owned here — callers recompute it from useWindowSize().
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
+import { useRowBudget } from '../bounds/bounds-context.js';
 import { colors } from '../theme/theme.js';
 
 export function clampBoundedOffset(offset: number, maxOffset: number): number {
@@ -62,17 +40,12 @@ export type BoundedListVisibility<T> = {
 // The component's own windowing on top of resolveBoundedWindow: `maxVisibleRows` is a *total*
 // row budget (items + indicator lines), not an item-only count.
 //
-// Review fix: the original two-pass version floored `itemRows` at 1 on *both* passes, which
-// let the function overshoot its own budget whenever `maxVisibleRows` was 1 or 2 — it could
-// return 1 visible item plus *both* indicators (3 rows for a budget of 1). It also reused the
-// first pass's `rawOffset` after shrinking `itemRows` on the second pass, which could leave the
-// window not even containing `cursorIndex` anymore (the row a caller asked to keep visible).
-// Both are fixed by (a) recomputing `rawOffset` against whichever `itemRows` is actually used,
-// and (b) a final affordability pass that only ever grants an indicator a row that's actually
-// left in the budget once `visible.length` is settled — this is what provably guarantees
+//
+// Two passes, then an affordability guard: `rawOffset` is recomputed against whichever
+// `itemRows` is actually used (so the window keeps `cursorIndex`), and an indicator only gets a
+// row that is still left once `visible.length` is settled. That guarantees
 // `visible.length + (hasMoreAbove?1:0) + (hasMoreBelow?1:0) <= maxVisibleRows` for every
-// `maxVisibleRows >= 0`, not just the common case, since `itemRows` never exceeds `totalBudget`
-// on either pass.
+// `maxVisibleRows >= 0`, including the extreme 1/2-row budgets.
 export function resolveBoundedVisibility<T>(
   items: readonly T[],
   maxVisibleRows: number,
@@ -136,8 +109,11 @@ export function resolveBoundedVisibility<T>(
 export type BoundedListProps<T> = {
   items: readonly T[];
   // Total row budget for this list, indicator lines included — callers derive it live from
-  // useWindowSize() (Boundaries: "recalculates its visible window live ... on every resize").
-  maxVisibleRows: number;
+  // useWindowSize() so it follows every resize.
+  maxVisibleRows?: number;
+  // Instead of a budget: the rows the caller uses around the list; the list takes the rest of
+  // its bounds region.
+  chromeRows?: number;
   // Renders one row; the returned element carries its own `key` (every existing call site
   // already keys its rows this way — e.g. `<Box key={service.path} ...>`).
   renderItem: (item: T, index: number) => ReactNode;
@@ -151,12 +127,14 @@ export type BoundedListProps<T> = {
 export function BoundedList<T>({
   items,
   maxVisibleRows,
+  chromeRows = 0,
   renderItem,
   cursorIndex,
   moreAboveLabel = 'more above',
   moreBelowLabel = 'more below',
 }: BoundedListProps<T>) {
-  const { visible, scrollOffset, hasMoreAbove, hasMoreBelow } = resolveBoundedVisibility(items, maxVisibleRows, cursorIndex);
+  const regionBudget = useRowBudget(chromeRows);
+  const { visible, scrollOffset, hasMoreAbove, hasMoreBelow } = resolveBoundedVisibility(items, maxVisibleRows ?? regionBudget, cursorIndex);
   return (
     <Box flexDirection="column">
       {hasMoreAbove ? <Text color={colors['text-dim']}>▲ {moreAboveLabel}</Text> : null}
@@ -164,4 +142,112 @@ export function BoundedList<T>({
       {hasMoreBelow ? <Text color={colors['text-dim']}>▼ {moreBelowLabel}</Text> : null}
     </Box>
   );
+}
+
+// Stream-fed collections (issue logs, retry lists) keep only the newest `max` entries; the
+// caller shows `hidden` as "N older hidden".
+export function capOlder<T>(items: readonly T[], max: number): { items: readonly T[]; hidden: number } {
+  const safeMax = Number.isFinite(max) ? Math.max(0, Math.floor(max)) : 0;
+  if (items.length <= safeMax) return { items, hidden: 0 };
+  return { items: items.slice(items.length - safeMax), hidden: items.length - safeMax };
+}
+
+export type Block = { key: string; rows: number; node: ReactNode };
+
+// The heterogeneous variant: each block declares its own height, the window never exceeds
+// `budget` rows (indicators included) and keeps the cursor block visible. A cursor block taller
+// than the content budget is still shown, clipped to `contentRows`.
+export function resolveBlockWindow(
+  heights: readonly number[],
+  budget: number,
+  cursorIndex: number | undefined,
+): { start: number; end: number; hasAbove: boolean; hasBelow: boolean; contentRows: number } {
+  const total = heights.reduce((sum, h) => sum + Math.max(0, h), 0);
+  const safeBudget = Number.isFinite(budget) ? Math.max(0, Math.floor(budget)) : 0;
+  if (total <= safeBudget) return { start: 0, end: heights.length, hasAbove: false, hasBelow: false, contentRows: safeBudget };
+  if (safeBudget === 0) return { start: 0, end: 0, hasAbove: false, hasBelow: false, contentRows: 0 };
+  const cursor = cursorIndex === undefined ? 0 : Math.min(Math.max(0, cursorIndex), heights.length - 1);
+  const height = (index: number) => Math.max(0, heights[index] ?? 0);
+  const windowFor = (content: number) => {
+    let start = cursor;
+    let end = cursor + 1;
+    let used = Math.min(height(cursor), content);
+    if (height(cursor) <= content) {
+      let grew = true;
+      while (grew) {
+        grew = false;
+        if (end < heights.length && used + height(end) <= content) {
+          used += height(end);
+          end += 1;
+          grew = true;
+        }
+        if (cursorIndex !== undefined && start > 0 && used + height(start - 1) <= content) {
+          used += height(start - 1);
+          start -= 1;
+          grew = true;
+        }
+      }
+    }
+    return { start, end };
+  };
+  let hasAbove = false;
+  let hasBelow = false;
+  let result = { start: 0, end: 0 };
+  let contentRows = safeBudget;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    contentRows = Math.max(0, safeBudget - (hasAbove ? 1 : 0) - (hasBelow ? 1 : 0));
+    result = windowFor(contentRows);
+    const nextAbove = result.start > 0;
+    const nextBelow = result.end < heights.length;
+    if (nextAbove === hasAbove && nextBelow === hasBelow) break;
+    hasAbove = hasAbove || nextAbove;
+    hasBelow = hasBelow || nextBelow;
+  }
+  // A budget too small for both indicators and any content gives up the "above" one.
+  if (safeBudget <= 2 && hasAbove && hasBelow) {
+    hasAbove = false;
+    contentRows = Math.max(0, safeBudget - 1);
+    result = windowFor(contentRows);
+  }
+  return { ...result, hasAbove, hasBelow, contentRows };
+}
+
+export function BoundedBlocks({
+  blocks,
+  maxVisibleRows,
+  chromeRows = 0,
+  cursorIndex,
+  moreAboveLabel = 'more above',
+  moreBelowLabel = 'more below',
+}: {
+  blocks: readonly Block[];
+  maxVisibleRows?: number;
+  chromeRows?: number;
+  cursorIndex?: number;
+  moreAboveLabel?: string;
+  moreBelowLabel?: string;
+}) {
+  const regionBudget = useRowBudget(chromeRows);
+  const { start, end, hasAbove, hasBelow, contentRows } = resolveBlockWindow(
+    blocks.map((block) => block.rows),
+    maxVisibleRows ?? regionBudget,
+    cursorIndex,
+  );
+  return (
+    <Box flexDirection="column">
+      {hasAbove ? <Text color={colors['text-dim']}>▲ {moreAboveLabel}</Text> : null}
+      <Box flexDirection="column" maxHeight={contentRows} overflow="hidden">
+        {blocks.slice(start, end).map((block) => (
+          <Box key={block.key} flexDirection="column" flexShrink={0}>
+            {block.node}
+          </Box>
+        ))}
+      </Box>
+      {hasBelow ? <Text color={colors['text-dim']}>▼ {moreBelowLabel}</Text> : null}
+    </Box>
+  );
+}
+
+export function OlderHiddenLine({ hidden }: { hidden: number }) {
+  return hidden > 0 ? <Text color={colors['text-dim']}>{`… ${hidden} older hidden`}</Text> : null;
 }

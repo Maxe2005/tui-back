@@ -1,5 +1,5 @@
 // core/scripts/validate-registry: unit tests against fake ports (AD-13) — every I/O-matrix
-// row of story 2.28: local hit, remote-only hit, missing branch, unreachable, all five
+// row: local hit, remote-only hit, missing branch, unreachable, all five
 // loader codes, all three inconclusive codes, empty registry, per-path isolation.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err, type Result } from '../result.js';

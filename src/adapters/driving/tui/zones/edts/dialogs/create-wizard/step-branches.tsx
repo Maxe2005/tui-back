@@ -1,30 +1,21 @@
-// tui/zones/edts/dialogs/create-wizard: Step 3 "Branches" (Story 2.37) — one global branch
-// rule for every selected service, then per-service exceptions.
-//   - Panel A "STRATÉGIE GLOBALE" (focused on entry): "Branche source par défaut" (empty = a
-//     dim `<shared-branch>` placeholder: each service uses its own manifest sharedBranch) and
-//     "Nom global de la branche" (the Step 1 slug until edited). `↑/↓` move between the two
-//     lines, `Enter` enters edit mode, `Esc` leaves it; on the base line any printable key
-//     also enters edit mode with that character typed.
-//   - Panel B "RÉSUMÉ ET EXCEPTIONS PAR SERVICE": a height-bounded table, one row per selected
-//     service (`Service | Mode | Base / Source | Branche cible`). `↑/↓` move the row cursor,
-//     `Enter` opens the "Configurer <service>" override box (override-box.tsx).
-//   - `Tab` switches panels. `Enter` never advances the wizard here; `Ctrl+N`/`Ctrl+→` do.
-//   - `Esc` closes the innermost element first: a field in edit, then the box, then Panel A's
-//     edit mode, then (reported as `cancel`) the whole wizard.
-// The key handling is a pure reducer over the dialog state (reduceBranchStepKey).
+// tui/zones/edts/dialogs/create-wizard: Step 3 "Branches" — one global branch rule (Panel A: the
+// default source branch, empty meaning each service's own sharedBranch, and the global branch
+// name) then per-service exceptions (Panel B: a height-bounded table, Enter opens the
+// "Configure <service>" box). Tab switches panels; Enter never advances the wizard here. Esc
+// closes the innermost element first. A pure reducer (reduceBranchStepKey) handles the keys.
 import { Box, Text, type Key } from 'ink';
 import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
+import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import { type BranchStepState, type CreateDialogState, type EdtDialogState } from '../../edts-zone.logic.js';
+import type { BranchStepState, CreateDialogState, EdtDialogState } from '../../edts-zone.logic.js';
 import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan-table.js';
 import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
 import { OverrideBoxView } from './override-box.js';
 import { buildStep3Rows, refreshSeededNames, type BranchCandidate, type RowView } from './wizard.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
-export const STEP3_FOOTER = '[Tab] Changer de zone • [Entrée] Configurer la ligne • [Ctrl+N] Étape suivante';
-
 export function overrideBoxContextFor(state: CreateDialogState, path: string, candidates: readonly BranchCandidate[]): OverrideBoxContext {
   const lists = state.branches.lists[path];
   const candidate = candidates.find((entry) => entry.path === path);
@@ -95,8 +86,9 @@ export function reduceBranchStepKey(
     return { state: withBranches(state, { ...branches, overrides: { ...branches.overrides, [box.path]: result.plan }, box: null }), cancel: false };
   }
 
-  if (key.tab) {
-    return { state: withBranches(state, { ...branches, panel: branches.panel === 'global' ? 'rows' : 'global', editing: false }), cancel: false };
+  const panelStep = resolveFocusStep(input, key, 'tab');
+  if (panelStep !== null) {
+    return { state: withBranches(state, { ...branches, panel: stepFocus(TWO_PANEL_NAV.stops, branches.panel, panelStep), editing: false }), cancel: false };
   }
 
   if (branches.panel === 'global') {
@@ -108,8 +100,8 @@ export function reduceBranchStepKey(
       const next = nextTextInputValue(branches[field], input, key);
       const nameChanged = field === 'globalName' && next.value !== branches.globalName.value;
       const touched = nameChanged ? true : branches.globalNameTouched;
-      // Story 2.31 (review): untouched seeded [Créer (Perso)] rows follow a global name edited
-      // here too, not only on Step 3 re-entry.
+      // Untouched seeded [Create (Custom)] rows follow a global name edited here too, not only on
+      // Step 3 re-entry.
       const overrides = nameChanged
         ? refreshSeededNames(branches.overrides, branches.seededPaths, state.seedFromEdt, branches.globalName.value, next.value)
         : branches.overrides;
@@ -177,7 +169,7 @@ export function createBranchStepHandlers(deps: {
   return { handleBranchStepInput };
 }
 
-const COLUMN_HEADERS = ['Service', 'Mode', 'Base / Source', 'Branche cible'] as const;
+const COLUMN_HEADERS = ['Service', 'Mode', 'Base / Source', 'Target branch'] as const;
 
 // The full text of a blocking error is shown once, on the detail line under the table (the
 // shared table truncates every cell).
@@ -233,16 +225,16 @@ export function BranchStepView({
   const blocked = detailRow(rows, branches.rowCursor);
   return (
     <Box flexDirection="column">
-      <PanelTitle text="STRATÉGIE GLOBALE" focused={globalFocused} />
+      <PanelTitle text="GLOBAL STRATEGY" focused={globalFocused} />
       <Box>
-        <Text color={colors.accent}>{lineFocused('base') ? '› ' : '  '}</Text>
+        <Text color={colors.accent} wrap="truncate-end">{lineFocused('base') ? '› ' : '  '}</Text>
         {branches.globalBase.value === '' ? (
-          <Text color={lineFocused('base') ? colors.accent : colors.text}>
-            Branche source par défaut: <Text color={colors['text-dim']}>{SHARED_BRANCH_PLACEHOLDER}</Text>
+          <Text color={lineFocused('base') ? colors.accent : colors.text} wrap="truncate-end">
+            Default source branch: <Text color={colors['text-dim']}>{SHARED_BRANCH_PLACEHOLDER}</Text>
           </Text>
         ) : (
           <TextInputLine
-            label="Branche source par défaut"
+            label="Default source branch"
             value={branches.globalBase.value}
             cursor={branches.globalBase.cursor}
             focused={lineFocused('base') && branches.editing}
@@ -250,15 +242,15 @@ export function BranchStepView({
         )}
       </Box>
       <Box>
-        <Text color={colors.accent}>{lineFocused('name') ? '› ' : '  '}</Text>
+        <Text color={colors.accent} wrap="truncate-end">{lineFocused('name') ? '› ' : '  '}</Text>
         <TextInputLine
-          label="Nom global de la branche"
+          label="Global branch name"
           value={branches.globalName.value}
           cursor={branches.globalName.cursor}
           focused={lineFocused('name') && branches.editing}
         />
       </Box>
-      <PanelTitle text="RÉSUMÉ ET EXCEPTIONS PAR SERVICE" focused={rowsFocused} />
+      <PanelTitle text="SUMMARY AND PER-SERVICE EXCEPTIONS" focused={rowsFocused} />
       <BranchPlanTable
         headers={COLUMN_HEADERS}
         rows={rows}
@@ -267,14 +259,11 @@ export function BranchStepView({
         cursor={branches.rowCursor}
         focused={rowsFocused}
         maxVisibleRows={maxVisibleRows}
-        labels={{ moreAbove: 'services au-dessus', moreBelow: 'services en dessous' }}
+        labels={{ moreAbove: 'services above', moreBelow: 'services below' }}
       />
       {blocked !== undefined ? (
-        <Text color={colors.error}>
-          ✖ {blocked.service} : {blocked.error}
-        </Text>
+        <ClampedParagraph color={colors.error} maxLines={4}>{`✖ ${blocked.service} : ${blocked.error}`}</ClampedParagraph>
       ) : null}
-      <Text color={colors['text-dim']}>{STEP3_FOOTER}</Text>
     </Box>
   );
 }

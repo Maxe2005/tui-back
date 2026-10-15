@@ -4,8 +4,8 @@ import { useAppStore } from '../../store/app-store.js';
 import { ZONES, type ZoneId } from '../../zones/zones.js';
 import { colors, spacing } from '../theme/theme.js';
 import { DetailPane } from './detail-pane.js';
-import { ListDetailSplit } from './list-detail-split.js';
 import { ListRow } from './list-row.js';
+import { ZoneLayout } from './zone-layout.js';
 
 export type ZonePlaceholderProps = {
   zoneId: ZoneId;
@@ -17,17 +17,15 @@ export function ZonePlaceholder({
   useStore = useAppStore,
 }: ZonePlaceholderProps) {
   const zone = ZONES.find((candidate) => candidate.id === zoneId);
-  // Story 2.21: splitterRatios[zoneId] widened to a per-boundary array — every non-EDTs zone
-  // has exactly one boundary (its list<->detail split), always index 0.
-  const ratio = useStore((state) => state.splitterRatios[zoneId][0]);
   if (!zone) {
     return null;
   }
   return (
     <Box flexDirection="column" flexGrow={1} backgroundColor={colors.surface}>
-      <ListDetailSplit
-        ratio={ratio}
-        list={
+      <ZoneLayout
+        zoneId={zoneId}
+        useStore={useStore}
+        first={
           <Box
             flexDirection="column"
             paddingX={spacing['pane-padding-x']}
@@ -39,7 +37,7 @@ export function ZonePlaceholder({
             <ListRow label="placeholder rows" meta="populated in a later story" />
           </Box>
         }
-        detail={
+        second={
           <Box
             flexDirection="column"
             paddingX={spacing['pane-padding-x']}
