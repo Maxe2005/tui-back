@@ -24,6 +24,7 @@ import {
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
   SETTINGS_GROUPS,
+  cycleSwitchRestartMode,
   SETTINGS_TABS,
   SettingsScreen,
   adjustBranchDropdownMaxRows,
@@ -362,9 +363,9 @@ describe('HIDEABLE_ACTION_TYPES', () => {
 });
 
 describe('SETTINGS_GROUPS', () => {
-  it('lists exactly the three EDTs-tab settings groups, in this order', () => {
-    expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual(['hint-visibility', 'action-types', 'branch-dropdown-rows']);
-    expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual(['Hint visibility', 'Recent action types', 'Branch dropdown rows']);
+  it('lists exactly the four EDTs-tab settings groups, in this order', () => {
+    expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual(['hint-visibility', 'action-types', 'branch-dropdown-rows', 'switch-restart']);
+    expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual(['Hint visibility', 'Recent action types', 'Branch dropdown rows', 'Post-switch restart']);
   });
 });
 
@@ -512,6 +513,18 @@ describe('SettingsScreen', () => {
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="logs" initialLogsGroup="restart-mode" />);
     expect(output).toContain('Restart mode');
     expect(output).toContain('clean');
+  });
+
+  it('renders the live post-switch restart mode and cycles it none → simple → clean → none', async () => {
+    expect(cycleSwitchRestartMode('none', 1)).toBe('simple');
+    expect(cycleSwitchRestartMode('simple', 1)).toBe('clean');
+    expect(cycleSwitchRestartMode('clean', 1)).toBe('none');
+    expect(cycleSwitchRestartMode('none', -1)).toBe('clean');
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, switch: { restartMode: 'clean' as const } } });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="switch-restart" />);
+    expect(output).toContain('after an EDT switch');
+    expect(output).toContain('Clean restart');
   });
 
   it('opens the EDTs tab on its group list, not a checkbox list', async () => {
@@ -700,6 +713,7 @@ describe('settingsFooterContext', () => {
     expect(settingsFooterContext('edts', closed)).toBe('settings-groups');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'hint-visibility' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'branch-dropdown-rows' })).toBe('settings-adjust');
+    expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'switch-restart' })).toBe('settings-toggle');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'buffer-size' })).toBe('settings-adjust');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'clear-history' })).toBe('settings-run');
   });
