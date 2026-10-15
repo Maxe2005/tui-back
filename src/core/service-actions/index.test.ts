@@ -58,6 +58,14 @@ describe('service actions list', () => {
     ]);
   });
 
+  it('counts a recipe of blank commands as no clean recipe', async () => {
+    const { actions, restart } = setup({ container: 'api', restartCommands: ['', '  '] });
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok && listed.data[2]?.availability).toEqual({ available: false, reason: 'no clean recipe' });
+    expect(await actions.restart('/repo/a', 'clean')).toEqual(ok({ notice: NO_CLEAN_RECIPE_NOTICE }));
+    expect(restart.run).not.toHaveBeenCalled();
+  });
+
   it('names the held blocking lock as the reason', async () => {
     const { actions, lock } = setup({ container: 'api', restartCommands: ['x'] });
     lock.peek.mockImplementation(async (key: string) => ok({ locked: key === 'group-update' }));

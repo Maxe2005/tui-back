@@ -92,6 +92,11 @@ function rejectBlankRepoPath(repoPath: string): Result<never> | null {
 
 const AVAILABLE: ServiceActionAvailability = { available: true };
 
+// Blank recipe entries are not a recipe: only runnable commands count.
+function recipeCommands(manifest: Manifest): string[] {
+  return (manifest.restartCommands ?? []).filter((command) => command.trim() !== '');
+}
+
 function hasContainer(manifest: Manifest): boolean {
   return manifest.container !== undefined && manifest.container.trim() !== '';
 }
@@ -129,7 +134,7 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
     if (blocking !== null) {
       return { available: false, reason: blocking };
     }
-    if (mode === 'clean' && (loaded.data.restartCommands?.length ?? 0) === 0) {
+    if (mode === 'clean' && recipeCommands(loaded.data).length === 0) {
       return { available: false, reason: 'no clean recipe' };
     }
     return AVAILABLE;
@@ -181,7 +186,7 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
           container,
           restart,
           containerName,
-          restartCommands,
+          restartCommands: recipeCommands(loaded.data),
           repoPath,
           cleanRestart: true,
           service,
@@ -190,7 +195,7 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
         if (!restarted.ok) {
           return restarted;
         }
-        return ok((restartCommands?.length ?? 0) > 0 ? {} : { notice: NO_CLEAN_RECIPE_NOTICE });
+        return ok(recipeCommands(loaded.data).length > 0 ? {} : { notice: NO_CLEAN_RECIPE_NOTICE });
       });
       if (!run.ok && run.error.code === 'action-in-progress') {
         return err(
