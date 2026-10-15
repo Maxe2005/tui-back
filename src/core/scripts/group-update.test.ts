@@ -17,6 +17,7 @@ import {
   edtUpdateLockKey,
   groupUpdate,
   markGroupUpdateInterrupted,
+  runRestartStep,
   type AutoResolveConflict,
   type GroupUpdateParams,
   type OnUpdateBlocker,
@@ -3296,3 +3297,38 @@ describe('groupUpdate — conflict auto-resolution seam', () => {
   });
 });
 
+
+describe('runRestartStep onStep', () => {
+  const container = { restart: vi.fn(async () => ok(undefined)) } as unknown as ContainerPort;
+  const base = { container, containerName: 'api', repoPath: '/r/a', service: 'api' };
+
+  it('reports each recipe command before it runs, with its 1-based position', async () => {
+    const seen: string[] = [];
+    const restart = {
+      run: vi.fn(async (_p: string, command: string) => {
+        seen.push(`run ${command}`);
+        return ok({ output: '' });
+      }),
+    } as unknown as RestartPort;
+    const result = await runRestartStep({
+      ...base,
+      restart,
+      restartCommands: ['a', 'b'],
+      cleanRestart: true,
+      onStep: (step, total) => seen.push(`step ${step}/${total}`),
+    });
+    expect(result.ok).toBe(true);
+    expect(seen).toEqual(['step 1/2', 'run a', 'step 2/2', 'run b']);
+  });
+
+  it('stops reporting at the first failing command and never reports for a plain container restart', async () => {
+    const steps: number[] = [];
+    const failing = { run: vi.fn(async () => err('restart-failed', 'x')) } as unknown as RestartPort;
+    const failed = await runRestartStep({ ...base, restart: failing, restartCommands: ['a', 'b'], cleanRestart: true, onStep: (step) => steps.push(step) });
+    expect(failed.ok).toBe(false);
+    expect(steps).toEqual([1]);
+    const plain = await runRestartStep({ ...base, restart: failing, restartCommands: ['a'], cleanRestart: false, onStep: (step) => steps.push(step) });
+    expect(plain.ok).toBe(true);
+    expect(steps).toEqual([1]);
+  });
+});

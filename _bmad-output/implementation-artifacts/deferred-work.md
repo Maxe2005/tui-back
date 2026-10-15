@@ -805,3 +805,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
   summary: Surface the cause (error code/message) of a failed Dashboard section load instead of a bare "Failed to load".
   evidence: `dashboard-slice.ts` drops the `Result` error on failure, so unwired ports, docker and registry errors look identical.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-3-dashboard-active-edt-services-table-service-actions.md`
+  summary: `restartAvailability` is evaluated twice per `ServiceActions.list` (simple and clean), loading the manifest and peeking locks twice.
+  evidence: Both restart actions share one availability; the list runs on every Dashboard focus move, so the manifest is read twice per move.
