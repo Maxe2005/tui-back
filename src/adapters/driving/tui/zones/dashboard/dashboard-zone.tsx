@@ -1,9 +1,7 @@
-// tui/zones/dashboard: the fixed launch banner, then the registry-error / empty-registry prompt
-// (checked first) or the snapshot sections. The registry check re-runs on mount and whenever the
-// registry screen's open flag flips (the zone never remounts); the snapshot loads on mount and
-// on `R`, and re-loads when the active EDT changes. Up/Down move the row cursor, Ctrl+O/R/L run
-// the focused row's registry actions, Enter opens it in its zone, `a` steps through the Attention
-// lines and lands the cursor on the line's service. Overlays make the zone inert.
+// tui/zones/dashboard: the fixed launch banner, then the registry prompt or the snapshot sections.
+// The snapshot loads on mount, on `R` and when the active EDT changes. Up/Down move the row cursor,
+// Ctrl+O/R/L run the focused row's actions, Enter opens it in Logs, `a` steps through Attention
+// lines, `E` enters the active EDT, `e` seeds the EDT quick-pick. Overlays make the zone inert.
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
@@ -13,7 +11,7 @@ import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js'
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { DashboardBody } from './dashboard-body.js';
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
-import { actionForKey, buildAttentionItems, nextAttentionIndex, resolveDashboardBody, rowIndexForAttention } from './dashboard.logic.js';
+import { actionForKey, buildAttentionItems, edtKeyEffect, resolveEdtSection, nextAttentionIndex, resolveDashboardBody, rowIndexForAttention } from './dashboard.logic.js';
 import { LaunchBanner } from './launch-banner.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
@@ -43,6 +41,9 @@ export function DashboardZone({
   const loadServiceActions = useStore((state) => state.loadDashboardServiceActions);
   const runServiceAction = useStore((state) => state.runDashboardServiceAction);
   const openServiceInZone = useStore((state) => state.openServiceInZone);
+  const openEdtSwitchDialog = useStore((state) => state.openEdtSwitchDialog);
+  const openEdtCreateDialog = useStore((state) => state.openEdtCreateDialog);
+  const setActiveZone = useStore((state) => state.setActiveZone);
   const [cursor, setCursor] = useState(0);
   const [attentionPick, setAttentionPick] = useState<number | null>(null);
   const zoneInputActive = useZoneInputActive(useStore);
@@ -111,6 +112,26 @@ export function DashboardZone({
         void loadDashboard();
         return;
       }
+      if (input === 'E' || input === 'e') {
+        const state = useStore.getState();
+        const snapshot = state.dashboardServices;
+        // Only a loaded snapshot on the sections body drives these keys; otherwise the shell's
+        // own zone switch handles `e`.
+        if (!showSections || state.dashboardServicesStatus !== 'ready' || snapshot === null) {
+          return;
+        }
+        const kind = resolveEdtSection(snapshot, state.edts === null ? null : state.edts.length);
+        const effect = edtKeyEffect(input, kind);
+        if (effect !== null) {
+          if (effect.openDialog === 'switch') {
+            openEdtSwitchDialog('edt-switch');
+          } else if (effect.openDialog === 'create') {
+            openEdtCreateDialog();
+          }
+          setActiveZone(effect.zone);
+        }
+        return;
+      }
       if (input === 'a') {
         const pick = nextAttentionIndex(attentionPick, attentionItems.length);
         const target = pick === null ? -1 : rowIndexForAttention(rows, attentionItems[pick]!);
@@ -140,7 +161,9 @@ export function DashboardZone({
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
       {/* Rendered unconditionally — the banner is permanent on every Dashboard render, above
           whatever content follows. */}
-      <LaunchBanner />
+      <Box flexShrink={0}>
+        <LaunchBanner />
+      </Box>
       {body === 'registry-error' ? (
         <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
           <ClampedParagraph color={colors.error} maxLines={4}>{`${REGISTRY_CHECK_ERROR_MESSAGE}`}</ClampedParagraph>

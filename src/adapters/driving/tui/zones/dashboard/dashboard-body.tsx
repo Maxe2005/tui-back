@@ -6,8 +6,8 @@ import { Box, Text } from 'ink';
 import type { DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { formatHint } from '../../shared/components/hints.js';
+import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ServiceActionsRow } from '../../shared/components/service-actions-row.js';
 import { StateLine } from '../../shared/components/state-line.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
@@ -27,19 +27,25 @@ import {
   attentionHeader,
   formatAttentionLine,
   registryAllClear,
+  edtSectionActions,
+  formatEdtAction,
+  formatEdtLine,
+  resolveEdtSection,
+  EDT_SECTION_ROWS,
+  NO_EDT_MESSAGE,
   type AttentionItem,
 } from './dashboard.logic.js';
 
 export const NO_ACTIVE_EDT_MESSAGE = 'No active EDT.';
-export const NO_ACTIVE_EDT_HINT = `Press ${formatHint(['e', 'EDTs'])} to create or choose one.`;
 export const REGISTRY_HINT = formatHint([':registry', 'repo health']);
 export const ATTENTION_CLEAR_MESSAGE = 'Nothing needs attention.';
 export const REGISTRY_CLEAR_MESSAGE = 'Registry healthy.';
 export const ATTENTION_MAX_ROWS = 4;
-// Rows the zone prints besides the service rows: banner (2), EDT line, registry counts and
-// success line, updated line, one spare for a "more below" indicator, the attention header (only
-// with lines, folded into the success line otherwise) and its lines (windowed).
-const BODY_FIXED_ROWS = 2 + 1 + 1 + 1 + 1;
+// Rows the zone prints besides the service rows: banner (2), EDT line (with the updated time),
+// registry counts and success line, one spare for a "more below" indicator, the EDT action lines,
+// the attention header (only with lines, folded into the success line otherwise) and its lines
+// (windowed).
+const BODY_FIXED_ROWS = 2 + 1 + 1 + 1 + EDT_SECTION_ROWS;
 export function bodyChromeRows(attentionCount: number): number {
   return BODY_FIXED_ROWS + (attentionCount === 0 ? 1 : 1 + Math.min(ATTENTION_MAX_ROWS, attentionCount));
 }
@@ -121,6 +127,10 @@ export function DashboardBody({
   }, [ticking]);
 
   const loading = servicesStatus === 'loading' || registryStatus === 'loading';
+  const edtCount = useStore((state) => (state.edts === null ? null : state.edts.length));
+  const updated = !loading && updatedAt !== null ? formatUpdatedAgo(now, updatedAt) : null;
+  const edtKind = servicesStatus === 'ready' && services !== null ? resolveEdtSection(services, edtCount) : null;
+  const edtActions = edtKind === null ? [] : edtSectionActions(edtKind, services?.edt?.topic ?? null);
   return (
     <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
       {servicesStatus === 'idle' || servicesStatus === 'loading' ? (
@@ -129,13 +139,13 @@ export function DashboardBody({
         <StateLine kind="error" subject="services" retry />
       ) : services.status === 'no-active-edt' || services.edt === null ? (
         <Box flexDirection="column">
-          <TruncatedText color={colors.text}>{NO_ACTIVE_EDT_MESSAGE}</TruncatedText>
-          <DimAnnotation text={NO_ACTIVE_EDT_HINT} />
+          <TruncatedText color={colors.text}>{edtKind === 'none' ? NO_EDT_MESSAGE : NO_ACTIVE_EDT_MESSAGE}</TruncatedText>
+          {updated === null ? null : <DimAnnotation text={updated} />}
         </Box>
       ) : (
         <Box flexDirection="column" flexGrow={1} minHeight={0}>
           <Box flexShrink={0}>
-            <TruncatedText color={colors.text}>{`EDT ${services.edt.topic} · ${services.edt.serviceCount} services`}</TruncatedText>
+            <TruncatedText color={colors.text}>{formatEdtLine(services.edt.topic, services.edt.serviceCount, updated)}</TruncatedText>
           </Box>
           {services.services.length === 0 ? (
             <DimAnnotation text="This EDT has no services." />
@@ -196,11 +206,16 @@ export function DashboardBody({
           </TruncatedText>
         </Box>
       )}
-      {!loading && updatedAt !== null ? (
-        <Box flexShrink={0}>
-          <TruncatedText color={colors['text-dim']}>{formatUpdatedAgo(now, updatedAt)}</TruncatedText>
+      {edtActions.length === 0 ? null : (
+        <Box flexDirection="column" flexShrink={0}>
+          <BoundedList
+            items={edtActions}
+            maxVisibleRows={EDT_SECTION_ROWS}
+            cursorIndex={0}
+            renderItem={(action) => <TruncatedText key={action.key} color={colors.text}>{formatEdtAction(action)}</TruncatedText>}
+          />
         </Box>
-      ) : null}
+      )}
     </Box>
   );
 }

@@ -4,6 +4,8 @@ import { Box, render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
+import { renderToString } from '../../shared/components/render-to-string.js';
+import { EdtsZone } from '../edts/edts-zone.js';
 import { DashboardZone } from './dashboard-zone.js';
 
 function mount(store: ReturnType<typeof createAppStore>) {
@@ -212,5 +214,122 @@ describe('DashboardZone interaction', () => {
     } finally {
       instance.unmount();
     }
+  });
+
+  describe('EDT actions', () => {
+    function withSpies(extra: Record<string, unknown> = {}) {
+      const { store } = seedServices();
+      const openEdtSwitchDialog = vi.fn();
+      const openEdtCreateDialog = vi.fn();
+      const setActiveZone = vi.fn();
+      store.setState({ openEdtSwitchDialog, openEdtCreateDialog, setActiveZone, ...extra } as never);
+      return { store, openEdtSwitchDialog, openEdtCreateDialog, setActiveZone };
+    }
+
+    it('E enters the active EDT in the EDTs zone without a dialog', async () => {
+      const { store, openEdtSwitchDialog, openEdtCreateDialog, setActiveZone } = withSpies();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, 'E');
+        expect(setActiveZone).toHaveBeenCalledWith('edts');
+        expect(openEdtSwitchDialog).not.toHaveBeenCalled();
+        expect(openEdtCreateDialog).not.toHaveBeenCalled();
+      } finally {
+        instance.unmount();
+      }
+    });
+
+    it('e opens the quick-pick, or the create wizard when no EDT exists', async () => {
+      const first = withSpies({ edts: [{}] });
+      const a = mount(first.store);
+      try {
+        await a.instance.waitUntilRenderFlush();
+        await press(a.instance, a.stdin, 'e');
+        expect(first.openEdtSwitchDialog).toHaveBeenCalledWith('edt-switch');
+        expect(first.setActiveZone).toHaveBeenCalledWith('edts');
+      } finally {
+        a.instance.unmount();
+      }
+      const second = withSpies({ edts: [], dashboardServices: { status: 'no-active-edt', edt: null, services: [] } });
+      const b = mount(second.store);
+      try {
+        await b.instance.waitUntilRenderFlush();
+        await press(b.instance, b.stdin, 'e');
+        expect(second.openEdtCreateDialog).toHaveBeenCalled();
+        expect(second.setActiveZone).toHaveBeenCalledWith('edts');
+        await press(b.instance, b.stdin, 'E');
+        expect(second.openEdtSwitchDialog).not.toHaveBeenCalled();
+      } finally {
+        b.instance.unmount();
+      }
+    });
+
+    it('leaves E and e to the shell on a missing snapshot, an errored one and the registry prompts', async () => {
+      const cases: Record<string, Record<string, unknown>> = {
+        'null snapshot': { dashboardServices: null, dashboardServicesStatus: 'loading' },
+        'error snapshot': { dashboardServices: null, dashboardServicesStatus: 'error' },
+        'registry error': { registryEmptyStatus: 'error', checkRegistryEmpty: async () => {} },
+        'empty registry': { registryEmpty: true },
+      };
+      for (const [name, extra] of Object.entries(cases)) {
+        const { store, openEdtSwitchDialog, openEdtCreateDialog, setActiveZone } = withSpies({ edts: [], ...extra });
+        const { instance, stdin } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await press(instance, stdin, 'E');
+          await press(instance, stdin, 'e');
+          expect(openEdtSwitchDialog, name).not.toHaveBeenCalled();
+          expect(openEdtCreateDialog, name).not.toHaveBeenCalled();
+          expect(setActiveZone, name).not.toHaveBeenCalled();
+        } finally {
+          instance.unmount();
+        }
+      }
+    });
+
+    it('with the real store, e leaves the quick-pick request and the EDTs zone active', async () => {
+      const { store } = seedServices();
+      store.setState({ edts: [{ ulid: 'x', topic: 'x', createdAt: '2026-01-01T00:00:00Z', status: 'active', members: [] } as never] });
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, 'e');
+        expect(store.getState().currentEdtAction).toMatchObject({ type: 'switch', target: 'select EDT' });
+        expect(store.getState().activeZone).toBe('edts');
+        // The EDTs zone consumes the request when it mounts.
+        store.setState({ loadEdts: async () => {}, loadEdtsBranches: async () => {} } as never);
+        await renderToString(createElement(EdtsZone, { useStore: store }));
+        expect(store.getState().currentEdtAction).toBeNull();
+      } finally {
+        instance.unmount();
+      }
+      const zero = seedServices();
+      zero.store.setState({ edts: [], dashboardServices: { status: 'no-active-edt', edt: null, services: [] } });
+      const again = mount(zero.store);
+      try {
+        await again.instance.waitUntilRenderFlush();
+        await press(again.instance, again.stdin, 'e');
+        expect(zero.store.getState().currentEdtAction).toMatchObject({ type: 'create' });
+        expect(zero.store.getState().activeZone).toBe('edts');
+      } finally {
+        again.instance.unmount();
+      }
+    });
+
+    it('ignores E and e while an overlay owns the keyboard', async () => {
+      const { store, openEdtSwitchDialog, setActiveZone } = withSpies();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        store.setState({ helpOpen: true });
+        await press(instance, stdin, 'E');
+        await press(instance, stdin, 'e');
+        expect(setActiveZone).not.toHaveBeenCalled();
+        expect(openEdtSwitchDialog).not.toHaveBeenCalled();
+      } finally {
+        instance.unmount();
+      }
+    });
   });
 });
