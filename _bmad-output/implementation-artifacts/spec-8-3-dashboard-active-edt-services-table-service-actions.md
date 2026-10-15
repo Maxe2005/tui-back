@@ -2,7 +2,7 @@
 title: 'Story 8.3: Dashboard — Active-EDT Services Table & Per-Service Actions'
 type: 'feature'
 created: '2026-10-15'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '4b7167788fb5c712f8eed29c2f0d9deef40486b3'
 review_loop_iteration: 0
 context:
@@ -56,12 +56,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/service-actions/index.ts` (+ test) -- clean-restart availability "no clean recipe", optional progress callback, lock-name helper -- reasons and progress
-- [ ] `src/adapters/driving/tui/app-shell.tsx` (+ tests) -- ignore Ctrl/Meta for zone switching -- no key collision
-- [ ] `store/slices/dashboard-slice.ts` (+ test) -- action state, run, `pendingServiceFocus`, unwired degradation -- state
-- [ ] `zones/dashboard/dashboard.logic.ts` (+ test) -- marker, ahead/behind, reason line -- pure logic
-- [ ] `zones/dashboard/dashboard-body.tsx`, `dashboard-zone.tsx` (+ unit/interaction tests) -- table, cursor, detail pane, keys -- UI
-- [ ] `keybindings/keybindings.ts`, target zone (+ tests) -- hints, `Enter` consumption -- discoverability
+- [x] `src/core/service-actions/index.ts` (+ test) -- clean-restart availability "no clean recipe", optional progress callback, lock-name helper -- reasons and progress
+- [x] `src/adapters/driving/tui/app-shell.tsx` (+ tests) -- ignore Ctrl/Meta for zone switching -- no key collision
+- [x] `store/slices/dashboard-slice.ts` (+ test) -- action state, run, `pendingServiceFocus`, unwired degradation -- state
+- [x] `zones/dashboard/dashboard.logic.ts` (+ test) -- marker, ahead/behind, reason line -- pure logic
+- [x] `zones/dashboard/dashboard-body.tsx`, `dashboard-zone.tsx` (+ unit/interaction tests) -- table, cursor, detail pane, keys -- UI
+- [x] `keybindings/keybindings.ts`, target zone (+ tests) -- hints, `Enter` consumption -- discoverability
 
 **Acceptance Criteria:**
 - Given the active EDT, when rendered, then the EDT line and one bounded row per service show state, marker, branch, ahead/behind.
@@ -81,3 +81,55 @@ Story 7.7 shipped only the Tab/arrow stop primitive, not a list component; row f
 - `npm test` -- expected: all green
 - `npm run typecheck` -- expected: no errors
 - `npm run depcheck` -- expected: no violations
+
+## Suggested Review Order
+
+**Action availability and progress (core)**
+
+- Entry point: clean-restart availability, blocking-lock names and progress callback.
+  [`index.ts:68`](../../src/core/service-actions/index.ts#L68)
+
+- "No clean recipe" reason replaces the silent simple-restart fallback.
+  [`index.ts:138`](../../src/core/service-actions/index.ts#L138)
+
+- Step callback feeds "recipe step 2/3" progress.
+  [`group-update.ts:729`](../../src/core/scripts/group-update.ts#L729)
+
+**Per-service action state (store)**
+
+- Run re-lists availability first, fails closed, tracks progress and result.
+  [`dashboard-slice.ts:198`](../../src/adapters/driving/tui/store/slices/dashboard-slice.ts#L198)
+
+- `Enter` records the pending focus and switches to Logs.
+  [`dashboard-slice.ts:193`](../../src/adapters/driving/tui/store/slices/dashboard-slice.ts#L193)
+
+- Logs zone consumes and clears the pending focus.
+  [`logs-zone.tsx:200`](../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L200)
+
+**Table, keys and collision fix (TUI)**
+
+- Ctrl/Meta no longer trigger zone mnemonics, so Ctrl+R/L stay on the Dashboard.
+  [`app-shell.tsx:33`](../../src/adapters/driving/tui/app-shell.tsx#L33)
+
+- Dashboard key handler: cursor, Ctrl+O/R/L, Enter, refresh.
+  [`dashboard-zone.tsx:83`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L83)
+
+- Table as list pane, reason line and actions as detail pane.
+  [`dashboard-body.tsx:118`](../../src/adapters/driving/tui/zones/dashboard/dashboard-body.tsx#L118)
+
+- Pure marker, ahead/behind and reason-line helpers.
+  [`dashboard.logic.ts:96`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L96)
+
+- New footer and help rows for the Dashboard.
+  [`keybindings.ts:186`](../../src/adapters/driving/tui/keybindings/keybindings.ts#L186)
+
+**Tests**
+
+- Pending-focus landing in Logs.
+  [`logs-zone.pending-focus.test.tsx:1`](../../src/adapters/driving/tui/zones/logs/logs-zone.pending-focus.test.tsx#L1)
+
+- Real keypresses, cursor reset and overlay inertness.
+  [`dashboard-zone.interaction.test.tsx:1`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.interaction.test.tsx#L1)
+
+- Slice: fresh availability, stale responses, pruning.
+  [`dashboard-slice.test.ts:1`](../../src/adapters/driving/tui/store/slices/dashboard-slice.test.ts#L1)
