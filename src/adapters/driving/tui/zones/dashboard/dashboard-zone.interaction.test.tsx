@@ -72,4 +72,50 @@ describe('DashboardZone interaction', () => {
       instance.unmount();
     }
   });
+
+  const flagged = (name: string) => ({
+    service: name,
+    path: `/r/${name}`,
+    manifest: { ok: true as const, value: { sharedBranch: 'development', protectedBranches: [] } },
+    container: { ok: true as const, value: 'up' as const },
+    branch: 'feat/x',
+    divergence: { status: 'current' as const, ahead: 0, behind: 1 },
+    workingTree: { ok: true as const, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
+    protectedBranch: false,
+    usedByEdts: [],
+  });
+  const seedAttention = () => {
+    const { store } = seed();
+    store.setState({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { status: 'active', edt: { ulid: 'e', topic: 't', serviceCount: 2 }, services: [flagged('svc-a'), flagged('svc-b')] },
+    });
+    return store;
+  };
+
+  it('moves the attention cursor with the arrows and focuses the service on Enter', async () => {
+    const store = seedAttention();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '\u001B[B');
+      await press(instance, stdin, '\r');
+      expect(store.getState().dashboardFocusedService).toBe('svc-b');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('ignores Enter while an overlay owns the keyboard', async () => {
+    const store = seedAttention();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      store.setState({ settingsScreenOpen: true });
+      await press(instance, stdin, '\r');
+      expect(store.getState().dashboardFocusedService).toBeNull();
+    } finally {
+      instance.unmount();
+    }
+  });
 });

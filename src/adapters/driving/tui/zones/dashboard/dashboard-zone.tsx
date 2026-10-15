@@ -2,7 +2,7 @@
 // (checked first) or the snapshot sections. The registry check re-runs on mount and whenever the
 // registry screen's open flag flips (the zone never remounts); the snapshot loads on mount and
 // on `R`, and re-loads when the active EDT changes. Overlays make the zone inert.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -10,7 +10,7 @@ import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { DashboardBody } from './dashboard-body.js';
-import { resolveDashboardBody } from './dashboard.logic.js';
+import { buildAttentionItems, moveAttentionCursor, resolveDashboardBody } from './dashboard.logic.js';
 import { LaunchBanner } from './launch-banner.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
@@ -31,7 +31,12 @@ export function DashboardZone({
   const checkRegistryEmpty = useStore((state) => state.checkRegistryEmpty);
   const loadDashboard = useStore((state) => state.loadDashboard);
   const activeEdt = useStore((state) => state.activeEdt);
+  const services = useStore((state) => state.dashboardServices);
+  const focusDashboardService = useStore((state) => state.focusDashboardService);
   const zoneInputActive = useZoneInputActive(useStore);
+  const [attentionCursor, setAttentionCursor] = useState(0);
+  const attentionItems = services !== null && services.status === 'active' ? buildAttentionItems(services.services) : [];
+  const cursor = Math.min(attentionCursor, Math.max(0, attentionItems.length - 1));
 
   useEffect(() => {
     void checkRegistryEmpty();
@@ -48,9 +53,15 @@ export function DashboardZone({
   }, [activeEdt, loadDashboard, showSections]);
 
   useInput(
-    (input) => {
+    (input, key) => {
       if (input === 'R') {
         void loadDashboard();
+      } else if (key.upArrow) {
+        setAttentionCursor(moveAttentionCursor(cursor, -1, attentionItems.length));
+      } else if (key.downArrow) {
+        setAttentionCursor(moveAttentionCursor(cursor, 1, attentionItems.length));
+      } else if (key.return && attentionItems.length > 0) {
+        focusDashboardService(attentionItems[cursor]!.service);
       }
     },
     { isActive: zoneInputActive },
@@ -72,7 +83,7 @@ export function DashboardZone({
           <DimAnnotation text={EMPTY_REGISTRY_HINT} />
         </Box>
       ) : (
-        <DashboardBody useStore={useStore} />
+        <DashboardBody useStore={useStore} attentionCursor={cursor} />
       )}
     </Box>
   );

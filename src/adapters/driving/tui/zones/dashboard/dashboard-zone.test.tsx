@@ -228,6 +228,33 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('updated 0s ago');
   });
 
+  it('lists attention lines with a count, and the registry hint with its counts', async () => {
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: ACTIVE,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Attention (1)');
+    expect(output).toContain('svc-a · uncommitted changes');
+    expect(output).toContain('[:registry]');
+  });
+
+  it('shows single success lines when nothing needs attention and the registry is clear', async () => {
+    const clean = { ...ACTIVE, services: [{ ...ACTIVE.services[0]!, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } } }] };
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: clean,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: { repoCount: 3, invalidManifests: 0, unreachable: 0, listingIssues: 0 },
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Attention (0)');
+    expect(output).toContain('Nothing needs attention.');
+    expect(output).toContain('Registry healthy.');
+  });
+
   it('prompts to create or choose an EDT when none is active, keeping the registry section', async () => {
     const store = seed({
       dashboardServicesStatus: 'ready',
