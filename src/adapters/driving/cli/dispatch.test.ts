@@ -744,6 +744,125 @@ describe('subcommand registry guards', () => {
     });
   });
 
+  describe('edt switch --restart (FR-37)', () => {
+    const target = {
+      ulid: 'ulid-1',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+    };
+
+    function restartSetup(opts: { healthy?: boolean; mode?: 'none' | 'simple' | 'clean'; withHealthUrl?: boolean } = {}) {
+      const writeActiveEdt = vi.fn(async () => ok(undefined));
+      const containerRestart = vi.fn(async () => ok(undefined));
+      const probe = vi.fn(async () => ok({ healthy: opts.healthy ?? true, status: opts.healthy === false ? 503 : 200, ...(opts.healthy === false ? { reason: 'HTTP 503' } : {}) }));
+      const subcommands = buildTestSubcommands({
+        registry: {
+          list: async () => ok(['/repo/a', '/repo/b']),
+          add: async () => ok(undefined),
+          exists: async () => ok(true),
+          scan: async () => ok({ candidates: [], skipped: [] }),
+          reset: async () => ok({ path: '/p', backupPath: null }),
+          remove: async () => ok(undefined),
+        },
+        manifest: {
+          load: async (repoPath: string) =>
+            ok({
+              service: repoPath === '/repo/a' ? 'svc-a' : 'svc-b',
+              container: repoPath === '/repo/a' ? 'ctr-a' : undefined,
+              ...(opts.withHealthUrl === false ? {} : { healthUrl: 'http://localhost:1/health' }),
+              sharedBranch: 'development',
+              modules: {},
+            }),
+        },
+        edtRegistry: { ...fakeEdtRegistry(), list: async () => ok([target]) },
+        state: { ...fakeState(), writeActiveEdt },
+        container: { restart: containerRestart },
+        settings: {
+          load: async () => ok({ settings: { ...DEFAULT_SETTINGS, switch: { restartMode: opts.mode ?? 'none' } }, warning: null }),
+          save: async () => ok(undefined),
+        },
+        docker: {
+          streamLogs: () => () => {},
+          fetchLogsBefore: async () => ok([]),
+          getContainerHealth: async () => ok('up' as const),
+          restartContainer: async () => ok(undefined),
+        },
+        healthProbe: { probe },
+      });
+      const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+      return { edt, writeActiveEdt, containerRestart, probe, subcommands };
+    }
+
+    it('rejects an unknown --restart value before anything is touched', async () => {
+      const { edt, writeActiveEdt } = restartSetup();
+      const result = await edt.run(['switch', '--to', 'demo', '--restart', 'bogus']);
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(writeActiveEdt).not.toHaveBeenCalled();
+      expect(await edt.run(['switch', '--to', 'demo', '--restart'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('without the flag and with the default none, the output is exactly the switch result — no restart key', async () => {
+      const { edt, containerRestart } = restartSetup();
+      const result = await edt.run(['switch', '--to', 'demo']);
+      expect(result.ok).toBe(true);
+      expect(result.ok && 'restart' in (result.data as object)).toBe(false);
+      expect(containerRestart).not.toHaveBeenCalled();
+    });
+
+    it('--restart simple restarts changed services, verifies them and emits rows in the envelope', async () => {
+      const { edt, containerRestart, probe } = restartSetup();
+      const result = await edt.run(['switch', '--to', 'demo', '--restart', 'simple']);
+      expect(result.ok).toBe(true);
+      expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+      expect(probe).toHaveBeenCalledWith('http://localhost:1/health', expect.any(Number));
+      expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
+        expect.arrayContaining([{ service: 'svc-a', mode: 'simple', state: 'functional' }]),
+      );
+    });
+
+    it('the flag overrides the setting, and an absent flag uses it', async () => {
+      const viaSetting = restartSetup({ mode: 'clean', withHealthUrl: false });
+      const fromSetting = await viaSetting.edt.run(['switch', '--to', 'demo']);
+      expect(fromSetting.ok && (fromSetting.data as { restart: Array<{ mode: string; state: string; detail?: string }> }).restart[0]).toMatchObject({
+        service: 'svc-a',
+        mode: 'clean',
+        state: 'up-unverified',
+        detail: expect.stringContaining('no clean-restart recipe'),
+      });
+      const overridden = restartSetup({ mode: 'clean' });
+      const none = await overridden.edt.run(['switch', '--to', 'demo', '--restart', 'none']);
+      expect(none.ok && 'restart' in (none.data as object)).toBe(false);
+    });
+
+    it('exits non-zero with the rows in the envelope when a targeted service ends unhealthy', async () => {
+      const { subcommands } = restartSetup({ healthy: false });
+      // The unhealthy verdict only lands once the 30 s verification budget is spent.
+      let rendered: Awaited<ReturnType<typeof runCli>>;
+      vi.useFakeTimers();
+      try {
+        const pending = runCli(['edt', 'switch', '--to', 'demo', '--restart', 'simple'], subcommands, false);
+        await vi.advanceTimersByTimeAsync(31_000);
+        rendered = await pending;
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(rendered.exitCode).toBe(1);
+      const line = JSON.parse(rendered.output) as { ok: boolean; error: { code: string; details: { restart: Array<{ service: string; state: string }> } } };
+      expect(line.error.code).toBe('switch-restart-needs-attention');
+      expect(line.error.details.restart).toEqual(expect.arrayContaining([expect.objectContaining({ service: 'svc-a', state: 'unhealthy' })]));
+    });
+
+    it('rejects a restart request up front when the Docker port is not wired', async () => {
+      const subcommands = buildTestSubcommands({ edtRegistry: { ...fakeEdtRegistry(), list: async () => ok([target]) } });
+      const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+      expect(await edt.run(['switch', '--to', 'demo', '--restart', 'simple'])).toMatchObject({ ok: false, error: { code: 'restart-unavailable' } });
+    });
+  });
+
   it('register --reset routes to the reset use-case, rejecting extra arguments', async () => {
     const reset = vi.fn(async () => ok({ path: '/p', backupPath: '/c/registry.yaml.bak-1' }));
     const registry: RegistryPort = {
