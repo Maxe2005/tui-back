@@ -114,17 +114,17 @@ describe('AppShell', () => {
     expect(output).not.toContain('●1');
   });
 
-  it('mounts a placeholder screen for every zone at its tab — none missing or unreachable', async () => {
+  it('mounts a screen for every zone at its tab — none missing or unreachable', async () => {
     const store = createAppStore();
     for (const zone of ZONES) {
       store.getState().setActiveZone(zone.id);
       const output = await renderToString(<AppShell useStore={store} onQuit={onQuit} />);
-      expect(output).toContain(zone.label.toUpperCase());
-      // EDTs, Update, Logs, Routes and shared-types render real content (covered by their own zone tests);
-      // every other zone is still the placeholder these two literal strings come from.
-      if (zone.id !== 'edts' && zone.id !== 'update' && zone.id !== 'logs' && zone.id !== 'routes' && zone.id !== 'shared-types') {
-        expect(output).toContain('list pane');
-        expect(output).toContain('detail pane');
+      // Every zone renders real content (covered by its own zone tests); the Dashboard has no
+      // zone-label heading, its banner is the marker.
+      if (zone.id === 'dashboard') {
+        expect(output).toContain(BANNER_LINES[0]);
+      } else {
+        expect(output).toContain(zone.label.toUpperCase());
       }
     }
   });
