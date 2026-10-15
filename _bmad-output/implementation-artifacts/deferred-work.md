@@ -602,3 +602,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-31-edt-create-from-clone-an-edt-as-a-creation-starting-point.md`
   summary: The `:` command-bar grid truncates command labels (e.g. `edt-switch` renders as `edt-switc`) once a longer command name widens the layout.
   evidence: Story 2.31 adding `edt-create-from` made `app-shell.interaction.test.tsx`'s grid assertion fail on the clipped label; the test was re-anchored on `edt-delete`, the layout itself was not fixed.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate.md`
+  summary: Cross-EDT ownership check (renameBranch and assertAllowedBranch) is not atomic with the git write and compares repo paths with resolve() only (no realpath/symlink canonicalisation).
+  evidence: Pre-existing pattern in assertAllowedBranch (story 2.4); story 2.43 reuses it for renameBranch, so a concurrent registration or a symlinked repo path can bypass the gate.
