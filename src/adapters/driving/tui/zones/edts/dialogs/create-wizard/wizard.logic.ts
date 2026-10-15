@@ -9,6 +9,7 @@
 import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
 import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
+import { ownerRefusalText } from '../../../../shared/branch-owners-text.js';
 import { isProtectedBranch, type BranchProtection } from '../../../../../../../core/edt/shared-branches.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import type { FailedResultRow } from '../../../../shared/components/failed-result-list.js';
@@ -258,6 +259,7 @@ export type PlanIssue =
   | { kind: 'protected-existing'; name: string } // attaching (no rename) lands on a protected local name
   | { kind: 'exists'; name: string } // the new/renamed target already exists locally
   | { kind: 'noop-rename'; name: string } // renameTo equals the branch's own local name
+  | { kind: 'owned-by-other-edt'; branch: string; topics: readonly string[] } // Story 2.43: an existing plan's source is another EDT's own branch
   | { kind: 'shadowed'; name: string }; // remote-only pick whose local name already exists
 
 export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undefined, protection: BranchProtection): PlanIssue | null {
@@ -279,6 +281,12 @@ export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undef
   if (isLocal && isProtectedTarget(branch, protection)) {
     // The adapter's renameBranch gates the old name too, so a rename cannot rescue it.
     return { kind: 'protected-source', branch };
+  }
+  // Story 2.43: taking (or renaming) a branch another EDT registers breaks that EDT. Only a
+  // *local* source can be owned; base-only usage never reaches this (create plans return above).
+  const ownerTopics = isLocal ? known?.owners?.[branch] : undefined;
+  if (ownerTopics !== undefined && ownerTopics.length > 0) {
+    return { kind: 'owned-by-other-edt', branch, topics: ownerTopics };
   }
   const localName = localNameOf(branch, known);
   if (plan.renameTo !== undefined) {
@@ -312,6 +320,8 @@ export function rowIssueMessage(issue: PlanIssue): string {
       return ROW_ERRORS.protected(issue.name);
     case 'protected-source':
       return ROW_ERRORS.protected(issue.branch);
+    case 'owned-by-other-edt':
+      return ownerRefusalText(issue.topics);
     case 'exists':
       return ROW_ERRORS.exists;
     case 'noop-rename':

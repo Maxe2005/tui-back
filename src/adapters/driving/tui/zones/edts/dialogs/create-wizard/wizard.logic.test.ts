@@ -531,3 +531,24 @@ describe('Step 4 helpers (story 2.38)', () => {
     ]);
   });
 });
+
+describe('cross-EDT branch usage (story 2.43)', () => {
+  const PROTECTION = { sharedBranch: 'main', protectedBranches: [] as string[] };
+  const lists = { status: 'ready' as const, local: ['main', 'feat/owned', 'feat/free'], remote: [] as string[], owners: { 'feat/owned': ['alpha'], main: ['alpha'] } };
+  const row = (override: Parameters<typeof buildRowView>[0]['override']) =>
+    buildRowView({ path: '/repos/a', service: 'svc-a', override }, { base: '', name: 'x' }, lists, PROTECTION);
+
+  it('an existing plan on a branch another EDT owns is a blocking row error, with or without rename', () => {
+    const message = "utilisée par l'EDT « alpha » — la reprendre ou la renommer casserait cet EDT";
+    expect(row({ kind: 'existing', branch: 'feat/owned' })).toMatchObject({ error: message, plan: null });
+    expect(row({ kind: 'existing', branch: 'feat/owned', renameTo: 'feat/new' })).toMatchObject({ error: message, plan: null });
+    expect(buildMemberPlans([row({ kind: 'existing', branch: 'feat/owned' })])).toBeNull();
+  });
+
+  it('an unowned existing branch passes; an owned base-only branch is accepted', () => {
+    expect(row({ kind: 'existing', branch: 'feat/free' })).toMatchObject({ error: null });
+    expect(row({ kind: 'create', base: 'feat/owned', name: 'feat/mine' })).toMatchObject({ error: null });
+    // The global base resolving to an owned branch (here the shared one) is base-only too.
+    expect(buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'x' }, lists, PROTECTION)).toMatchObject({ error: null });
+  });
+});

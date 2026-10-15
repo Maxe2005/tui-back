@@ -35,6 +35,7 @@ export function overrideBoxContextFor(state: CreateDialogState, path: string, ca
     remote: lists?.remote ?? [],
     sharedBranch: candidate?.sharedBranch ?? '',
     protectedBranches: candidate?.protectedBranches ?? [],
+    owners: lists?.owners ?? {},
   };
 }
 

@@ -42,7 +42,7 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
       }
       branch = outcome.branchName;
     } else {
-      const renamed = await deps.renameBranchAction(current.repoPath, outcome.oldName, outcome.newName);
+      const renamed = await deps.renameBranchAction(current.repoPath, outcome.oldName, outcome.newName, current.edt.ulid);
       if (!renamed.ok) {
         const failedRows: FailedResultRow[] = [{ service: current.serviceName, code: renamed.error.code, message: renamed.error.message }];
         deps.setDialog((prev) => (prev.kind === 'add-to-edt' ? { ...prev, submitting: false, failedRows } : prev));
@@ -87,7 +87,7 @@ export function createAddToEdtDialogHandlers(deps: AddToEdtDialogDeps) {
       return;
     }
     const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(current.branchPicker.state, current.branchPicker.branches, otherMemberBranches, input, key, current.branchPicker.owners);
     if (result.type === 'cancel') {
       deps.setDialog({ kind: 'none' });
       return;
@@ -116,6 +116,7 @@ export function AddToEdtDialogView({ dialog, maxRows }: { dialog: AddToEdtDialog
             state={dialog.branchPicker.state}
             branches={dialog.branchPicker.branches}
             branchesStatus={dialog.branchPicker.branchesStatus}
+            owners={dialog.branchPicker.owners}
             otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
             maxRows={maxRows}
           />

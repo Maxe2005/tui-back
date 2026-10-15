@@ -307,6 +307,9 @@ export type BranchListState = {
   local: readonly string[];
   remote: readonly string[];
   error?: string;
+  // Story 2.43: branch -> topics of the EDTs that register it as their own for this repo,
+  // computed when the lists load (a not-yet-created EDT has no ulid to exclude).
+  owners?: Readonly<Record<string, readonly string[]>>;
 };
 
 export type BranchStepState = {
@@ -717,6 +720,10 @@ export type BranchPickerSession = {
   state: BranchPickerState;
   branches: string[];
   branchesStatus: 'loading' | 'ready' | 'error';
+  // Story 2.43: branch -> topics of the *other* EDTs that register it as their own for this
+  // repoPath, computed alongside `branches` when the list loads. Drives the chooser's
+  // `⚠ EDT « topic »` annotations and the picker's inline refusals.
+  owners?: Record<string, string[]>;
   // Story 2.25's retry mechanism, carried over: set only when this session was opened by the
   // "try a different name"/"try a different branch" assisted action — confirming it re-runs
   // the owning dialog's own submit immediately (Modify: submitModify; service-actions/

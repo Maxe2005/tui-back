@@ -146,7 +146,7 @@ export function createServiceActionsDialogHandlers(deps: ServiceActionsDialogDep
       return;
     }
     const otherMemberBranches = Array.from(new Set(current.edt.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key);
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key, session.owners);
     if (result.type === 'cancel') {
       deps.setDialog((prev) => (prev.kind === 'service-actions' ? { ...prev, branchPicker: null } : prev));
       return;
@@ -235,6 +235,7 @@ export function ServiceActionsDialogView({ dialog, maxRows }: { dialog: ServiceA
               state={dialog.branchPicker.state}
               branches={dialog.branchPicker.branches}
               branchesStatus={dialog.branchPicker.branchesStatus}
+              owners={dialog.branchPicker.owners}
               otherMemberBranches={Array.from(new Set(dialog.edt.members.map((member) => member.branch)))}
               maxRows={maxRows}
             />

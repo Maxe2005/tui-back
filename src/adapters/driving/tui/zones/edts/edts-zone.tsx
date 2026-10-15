@@ -22,6 +22,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, useWindowSize, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import { branchOwnersMap } from '../../../../../core/edt/branch-owners.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
@@ -417,9 +418,17 @@ export function EdtsZone({
         if (prev.branchPicker === null || prev.branchPicker.repoPath !== repoPath || prev.branchPicker.branchesStatus !== 'loading') {
           return prev;
         }
+        const listed = result.ok ? result.data : [];
+        const editedUlid = prev.kind === 'modify' ? prev.target.ulid : prev.edt.ulid;
+        const owners = branchOwnersMap(
+          edts ?? [],
+          repoPath,
+          Array.from(new Set([...listed, prev.branchPicker.state.currentBranch])),
+          editedUlid,
+        );
         return {
           ...prev,
-          branchPicker: { ...prev.branchPicker, branches: result.ok ? result.data : [], branchesStatus: result.ok ? 'ready' : 'error' },
+          branchPicker: { ...prev.branchPicker, branches: listed, owners, branchesStatus: result.ok ? 'ready' : 'error' },
         };
       });
     })();
