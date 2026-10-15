@@ -24,7 +24,7 @@ Six permanent zones, always reachable from the top bar:
 
 | Zone | Purpose | FR range |
 |---|---|---|
-| Dashboard | Landing surface on launch: summarizes the active EDT — each member service's container status (up/down/restarting/no container), active branch and divergence from its shared branch, working-tree alerts (uncommitted changes, merge/rebase in progress) — the last group-update outcome, registry health, and any operation in progress; offers keyboard quick actions (enter last EDT, start group update, open Logs, switch EDT). (Amended 2026-10-01, Sprint Change Proposal.) **Amended 2026-10-12:** the Dashboard's main body is the active EDT's services list — state, branch and every per-service action (open IDE, simple/clean restart, extensible); the EDT-level quick actions are secondary. | (summary surface; draws on FR-9, FR-18, FR-27, FR-29) |
+| Dashboard | Landing surface on launch, rewritten 2026-10-15 (Epic 8): under the permanent, non-compacting banner, the active EDT's services table (container state, branch, ahead/behind vs. shared branch, issue marker) with the shared per-service actions (`Ctrl+O` open in IDE, `Ctrl+R` restart, `Ctrl+L` clean restart, extensible), an Attention block, a registry-health summary and the EDT actions (enter, choose/create). Read-only apart from those actions; refreshed on mount and `R`. No group-update outcome and no background-event badge. | (summary surface; draws on FR-9, FR-29, FR-35) |
 | EDTs | Create, modify, and protected-switch EDTs; membership and per-service working branches. | FR-3–FR-9 |
 | Update | A permanent left-hand service list with live status (up/down/restarting/updating/migrating/error); a shared configuration screen (service selection, per-service source branch, migrate/clean-restart toggles) gates every run — EDT-scoped, all-repos, or single-service — followed by live per-service tracking, assisted resolution of conflicts, and migration-failure handling. Per-service quick actions (clean restart, single-service update) are available from the list at any time. | FR-10–FR-12, FR-25–FR-27 |
 | Logs | Aggregated live log stream across the active EDT's services (or a chosen subset), filterable, with inline health and developer-triggered restart. | FR-16–FR-18 |
@@ -91,12 +91,12 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 **Dashboard**
 | State | Treatment |
 |---|---|
-| Cold load | Spinner while the summary assembles; each section fills independently (a slow docker probe never blocks the git sections). |
-| Populated | Active EDT name + one row per member service: container status (glyph + text: up/down/restarting/no container), active branch, ahead/behind vs. its shared branch. Last group-update outcome (timestamp + updated/skipped/failed counts). Default highlighted action "enter [last EDT]". (Amended 2026-10-01.) |
-| Working-tree alerts | Member services with uncommitted changes or a merge/rebase in progress are flagged inline (warning glyph + reason). (Added 2026-10-01.) |
-| Quick actions | Keyboard action row: enter last EDT, start group update, open Logs, switch EDT (quick-pick) — each with its key shown. (Added 2026-10-01.) |
-| Registry health | Counts of registered repos, invalid manifests, unreachable repos and listing issues; shortcut to `:registry`. (Added 2026-10-01.) |
-| Operation in progress | When an update/migration/switch holds a lock, a line names it and its progress; quick actions it would conflict with are disabled with the reason. (Added 2026-10-01.) |
+| Cold load | Spinner per section; each section fills independently (a slow docker probe never blocks the git sections). |
+| Populated | EDT line (name, N services, "updated Ns ago · [R] refresh"), then one row per member service: state glyph + text, issue marker, branch, ahead/behind vs. its shared branch. The focused row shows a reason line and the service-action row. |
+| Service action | `Ctrl+O` / `Ctrl+R` / `Ctrl+L` from Story 7.12's registry; unavailable actions greyed with their reason; a running action shows its progress inline on the row and disables that row's other actions. |
+| Attention | Ordered list: protected branch, no upstream / unknown (offline), uncommitted changes or merge in progress, branch shared with another EDT (named), behind on a shared branch. Single success line when clear. |
+| Registry health | Repo count, invalid manifests, unreachable repos, listing issues; shortcut `:registry`; single success line when clear. |
+| Probe error | The affected field shows an explicit error state; the rest of the row and the other sections are unaffected. |
 | No EDT yet (first run) | Prompts to choose or create an EDT instead of showing a stale/empty summary. |
 | No repos registered | Unchanged (Story 2.11) — takes precedence over every other Dashboard content state. |
 | Background-event badge | A zone with a pending background event (e.g. Logs) shows its counter badge on its tab while Max is on Dashboard. |
@@ -249,7 +249,7 @@ The same intent uses the same key, wording and component in every zone and dialo
 | Branch lists: no `[R] retry` hint | A bare letter would type into the focused text field; branch lists reload on reopening the field. |
 | Clearing views (Logs `c`/`Ctrl+C`) and Routes row `d` act without confirmation | Reversible or trivially re-creatable data; labelled in the hints, per the destructive-action rule. |
 | Registry stale-entry cleaning: selection + `Enter`, no second step | The registry entries only point at paths that are gone; nothing on disk is destroyed. |
-| Dashboard empty-registry sentence (`Press [:] ...`) stays hand-written | The Dashboard belongs to stories 7.5/7.6; it is the one allowlisted literal in the hint guard test. |
+| Dashboard empty-registry sentence (`Press [:] ...`) stays hand-written | The Dashboard belongs to Epic 8 (Dashboard); it is the one allowlisted literal in the hint guard test. |
 | Action-progress labels (`Saving…`, `Deleting…`, `Switching…`, `Creating…`) are plain annotations, not `StateLine` | They report an action in flight, not a list being loaded; `StateLine` covers loading, empty and error states. |
 | Detail-pane action hints (`[Enter] Switch`, `[Enter] Remove / Change branch`) and the `[i] details` suffix stay inline | They are zone content the settings screen lets the user hide; they are built with `formatHint` and keep their capitalised verbs. |
 | A dialog with no key to press (creating, activating, preparing the switch resolution) registers no footer context | The footer falls back to the zone hints for that moment; a context would only advertise keys that do nothing. |
@@ -283,7 +283,7 @@ Behavioral; visual contrast values live in `DESIGN.md`.
 
 ### UJ-1 — Max starts a coding session by switching EDTs
 
-1. Max launches tui-back. The Dashboard zone loads showing yesterday's EDT as last-active, its member services, and the last group-update timestamp; the default highlighted action is "Entrer dans [dernier EDT]".
+1. Max launches tui-back. The Dashboard zone loads showing the active EDT's services with their state, branch and anomalies; the default highlighted action is "Entrer dans [dernier EDT]".
 2. Since today's ticket touches different services, Max instead selects "Choisir un autre EDT / en créer un".
 3. In the EDTs zone he creates a new EDT (topic = the ticket name) and selects `micro-users` and `api-gateway` as member services via the `checkbox-list-item` pattern — `Space` toggles each, `Enter` confirms (FR-3).
 4. At creation he has the tool create matching dev branches for both services, named after the ticket: he chooses one base branch (default `development`) and one naming mode — grouped (one shared name) or individual (per service) — that apply to the whole creation action (FR-4).
