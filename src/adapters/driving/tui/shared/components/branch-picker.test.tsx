@@ -520,3 +520,10 @@ describe('cross-EDT branch usage (story 2.43)', () => {
     expect(out2).toContain('⚠ EDT « alpha »');
   });
 });
+
+describe('cross-EDT prototype-key safety (story 2.43)', () => {
+  it('a branch named constructor is not refused when owners has no such own key', () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: 'constructor' });
+    expect(handleBranchPickerKey(state, ['constructor'], [], '', { return: true }, {}).type).toBe('submit');
+  });
+});

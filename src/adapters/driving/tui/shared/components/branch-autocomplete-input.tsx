@@ -185,7 +185,7 @@ export function BranchAutocompleteInput(props: BranchAutocompleteInputProps) {
             <Text key={branch} color={index === highlight ? colors.accent : colors.text}>
               {index === highlight ? '› ' : '  '}
               {branch}
-              {annotations?.[branch] !== undefined ? <Text color={colors.warning}>{`  ⚠ ${annotations[branch]}`}</Text> : null}
+              {annotations !== undefined && Object.hasOwn(annotations, branch) ? <Text color={colors.warning}>{`  ⚠ ${annotations[branch]}`}</Text> : null}
             </Text>
           ))}
         </Box>

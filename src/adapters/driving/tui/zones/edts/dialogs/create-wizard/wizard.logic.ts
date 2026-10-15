@@ -284,7 +284,7 @@ export function checkPlan(plan: MemberBranchPlan, lists: BranchListState | undef
   }
   // Story 2.43: taking (or renaming) a branch another EDT registers breaks that EDT. Only a
   // *local* source can be owned; base-only usage never reaches this (create plans return above).
-  const ownerTopics = isLocal ? known?.owners?.[branch] : undefined;
+  const ownerTopics = isLocal ? (known?.owners !== undefined && Object.hasOwn(known.owners, branch) ? known.owners[branch] : undefined) : undefined;
   if (ownerTopics !== undefined && ownerTopics.length > 0) {
     return { kind: 'owned-by-other-edt', branch, topics: ownerTopics };
   }

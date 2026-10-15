@@ -7,6 +7,7 @@ import {
   buildRowView,
   buildStep3Rows,
   canAdvance,
+  checkPlan,
   activateLaterHint,
   activationErrorResults,
   checkNameAvailability,
@@ -550,5 +551,12 @@ describe('cross-EDT branch usage (story 2.43)', () => {
     expect(row({ kind: 'create', base: 'feat/owned', name: 'feat/mine' })).toMatchObject({ error: null });
     // The global base resolving to an owned branch (here the shared one) is base-only too.
     expect(buildRowView({ path: '/repos/a', service: 'svc-a' }, { base: '', name: 'x' }, lists, PROTECTION)).toMatchObject({ error: null });
+  });
+});
+
+describe('checkPlan prototype-key safety (story 2.43)', () => {
+  it('an existing branch named constructor is not read as owned', () => {
+    const lists = { status: 'ready' as const, local: ['constructor'], remote: [] as string[], owners: {} };
+    expect(checkPlan({ kind: 'existing', branch: 'constructor' }, lists, { sharedBranch: 'main', protectedBranches: [] })).toBeNull();
   });
 });

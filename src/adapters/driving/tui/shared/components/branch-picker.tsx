@@ -209,7 +209,7 @@ function applyTextInput(current: TextEditState, input: string, key: TextEditKey)
 // branch" submit — never to a create-new base (base-only usage is annotated, allowed).
 function ownedRefusal(names: readonly string[], owners: BranchOwners | undefined): string | null {
   for (const name of names) {
-    const topics = owners?.[name];
+    const topics = owners !== undefined && Object.hasOwn(owners, name) ? owners[name] : undefined;
     if (topics !== undefined && topics.length > 0) {
       return ownerRefusalForBranch(name, topics);
     }
@@ -513,7 +513,7 @@ function FilterableBranchList({
         <Text key={branch} color={index === highlightedIndex ? colors.accent : colors.text}>
           {index === highlightedIndex ? '› ' : '  '}
           {branch}
-          {annotations[branch] !== undefined ? <Text color={colors.warning}>{`  ⚠ ${annotations[branch]}`}</Text> : null}
+          {Object.hasOwn(annotations, branch) ? <Text color={colors.warning}>{`  ⚠ ${annotations[branch]}`}</Text> : null}
         </Text>
       ))}
     </Box>

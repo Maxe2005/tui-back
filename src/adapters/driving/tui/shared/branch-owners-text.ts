@@ -14,7 +14,8 @@ export function ownerAnnotationText(topics: readonly string[]): string {
 
 // Branch -> annotation text, for BranchAutocompleteInput's generic `annotations` prop.
 export function ownerAnnotations(owners: BranchOwners | undefined): Record<string, string> {
-  const annotations: Record<string, string> = {};
+  // Null prototype: a branch named `constructor`/`__proto__` is plain data, never inherited.
+  const annotations = Object.create(null) as Record<string, string>;
   for (const [branch, topics] of Object.entries(owners ?? {})) {
     if (topics.length > 0) {
       annotations[branch] = ownerAnnotationText(topics);

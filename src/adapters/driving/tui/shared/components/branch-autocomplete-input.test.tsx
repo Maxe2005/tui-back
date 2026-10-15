@@ -297,3 +297,19 @@ describe('BranchAutocompleteInput render', () => {
     expect(output).not.toContain('fix-y  ⚠');
   });
 });
+
+describe('BranchAutocompleteInput annotations — prototype keys (story 2.43)', () => {
+  it('a branch named toString/constructor is never read as an inherited annotation', async () => {
+    const output = await renderToString(
+      <BranchAutocompleteInput
+        label="Branch"
+        state={{ value: '', cursor: 0, pickCursor: 0 }}
+        branches={['toString', 'constructor']}
+        branchesStatus="ready"
+        maxRows={5}
+        annotations={{}}
+      />,
+    );
+    expect(output).not.toContain('⚠');
+  });
+});

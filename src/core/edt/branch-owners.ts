@@ -30,7 +30,8 @@ export function branchOwnersMap(
   branches: readonly string[],
   excludeUlid?: string,
 ): Record<string, string[]> {
-  const owned: Record<string, string[]> = {};
+  // Null prototype: a branch named `constructor`/`__proto__` is plain data, never inherited.
+  const owned = Object.create(null) as Record<string, string[]>;
   for (const branch of branches) {
     const topics = branchOwners(edts, repoPath, branch, excludeUlid);
     if (topics.length > 0) {

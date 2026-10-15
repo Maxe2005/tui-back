@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { branchOwners } from './branch-owners.js';
+import { branchOwners, branchOwnersMap } from './branch-owners.js';
 
 const edts = [
   { ulid: 'U1', topic: 'alpha', members: [{ service: 's', repoPath: '/repos/a/', branch: 'feat/x' }] },
@@ -20,11 +20,18 @@ describe('branchOwners', () => {
   });
 });
 
-import { branchOwnersMap } from './branch-owners.js';
 
 describe('branchOwnersMap', () => {
   it('maps only owned branches, excluding the given EDT', () => {
     expect(branchOwnersMap(edts, '/repos/a', ['feat/x', 'feat/y'], 'U1')).toEqual({ 'feat/x': ['beta'] });
     expect(branchOwnersMap(edts, '/repos/a', ['feat/y'])).toEqual({});
+  });
+});
+
+describe('prototype-key safety', () => {
+  it('a branch named constructor/__proto__ is a normal key', () => {
+    const map = branchOwnersMap(edts, '/repos/a', ['constructor', '__proto__', 'feat/x']);
+    expect(Object.keys(map)).toEqual(['feat/x']);
+    expect(Object.hasOwn(map, 'constructor')).toBe(false);
   });
 });
