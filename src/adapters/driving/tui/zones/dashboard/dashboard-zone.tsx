@@ -1,8 +1,9 @@
 // tui/zones/dashboard: the fixed launch banner, then the registry-error / empty-registry prompt
 // (checked first) or the snapshot sections. The registry check re-runs on mount and whenever the
 // registry screen's open flag flips (the zone never remounts); the snapshot loads on mount and
-// on `R`, and re-loads when the active EDT changes. Overlays make the zone inert.
-import { useEffect } from 'react';
+// on `R`, and re-loads when the active EDT changes. Up/Down move the row cursor, Ctrl+O/R/L run
+// the focused row's registry actions, Enter opens it in its zone. Overlays make the zone inert.
+import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -10,7 +11,8 @@ import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { DashboardBody } from './dashboard-body.js';
-import { resolveDashboardBody } from './dashboard.logic.js';
+import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
+import { actionForKey, resolveDashboardBody } from './dashboard.logic.js';
 import { LaunchBanner } from './launch-banner.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
@@ -19,6 +21,10 @@ export const EMPTY_REGISTRY_HINT = 'Press [:] to scan a root path and register r
 // A registry.list() failure (e.g. a corrupt registry.yaml) renders its own error branch rather
 // than silently falling through to whatever registryEmpty last was.
 export const REGISTRY_CHECK_ERROR_MESSAGE = 'Failed to check the repo registry.';
+
+// Used only while the registry's action list is not loaded (unwired ports): the key still
+// reaches the store, which reports the missing port inline.
+const FALLBACK_ACTION_IDS: Record<string, string> = { o: 'open-in-ide', r: 'restart-simple', l: 'restart-clean' };
 
 export function DashboardZone({
   useStore = useAppStore,
@@ -31,6 +37,12 @@ export function DashboardZone({
   const checkRegistryEmpty = useStore((state) => state.checkRegistryEmpty);
   const loadDashboard = useStore((state) => state.loadDashboard);
   const activeEdt = useStore((state) => state.activeEdt);
+  const servicesSection = useStore((state) => state.dashboardServices);
+  const updatedAt = useStore((state) => state.dashboardUpdatedAt);
+  const loadServiceActions = useStore((state) => state.loadDashboardServiceActions);
+  const runServiceAction = useStore((state) => state.runDashboardServiceAction);
+  const openServiceInZone = useStore((state) => state.openServiceInZone);
+  const [cursor, setCursor] = useState(0);
   const zoneInputActive = useZoneInputActive(useStore);
 
   useEffect(() => {
@@ -47,10 +59,50 @@ export function DashboardZone({
     }
   }, [activeEdt, loadDashboard, showSections]);
 
+  const rows = servicesSection?.services ?? [];
+  const focusedIndex = rows.length === 0 ? 0 : Math.min(cursor, rows.length - 1);
+  const focusedPath = showSections ? rows[focusedIndex]?.path ?? null : null;
+
+  // The focused row's actions (availability, lock names) are re-read when focus moves or the
+  // rows reload; never on a timer.
+  useEffect(() => {
+    if (focusedPath !== null) {
+      void loadServiceActions(focusedPath);
+    }
+  }, [focusedPath, updatedAt, loadServiceActions]);
+
   useInput(
-    (input) => {
+    (input, key) => {
+      if (key.ctrl === true) {
+        // Ctrl+<letter> runs the registry action bound to that key on the focused row.
+        if (focusedPath === null) {
+          return;
+        }
+        const actions = useStore.getState().dashboardServiceActions[focusedPath];
+        const action = actionForKey(actions ?? [], input);
+        const id = action !== undefined ? (action.availability.available ? action.id : null) : actions === undefined ? FALLBACK_ACTION_IDS[input] : null;
+        if (id !== undefined && id !== null) {
+          void runServiceAction(focusedPath, id);
+        }
+        return;
+      }
+      if (key.meta === true) {
+        return;
+      }
       if (input === 'R') {
         void loadDashboard();
+        return;
+      }
+      if (focusedPath === null) {
+        return;
+      }
+      const next = nextCursorForKey(key, focusedIndex, rows.length);
+      if (next !== null) {
+        setCursor(next);
+        return;
+      }
+      if (key.return === true) {
+        openServiceInZone(focusedPath);
       }
     },
     { isActive: zoneInputActive },
@@ -72,7 +124,7 @@ export function DashboardZone({
           <DimAnnotation text={EMPTY_REGISTRY_HINT} />
         </Box>
       ) : (
-        <DashboardBody useStore={useStore} />
+        <DashboardBody useStore={useStore} cursor={focusedIndex} />
       )}
     </Box>
   );

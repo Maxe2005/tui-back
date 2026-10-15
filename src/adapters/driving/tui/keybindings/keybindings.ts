@@ -172,6 +172,31 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'Dashboard: refresh every section (also retries a failed section)',
     footer: { key: 'R', verb: 'refresh', zones: ['dashboard'] },
   },
+  {
+    keys: '↑ / ↓ (Dashboard)',
+    description: 'Dashboard: move the cursor over the active EDT\'s services',
+    footer: { key: '↑/↓', verb: 'service', zones: ['dashboard'] },
+  },
+  {
+    keys: 'Enter (Dashboard)',
+    description: 'Dashboard: open the focused service in the Logs zone',
+    footer: { key: 'Enter', verb: 'open', zones: ['dashboard'] },
+  },
+  {
+    keys: 'Ctrl+O (Dashboard)',
+    description: 'Dashboard: open the focused service repo in your editor',
+    footer: { key: 'Ctrl+O', verb: 'IDE', zones: ['dashboard'] },
+  },
+  {
+    keys: 'Ctrl+R (Dashboard)',
+    description: 'Dashboard: restart the focused service (R stays refresh)',
+    footer: { key: 'Ctrl+R', verb: 'restart', zones: ['dashboard'] },
+  },
+  {
+    keys: 'Ctrl+L (Dashboard)',
+    description: 'Dashboard: clean-restart the focused service through its recipe',
+    footer: { key: 'Ctrl+L', verb: 'clean restart', zones: ['dashboard'] },
+  },
   // Scoped to the Logs zone's pane grid.
   {
     keys: 'W (Logs)',

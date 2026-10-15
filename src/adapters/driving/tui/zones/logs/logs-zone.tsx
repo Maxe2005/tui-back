@@ -195,6 +195,47 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const [historyGridCursor, setHistoryGridCursor] = useState<GridCursor | null>(null);
   const [historyGridScroll, setHistoryGridScroll] = useState(0);
 
+  // `Enter` on a Dashboard row lands here: select that service's pane (when it has a container)
+  // and put the list cursor on it. Dropped once the listing is loaded without it.
+  const pendingServiceFocus = useStore((state) => state.pendingServiceFocus);
+  const clearPendingServiceFocus = useStore((state) => state.clearPendingServiceFocus);
+  useEffect(() => {
+    if (pendingServiceFocus === null) {
+      return;
+    }
+    const inEdt = edtServices.findIndex((row) => row.path === pendingServiceFocus);
+    const inOther = otherServices.findIndex((row) => row.path === pendingServiceFocus);
+    if (inEdt >= 0) {
+      if (!logsEdtSelected.includes(pendingServiceFocus)) {
+        toggleLogsEdtSelection(pendingServiceFocus);
+      }
+      setEdtCursor(inEdt);
+      setPaneFocus('edt-list');
+    } else if (inOther >= 0) {
+      if (!logsOtherSelected.includes(pendingServiceFocus)) {
+        toggleLogsOtherSelection(pendingServiceFocus);
+      }
+      setOtherCursor(inOther);
+      setPaneFocus('other-list');
+    } else if (servicesStatus === 'error' || (servicesStatus === 'idle' && services !== null)) {
+      // Not listed (container-less rows only appear in the info section): nothing to select.
+    } else {
+      return;
+    }
+    clearPendingServiceFocus();
+  }, [
+    pendingServiceFocus,
+    edtServices,
+    otherServices,
+    servicesStatus,
+    services,
+    logsEdtSelected,
+    logsOtherSelected,
+    toggleLogsEdtSelection,
+    toggleLogsOtherSelection,
+    clearPendingServiceFocus,
+  ]);
+
   const clampedEdtCursor = edtServices.length === 0 ? 0 : Math.min(edtCursor, edtServices.length - 1);
   const clampedOtherCursor = otherServices.length === 0 ? 0 : Math.min(otherCursor, otherServices.length - 1);
 
