@@ -92,6 +92,12 @@ export function restartNeedsAttention(summary: RestartSummary): boolean {
 
 const CHANGED_OUTCOMES: ReadonlySet<SwitchEdtRepoResult['outcome']> = new Set(['switched', 'adopted', 'discarded']);
 
+// The one definition of "this service's branch changed in the switch" — the restart targets, the
+// store's in-flight marking and the dialog's decision to start a phase all use it.
+export function isChangedSwitchOutcome(outcome: SwitchEdtRepoResult['outcome']): boolean {
+  return CHANGED_OUTCOMES.has(outcome);
+}
+
 export interface RestartAfterSwitchParams {
   results: readonly SwitchEdtRepoResult[];
   repos: readonly SwitchRestartRepo[];
@@ -120,7 +126,7 @@ export async function restartAfterSwitch(params: RestartAfterSwitchParams): Prom
     }
   };
 
-  const changed = new Set(results.filter((result) => CHANGED_OUTCOMES.has(result.outcome)).map((result) => result.service));
+  const changed = new Set(results.filter((result) => isChangedSwitchOutcome(result.outcome)).map((result) => result.service));
   const rows: RestartRow[] = repos.map((repo) => {
     const row: RestartRow = { service: repo.service, repoPath: repo.repoPath, phase: 'pending' };
     if (!changed.has(repo.service)) {

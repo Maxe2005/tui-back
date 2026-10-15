@@ -903,8 +903,8 @@ async function runEdtSwitch(
     }
     restartMode = (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).switch.restartMode;
   }
-  if (restartMode !== 'none' && deps.docker === undefined) {
-    return err('restart-unavailable', 'Post-switch restart needs the Docker port, which is not wired — nothing was switched');
+  if (restartMode !== 'none' && (deps.docker === undefined || deps.healthProbe === undefined)) {
+    return err('restart-unavailable', 'Post-switch restart needs the Docker and health-probe ports, which are not wired — nothing was switched');
   }
   const dirtyPolicy: DirtyPolicy | undefined = discardDirty
     ? { kind: 'discard' }

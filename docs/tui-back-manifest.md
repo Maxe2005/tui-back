@@ -137,8 +137,9 @@ modules:
   un redémarrage post-switch, un conteneur démarré est rapporté
   `up-unverified` (démarré, non vérifié) au lieu de `functional`.
 - **Rôle** : après le redémarrage optionnel d'un EDT switch (`switch.restartMode`
-  ≠ `none`), tui-back émet un unique `GET` (avec délai maximal) sur cette URL
-  via `HealthProbePort`. Une réponse 2xx avec conteneur `up` donne `functional` ;
+  ≠ `none`), tui-back interroge cette URL par un `GET` (délai maximal de 5 s par requête)
+  via `HealthProbePort`, une fois par seconde, jusqu'à 30 s au total ; les
+  redirections ne sont pas suivies (un 3xx n'est pas un 2xx). Une réponse 2xx avec conteneur `up` donne `functional` ;
   un délai dépassé ou un statut non-2xx donne `unhealthy`.
 - **Exemple** : `healthUrl: http://localhost:3000/health`
 

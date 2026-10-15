@@ -4,7 +4,7 @@
 import { Box, Text, type Key } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../core/edt/switch.js';
-import { restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../core/edt/switch-restart.js';
+import { isChangedSwitchOutcome, restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../core/edt/switch-restart.js';
 import { cycleSwitchRestartMode } from '../../../../../../core/ports/settings.js';
 import type { AppState } from '../../../store/app-store.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
@@ -81,13 +81,25 @@ export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
       // paths alongside any failure.
       const detail = describeSwitchForLog(current.target.topic, force, results);
       const restartMode = effectiveRestartMode(current, deps.defaultRestartMode);
-      if (restartMode !== 'none' && results.some((row) => row.outcome !== 'failed')) {
+      if (restartMode !== 'none' && results.some((row) => isChangedSwitchOutcome(row.outcome))) {
         // FR-37: the restart phase is a second call after the (already complete) switch — the
         // dialog stays open on the report; a restart problem never rolls the switch back.
         deps.setDialog((prev) =>
           prev.kind === 'switch-confirm' ? { ...prev, submitting: false, resolution: null, failedRows, results, restartReport: true } : prev,
         );
-        const restarted = await deps.runSwitchRestart({ topic: current.target.topic, mode: restartMode, results });
+        // A rejected or throwing run never leaves the dialog on an empty report: the reason is
+        // shown inline and the switch (already done) stays untouched.
+        const restarted = await deps
+          .runSwitchRestart({ topic: current.target.topic, mode: restartMode, results })
+          .catch((error: unknown) => ({
+            ok: false as const,
+            error: { code: 'switch-restart-failed', message: error instanceof Error ? error.message : String(error) },
+          }));
+        if (!restarted.ok && deps.switchRestart === null) {
+          deps.setDialog((prev) =>
+            prev.kind === 'switch-confirm' ? { ...prev, restartReport: false, error: restarted.error.message } : prev,
+          );
+        }
         const restartDetail = restarted.ok
           ? describeRestartForLog(restartMode, restarted.data.rows)
           : `restart ${restartMode} not run: ${restarted.error.message}`;

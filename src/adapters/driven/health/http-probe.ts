@@ -9,8 +9,13 @@ export function createHttpHealthProbe(fetchImpl: typeof fetch = fetch): HealthPr
       if (url.trim() === '') {
         return err('invalid-argument', 'health probe url must not be empty');
       }
+      if (!/^https?:\/\/\S+$/i.test(url.trim())) {
+        return err('invalid-argument', `health probe url must be http(s): ${url}`);
+      }
       try {
-        const response = await fetchImpl(url, { method: 'GET', signal: AbortSignal.timeout(timeoutMs) });
+        // Redirects are not followed: a 3xx is not a 2xx answer, and a redirect to a login page
+        // that returns 200 must not make the service look functional.
+        const response = await fetchImpl(url, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
         // Drain nothing: the body is irrelevant, release the connection.
         void response.body?.cancel().catch(() => {});
         if (response.status >= 200 && response.status < 300) {

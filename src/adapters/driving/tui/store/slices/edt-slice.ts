@@ -12,6 +12,7 @@ import {
 } from '../../../../../core/edt/create.js';
 import {
   listSwitchRestartRepos,
+  isChangedSwitchOutcome,
   restartAfterSwitch,
   type RestartReport,
   type RestartRow,
@@ -68,6 +69,9 @@ export const SWITCH_RESTART_IN_PROGRESS_MESSAGE =
 
 // The live post-switch restart run, read by the switch dialog's report view. `rows` are in run
 // order while `running` (stable positions for live updates) and non-green first once `done`.
+export const UPDATE_RUNNING_RESTART_MESSAGE =
+  'A group update is in progress — wait for it to finish before restarting services after a switch.';
+
 export type SwitchRestartState = {
   topic: string;
   mode: Exclude<SwitchRestartRunMode, 'none'>;
@@ -370,11 +374,13 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         return rejected(SWITCH_RESTART_IN_PROGRESS_MESSAGE);
       }
       if (get().updateStatus === 'running') {
-        return rejected(UPDATE_IN_PROGRESS_MESSAGE.replace('activating or switching an EDT', 'restarting services after a switch'));
+        return rejected(UPDATE_RUNNING_RESTART_MESSAGE);
       }
       if (Object.keys(get().serviceRestartInFlight).length > 0) {
         return rejected('A service restart is already in progress — wait for it to finish before restarting services after a switch.');
       }
+      // Claimed before the first await so two interleaved starts cannot both pass the guards above.
+      set({ switchRestart: { topic, mode, status: 'running', rows: [], report: null, error: null } });
       const repos = await listSwitchRestartRepos({ registry: deps.registry, manifest: deps.manifest });
       if (!repos.ok) {
         set({ switchRestart: { topic, mode, status: 'error', rows: [], report: null, error: repos.error.message } });
@@ -382,10 +388,9 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
       // Marks every target as restarting in the shared in-flight map, so a group update or a
       // standalone restart on the same services is refused until the run ends.
-      const changed = new Set(results.filter((row) => row.outcome !== 'failed').map((row) => row.service));
+      const changed = new Set(results.filter((row) => isChangedSwitchOutcome(row.outcome)).map((row) => row.service));
       const inFlightPaths = repos.data.filter((repo) => repo.hasContainer && changed.has(repo.service)).map((repo) => repo.repoPath);
       set({
-        switchRestart: { topic, mode, status: 'running', rows: [], report: null, error: null },
         serviceRestartInFlight: { ...get().serviceRestartInFlight, ...Object.fromEntries(inFlightPaths.map((path) => [path, 'restart' as const])) },
       });
       const liveRows = new Map<string, RestartRow>();

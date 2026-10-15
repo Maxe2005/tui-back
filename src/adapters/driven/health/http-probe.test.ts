@@ -43,6 +43,17 @@ describe('createHttpHealthProbe', () => {
     expect(result.ok && result.data.healthy).toBe(false);
   });
 
+  it('does not follow redirects: a 3xx is unhealthy', async () => {
+    const url = await serve((_req, res) => res.writeHead(302, { location: 'http://127.0.0.1:1/login' }).end());
+    const result = await createHttpHealthProbe().probe(url, 1000);
+    expect(result).toEqual({ ok: true, data: { healthy: false, status: 302, reason: 'HTTP 302' } });
+  });
+
+  it('rejects a non-http(s) url', async () => {
+    const result = await createHttpHealthProbe().probe('ftp://host/x', 500);
+    expect(!result.ok && result.error.code).toBe('invalid-argument');
+  });
+
   it('rejects a blank url', async () => {
     const result = await createHttpHealthProbe().probe('  ', 500);
     expect(result.ok).toBe(false);

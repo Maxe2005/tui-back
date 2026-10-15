@@ -498,6 +498,23 @@ describe('edt slice — post-switch restart (FR-37)', () => {
     expect(deps.container?.restart).not.toHaveBeenCalled();
   });
 
+  it('claims the run synchronously: two interleaved starts cannot both pass the guards', async () => {
+    const { deps } = restartDeps();
+    const store = createAppStore(deps);
+    const first = store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows });
+    const second = await store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows });
+    expect(second).toMatchObject({ ok: false, error: { code: 'switch-restart-in-progress' } });
+    expect((await first).ok).toBe(true);
+  });
+
+  it('updateSettings applies and persists switch.restartMode', async () => {
+    const deps = fakeDeps();
+    const store = createAppStore(deps);
+    await store.getState().updateSettings({ switch: { restartMode: 'clean' } });
+    expect(store.getState().settings.switch.restartMode).toBe('clean');
+    expect(deps.settings.save).toHaveBeenCalledWith(expect.objectContaining({ switch: { restartMode: 'clean' } }));
+  });
+
   it('reports an explicit error when the restart ports are not wired', async () => {
     const store = createAppStore(fakeDeps());
     expect(await store.getState().runSwitchRestart({ topic: 't', mode: 'simple', results: rows })).toMatchObject({
