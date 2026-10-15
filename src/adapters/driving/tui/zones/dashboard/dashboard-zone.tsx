@@ -59,7 +59,16 @@ export function DashboardZone({
     }
   }, [activeEdt, loadDashboard, showSections]);
 
+  // A new EDT lists other services: the cursor starts over so a key never lands on a stranger.
+  useEffect(() => {
+    setCursor(0);
+  }, [activeEdt]);
+
   const rows = servicesSection?.services ?? [];
+  // Rows can shrink on reload: keep the stored cursor inside them.
+  useEffect(() => {
+    setCursor((current) => (rows.length === 0 ? 0 : Math.min(current, rows.length - 1)));
+  }, [rows.length]);
   const focusedIndex = rows.length === 0 ? 0 : Math.min(cursor, rows.length - 1);
   const focusedPath = showSections ? rows[focusedIndex]?.path ?? null : null;
 

@@ -92,7 +92,21 @@ describe('row anomalies', () => {
   });
 });
 
+describe('reasonParts details', () => {
+  it('keeps the offline detail message and the manifest error message', () => {
+    expect(reasonLine(row({ divergence: { status: 'unknown-offline', ahead: null, behind: null, detail: { code: 'git', message: 'no route to host' } } }))).toBe(
+      'offline: no route to host',
+    );
+    expect(reasonLine(row({ manifest: { ok: false, error: { code: 'manifest-invalid', message: 'bad yaml' } } }))).toBe('manifest error: bad yaml');
+    expect(reasonLine(row({ container: { ok: false, error: { code: 'd', message: 'docker down' } } }))).toBe('container error: docker down');
+  });
+});
+
 describe('aheadBehindLabel', () => {
+  it('reads unknown when a current divergence has no counts', () => {
+    expect(aheadBehindLabel({ status: 'current', ahead: null, behind: null })).toBe('unknown');
+    expect(aheadBehindLabel({ status: 'current', ahead: 0, behind: null })).toBe('unknown');
+  });
   it('prints counts, or the explicit no-upstream / offline state', () => {
     expect(aheadBehindLabel({ status: 'current', ahead: 1, behind: 2 })).toBe('↑1 ↓2');
     expect(aheadBehindLabel({ status: 'no-upstream', ahead: null, behind: null })).toBe('no upstream');

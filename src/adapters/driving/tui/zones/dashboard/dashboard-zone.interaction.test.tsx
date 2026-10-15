@@ -165,4 +165,35 @@ describe('DashboardZone interaction', () => {
       instance.unmount();
     }
   });
+
+  it('resets the cursor to the first row when the active EDT changes', async () => {
+    const { store, runDashboardServiceAction } = seedServices();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '\x1b[B');
+      store.setState({ activeEdt: 'other-edt' });
+      await instance.waitUntilRenderFlush();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await press(instance, stdin, '\x12');
+      expect(runDashboardServiceAction).toHaveBeenLastCalledWith('/r/a', 'restart-simple');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('keeps the cursor inside the rows when they shrink', async () => {
+    const { store, runDashboardServiceAction } = seedServices();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '\x1b[B');
+      store.setState({ dashboardServices: { status: 'active', edt: { ulid: 'e', topic: 't', serviceCount: 1 }, services: [serviceRow('a')] } });
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '\x12');
+      expect(runDashboardServiceAction).toHaveBeenLastCalledWith('/r/a', 'restart-simple');
+    } finally {
+      instance.unmount();
+    }
+  });
 });

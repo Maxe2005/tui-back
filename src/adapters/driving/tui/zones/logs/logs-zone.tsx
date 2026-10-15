@@ -236,6 +236,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     clearPendingServiceFocus,
   ]);
 
+  // A request nobody consumed must not fire on a later visit.
+  useEffect(() => () => clearPendingServiceFocus(), [clearPendingServiceFocus]);
+
   const clampedEdtCursor = edtServices.length === 0 ? 0 : Math.min(edtCursor, edtServices.length - 1);
   const clampedOtherCursor = otherServices.length === 0 ? 0 : Math.min(otherCursor, otherServices.length - 1);
 
