@@ -103,12 +103,23 @@ describe('buildDashboardSnapshot', () => {
     expect(unknown.status).toBe('no-active-edt');
   });
 
-  it('marks a container-less service without calling docker', async () => {
-    const { container: _omit, ...rest } = manifestFor('/r/a');
-    const setup = build({ manifests: { '/r/a': rest as Manifest } });
+  it.each([undefined, '', '   '])('marks a container-less service (container=%j) without calling docker', async (container) => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x']])],
+      manifests: { '/r/a': manifestFor('/r/a', { container }) },
+    });
     const result = await setup.run();
     expect(result.ok && result.data.services[0]?.container).toEqual({ ok: true, value: 'no-container' });
-    expect(setup.docker.getContainerHealth).toHaveBeenCalledTimes(1);
+    expect(setup.docker.getContainerHealth).not.toHaveBeenCalled();
+  });
+
+  it('queries docker with the trimmed container name', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x']])],
+      manifests: { '/r/a': manifestFor('/r/a', { container: ' ctr-a ' }) },
+    });
+    await setup.run();
+    expect(setup.docker.getContainerHealth).toHaveBeenCalledWith('ctr-a');
   });
 
   it('confines a docker failure to that row container field', async () => {
@@ -149,13 +160,13 @@ describe('buildDashboardSnapshot', () => {
 
   it('summarizes the registry per path', async () => {
     const snapshot = await data({
-      paths: ['/r/a', '/r/b', '/r/gone', '/r/bad', '/r/err'],
+      paths: ['/r/a', '/r/b', '/r/gone', '/r/bad', '/r/err', '/r/unmanaged'],
       registry: {
         exists: async (path: string) => (path === '/r/err' ? err('fs', 'x') : ok(path !== '/r/gone')),
       },
-      manifests: { '/r/bad': { code: 'manifest-invalid' } },
+      manifests: { '/r/bad': { code: 'manifest-invalid' }, '/r/unmanaged': { code: 'manifest-not-found' } },
     });
-    expect(snapshot.registry).toEqual({ repoCount: 5, invalidManifests: 1, unreachable: 1, listingIssues: 1 });
+    expect(snapshot.registry).toEqual({ repoCount: 6, invalidManifests: 1, unreachable: 1, listingIssues: 1 });
   });
 
   it('keeps a row with a manifest error when a member manifest cannot load', async () => {

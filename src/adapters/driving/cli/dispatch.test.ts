@@ -327,6 +327,30 @@ describe('subcommand registry guards', () => {
     });
   });
 
+  it('dashboard passes its ports through to a populated snapshot', async () => {
+    const edtRegistry: EdtRegistryPort = {
+      ...fakeEdtRegistry(),
+      list: async () =>
+        ok([
+          { ulid: 'e1', topic: 'topic-a', createdAt: '2026-01-01T00:00:00Z', status: 'active' as const, members: [{ service: 'svc-a', repoPath: '/r/a', branch: 'feat/x' }] },
+        ]),
+    };
+    const subcommands = buildTestSubcommands({
+      edtRegistry,
+      state: { ...fakeState(), readActiveEdt: async () => ok('e1') },
+      manifest: { load: async () => ok({ service: 'svc-a', container: 'ctr-a', sharedBranch: 'development', modules: {} }) },
+      docker: { getContainerHealth: async () => ok('restarting' as const) } as unknown as DockerPort,
+    });
+    const dashboard = subcommands.find((subcommand) => subcommand.name === 'dashboard');
+    if (!dashboard) throw new Error('expected dashboard subcommand');
+
+    const result = await dashboard.run([]);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { status: 'active', edt: { topic: 'topic-a', serviceCount: 1 }, services: [{ service: 'svc-a', container: { ok: true, value: 'restarting' } }] },
+    });
+  });
+
   it('list-routes rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
     const subcommands = buildTestSubcommands();
     const listRoutesCmd = subcommands.find((subcommand) => subcommand.name === 'list-routes');

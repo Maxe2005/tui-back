@@ -177,10 +177,11 @@ async function readContainer(
   if (manifest === null) {
     return { ok: false, error: { code: manifestError?.code ?? 'manifest-error', message: manifestError?.message ?? 'manifest unavailable' } };
   }
-  if (manifest.container === undefined || manifest.container.trim() === '') {
+  const container = manifest.container?.trim() ?? '';
+  if (container === '') {
     return { ok: true, value: 'no-container' };
   }
-  const health = await getServiceHealth({ docker, container: manifest.container });
+  const health = await getServiceHealth({ docker, container });
   return health.ok ? { ok: true, value: health.data } : { ok: false, error: { code: health.error.code, message: health.error.message } };
 }
 
