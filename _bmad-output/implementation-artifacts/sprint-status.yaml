@@ -33,9 +33,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-10-14
-# 2026-10-14: Story 2-40 validated by the developer, moved to done and merged into epic-2.
-# 2026-10-14: Story 2-40 (edt switch CLI dirty flags) moved to review (bmad-build).
+last_updated: 2026-10-15
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -47,10 +45,10 @@ development_status:
   epic-1-retrospective: done
 
   epic-2: in-progress
-  2-28-registry-manifest-semantic-validation: review
-  2-38-edt-creation-wizard-step-4-activation-switch-choice: review
+  2-28-registry-manifest-semantic-validation: done
+  2-38-edt-creation-wizard-step-4-activation-switch-choice: done
   2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: done
-  2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: review
+  2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: done
   2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: backlog
   2-44-edt-switch-optional-parallel-service-restart-verified-state: backlog
   epic-2-retrospective: optional
@@ -60,7 +58,7 @@ development_status:
   # 3-18/3-19 added by sprint-change-proposal-2026-10-08-2.md. Order: merge 3-15, then 3-19, then 3-18; 4-4 builds on 3-18.
   3-18-parallel-update-run-incident-queue: done
   3-19-full-screen-service-report: done
-  3-20-update-configurable-global-defaults: review
+  3-20-update-configurable-global-defaults: done
   epic-3-retrospective: optional
 
   epic-4: in-progress
@@ -68,13 +66,13 @@ development_status:
   4-4-smart-group-update-shared-types-first: done
   4-5-auto-resolve-shared-types-only-merge-conflicts: done
   # 4-6 rewritten 2026-10-12 (version history library); 4-7 added. Order: 4-3 merged -> 4-7 -> 4-6. Prerequisite relaxed to 7-3/7-4 done.
-  4-6-shared-types-version-history-library: review
-  4-7-shared-types-zone-configurable-default-options-busy-tab-indicator: review
+  4-6-shared-types-version-history-library: done
+  4-7-shared-types-zone-configurable-default-options-busy-tab-indicator: done
   epic-4-retrospective: optional
 
   epic-5: in-progress
   5-6-command-history-recall-shared-input-history-primitive: done
-  5-7-logs-restart-mode-setting-open-ide-shortcut: review
+  5-7-logs-restart-mode-setting-open-ide-shortcut: done
   epic-5-retrospective: optional
 
   epic-6: in-progress
@@ -86,7 +84,7 @@ development_status:
   epic-7: in-progress
   # Execution order: 7-12 -> 5-7, 7-5 -> 7-6 (7-5 rewritten as services console; 7-10/7-11 done).
   7-9-bounded-rendering-audit-global-fix-regression-guard: done
-  7-12-shared-service-actions-open-in-ide-simple-clean-restart: review
+  7-12-shared-service-actions-open-in-ide-simple-clean-restart: done
   7-5-dashboard-active-edt-services-console-last-update-persistence: backlog
   7-6-dashboard-alerts-quick-actions-registry-health-operation-indicator: backlog
   epic-7-retrospective: optional
