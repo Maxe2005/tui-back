@@ -717,13 +717,16 @@ export interface RestartStepInput {
   // phase).
   service: string;
   onPhase?: OnUpdatePhase;
+  // Called before each recipe command with its 1-based position, so a caller can show progress.
+  onStep?: (step: number, total: number) => void;
 }
 
 export async function runRestartStep(input: RestartStepInput): Promise<Result<void>> {
-  const { container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase } = input;
+  const { container, restart, containerName, restartCommands, repoPath, cleanRestart, service, onPhase, onStep } = input;
   emitPhase(onPhase, service, 'restarting');
   if (cleanRestart && restartCommands !== undefined && restartCommands.length > 0) {
-    for (const command of restartCommands) {
+    for (const [index, command] of restartCommands.entries()) {
+      onStep?.(index + 1, restartCommands.length);
       const restarted = await restart.run(repoPath, command);
       if (!restarted.ok) {
         return err(

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Manifest } from '../ports/manifest.js';
 import { err, ok } from '../result.js';
-import { createServiceActions, NO_CLEAN_RECIPE_NOTICE } from './index.js';
+import { createServiceActions, NO_CLEAN_RECIPE_NOTICE, restartBlockingLocks } from './index.js';
 
 function setup(manifest: Partial<Manifest> | 'broken', opts: { locked?: boolean; acquire?: 'busy' } = {}) {
   const container = { restart: vi.fn(async () => ok(undefined)) };
@@ -23,7 +23,7 @@ function setup(manifest: Partial<Manifest> | 'broken', opts: { locked?: boolean;
 
 describe('service actions list', () => {
   it('lists open-in-IDE, simple and clean restart, all available for a container service', async () => {
-    const { actions } = setup({ container: 'api' });
+    const { actions } = setup({ container: 'api', restartCommands: ['make'] });
     const listed = await actions.list('/repo/a');
     expect(listed.ok && listed.data.map((a) => [a.id, a.key, a.availability.available])).toEqual([
       ['open-in-ide', 'Ctrl+O', true],
@@ -48,10 +48,40 @@ describe('service actions list', () => {
     expect(listed.ok && listed.data[1]?.availability).toEqual({ available: false, reason: 'restart in progress' });
   });
 
+  it('marks only the clean restart unavailable when no recipe is declared', async () => {
+    const { actions } = setup({ container: 'api' });
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok && listed.data.map((a) => a.availability)).toEqual([
+      { available: true },
+      { available: true },
+      { available: false, reason: 'no clean recipe' },
+    ]);
+  });
+
+  it('names the held blocking lock as the reason', async () => {
+    const { actions, lock } = setup({ container: 'api', restartCommands: ['x'] });
+    lock.peek.mockImplementation(async (key: string) => ok({ locked: key === 'group-update' }));
+    const listed = await actions.list('/repo/a', { blockingLocks: restartBlockingLocks('01ABC') });
+    expect(listed.ok && listed.data[1]?.availability).toEqual({ available: false, reason: 'group update' });
+    expect(listed.ok && listed.data[0]?.availability).toEqual({ available: true });
+  });
+
   it('keeps open-in-IDE available when the manifest cannot be read', async () => {
     const { actions } = setup('broken');
     const listed = await actions.list('/repo/a');
     expect(listed.ok && listed.data.map((a) => a.availability.available)).toEqual([true, false, false]);
+  });
+});
+
+describe('service actions restart progress', () => {
+  it('reports each recipe step of a clean restart, and 1/1 for a simple one', async () => {
+    const { actions } = setup({ container: 'api', restartCommands: ['a', 'b', 'c'] });
+    const steps: Array<[number, number]> = [];
+    await actions.restart('/repo/a', 'clean', (p) => steps.push([p.step, p.total]));
+    expect(steps).toEqual([[1, 3], [2, 3], [3, 3]]);
+    const simple: Array<[number, number]> = [];
+    await actions.restart('/repo/a', 'simple', (p) => simple.push([p.step, p.total]));
+    expect(simple).toEqual([[1, 1]]);
   });
 });
 

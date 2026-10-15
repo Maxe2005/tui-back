@@ -192,6 +192,13 @@ describe('AppShell', () => {
       expect(shouldSwitchZone('x')).toBeNull();
     });
 
+    it('ignores Ctrl/Meta letters so zone bindings like Ctrl+R and Ctrl+L never switch zone', () => {
+      expect(shouldSwitchZone('r', undefined, { ctrl: true })).toBeNull();
+      expect(shouldSwitchZone('l', undefined, { ctrl: true })).toBeNull();
+      expect(shouldSwitchZone('d', undefined, { meta: true })).toBeNull();
+      expect(shouldSwitchZone('r', undefined, { ctrl: false })).toBe('routes');
+    });
+
     describe('reachable-set gating', () => {
       it('shouldSwitchZone returns null for an omitted zone\'s mnemonic — never lands on it', () => {
         const reachable: ReadonlySet<ZoneId> = new Set(['dashboard', 'edts', 'update', 'logs', 'shared-types']);
