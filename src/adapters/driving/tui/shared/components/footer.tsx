@@ -20,11 +20,17 @@ export const DEFAULT_FOOTER_HINTS = footerEntries
 
 // Generated from the keybinding declarations: the shared hints, those scoped to this zone, and
 // the resize hint only for a zone declaring a splitter boundary.
-export function footerHintsFor(zone?: ZoneId): string[] {
+export function footerHintsFor(zone?: ZoneId, { serviceFocused = true, activeEdt = true }: { serviceFocused?: boolean; activeEdt?: boolean } = {}): string[] {
   return footerEntries
     .filter((entry) => {
       if (entry.zones !== undefined && (zone === undefined || !entry.zones.includes(zone))) {
         return false;
+      }
+      if (entry.when === 'service-focused') {
+        return serviceFocused;
+      }
+      if (entry.when === 'active-edt') {
+        return activeEdt;
       }
       return entry.when !== 'resizable' || zone === undefined || hasResizableBoundary(zone);
     })
@@ -38,7 +44,10 @@ export function footerContextHintStrings(id: FooterContextId): string[] {
 // The hints currently shown: explicit ones, else the active footer context's, else the zone's.
 export function useFooterItems(zone: ZoneId | undefined, useStore: AppStore, hints?: string[]): string[] {
   const context = useStore((state) => activeFooterContext(state.footerContexts));
-  return hints && hints.length > 0 ? hints : context !== undefined ? footerContextHintStrings(context) : footerHintsFor(zone);
+  // The Dashboard's per-service keys only apply while a service row is focused.
+  const serviceFocused = useStore((state) => state.dashboardServicesStatus === 'ready' && (state.dashboardServices?.services.length ?? 0) > 0);
+  const activeEdt = useStore((state) => state.dashboardServicesStatus === 'ready' && state.dashboardServices?.status === 'active' && state.dashboardServices.edt !== null);
+  return hints && hints.length > 0 ? hints : context !== undefined ? footerContextHintStrings(context) : footerHintsFor(zone, { serviceFocused, activeEdt });
 }
 
 // Rows the footer takes at `columns`: its wrapped hint lines (1 column of left padding), capped.

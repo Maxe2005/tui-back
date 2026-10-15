@@ -13,7 +13,7 @@ export type Keybinding = {
   description: string;
   // Rows of the same section are listed under one heading in the `?` help.
   section?: string;
-  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' };
+  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' | 'service-focused' | 'active-edt' };
 };
 
 // The retry key StateLine advertises beside a load error; zones bind R to their reload.
@@ -188,19 +188,24 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     footer: { key: 'a', verb: 'attention', zones: ['dashboard'] },
   },
   {
+    keys: 'E (Dashboard)',
+    description: 'Dashboard: enter the active EDT in the EDTs zone (e opens the EDT quick-pick, or the create wizard when none exists)',
+    footer: { key: 'E', verb: 'enter EDT', zones: ['dashboard'], when: 'active-edt' },
+  },
+  {
     keys: 'Ctrl+O (Dashboard)',
     description: 'Dashboard: open the focused service repo in your editor',
-    footer: { key: 'Ctrl+O', verb: 'IDE', zones: ['dashboard'] },
+    footer: { key: 'Ctrl+O', verb: 'IDE', zones: ['dashboard'], when: 'service-focused' },
   },
   {
     keys: 'Ctrl+R (Dashboard)',
     description: 'Dashboard: restart the focused service (R stays refresh)',
-    footer: { key: 'Ctrl+R', verb: 'restart', zones: ['dashboard'] },
+    footer: { key: 'Ctrl+R', verb: 'restart', zones: ['dashboard'], when: 'service-focused' },
   },
   {
     keys: 'Ctrl+L (Dashboard)',
     description: 'Dashboard: clean-restart the focused service through its recipe',
-    footer: { key: 'Ctrl+L', verb: 'clean restart', zones: ['dashboard'] },
+    footer: { key: 'Ctrl+L', verb: 'clean restart', zones: ['dashboard'], when: 'service-focused' },
   },
   // Scoped to the Logs zone's pane grid.
   {
