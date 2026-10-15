@@ -147,10 +147,13 @@ export type BranchAutocompleteInputProps = {
   branchesStatus: BranchAutocompleteStatus;
   maxRows: number;
   focused?: boolean;
+  // Story 2.43: optional per-branch advisory text rendered as `⚠ <text>` (warning color) after
+  // the row's branch name. Generic on purpose — this component stays EDT-agnostic.
+  annotations?: Readonly<Record<string, string>>;
 };
 
 export function BranchAutocompleteInput(props: BranchAutocompleteInputProps) {
-  const { label, state, branches, branchesStatus, maxRows, focused = false } = props;
+  const { label, state, branches, branchesStatus, maxRows, focused = false, annotations } = props;
   if (branchesStatus === 'loading' || branchesStatus === 'error') {
     // No dropdown and no validity coloring while the branch list itself is unavailable — the
     // field stays editable, with the status line carrying the state (same convention as
@@ -182,6 +185,7 @@ export function BranchAutocompleteInput(props: BranchAutocompleteInputProps) {
             <Text key={branch} color={index === highlight ? colors.accent : colors.text}>
               {index === highlight ? '› ' : '  '}
               {branch}
+              {annotations?.[branch] !== undefined ? <Text color={colors.warning}>{`  ⚠ ${annotations[branch]}`}</Text> : null}
             </Text>
           ))}
         </Box>

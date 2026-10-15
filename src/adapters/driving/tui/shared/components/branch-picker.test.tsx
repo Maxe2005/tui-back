@@ -457,3 +457,66 @@ describe('BranchPicker rendering', () => {
     expect(output).not.toContain('✖');
   });
 });
+
+describe('cross-EDT branch usage (story 2.43)', () => {
+  const owners = { 'feat/owned': ['alpha'] };
+
+  it('Pick existing refuses setting a branch another EDT owns, inline, no submit', () => {
+    const state = baseState({ mode: 'pick-existing', pickQuery: 'feat/owned' });
+    const result = handleBranchPickerKey(state, ['feat/owned', 'feat/free'], [], '', { return: true }, owners);
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.error).toContain("utilisée par l'EDT « alpha » — la reprendre ou la renommer casserait cet EDT");
+    }
+  });
+
+  it('Pick existing still submits an unowned branch (and any branch without owners)', () => {
+    const free = baseState({ mode: 'pick-existing', pickQuery: 'feat/free' });
+    expect(handleBranchPickerKey(free, ['feat/owned', 'feat/free'], [], '', { return: true }, owners)).toEqual({
+      type: 'submit',
+      outcome: { kind: 'set', branch: 'feat/free' },
+    });
+    const owned = baseState({ mode: 'pick-existing', pickQuery: 'feat/owned' });
+    expect(handleBranchPickerKey(owned, ['feat/owned'], [], '', { return: true }).type).toBe('submit');
+  });
+
+  it('Pick existing row-rename of an owned branch is refused in the rename sub-view', () => {
+    const state = baseState({
+      mode: 'pick-existing',
+      renameSub: { oldName: 'feat/owned', value: 'feat/new', cursor: 8, error: null },
+    });
+    const result = handleBranchPickerKey(state, ['feat/owned'], [], '', { return: true }, owners);
+    expect(result.type).toBe('update');
+    if (result.type === 'update') {
+      expect(result.state.renameSub?.error).toContain('« alpha »');
+    }
+  });
+
+  it('Rename current refuses an owned member branch and an owned new name', () => {
+    const owned = baseState({ mode: 'rename-current', renameSub: { oldName: 'feat/owned', value: 'feat/new', cursor: 8, error: null } });
+    const a = handleBranchPickerKey(owned, [], [], '', { return: true }, owners);
+    expect(a.type === 'update' && a.state.renameSub?.error).toContain('« alpha »');
+    const taking = baseState({ mode: 'rename-current', renameSub: { oldName: 'main', value: 'feat/owned', cursor: 10, error: null } });
+    const b = handleBranchPickerKey(taking, [], [], '', { return: true }, owners);
+    expect(b.type === 'update' && b.state.renameSub?.error).toContain('« alpha »');
+  });
+
+  it('Create new from an owned base is allowed', () => {
+    const state = baseState({ mode: 'create-new', baseBranch: 'feat/owned', baseFocused: false, nameValue: 'feat/mine' });
+    expect(handleBranchPickerKey(state, ['feat/owned'], [], '', { return: true }, owners).type).toBe('submit');
+  });
+
+  it('annotates owned candidates in the pick-existing and base-branch lists', async () => {
+    const pick = baseState({ mode: 'pick-existing' });
+    const out = await renderToString(
+      <BranchPicker state={pick} branches={['feat/owned', 'feat/free']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} owners={owners} />,
+    );
+    expect(out).toContain('⚠ EDT « alpha »');
+    expect(out.match(/⚠/g)).toHaveLength(1);
+    const create = baseState({ mode: 'create-new', baseBranch: 'feat', baseFocused: true });
+    const out2 = await renderToString(
+      <BranchPicker state={create} branches={['feat/owned', 'feat/free']} branchesStatus="ready" otherMemberBranches={[]} maxRows={5} owners={owners} />,
+    );
+    expect(out2).toContain('⚠ EDT « alpha »');
+  });
+});
