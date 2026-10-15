@@ -91,7 +91,7 @@ development_status:
   # Dashboard rewrite (2026-10-15): active-EDT services table + shared service actions + Attention block.
   8-1-dashboard-snapshot-use-case-and-cli: done
   8-2-dashboard-shell-states-fixed-banner-refresh: review
-  8-3-dashboard-active-edt-services-table-service-actions: backlog
+  8-3-dashboard-active-edt-services-table-service-actions: in-progress
   8-4-dashboard-attention-block-registry-health: backlog
   8-5-dashboard-edt-actions-visual-finish: backlog
   # 8-6/8-7/8-8 (branch drift detection & realignment) added 2026-10-15: sprint-change-proposal-2026-10-15-2.md. Order: 8-6 → 8-7 (needs 2-44 merged) → 8-8.
