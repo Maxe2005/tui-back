@@ -64,13 +64,13 @@ export interface BuildDashboardSnapshotParams {
   state: StatePort;
 }
 
-export async function buildDashboardSnapshot(params: BuildDashboardSnapshotParams): Promise<Result<DashboardSnapshot>> {
-  const { registry, manifest, edtRegistry, state } = params;
+export type DashboardServicesSection = Pick<DashboardSnapshot, 'status' | 'edt' | 'services'>;
 
-  const registered = await registry.list();
-  if (!registered.ok) {
-    return registered;
-  }
+// The services section: active-EDT resolution plus one probed row per member.
+export async function buildDashboardServices(
+  params: Omit<BuildDashboardSnapshotParams, 'registry'>,
+): Promise<Result<DashboardServicesSection>> {
+  const { edtRegistry, state } = params;
   const activeUlid = await state.readActiveEdt();
   if (!activeUlid.ok) {
     return activeUlid;
@@ -79,20 +79,39 @@ export async function buildDashboardSnapshot(params: BuildDashboardSnapshotParam
   if (!edts.ok) {
     return edts;
   }
-
-  const summary = await summarizeRegistry(registry, manifest, registered.data);
   const active = activeUlid.data === null ? undefined : edts.data.find((entry) => entry.ulid === activeUlid.data);
   if (active === undefined) {
-    return ok({ status: 'no-active-edt', edt: null, services: [], registry: summary });
+    return ok({ status: 'no-active-edt', edt: null, services: [] });
   }
-
   const services = await Promise.all(active.members.map((member) => readService(params, member, edts.data, active.ulid)));
   return ok({
     status: 'active',
     edt: { ulid: active.ulid, topic: active.topic, serviceCount: services.length },
     services,
-    registry: summary,
   });
+}
+
+// The registry-health section, independent of any active EDT.
+export async function buildDashboardRegistrySummary(
+  params: Pick<BuildDashboardSnapshotParams, 'registry' | 'manifest'>,
+): Promise<Result<DashboardRegistrySummary>> {
+  const registered = await params.registry.list();
+  if (!registered.ok) {
+    return registered;
+  }
+  return ok(await summarizeRegistry(params.registry, params.manifest, registered.data));
+}
+
+export async function buildDashboardSnapshot(params: BuildDashboardSnapshotParams): Promise<Result<DashboardSnapshot>> {
+  const registry = await buildDashboardRegistrySummary(params);
+  if (!registry.ok) {
+    return registry;
+  }
+  const services = await buildDashboardServices(params);
+  if (!services.ok) {
+    return services;
+  }
+  return ok({ ...services.data, registry: registry.data });
 }
 
 async function summarizeRegistry(
@@ -123,7 +142,7 @@ async function summarizeRegistry(
 }
 
 async function readService(
-  params: BuildDashboardSnapshotParams,
+  params: Omit<BuildDashboardSnapshotParams, 'registry'>,
   member: EdtMember,
   edts: EdtRegistryEntry[],
   activeUlid: string,

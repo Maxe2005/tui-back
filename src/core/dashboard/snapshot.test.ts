@@ -7,7 +7,7 @@ import type { GitPort } from '../ports/git.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
-import { buildDashboardSnapshot } from './snapshot.js';
+import { buildDashboardRegistrySummary, buildDashboardServices, buildDashboardSnapshot } from './snapshot.js';
 
 function manifestFor(path: string, extra: Partial<Manifest> = {}): Manifest {
   const name = path.split('/').pop();
@@ -68,7 +68,8 @@ function build(setup: Setup = {}) {
     ...setup.edtRegistry,
   } as unknown as EdtRegistryPort;
   const state = { readActiveEdt: vi.fn(async () => ok(setup.active === undefined ? 'e1' : setup.active)) } as unknown as StatePort;
-  return { run: () => buildDashboardSnapshot({ registry, manifest, git, docker, edtRegistry, state }), docker, git };
+  const deps = { registry, manifest, git, docker, edtRegistry, state };
+  return { run: () => buildDashboardSnapshot(deps), deps, docker, git };
 }
 
 async function data(setup?: Setup) {
@@ -182,5 +183,17 @@ describe('buildDashboardSnapshot', () => {
   it('returns the error when the registry or EDT list fails', async () => {
     expect((await build({ registry: { list: async () => err('registry-error', 'x') } }).run()).ok).toBe(false);
     expect((await build({ edtRegistry: { list: async () => err('edt-error', 'x') } }).run()).ok).toBe(false);
+  });
+
+  it('builds the services and registry sections independently', async () => {
+    const { deps } = build({ registry: { list: async () => err('registry-error', 'x') } });
+    const services = await buildDashboardServices(deps);
+    expect(services.ok && services.data.status).toBe('active');
+    expect((await buildDashboardRegistrySummary(deps)).ok).toBe(false);
+
+    const healthy = build({ edtRegistry: { list: async () => err('edt-error', 'x') } }).deps;
+    expect((await buildDashboardServices(healthy)).ok).toBe(false);
+    const summary = await buildDashboardRegistrySummary(healthy);
+    expect(summary.ok && summary.data.repoCount).toBe(2);
   });
 });
