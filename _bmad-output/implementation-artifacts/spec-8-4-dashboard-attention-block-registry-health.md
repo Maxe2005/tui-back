@@ -2,7 +2,7 @@
 title: 'Story 8.4: Dashboard — Attention Block & Registry Health'
 type: 'feature'
 created: '2026-10-15'
-status: 'in-review'
+status: 'done'
 baseline_commit: '4b7167788fb5c712f8eed29c2f0d9deef40486b3'
 review_loop_iteration: 0
 context:
@@ -80,3 +80,40 @@ Attention is derived in the TUI from the services section, not added to the snap
 - `npm test` -- expected: all green
 - `npm run typecheck` -- expected: no errors
 - `npm run depcheck` -- expected: no violations
+
+## Suggested Review Order
+
+**Attention derivation**
+
+- Entry point: pure, severity-ordered items from the loaded services only.
+  [`dashboard.logic.ts:68`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L68)
+
+- Line wording per reason, naming service and other EDTs.
+  [`dashboard.logic.ts:97`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L97)
+
+- Registry all-clear, never true for an empty registry.
+  [`dashboard.logic.ts:105`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L105)
+
+**Rendering**
+
+- Attention block: header count, bounded lines, success line.
+  [`dashboard-body.tsx:95`](../../src/adapters/driving/tui/zones/dashboard/dashboard-body.tsx#L95)
+
+- Registry counts with the `[:registry]` shortcut.
+  [`dashboard-body.tsx:127`](../../src/adapters/driving/tui/zones/dashboard/dashboard-body.tsx#L127)
+
+**Keys and hand-off to the services table**
+
+- Enter writes the focused service; cursor stays in range.
+  [`dashboard-zone.tsx:69`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L69)
+
+- Only coupling point with the services table (read by the next story).
+  [`dashboard-slice.ts:43`](../../src/adapters/driving/tui/store/slices/dashboard-slice.ts#L43)
+
+- Footer and help declarations for the new keys.
+  [`keybindings.ts:176`](../../src/adapters/driving/tui/keybindings/keybindings.ts#L176)
+
+**Tests**
+
+- Cursor movement, Enter focus and overlay inertness.
+  [`dashboard-zone.interaction.test.tsx:87`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.interaction.test.tsx#L87)
