@@ -794,3 +794,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-4/spec-4-6-shared-types-version-history-library.md`
   summary: Tab toggles the History search mode while the branch autocomplete dropdown may be open, instead of letting the autocomplete consume it; it also conflicts with the Tab-moves-focus convention.
   evidence: `shared-types-history.logic.ts` was added to the focus-navigation guard allowlist.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-1-dashboard-snapshot-use-case-and-cli.md`
+  summary: Bound the dashboard snapshot's parallelism and add per-probe timeouts.
+  evidence: buildDashboardSnapshot runs exists/manifest.load for every registered repo and 3 git calls + 1 docker call per member through unbounded Promise.all; a hung docker/git call blocks the whole snapshot.

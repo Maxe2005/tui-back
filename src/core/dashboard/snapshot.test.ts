@@ -1,0 +1,186 @@
+// core/dashboard/snapshot: unit tests against fake ports — one per snapshot scenario.
+import { describe, expect, it, vi } from 'vitest';
+import { err, ok } from '../result.js';
+import type { DockerPort } from '../ports/docker.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
+import type { GitPort } from '../ports/git.js';
+import type { Manifest, ManifestPort } from '../ports/manifest.js';
+import type { RegistryPort } from '../ports/registry.js';
+import type { StatePort } from '../ports/state.js';
+import { buildDashboardSnapshot } from './snapshot.js';
+
+function manifestFor(path: string, extra: Partial<Manifest> = {}): Manifest {
+  const name = path.split('/').pop();
+  return { service: `svc-${name}`, container: `ctr-${name}`, sharedBranch: 'development', modules: {}, ...extra };
+}
+
+function edt(ulid: string, topic: string, members: Array<[string, string]>): EdtRegistryEntry {
+  return {
+    ulid,
+    topic,
+    createdAt: '2026-01-01T00:00:00Z',
+    status: 'active',
+    members: members.map(([repoPath, branch]) => ({ service: `svc-${repoPath.split('/').pop()}`, repoPath, branch })),
+  };
+}
+
+interface Setup {
+  paths?: string[];
+  edts?: EdtRegistryEntry[];
+  active?: string | null;
+  manifests?: Record<string, Manifest | { code: string }>;
+  git?: Partial<Record<keyof GitPort, unknown>>;
+  docker?: Partial<DockerPort>;
+  registry?: Partial<RegistryPort>;
+  edtRegistry?: Partial<EdtRegistryPort>;
+}
+
+function build(setup: Setup = {}) {
+  const paths = setup.paths ?? ['/r/a', '/r/b'];
+  const registry = {
+    list: vi.fn(async () => ok(paths)),
+    exists: vi.fn(async () => ok(true)),
+    ...setup.registry,
+  } as unknown as RegistryPort;
+  const manifest: ManifestPort = {
+    load: vi.fn(async (path: string) => {
+      const entry = setup.manifests?.[path];
+      if (entry === undefined) {
+        return ok(manifestFor(path));
+      }
+      return 'code' in entry ? err(entry.code, entry.code) : ok(entry);
+    }),
+  };
+  const git = {
+    currentBranch: vi.fn(async () => ok('feat/x')),
+    aheadBehind: vi.fn(async () => ok({ ahead: 1, behind: 2 })),
+    hasUncommittedChanges: vi.fn(async () => ok(false)),
+    isMergeInProgress: vi.fn(async () => ok(false)),
+    isRebaseInProgress: vi.fn(async () => ok(false)),
+    ...setup.git,
+  } as unknown as GitPort;
+  const docker = {
+    getContainerHealth: vi.fn(async () => ok('up' as const)),
+    ...setup.docker,
+  } as unknown as DockerPort;
+  const edtRegistry = {
+    list: vi.fn(async () => ok(setup.edts ?? [edt('e1', 'topic-a', [['/r/a', 'feat/x'], ['/r/b', 'feat/x']])])),
+    ...setup.edtRegistry,
+  } as unknown as EdtRegistryPort;
+  const state = { readActiveEdt: vi.fn(async () => ok(setup.active === undefined ? 'e1' : setup.active)) } as unknown as StatePort;
+  return { run: () => buildDashboardSnapshot({ registry, manifest, git, docker, edtRegistry, state }), docker, git };
+}
+
+async function data(setup?: Setup) {
+  const result = await build(setup).run();
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+  return result.data;
+}
+
+describe('buildDashboardSnapshot', () => {
+  it('returns one row per member with every field', async () => {
+    const snapshot = await data();
+    expect(snapshot.status).toBe('active');
+    expect(snapshot.edt).toEqual({ ulid: 'e1', topic: 'topic-a', serviceCount: 2 });
+    expect(snapshot.services.map((s) => s.path)).toEqual(['/r/a', '/r/b']);
+    expect(snapshot.services[0]).toMatchObject({
+      service: 'svc-a',
+      container: { ok: true, value: 'up' },
+      branch: 'feat/x',
+      divergence: { status: 'current', ahead: 1, behind: 2 },
+      workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
+      protectedBranch: false,
+      usedByEdts: [],
+    });
+  });
+
+  it('reports no-active-edt with the registry summary still present', async () => {
+    const snapshot = await data({ active: null });
+    expect(snapshot).toMatchObject({ status: 'no-active-edt', edt: null, services: [], registry: { repoCount: 2 } });
+    const unknown = await data({ active: 'missing' });
+    expect(unknown.status).toBe('no-active-edt');
+  });
+
+  it.each([undefined, '', '   '])('marks a container-less service (container=%j) without calling docker', async (container) => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x']])],
+      manifests: { '/r/a': manifestFor('/r/a', { container }) },
+    });
+    const result = await setup.run();
+    expect(result.ok && result.data.services[0]?.container).toEqual({ ok: true, value: 'no-container' });
+    expect(setup.docker.getContainerHealth).not.toHaveBeenCalled();
+  });
+
+  it('queries docker with the trimmed container name', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x']])],
+      manifests: { '/r/a': manifestFor('/r/a', { container: ' ctr-a ' }) },
+    });
+    await setup.run();
+    expect(setup.docker.getContainerHealth).toHaveBeenCalledWith('ctr-a');
+  });
+
+  it('confines a docker failure to that row container field', async () => {
+    const snapshot = await data({
+      docker: {
+        getContainerHealth: async (name: string) => (name === 'ctr-a' ? err('docker-unavailable', 'no docker') : ok('down' as const)),
+      },
+    });
+    expect(snapshot.services[0]?.container).toEqual({ ok: false, error: { code: 'docker-unavailable', message: 'no docker' } });
+    expect(snapshot.services[0]?.branch).toBe('feat/x');
+    expect(snapshot.services[1]?.container).toEqual({ ok: true, value: 'down' });
+  });
+
+  it('classifies no-upstream and unknown-offline divergence', async () => {
+    const noUpstream = await data({ git: { aheadBehind: async () => err('no-upstream', 'none') } });
+    expect(noUpstream.services[0]?.divergence).toEqual({ status: 'no-upstream', ahead: null, behind: null });
+    const offline = await data({ git: { aheadBehind: async () => err('git-error', 'boom') } });
+    expect(offline.services[0]?.divergence).toMatchObject({ status: 'unknown-offline', ahead: null, behind: null, detail: { code: 'git-error' } });
+  });
+
+  it('flags dirty, mid-merge and mid-rebase, and surfaces probe errors', async () => {
+    const flags = await data({
+      git: { hasUncommittedChanges: async () => ok(true), isMergeInProgress: async () => ok(true), isRebaseInProgress: async () => ok(true) },
+    });
+    expect(flags.services[0]?.workingTree).toEqual({ ok: true, value: { uncommitted: true, mergeInProgress: true, rebaseInProgress: true } });
+    const failed = await data({ git: { isRebaseInProgress: async () => err('git-spawn', 'x') } });
+    expect(failed.services[0]?.workingTree).toEqual({ ok: false, error: { code: 'git-spawn', message: 'x' } });
+  });
+
+  it('flags protected branches and branches used by another EDT', async () => {
+    const snapshot = await data({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'development'], ['/r/b', 'feat/x']]), edt('e2', 'topic-b', [['/r/b', 'feat/x']]), edt('e3', 'topic-c', [['/r/b', 'other']])],
+      git: { currentBranch: async (path: string) => ok(path === '/r/a' ? 'development' : 'feat/x') },
+    });
+    expect(snapshot.services[0]).toMatchObject({ protectedBranch: true, usedByEdts: [] });
+    expect(snapshot.services[1]).toMatchObject({ protectedBranch: false, usedByEdts: ['topic-b'] });
+  });
+
+  it('summarizes the registry per path', async () => {
+    const snapshot = await data({
+      paths: ['/r/a', '/r/b', '/r/gone', '/r/bad', '/r/err', '/r/unmanaged'],
+      registry: {
+        exists: async (path: string) => (path === '/r/err' ? err('fs', 'x') : ok(path !== '/r/gone')),
+      },
+      manifests: { '/r/bad': { code: 'manifest-invalid' }, '/r/unmanaged': { code: 'manifest-not-found' } },
+    });
+    expect(snapshot.registry).toEqual({ repoCount: 6, invalidManifests: 1, unreachable: 1, listingIssues: 1 });
+  });
+
+  it('keeps a row with a manifest error when a member manifest cannot load', async () => {
+    const snapshot = await data({ manifests: { '/r/a': { code: 'manifest-invalid' } } });
+    expect(snapshot.services[0]).toMatchObject({
+      service: 'svc-a',
+      manifest: { ok: false, error: { code: 'manifest-invalid' } },
+      container: { ok: false, error: { code: 'manifest-invalid' } },
+    });
+    expect(snapshot.services[1]?.manifest.ok).toBe(true);
+  });
+
+  it('returns the error when the registry or EDT list fails', async () => {
+    expect((await build({ registry: { list: async () => err('registry-error', 'x') } }).run()).ok).toBe(false);
+    expect((await build({ edtRegistry: { list: async () => err('edt-error', 'x') } }).run()).ok).toBe(false);
+  });
+});

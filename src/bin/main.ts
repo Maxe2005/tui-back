@@ -7,6 +7,7 @@ import { runCli } from '../adapters/driving/cli/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { createManifestCarryPort } from '../adapters/driven/manifest/carry.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';
+import { createDockerPort } from '../adapters/driven/docker/index.js';
 import { createContainerPort } from '../adapters/driven/container/index.js';
 import { createMigrationPort } from '../adapters/driven/migration/index.js';
 import { createRestartPort } from '../adapters/driven/restart/index.js';
@@ -80,6 +81,7 @@ const subcommands = buildSubcommands({
   edtRegistryResourceKey: edtRegistryFile,
   git,
   container,
+  docker: createDockerPort(),
   migration,
   restart,
   state,

@@ -131,7 +131,7 @@ export async function listEdtBranchesDivergence(
   return ok({ services, unreachable, errors });
 }
 
-async function readServiceDivergence(
+export async function readServiceDivergence(
   git: GitPort,
   service: string,
   path: string,
