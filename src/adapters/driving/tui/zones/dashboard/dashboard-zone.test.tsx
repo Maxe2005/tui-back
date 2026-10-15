@@ -228,7 +228,9 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('uncommitted changes');
     expect(output).toContain('Actions unavailable.');
     expect(output).toContain('1 invalid manifests');
-    expect(output).toContain('updated 0s ago');
+    expect(output).toContain('updated 0s ago · [R] refresh');
+    expect(output).toContain('[E] ▸ Enter');
+    expect(output).toContain('[e] ▸ Choose another EDT / create one');
   });
 
   it('shows the focused row actions with their unavailable reasons, and the running progress', async () => {
@@ -290,7 +292,7 @@ describe('DashboardZone snapshot sections', () => {
     });
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).toContain('No active EDT.');
-    expect(output).toContain('[e]');
+    expect(output).toContain('[e] ▸ Choose or create an EDT');
     expect(output).toContain('3 repos');
   });
 
