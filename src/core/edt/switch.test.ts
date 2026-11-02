@@ -560,7 +560,10 @@ describe('switchActiveEdt — edts.yaml write under lock (AD-9)', () => {
   });
 
   it('propagates a lock-acquire failure without writing state.json or the registry', async () => {
-    const lock = fakeLock({ acquire: async () => err('action-in-progress', 'another switch is running') });
+    const lock = fakeLock({
+      acquire: async (key: string) =>
+        key === '/cfg/edts.yaml' ? err('action-in-progress', 'another switch is running') : ok({ release: async () => ok(undefined) }),
+    });
     const state = fakeState({ readActiveEdt: vi.fn(async () => ok('outgoing-ulid')) });
     const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) });
 
@@ -573,7 +576,7 @@ describe('switchActiveEdt — edts.yaml write under lock (AD-9)', () => {
 });
 
 describe('switchActiveEdt — outgoing action lock held across the per-repo work', () => {
-  it('holds edt:<outgoing ulid> around every checkout and releases it before the registry writes', async () => {
+  it('holds edt:<outgoing ulid> from the first checkout until the state.json and edts.yaml writes are done', async () => {
     const events: string[] = [];
     const lock = fakeLock({
       acquire: vi.fn(async (key: string) => {
@@ -592,8 +595,15 @@ describe('switchActiveEdt — outgoing action lock held across the per-repo work
         return ok(undefined);
       }),
     });
+    const state = fakeState({
+      readActiveEdt: vi.fn(async () => ok('outgoing-ulid')),
+      writeActiveEdt: vi.fn(async () => {
+        events.push('writeActiveEdt');
+        return ok(undefined);
+      }),
+    });
 
-    const result = await switchActiveEdt(makeParams({ lock, git }));
+    const result = await switchActiveEdt(makeParams({ lock, git, state }));
 
     expect(result).toMatchObject({ ok: true });
     expect(events).toEqual([
@@ -601,9 +611,10 @@ describe('switchActiveEdt — outgoing action lock held across the per-repo work
       'checkout:/repo/a',
       'checkout:/repo/b',
       'checkout:/repo/c',
-      'release:edt:outgoing-ulid',
       'acquire:/cfg/edts.yaml',
+      'writeActiveEdt',
       'release:/cfg/edts.yaml',
+      'release:edt:outgoing-ulid',
     ]);
   });
 
@@ -618,7 +629,11 @@ describe('switchActiveEdt — outgoing action lock held across the per-repo work
 
     const result = await switchActiveEdt(makeParams({ lock, git, state }));
 
-    expect(result).toMatchObject({ ok: false, error: { code: 'action-in-progress' } });
+    // Same error as the peek path, so the TUI's force/cancel prompt still applies.
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'switch-blocked-action-in-progress', message: expect.stringContaining('Pass --force') },
+    });
     expect(calls(git.checkout)).toHaveLength(0);
     expect(calls(state.writeActiveEdt)).toHaveLength(0);
   });

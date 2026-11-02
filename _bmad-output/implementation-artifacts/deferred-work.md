@@ -830,3 +830,11 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-8-6-branch-drift-detection-snapshot-attention.md`
   summary: Bound the concurrency of the Dashboard snapshot probes (members, others and registry summary each fan out through an unbounded Promise.all).
   evidence: Story 8.6 adds one exists/manifest/git rev-parse probe per non-member registered repo on every refresh, on top of the existing unbounded member and registry-summary probes; a large registry spawns that many git processes at once.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-7-realign-use-case-and-cli-selective-branch-realignment.md`
+  summary: `edt switch --force` past a held `edt:<ulid>` lock proceeds without the lock, so it can run checkouts concurrently with the update or realign holding it.
+  evidence: Pre-existing `--force` semantics (no abort primitive exists); story 8.7 made realign a new holder of that lock, widening the exposure, but the race already existed with EDT updates.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-7-realign-use-case-and-cli-selective-branch-realignment.md`
+  summary: `restartAfterSwitch` keys restart targets by service name, so two managed repos sharing a manifest service name can be conflated in the restart report.
+  evidence: Pre-existing in Story 2.44's restart phase; realign rejects ambiguous `--service` names but `--scope all` can still select both repos.

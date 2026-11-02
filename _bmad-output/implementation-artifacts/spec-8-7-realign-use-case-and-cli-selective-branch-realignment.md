@@ -2,7 +2,7 @@
 title: 'Story 8.7: realign Use-Case & CLI — Selective Branch Realignment'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '97e1082aaa5d8251032813ccb38694a306dbda5f'
 review_loop_iteration: 0
 context:
@@ -58,13 +58,13 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/edt/switch.ts` (+ `checkout-expected.ts`) -- extract the shared checkout step; switch tests unchanged and green -- one implementation (story note)
-- [ ] `src/core/edt/switch.ts` (+ test) -- hold `edt:<outgoing ulid>` via `withActionLock` around the per-repo loop when the peek found it free (`--force` path unchanged) -- realign rejected while a switch runs
-- [ ] `src/core/edt/switch-restart.ts` (+ test) -- optional `changedServices` -- restart reuse
-- [ ] `src/core/dashboard/drift.ts` (+ test), `snapshot.ts` -- `listDriftCandidates`, snapshot tests unchanged -- candidates
-- [ ] `src/core/realign/index.ts` (+ test) -- `resolveRealignSelection`, `realignServices` covering the matrix, lock, log, restart; export from `src/core/index.ts` -- use-case
-- [ ] `src/adapters/driving/cli/subcommands.ts` (+ `dispatch.test.ts`) -- `realign` subcommand, `REALIGN_USAGE`, envelope `{rows, restart?}` -- CLI
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 2-44 and 8-6 to `done` (stale), 8-7 to `in-progress` -- tracking
+- [x] `src/core/edt/switch.ts` (+ `checkout-expected.ts`) -- extract the shared checkout step; switch tests unchanged and green -- one implementation (story note)
+- [x] `src/core/edt/switch.ts` (+ test) -- hold `edt:<outgoing ulid>` via `withActionLock` around the per-repo loop when the peek found it free (`--force` path unchanged) -- realign rejected while a switch runs
+- [x] `src/core/edt/switch-restart.ts` (+ test) -- optional `changedServices` -- restart reuse
+- [x] `src/core/dashboard/drift.ts` (+ test), `snapshot.ts` -- `listDriftCandidates`, snapshot tests unchanged -- candidates
+- [x] `src/core/realign/index.ts` (+ test) -- `resolveRealignSelection`, `realignServices` covering the matrix, lock, log, restart; export from `src/core/index.ts` -- use-case
+- [x] `src/adapters/driving/cli/subcommands.ts` (+ `dispatch.test.ts`) -- `realign` subcommand, `REALIGN_USAGE`, envelope `{rows, restart?}` -- CLI
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 2-44 and 8-6 to `done` (stale), 8-7 to `in-progress` -- tracking
 
 **Acceptance Criteria:**
 - Given a realign holding the lock, when `update`, `edt switch` or another `realign` starts, then it is rejected; given a switch in flight, when `realign` starts, then it is rejected.
