@@ -269,6 +269,20 @@ describe('realignServices', () => {
     expect(git.checkout).toHaveBeenCalledWith('/r/c', 'develop');
   });
 
+  it('fails a member whose repo left the managed-repo registry, never checking out there', async () => {
+    const { params, git } = build({ branches: { '/r/b': ok('main') } });
+    (params().registry.list as ReturnType<typeof vi.fn>).mockResolvedValue(ok(['/r/b', '/r/c', '/r/d']));
+
+    const result = await realignServices(params());
+
+    expect(result.ok && result.data.rows).toEqual([
+      { service: 'svc-a', outcome: 'failed', detail: { code: 'repo-not-registered', message: expect.stringContaining('/r/a') } },
+      expect.objectContaining({ service: 'svc-b', outcome: 'realigned' }),
+    ]);
+    expect(git.checkout).not.toHaveBeenCalledWith('/r/a', expect.anything());
+    expect(git.isMergeInProgress).not.toHaveBeenCalledWith('/r/a');
+  });
+
   it('turns a throwing worker into its failed row and still resolves', async () => {
     const { params } = build({
       git: {

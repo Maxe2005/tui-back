@@ -204,6 +204,9 @@ function messageOf(error: unknown): string {
 async function realignOne(params: RealignServicesParams, activeUlid: string, candidate: DriftCandidate): Promise<RealignRow> {
   const { git } = params;
   const { service, path, expectedBranch } = candidate;
+  if (candidate.unregistered === true) {
+    return failedRow(service, 'repo-not-registered', `Member ${path} is no longer in the managed-repo registry — left untouched`);
+  }
   if (candidate.drift === 'aligned') {
     return { service, outcome: 'unchanged' };
   }
