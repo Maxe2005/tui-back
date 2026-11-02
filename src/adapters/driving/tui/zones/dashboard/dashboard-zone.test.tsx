@@ -222,8 +222,9 @@ describe('DashboardZone snapshot sections', () => {
     });
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).toContain('EDT topic-a · 2 services');
-    expect(output).toContain('svc-a up feat/x ↑0 ↓0');
-    expect(output).toContain('svc-b container error feat/x ↑0 ↓0');
+    expect(output).toMatch(/SERVICE\s+STATUS\s+BRANCH\s+SYNC/);
+    expect(output).toMatch(/svc-a\s+up\s+feat\/x\s+↑0 ↓0/);
+    expect(output).toMatch(/svc-b\s+container error\s+feat\/x\s+↑0 ↓0/);
     // The focused (first) row explains its anomaly and lists the actions' absence while unloaded.
     expect(output).toContain('uncommitted changes');
     expect(output).toContain('Actions unavailable.');

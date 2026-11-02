@@ -158,10 +158,10 @@ export function DashboardZone({
 
 
   return (
-    <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
+    <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" backgroundColor={colors.surface}>
       {/* Rendered unconditionally — the banner is permanent on every Dashboard render, above
           whatever content follows. */}
-      <Box flexShrink={0}>
+      <Box flexShrink={0} marginTop={1}>
         <LaunchBanner />
       </Box>
       {body === 'registry-error' ? (
