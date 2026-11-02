@@ -5,7 +5,7 @@
 import { resolve } from 'node:path';
 import type { DockerPort, HealthState } from '../ports/docker.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
+import { GIT_DETACHED_HEAD, type GitPort } from '../ports/git.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
@@ -32,9 +32,6 @@ export interface DashboardDivergence {
 // aligned/drifted compare the current branch with the expected one (a detached HEAD is
 // drifted); unknown means the branch could not be read.
 export type DriftState = 'aligned' | 'drifted' | 'unknown';
-
-// GitPort.currentBranch's code for a detached HEAD, which counts as drifted.
-const DETACHED_HEAD = 'git-detached-head';
 
 export interface DashboardService {
   service: string;
@@ -168,14 +165,15 @@ async function summarizeRegistry(
 }
 
 // Registered paths outside the active EDT whose manifest loads; unreachable, unmanaged and
-// invalid paths (and a failed registry listing) are left to the registry-health section.
+// invalid paths (and a failed registry listing) are left to the registry-health section. A port
+// that throws drops only its own row (or every row, for the listing): members never depend on it.
 async function readOthers(params: BuildDashboardSnapshotParams, memberPaths: Set<string>): Promise<DashboardOtherService[]> {
-  const registered = await params.registry.list();
-  if (!registered.ok) {
+  const registered = await params.registry.list().catch(() => null);
+  if (registered === null || !registered.ok) {
     return [];
   }
   const candidates = [...new Set(registered.data.map((path) => resolve(path)))].filter((path) => !memberPaths.has(path));
-  const rows = await Promise.all(candidates.map((path) => readOther(params, path)));
+  const rows = await Promise.all(candidates.map((path) => readOther(params, path).catch(() => null)));
   return rows.filter((row): row is DashboardOtherService => row !== null);
 }
 
@@ -201,7 +199,7 @@ function driftOf(branch: string | null, expectedBranch: string, errorCode: strin
   if (branch !== null) {
     return branch === expectedBranch ? 'aligned' : 'drifted';
   }
-  return errorCode === DETACHED_HEAD ? 'drifted' : 'unknown';
+  return errorCode === GIT_DETACHED_HEAD ? 'drifted' : 'unknown';
 }
 
 async function readService(

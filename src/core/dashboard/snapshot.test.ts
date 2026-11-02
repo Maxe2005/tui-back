@@ -257,6 +257,24 @@ describe('buildDashboardSnapshot', () => {
       const { deps } = build({ edts: oneMember, registry: { list: async () => err('registry-error', 'x') } });
       const services = await buildDashboardServices(deps);
       expect(services.ok && services.data.others).toEqual([]);
+      const throwing = build({ edts: oneMember, registry: { list: async () => Promise.reject(new Error('boom')) } }).deps;
+      const thrown = await buildDashboardServices(throwing);
+      expect(thrown.ok && thrown.data).toMatchObject({ services: [{ path: '/r/a', drift: 'aligned' }], others: [] });
+    });
+
+    it('drops only the other row whose probe throws, members untouched', async () => {
+      const { deps } = build({
+        edts: oneMember,
+        paths: ['/r/a', '/r/o', '/r/p', '/r/q'],
+        registry: { exists: async (path: string) => (path === '/r/p' ? Promise.reject(new Error('fs boom')) : ok(true)) },
+        git: { currentBranch: async (path: string) => (path === '/r/o' ? Promise.reject(new Error('git boom')) : ok('feat/x')) },
+      });
+      const result = await buildDashboardServices(deps);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.data.services).toMatchObject([{ path: '/r/a', branch: 'feat/x', drift: 'aligned' }]);
+      expect(result.data.others.map((other) => other.path)).toEqual(['/r/q']);
     });
   });
 });
