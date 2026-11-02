@@ -279,7 +279,7 @@ describe('subcommand registry guards', () => {
     });
   }
 
-  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/registry/list-routes/fire-request/dashboard without name collisions', () => {
+  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/realign/registry/list-routes/fire-request/dashboard without name collisions', () => {
     const subcommands = buildTestSubcommands();
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual([
@@ -291,6 +291,7 @@ describe('subcommand registry guards', () => {
       'dashboard',
       'edt',
       'update',
+      'realign',
       'registry',
       'list-routes',
       'fire-request',
@@ -918,6 +919,165 @@ describe('subcommand registry guards', () => {
       const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
       if (!edt) throw new Error('expected edt subcommand');
       expect(await edt.run(['switch', '--to', 'demo', '--restart', 'simple'])).toMatchObject({ ok: false, error: { code: 'restart-unavailable' } });
+    });
+  });
+
+  describe('realign', () => {
+    const active = {
+      ulid: 'e1',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+    };
+
+    function realignSetup(opts: { checkout?: GitPort['checkout']; healthy?: boolean; withDocker?: boolean } = {}) {
+      const checkout = vi.fn(opts.checkout ?? (async () => ok(undefined)));
+      const acquire = vi.fn(async () => ok({ release: async () => ok(undefined) }));
+      const containerRestart = vi.fn(async () => ok(undefined));
+      const logAction = vi.fn(async () => ok(undefined));
+      const subcommands = buildTestSubcommands({
+        registry: {
+          list: async () => ok(['/repo/a', '/repo/b']),
+          add: async () => ok(undefined),
+          exists: async () => ok(true),
+          scan: async () => ok({ candidates: [], skipped: [] }),
+          reset: async () => ok({ path: '/p', backupPath: null }),
+          remove: async () => ok(undefined),
+        },
+        manifest: {
+          load: async (repoPath: string) =>
+            ok({
+              service: repoPath === '/repo/a' ? 'svc-a' : 'svc-b',
+              container: repoPath === '/repo/a' ? 'ctr-a' : undefined,
+              healthUrl: 'http://localhost:1/health',
+              sharedBranch: 'develop',
+              modules: {},
+            }),
+        },
+        // Both repos sit on `development`: svc-a drifted from feat/a, svc-b from develop.
+        git: fakeGitPort({ checkout }),
+        lock: { acquire, peek: async () => ok({ locked: false }) },
+        edtRegistry: { ...fakeEdtRegistry(), list: async () => ok([active]), logAction },
+        state: { ...fakeState(), readActiveEdt: async () => ok('e1') },
+        container: { restart: containerRestart },
+        ...(opts.withDocker === false
+          ? {}
+          : {
+              docker: {
+                streamLogs: () => () => {},
+                fetchLogsBefore: async () => ok([]),
+                getContainerHealth: async () => ok('up' as const),
+                restartContainer: async () => ok(undefined),
+              },
+              healthProbe: { probe: async () => ok({ healthy: opts.healthy ?? true, status: 200 }) },
+            }),
+      });
+      const realign = subcommands.find((subcommand) => subcommand.name === 'realign');
+      if (!realign) throw new Error('expected realign subcommand');
+      return { realign, checkout, acquire, containerRestart, logAction, subcommands };
+    }
+
+    it.each([
+      [['--scope', 'foo']],
+      [['--scope']],
+      [['--scope', 'edt', '--scope', 'all']],
+      [['--restart', 'bogus']],
+      [['--restart', 'simple', '--restart', 'none']],
+      [['--service']],
+      [['--service', '--scope']],
+      [['--bogus']],
+      [['extra']],
+      [['--service', 'nope']],
+    ])('rejects %j with invalid-argument before locking or touching anything', async (args) => {
+      const { realign, checkout, acquire } = realignSetup();
+      expect(await realign.run(args)).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(acquire).not.toHaveBeenCalled();
+      expect(checkout).not.toHaveBeenCalled();
+    });
+
+    it('defaults to scope edt with no restart and returns {rows}', async () => {
+      const { realign, checkout, containerRestart, logAction } = realignSetup();
+      const result = await realign.run([]);
+      expect(result).toEqual({
+        ok: true,
+        data: { rows: [{ service: 'svc-a', outcome: 'realigned', detail: { code: 'realigned', message: 'Checked out "feat/a"' } }] },
+      });
+      expect(checkout).toHaveBeenCalledWith('/repo/a', 'feat/a');
+      expect(containerRestart).not.toHaveBeenCalled();
+      expect(logAction).toHaveBeenCalledWith('e1', 'realign', 'success', expect.stringContaining('svc-a realigned'));
+    });
+
+    it('--scope none with no service is an empty success', async () => {
+      const { realign, checkout } = realignSetup();
+      expect(await realign.run(['--scope', 'none'])).toEqual({ ok: true, data: { rows: [] } });
+      expect(checkout).not.toHaveBeenCalled();
+    });
+
+    it('--service adds a managed other to the scope', async () => {
+      const { realign, checkout } = realignSetup();
+      const result = await realign.run(['--scope', 'none', '--service', 'svc-b']);
+      expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-b', outcome: 'realigned' }] } });
+      expect(checkout).toHaveBeenCalledWith('/repo/b', 'develop');
+    });
+
+    it('exits non-zero with the rows when a service fails', async () => {
+      const { subcommands } = realignSetup({ checkout: async () => err('git-checkout-error', 'refused') });
+      const rendered = await runCli(['realign'], subcommands, false);
+      expect(rendered.exitCode).toBe(1);
+      const line = JSON.parse(rendered.output) as { error: { code: string; details: { rows: unknown[] } } };
+      expect(line.error.code).toBe('realign-failed');
+      expect(line.error.details.rows).toEqual([{ service: 'svc-a', outcome: 'failed', detail: { code: 'git-checkout-error', message: 'refused' } }]);
+    });
+
+    it('--restart simple restarts the realigned container services and emits restart rows', async () => {
+      const { realign, containerRestart } = realignSetup();
+      const result = await realign.run(['--scope', 'all', '--restart', 'simple']);
+      expect(result.ok).toBe(true);
+      expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+      expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
+        expect.arrayContaining([
+          { service: 'svc-a', mode: 'simple', state: 'functional' },
+          { service: 'svc-b', mode: 'simple', state: 'skipped', detail: 'no container' },
+        ]),
+      );
+    });
+
+    it('exits non-zero when a restarted service ends unhealthy', async () => {
+      const { subcommands } = realignSetup({ healthy: false });
+      let rendered: Awaited<ReturnType<typeof runCli>>;
+      vi.useFakeTimers();
+      try {
+        const pending = runCli(['realign', '--restart', 'simple'], subcommands, false);
+        await vi.advanceTimersByTimeAsync(31_000);
+        rendered = await pending;
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(rendered.exitCode).toBe(1);
+      const line = JSON.parse(rendered.output) as { error: { code: string; details: { rows: unknown[]; restart: unknown[] } } };
+      expect(line.error.code).toBe('realign-restart-needs-attention');
+      expect(line.error.details.rows).toEqual([expect.objectContaining({ service: 'svc-a', outcome: 'realigned' })]);
+    });
+
+    it('rejects a restart request up front when the Docker port is not wired', async () => {
+      const { realign, acquire } = realignSetup({ withDocker: false });
+      expect(await realign.run(['--restart', 'clean'])).toMatchObject({ ok: false, error: { code: 'restart-unavailable' } });
+      expect(acquire).not.toHaveBeenCalled();
+    });
+
+    it('is rejected while an update, switch or realign holds the lock', async () => {
+      const checkout = vi.fn(async () => ok(undefined));
+      const blocked = buildTestSubcommands({
+        registry: { list: async () => ok(['/repo/a']), exists: async () => ok(true) } as unknown as RegistryPort,
+        manifest: { load: async () => ok({ service: 'svc-a', sharedBranch: 'develop', modules: {} }) },
+        git: fakeGitPort({ checkout }),
+        lock: { acquire: async () => err('action-in-progress', 'busy'), peek: async () => ok({ locked: true }) },
+        edtRegistry: { ...fakeEdtRegistry(), list: async () => ok([active]) },
+        state: { ...fakeState(), readActiveEdt: async () => ok('e1') },
+      }).find((subcommand) => subcommand.name === 'realign');
+      expect(await blocked?.run([])).toMatchObject({ ok: false, error: { code: 'realign-blocked-action-in-progress' } });
+      expect(checkout).not.toHaveBeenCalled();
     });
   });
 

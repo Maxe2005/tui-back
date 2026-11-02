@@ -19,6 +19,7 @@ import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core
 import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import { buildDashboardSnapshot } from '../../../core/dashboard/snapshot.js';
+import { REALIGN_SCOPES, realignServices, type RealignScope } from '../../../core/realign/index.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { DockerPort } from '../../../core/ports/docker.js';
 import type { EditorPort } from '../../../core/ports/editor.js';
@@ -84,6 +85,10 @@ function parseUpdateOverrides(
     ...(has('--clean-restart') ? { cleanRestart: true } : has('--no-clean-restart') ? { cleanRestart: false } : {}),
   };
 }
+const REALIGN_USAGE =
+  'tui-back realign [--scope none|edt|all] [--service <name>]... [--restart none|simple|clean]' +
+  ' (--scope defaults to edt: the drifted active-EDT members; --service adds a service to the scope;' +
+  ' --restart defaults to none; exit 1 when a service fails or a restarted service ends failed, down or unhealthy)';
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
 const REGISTRY_VALIDATE_USAGE = 'tui-back registry validate';
@@ -318,6 +323,11 @@ export function buildSubcommands(deps: {
         }
         return err('invalid-argument', `Usage: ${UPDATE_USAGE}`);
       },
+    },
+    {
+      name: 'realign',
+      usage: REALIGN_USAGE,
+      run: async (args) => runRealign(deps, args),
     },
     {
       name: 'registry',
@@ -988,6 +998,136 @@ async function runEdtSwitch(
   return restartNeedsAttention(report.data.summary)
     ? err('switch-restart-needs-attention', 'The switch succeeded, but a restarted service ended failed, down or unhealthy', data)
     : ok(data);
+}
+
+// Hand-rolled flag parsing for `realign` (same style as runEdtSwitch): every flag, scope and
+// restart value is validated here, service names by the use-case — both before any lock is
+// taken or any repo touched.
+async function runRealign(
+  deps: {
+    registry: RegistryPort;
+    manifest: ManifestPort;
+    manifestCarry: ManifestCarryPort;
+    git: GitPort;
+    lock: LockPort;
+    state: StatePort;
+    edtRegistry: EdtRegistryPort;
+    settings: SettingsPort;
+    container: ContainerPort;
+    restart: RestartPort;
+    editor?: EditorPort;
+    docker?: DockerPort;
+    healthProbe?: HealthProbePort;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  let scopeFlag: string | undefined;
+  let restartFlag: string | undefined;
+  const services: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1]?.trim();
+    switch (flag) {
+      case '--scope':
+      case '--restart': {
+        if (value === undefined || value === '' || value.startsWith('--')) {
+          return err('invalid-argument', `Missing value for ${flag}. Usage: ${REALIGN_USAGE}`);
+        }
+        if ((flag === '--scope' ? scopeFlag : restartFlag) !== undefined) {
+          return err('invalid-argument', `${flag} may only be given once. Usage: ${REALIGN_USAGE}`);
+        }
+        if (flag === '--scope') {
+          scopeFlag = value;
+        } else {
+          restartFlag = value;
+        }
+        i += 1;
+        break;
+      }
+      case '--service':
+        if (value === undefined || value === '' || value.startsWith('--')) {
+          return err('invalid-argument', `Missing value for --service. Usage: ${REALIGN_USAGE}`);
+        }
+        if (!services.includes(value)) {
+          services.push(value);
+        }
+        i += 1;
+        break;
+      default:
+        return err('invalid-argument', `Unknown realign option: "${flag}". Usage: ${REALIGN_USAGE}`);
+    }
+  }
+
+  if (scopeFlag !== undefined && !(REALIGN_SCOPES as readonly string[]).includes(scopeFlag)) {
+    return err('invalid-argument', `Unknown --scope value "${scopeFlag}" — expected none, edt or all. Usage: ${REALIGN_USAGE}`);
+  }
+  if (restartFlag !== undefined && !(SWITCH_RESTART_MODES as readonly string[]).includes(restartFlag)) {
+    return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected none, simple or clean. Usage: ${REALIGN_USAGE}`);
+  }
+  const scope = (scopeFlag ?? 'edt') as RealignScope;
+  const restartMode = (restartFlag ?? 'none') as SwitchRestartMode;
+  if (restartMode !== 'none' && (deps.docker === undefined || deps.healthProbe === undefined)) {
+    return err('restart-unavailable', 'Post-realign restart needs the Docker and health-probe ports, which are not wired — nothing was realigned');
+  }
+
+  let restart: Parameters<typeof realignServices>[0]['restart'];
+  if (restartMode !== 'none') {
+    const loaded = await deps.settings.load();
+    restart = {
+      mode: restartMode,
+      concurrency: (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).update.concurrency,
+      serviceActions: createServiceActions({
+        manifest: deps.manifest,
+        container: deps.container,
+        restart: deps.restart,
+        // Never used by restart/verify, but the registry's deps are complete.
+        editor: deps.editor ?? { launch: () => err('editor-launch-failed', 'No editor is wired in the CLI') },
+        lock: deps.lock,
+        docker: deps.docker,
+        healthProbe: deps.healthProbe,
+      }),
+    };
+  }
+
+  const realigned = await realignServices({
+    registry: deps.registry,
+    manifest: deps.manifest,
+    manifestCarry: deps.manifestCarry,
+    git: deps.git,
+    lock: deps.lock,
+    state: deps.state,
+    edtRegistry: deps.edtRegistry,
+    scope,
+    services,
+    ...(restart !== undefined ? { restart } : {}),
+  });
+  if (!realigned.ok) {
+    return realigned;
+  }
+
+  const { rows, restart: report, restartError } = realigned.data;
+  const data = {
+    rows,
+    ...(report !== undefined
+      ? {
+          restart: report.rows.map((row) => ({
+            service: row.service,
+            mode: report.mode,
+            state: row.phase,
+            ...(row.phase === 'skipped' ? { detail: row.skipReason } : row.detail !== undefined ? { detail: row.detail } : {}),
+          })),
+        }
+      : {}),
+    ...(restartError !== undefined ? { restartError } : {}),
+  };
+  if (rows.some((row) => row.outcome === 'failed')) {
+    return err('realign-failed', 'One or more services could not be realigned', data);
+  }
+  if (restartError !== undefined || (report !== undefined && restartNeedsAttention(report.summary))) {
+    return err('realign-restart-needs-attention', 'The realign succeeded, but the restart failed or a restarted service ended failed, down or unhealthy', data);
+  }
+  return ok(data);
 }
 
 // Hand-rolled flag parsing for `edt modify`: the wrapper owns flag syntax (unknown options,
