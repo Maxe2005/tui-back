@@ -97,5 +97,5 @@ development_status:
   # 8-6/8-7/8-8 (branch drift detection & realignment) added 2026-10-15: sprint-change-proposal-2026-10-15-2.md. Order: 8-6 → 8-7 (needs 2-44 merged) → 8-8.
   8-6-branch-drift-detection-snapshot-attention: done
   8-7-realign-use-case-and-cli-selective-branch-realignment: done
-  8-8-realign-dialog-shortcut-settings-defaults: review
+  8-8-realign-dialog-shortcut-settings-defaults: done
   epic-8-retrospective: optional
