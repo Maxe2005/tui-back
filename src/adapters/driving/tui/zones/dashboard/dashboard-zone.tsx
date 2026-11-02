@@ -13,6 +13,7 @@ import { DashboardBody } from './dashboard-body.js';
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import { actionForKey, buildAttentionItems, edtKeyEffect, resolveEdtSection, nextAttentionIndex, resolveDashboardBody, rowIndexForAttention } from './dashboard.logic.js';
 import { LaunchBanner } from './launch-banner.js';
+import type { DashboardOtherService } from '../../../../../core/dashboard/snapshot.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export const EMPTY_REGISTRY_MESSAGE = 'No repos registered yet.';
@@ -23,6 +24,7 @@ export const REGISTRY_CHECK_ERROR_MESSAGE = 'Failed to check the repo registry.'
 
 // Used only while the registry's action list is not loaded (unwired ports): the key still
 // reaches the store, which reports the missing port inline.
+const NO_OTHERS: readonly DashboardOtherService[] = [];
 const FALLBACK_ACTION_IDS: Record<string, string> = { o: 'open-in-ide', r: 'restart-simple', l: 'restart-clean' };
 
 export function DashboardZone({
@@ -73,7 +75,8 @@ export function DashboardZone({
     setCursor((current) => (rows.length === 0 ? 0 : Math.min(current, rows.length - 1)));
   }, [rows.length]);
   const focusedIndex = rows.length === 0 ? 0 : Math.min(cursor, rows.length - 1);
-  const attentionItems = useMemo(() => buildAttentionItems(rows), [rows]);
+  const others = servicesSection?.others ?? NO_OTHERS;
+  const attentionItems = useMemo(() => buildAttentionItems(rows, others), [rows, others]);
   // The picked line only shows as selected while the cursor still sits on its service.
   const pickedItem = attentionPick === null ? undefined : attentionItems[attentionPick];
   const attentionIndex = pickedItem !== undefined && rows[focusedIndex]?.path === pickedItem.path ? attentionPick : null;
@@ -133,7 +136,7 @@ export function DashboardZone({
         return;
       }
       if (input === 'a') {
-        const pick = nextAttentionIndex(attentionPick, attentionItems.length);
+        const pick = nextAttentionIndex(attentionPick, attentionItems);
         const target = pick === null ? -1 : rowIndexForAttention(rows, attentionItems[pick]!);
         if (pick !== null && target >= 0) {
           setAttentionPick(pick);

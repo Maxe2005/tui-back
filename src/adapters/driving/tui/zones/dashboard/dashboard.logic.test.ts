@@ -1,10 +1,10 @@
 // tui/zones/dashboard: the pure helpers — body precedence, the "updated Ns ago" wording and the
 // field-level error labels.
 import { describe, expect, it } from 'vitest';
-import type { DashboardService } from '../../../../../core/dashboard/snapshot.js';
+import type { DashboardOtherService, DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import { MIN_TERMINAL_ROWS, SHELL_CHROME_ROWS } from '../../shared/bounds/bounds.js';
 import { BANNER_LINES } from './launch-banner.js';
-import { edtKeyEffect, edtSectionActions, formatEdtAction, formatEdtLine, resolveEdtSection, actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, containerLabel, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, rowIndexForAttention } from './dashboard.logic.js';
+import { edtKeyEffect, edtSectionActions, formatEdtAction, formatEdtLine, resolveEdtSection, actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, containerLabel, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, type AttentionItem, rowIndexForAttention } from './dashboard.logic.js';
 
 const FIELD_ERROR = { ok: false as const, error: { code: 'x', message: 'y' } };
 
@@ -71,6 +71,8 @@ function row(overrides: Partial<DashboardService> = {}): DashboardService {
     workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
     protectedBranch: false,
     usedByEdts: [],
+    expectedBranch: 'feat/x',
+    drift: 'aligned',
     ...overrides,
   };
 }
@@ -143,6 +145,8 @@ function svc(over: Partial<DashboardService>): DashboardService {
     workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
     protectedBranch: false,
     usedByEdts: [],
+    expectedBranch: 'feat/x',
+    drift: 'aligned',
     ...over,
   };
 }
@@ -180,6 +184,46 @@ describe('buildAttentionItems', () => {
       buildAttentionItems([svc({ workingTree: FIELD_ERROR, divergence: { status: 'current', ahead: null, behind: null, detail: { code: 'x', message: 'y' } } })]),
     ).toEqual([]);
   });
+  const other = (over: Partial<DashboardOtherService>): DashboardOtherService => ({
+    service: 'o',
+    path: '/o',
+    branch: 'hotfix',
+    expectedBranch: 'develop',
+    drift: 'drifted',
+    ...over,
+  });
+  it('ranks drift right after protected branch, members then others, counted as items', () => {
+    const items = buildAttentionItems(
+      [
+        svc({ service: 'a', divergence: { status: 'current', ahead: 0, behind: 3 } }),
+        svc({ service: 'b', branch: 'main', drift: 'drifted' }),
+        svc({ service: 'c', protectedBranch: true, branch: 'development', drift: 'drifted' }),
+      ],
+      [other({}), other({ service: 'p', path: '/p', drift: 'aligned', branch: 'develop' })],
+    );
+    expect(items.map(formatAttentionLine)).toEqual([
+      'c · on protected branch development',
+      'b · on main, expected feat/x (EDT member)',
+      'c · on development, expected feat/x (EDT member)',
+      'o · on hotfix, expected develop (other service)',
+      'a · behind by 3',
+    ]);
+    expect(items.map((item) => item.focusable)).toEqual([true, true, true, false, true]);
+  });
+  it('shows a detached HEAD as drift without an unknown-divergence line, and never an unknown drift', () => {
+    const detached = svc({
+      branch: null,
+      drift: 'drifted',
+      divergence: { status: 'unknown-offline', ahead: null, behind: null, detail: { code: 'git-detached-head', message: 'detached' } },
+    });
+    const items = buildAttentionItems([detached], [other({ branch: null }), other({ service: 'u', path: '/u', branch: null, drift: 'unknown' })]);
+    expect(items.map(formatAttentionLine)).toEqual([
+      's · on detached HEAD, expected feat/x (EDT member)',
+      'o · on detached HEAD, expected develop (other service)',
+    ]);
+    const failed = svc({ branch: null, drift: 'unknown', divergence: { status: 'unknown-offline', ahead: null, behind: null } });
+    expect(buildAttentionItems([failed]).map((item) => item.reason)).toEqual(['unknown-offline']);
+  });
   it('points each item at its row by path, so equal service names stay apart', () => {
     const rows = [svc({ service: 'a', path: '/1' }), svc({ service: 'a', path: '/2', usedByEdts: ['x'] })];
     const [item] = buildAttentionItems(rows);
@@ -193,11 +237,20 @@ describe('registry and attention cursor helpers', () => {
     expect(registryAllClear({ repoCount: 4, invalidManifests: 0, unreachable: 1, listingIssues: 0 })).toBe(false);
     expect(registryAllClear({ repoCount: 0, invalidManifests: 0, unreachable: 0, listingIssues: 0 })).toBe(false);
   });
+  const line = (focusable: boolean): AttentionItem => ({ service: 's', path: '/s', reason: 'drift', text: 't', focusable });
   it('cycles through the attention lines, starting at the first', () => {
-    expect(nextAttentionIndex(null, 3)).toBe(0);
-    expect(nextAttentionIndex(0, 3)).toBe(1);
-    expect(nextAttentionIndex(2, 3)).toBe(0);
-    expect(nextAttentionIndex(null, 0)).toBeNull();
+    const three = [line(true), line(true), line(true)];
+    expect(nextAttentionIndex(null, three)).toBe(0);
+    expect(nextAttentionIndex(0, three)).toBe(1);
+    expect(nextAttentionIndex(2, three)).toBe(0);
+    expect(nextAttentionIndex(null, [])).toBeNull();
+  });
+  it('skips lines with no services-table row', () => {
+    const items = [line(false), line(true), line(false), line(true)];
+    expect(nextAttentionIndex(null, items)).toBe(1);
+    expect(nextAttentionIndex(1, items)).toBe(3);
+    expect(nextAttentionIndex(3, items)).toBe(1);
+    expect(nextAttentionIndex(null, [line(false)])).toBeNull();
   });
 });
 

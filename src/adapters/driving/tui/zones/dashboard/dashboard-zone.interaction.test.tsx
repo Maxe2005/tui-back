@@ -46,6 +46,8 @@ function serviceRow(name: string) {
     workingTree: { ok: true as const, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
     protectedBranch: false,
     usedByEdts: [],
+    expectedBranch: 'feat/x',
+    drift: 'aligned' as const,
   };
 }
 
@@ -57,7 +59,7 @@ function seedServices(available = true) {
   const action = (id: string, key: string) => ({ id, label: id, key, availability: available ? { available: true as const } : { available: false as const, reason: 'group update' } });
   store.setState({
     dashboardServicesStatus: 'ready',
-    dashboardServices: { status: 'active', edt: { ulid: 'e', topic: 't', serviceCount: 2 }, services: [serviceRow('a'), serviceRow('b')] },
+    dashboardServices: { status: 'active', edt: { ulid: 'e', topic: 't', serviceCount: 2 }, services: [serviceRow('a'), serviceRow('b')], others: [] },
     dashboardServiceActions: {
       '/r/a': [action('open-in-ide', 'Ctrl+O'), action('restart-simple', 'Ctrl+R'), action('restart-clean', 'Ctrl+L')],
       '/r/b': [action('open-in-ide', 'Ctrl+O'), action('restart-simple', 'Ctrl+R'), action('restart-clean', 'Ctrl+L')],
@@ -79,6 +81,29 @@ describe('DashboardZone interaction', () => {
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'a');
+      await press(instance, stdin, '\r');
+      expect(openServiceInZone).toHaveBeenCalledWith('/r/b');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('a skips the attention lines of other services, which have no row', async () => {
+    const { store, openServiceInZone } = seedServices();
+    const services = store.getState().dashboardServices!;
+    store.setState({
+      dashboardServices: {
+        ...services,
+        services: [serviceRow('a'), { ...serviceRow('b'), branch: 'main', drift: 'drifted' }],
+        others: [{ service: 'o', path: '/r/o', branch: 'hotfix', expectedBranch: 'development', drift: 'drifted' }],
+      },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      // Lines: b (member drift), o (other drift). The second `a` wraps back to b.
+      await press(instance, stdin, 'a');
       await press(instance, stdin, 'a');
       await press(instance, stdin, '\r');
       expect(openServiceInZone).toHaveBeenCalledWith('/r/b');
@@ -207,7 +232,7 @@ describe('DashboardZone interaction', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, '\x1b[B');
-      store.setState({ dashboardServices: { status: 'active', edt: { ulid: 'e', topic: 't', serviceCount: 1 }, services: [serviceRow('a')] } });
+      store.setState({ dashboardServices: { status: 'active', edt: { ulid: 'e', topic: 't', serviceCount: 1 }, services: [serviceRow('a')], others: [] } });
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, '\x12');
       expect(runDashboardServiceAction).toHaveBeenLastCalledWith('/r/a', 'restart-simple');
@@ -251,7 +276,7 @@ describe('DashboardZone interaction', () => {
       } finally {
         a.instance.unmount();
       }
-      const second = withSpies({ edts: [], dashboardServices: { status: 'no-active-edt', edt: null, services: [] } });
+      const second = withSpies({ edts: [], dashboardServices: { status: 'no-active-edt', edt: null, services: [], others: [] } });
       const b = mount(second.store);
       try {
         await b.instance.waitUntilRenderFlush();
@@ -305,7 +330,7 @@ describe('DashboardZone interaction', () => {
         instance.unmount();
       }
       const zero = seedServices();
-      zero.store.setState({ edts: [], dashboardServices: { status: 'no-active-edt', edt: null, services: [] } });
+      zero.store.setState({ edts: [], dashboardServices: { status: 'no-active-edt', edt: null, services: [], others: [] } });
       const again = mount(zero.store);
       try {
         await again.instance.waitUntilRenderFlush();
