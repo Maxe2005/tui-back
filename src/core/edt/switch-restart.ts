@@ -108,10 +108,13 @@ export interface RestartAfterSwitchParams {
   // Called with the updated row on every transition, and once per row up front (`pending` or
   // `skipped`). A throwing callback never breaks the run.
   onPhase?: (row: RestartRow) => void;
+  // Overrides the targets derived from `results`: the services whose branch changed, named by
+  // another use-case (realign's `realigned` rows).
+  changedServices?: readonly string[];
 }
 
 export async function restartAfterSwitch(params: RestartAfterSwitchParams): Promise<Result<RestartReport>> {
-  const { results, repos, mode, concurrency, serviceActions, onPhase } = params;
+  const { results, repos, mode, concurrency, serviceActions, onPhase, changedServices } = params;
   if (!SWITCH_RESTART_RUN_MODES.includes(mode)) {
     return err('invalid-argument', `Unknown restart mode "${String(mode)}" — expected none, simple or clean`);
   }
@@ -126,7 +129,9 @@ export async function restartAfterSwitch(params: RestartAfterSwitchParams): Prom
     }
   };
 
-  const changed = new Set(results.filter((result) => isChangedSwitchOutcome(result.outcome)).map((result) => result.service));
+  const changed = new Set(
+    changedServices ?? results.filter((result) => isChangedSwitchOutcome(result.outcome)).map((result) => result.service),
+  );
   const rows: RestartRow[] = repos.map((repo) => {
     const row: RestartRow = { service: repo.service, repoPath: repo.repoPath, phase: 'pending' };
     if (!changed.has(repo.service)) {

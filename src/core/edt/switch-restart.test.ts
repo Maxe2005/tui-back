@@ -47,6 +47,20 @@ describe('restartAfterSwitch', () => {
     expect(serviceActions.restart).toHaveBeenCalledTimes(2);
   });
 
+  it('targets only the changedServices override when given, ignoring the switch outcomes', async () => {
+    const serviceActions = actions();
+    const report = await restartAfterSwitch({ results: [], repos, mode: 'clean', concurrency: 1, serviceActions, changedServices: ['idle', 'lib'] });
+    expect(report.ok).toBe(true);
+    if (!report.ok) return;
+    const byService = Object.fromEntries(report.data.rows.map((row) => [row.service, row]));
+    expect(byService.idle).toMatchObject({ phase: 'functional' });
+    expect(byService.lib).toMatchObject({ phase: 'skipped', skipReason: 'no container' });
+    expect(byService.api).toMatchObject({ phase: 'skipped', skipReason: 'unchanged' });
+    expect(byService.web).toMatchObject({ phase: 'skipped', skipReason: 'unchanged' });
+    expect(serviceActions.restart).toHaveBeenCalledTimes(1);
+    expect(serviceActions.restart).toHaveBeenCalledWith('/r/idle', 'clean');
+  });
+
   it('streams pending → restarting → verifying → final through onPhase', async () => {
     const seen: [string, string][] = [];
     await restartAfterSwitch({
