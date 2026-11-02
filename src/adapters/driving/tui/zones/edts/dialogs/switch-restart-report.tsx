@@ -42,11 +42,15 @@ export function describeRestartSummary(rows: readonly RestartRow[]): string {
 
 export function SwitchRestartReport({
   state,
-  chromeRows,
+  chromeRows = 0,
+  maxVisibleRows,
 }: {
   state: NonNullable<AppState['switchRestart']>;
   // Rows the dialog spends around the list (border, title, summary lines) — the list gets the rest.
-  chromeRows: number;
+  chromeRows?: number;
+  // Instead of chromeRows: the list's own row budget, when the dialog shares its height with
+  // another list.
+  maxVisibleRows?: number;
 }) {
   const running = state.status === 'running';
   // Live: stable run order. Done: non-green first.
@@ -60,6 +64,7 @@ export function SwitchRestartReport({
       <BoundedList
         items={rows}
         chromeRows={chromeRows}
+        {...(maxVisibleRows !== undefined ? { maxVisibleRows } : {})}
         renderItem={(row, index) => (
           <Text key={`${row.repoPath}:${index}`} color={RESTART_PHASE_BADGES[row.phase].color} wrap="truncate-end">
             {'  '}

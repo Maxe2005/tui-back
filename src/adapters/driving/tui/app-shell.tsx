@@ -13,6 +13,7 @@ import { sharedTypesBusy } from './store/slices/shared-types-slice.js';
 import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { ResetScreen } from './shared/reset-screen.js';
+import { RealignDialog } from './shared/realign-dialog.js';
 import { SettingsScreen } from './shared/settings-screen.js';
 import { useFooterContext } from './shared/hooks/use-footer-context.js';
 import { resolveFocusStep } from './shared/keys/focus-navigation.js';
@@ -204,6 +205,9 @@ export function AppShell({
   const resetScreenOpen = useStore((state) => state.resetScreenOpen);
   const closeResetScreen = useStore((state) => state.closeResetScreen);
   const resetNotice = useStore((state) => state.resetNotice);
+  // `:realign` overlay (also `A` on the Dashboard): same open flag + onClose pattern.
+  const realignScreenOpen = useStore((state) => state.realignScreenOpen);
+  const closeRealignScreen = useStore((state) => state.closeRealignScreen);
   // Manifest-gated Routes/shared-types tab visibility — loaded on mount and reloaded on
   // registry-screen close / active-EDT membership change (see the effect below and
   // app-store.ts's createEdt/switchEdt/modifyEdt).
@@ -302,7 +306,7 @@ export function AppShell({
     // Ctrl+W resize-mode. Entering and dispatching within it both sit under the same overlay
     // exclusion as the zone-switch block below; entering additionally requires the active zone
     // to declare a boundary (shouldEnterResizeMode), and the Logs fullscreen preview has none.
-    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
+    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
       if (state.resizeMode !== null) {
         const boundaryStep = resolveFocusStep(input, key, 'tab');
         if (boundaryStep !== null) {
@@ -336,7 +340,7 @@ export function AppShell({
     // must land as a literal character (or, for settings, simply not open help on top of it),
     // never also pop the keybinding-help modal on top of the overlay. Mirrors how the registry
     // screen's own Esc-close below is gated on registryScreenOpen.
-    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen) {
+    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
       resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
     }
 
@@ -349,6 +353,7 @@ export function AppShell({
       !commandBarOpen &&
       !settingsScreenOpen &&
       !resetScreenOpen &&
+      !realignScreenOpen &&
       state.resizeMode === null
     ) {
       // The reachable-zone set (every zone minus whichever gated tab is currently 'omitted')
@@ -421,6 +426,7 @@ export function AppShell({
             {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
             {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
             {resetScreenOpen && <ResetScreen useStore={useStore} onClose={closeResetScreen} />}
+            {realignScreenOpen && <RealignDialog useStore={useStore} onClose={closeRealignScreen} />}
             {resetNotice !== null && <TruncatedText color={colors.warning}>{resetNotice}</TruncatedText>}
           </BoundsProvider>
         </Box>

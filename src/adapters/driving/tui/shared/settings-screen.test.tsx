@@ -25,6 +25,7 @@ import {
   MIN_LOG_BUFFER_SIZE,
   SETTINGS_GROUPS,
   cycleSwitchRestartMode,
+  cycleRealignScope,
   SETTINGS_TABS,
   SettingsScreen,
   adjustBranchDropdownMaxRows,
@@ -363,9 +364,23 @@ describe('HIDEABLE_ACTION_TYPES', () => {
 });
 
 describe('SETTINGS_GROUPS', () => {
-  it('lists exactly the four EDTs-tab settings groups, in this order', () => {
-    expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual(['hint-visibility', 'action-types', 'branch-dropdown-rows', 'switch-restart']);
-    expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual(['Hint visibility', 'Recent action types', 'Branch dropdown rows', 'Post-switch restart']);
+  it('lists exactly the six EDTs-tab settings groups, in this order', () => {
+    expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual([
+      'hint-visibility',
+      'action-types',
+      'branch-dropdown-rows',
+      'switch-restart',
+      'realign-scope',
+      'realign-restart',
+    ]);
+    expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual([
+      'Hint visibility',
+      'Recent action types',
+      'Branch dropdown rows',
+      'Post-switch restart',
+      'Realign default scope',
+      'Post-realign restart',
+    ]);
   });
 });
 
@@ -525,6 +540,24 @@ describe('SettingsScreen', () => {
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="switch-restart" />);
     expect(output).toContain('after an EDT switch');
     expect(output).toContain('Clean restart');
+  });
+
+  it('renders the live realign default scope and cycles it none → edt → all → none', async () => {
+    expect(cycleRealignScope('none', 1)).toBe('edt');
+    expect(cycleRealignScope('edt', 1)).toBe('all');
+    expect(cycleRealignScope('all', 1)).toBe('none');
+    expect(cycleRealignScope('none', -1)).toBe('all');
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'all' as const, restartMode: 'none' as const } } });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="realign-scope" />);
+    expect(output).toContain('Services pre-selected for a realign: All');
+  });
+
+  it('renders the live post-realign restart mode', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'edt' as const, restartMode: 'simple' as const } } });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="realign-restart" />);
+    expect(output).toContain('Restart services after a realign: Simple restart');
   });
 
   it('opens the EDTs tab on its group list, not a checkbox list', async () => {
@@ -714,6 +747,8 @@ describe('settingsFooterContext', () => {
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'hint-visibility' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'branch-dropdown-rows' })).toBe('settings-adjust');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'switch-restart' })).toBe('settings-toggle');
+    expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'realign-scope' })).toBe('settings-toggle');
+    expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'realign-restart' })).toBe('settings-toggle');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'buffer-size' })).toBe('settings-adjust');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'clear-history' })).toBe('settings-run');
   });

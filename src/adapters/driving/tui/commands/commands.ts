@@ -61,6 +61,11 @@ export const COMMANDS: readonly Command[] = [
       useStore.getState().openResetScreen();
     },
   },
+  // `:realign` — the realign overlay over the drifted services (also `A` on the Dashboard).
+  {
+    name: 'realign',
+    run: (useStore) => useStore.getState().openRealignScreen(),
+  },
   // Mirrors shouldQuit's own runInProgress guard (app-shell.tsx) so `:quit` can't bypass it —
   // unlike the raw `q` keypress, this command stays reachable regardless of
   // settings.general.quitShortcutEnabled (that flag only gates the keypress). Goes through

@@ -6,6 +6,7 @@ import { KEYBINDINGS, activeFooterContext, footerContextHints, type FooterContex
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors, spacing } from '../theme/theme.js';
 import { formatHint } from './hints.js';
+import type { AppState } from '../../store/app-store.js';
 
 // The hint list wraps on a narrow terminal; past this many rows the rest is clipped.
 export const FOOTER_MAX_ROWS = 3;
@@ -20,7 +21,10 @@ export const DEFAULT_FOOTER_HINTS = footerEntries
 
 // Generated from the keybinding declarations: the shared hints, those scoped to this zone, and
 // the resize hint only for a zone declaring a splitter boundary.
-export function footerHintsFor(zone?: ZoneId, { serviceFocused = true, activeEdt = true }: { serviceFocused?: boolean; activeEdt?: boolean } = {}): string[] {
+export function footerHintsFor(
+  zone?: ZoneId,
+  { serviceFocused = true, activeEdt = true, drift = true }: { serviceFocused?: boolean; activeEdt?: boolean; drift?: boolean } = {},
+): string[] {
   return footerEntries
     .filter((entry) => {
       if (entry.zones !== undefined && (zone === undefined || !entry.zones.includes(zone))) {
@@ -31,6 +35,9 @@ export function footerHintsFor(zone?: ZoneId, { serviceFocused = true, activeEdt
       }
       if (entry.when === 'active-edt') {
         return activeEdt;
+      }
+      if (entry.when === 'drift') {
+        return drift;
       }
       return entry.when !== 'resizable' || zone === undefined || hasResizableBoundary(zone);
     })
@@ -47,7 +54,13 @@ export function useFooterItems(zone: ZoneId | undefined, useStore: AppStore, hin
   // The Dashboard's per-service keys only apply while a service row is focused.
   const serviceFocused = useStore((state) => state.dashboardServicesStatus === 'ready' && (state.dashboardServices?.services.length ?? 0) > 0);
   const activeEdt = useStore((state) => state.dashboardServicesStatus === 'ready' && state.dashboardServices?.status === 'active' && state.dashboardServices.edt !== null);
-  return hints && hints.length > 0 ? hints : context !== undefined ? footerContextHintStrings(context) : footerHintsFor(zone, { serviceFocused, activeEdt });
+  // The realign key only applies while the snapshot shows a drifted service.
+  const drift = useStore((state) => state.dashboardServicesStatus === 'ready' && hasDrift(state.dashboardServices));
+  return hints && hints.length > 0 ? hints : context !== undefined ? footerContextHintStrings(context) : footerHintsFor(zone, { serviceFocused, activeEdt, drift });
+}
+
+export function hasDrift(snapshot: AppState['dashboardServices']): boolean {
+  return snapshot !== null && [...snapshot.services, ...(snapshot.others ?? [])].some((service) => service.drift === 'drifted');
 }
 
 // Rows the footer takes at `columns`: its wrapped hint lines (1 column of left padding), capped.

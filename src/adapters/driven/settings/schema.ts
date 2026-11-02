@@ -21,6 +21,7 @@ import {
   MIN_GRID_MAX_ROWS,
   MIN_LOG_BUFFER_SIZE,
   MIN_UPDATE_CONCURRENCY,
+  REALIGN_SCOPES,
   SWITCH_RESTART_MODES,
   UPDATE_MERGE_SOURCES,
   type Settings,
@@ -129,6 +130,15 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.switch),
+    // Same optional-with-default and per-field fallback as `switch:` above.
+    realign: z
+      .object({
+        defaultScope: z.enum(REALIGN_SCOPES).catch(DEFAULT_SETTINGS.realign.defaultScope).optional().default(DEFAULT_SETTINGS.realign.defaultScope),
+        restartMode: z.enum(SWITCH_RESTART_MODES).catch(DEFAULT_SETTINGS.realign.restartMode).optional().default(DEFAULT_SETTINGS.realign.restartMode),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.realign),
     // An invalid `logs.bufferSize` does not just reset this `logs` block: the whole top-level
     // `.strict()` object fails validation as one unit, so *every* top-level key falls back to
     // DEFAULT_SETTINGS, like any other invalid field in this schema (index.test.ts's

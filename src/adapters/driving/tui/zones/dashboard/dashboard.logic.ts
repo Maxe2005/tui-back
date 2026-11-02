@@ -192,8 +192,11 @@ export function formatAttentionLine(item: AttentionItem): string {
   return `${item.service} · ${item.text}`;
 }
 
-export function attentionHeader(count: number): string {
-  return `Attention (${count})`;
+export const REALIGN_HINT = formatHint(['A', 'realign']);
+
+// The realign shortcut is offered as soon as one Attention line is a drift.
+export function attentionHeader(count: number, drift = false): string {
+  return `Attention (${count})${drift ? `  ${REALIGN_HINT}` : ''}`;
 }
 
 export function registryAllClear(summary: DashboardRegistrySummary): boolean {

@@ -219,7 +219,7 @@ export function DashboardBody({
               </Box>
             ) : (
               <>
-              <TruncatedText color={colors.text} bold>{attentionHeader(attentionItems.length)}</TruncatedText>
+              <TruncatedText color={colors.text} bold>{attentionHeader(attentionItems.length, attentionItems.some((item) => item.reason === 'drift'))}</TruncatedText>
               <BoundedList
                 items={attentionItems}
                 maxVisibleRows={ATTENTION_MAX_ROWS}

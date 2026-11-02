@@ -116,6 +116,48 @@ describe('DashboardZone interaction', () => {
     }
   });
 
+  it('A opens the realign dialog, a and R keep their own actions', async () => {
+    const { store, loadDashboard } = seedServices();
+    const openRealignScreen = vi.fn();
+    store.setState({ openRealignScreen });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'A');
+      expect(openRealignScreen).toHaveBeenCalledTimes(1);
+      await press(instance, stdin, 'a');
+      await press(instance, stdin, 'R');
+      expect(openRealignScreen).toHaveBeenCalledTimes(1);
+      expect(loadDashboard).toHaveBeenCalledTimes(2);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('ignores A while an overlay owns the keyboard', async () => {
+    const { store } = seedServices();
+    const openRealignScreen = vi.fn();
+    store.setState({ openRealignScreen, commandBarOpen: true });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'A');
+      expect(openRealignScreen).not.toHaveBeenCalled();
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('offers [A] realign in the Attention header only when a line is a drift', async () => {
+    const { store } = seedServices();
+    const services = store.getState().dashboardServices!;
+    const aligned = await renderToString(createElement(DashboardZone, { useStore: store }), { columns: 120, rows: 40 });
+    expect(aligned).not.toContain('[A] realign');
+    store.setState({ dashboardServices: { ...services, others: [{ service: 'o', path: '/r/o', branch: 'hotfix', expectedBranch: 'development', drift: 'drifted' }] } });
+    const drifted = await renderToString(createElement(DashboardZone, { useStore: store }), { columns: 120, rows: 40 });
+    expect(drifted).toMatch(/Attention \(1\)\s+\[A\] realign/);
+  });
+
   it('loads on mount and again on R', async () => {
     const { store, loadDashboard } = seed();
     const { instance, stdin } = mount(store);

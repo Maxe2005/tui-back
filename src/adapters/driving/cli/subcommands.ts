@@ -34,7 +34,7 @@ import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { SavedRequestPort } from '../../../core/ports/saved-request.js';
-import { DEFAULT_SETTINGS, SWITCH_RESTART_MODES, type SettingsPort, type SwitchRestartMode } from '../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS, SWITCH_RESTART_MODES, type Settings, type SettingsPort, type SwitchRestartMode } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
@@ -87,8 +87,9 @@ function parseUpdateOverrides(
 }
 const REALIGN_USAGE =
   'tui-back realign [--scope none|edt|all] [--service <name>]... [--restart none|simple|clean]' +
-  ' (--scope defaults to edt: the drifted active-EDT members; --service adds a service to the scope;' +
-  ' --restart defaults to none; exit 1 when a service fails or a restarted service ends failed, down or unhealthy)';
+  ' (--scope defaults to the realign.defaultScope setting, edt out of the box: the drifted active-EDT members;' +
+  ' --service adds a service to the scope; --restart defaults to the realign.restartMode setting, none out of the box;' +
+  ' exit 1 when a service fails or a restarted service ends failed, down or unhealthy)';
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
 const REGISTRY_VALIDATE_USAGE = 'tui-back registry validate';
@@ -1065,24 +1066,33 @@ async function runRealign(
   if (restartFlag !== undefined && !(SWITCH_RESTART_MODES as readonly string[]).includes(restartFlag)) {
     return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected none, simple or clean. Usage: ${REALIGN_USAGE}`);
   }
-  const scope = (scopeFlag ?? 'edt') as RealignScope;
-  const restartMode = (restartFlag ?? 'none') as SwitchRestartMode;
+  // Settings are read only when needed: an absent flag falls back to them, and a restart takes
+  // update.concurrency from them. A load failure or warning goes to stderr and the built-in
+  // defaults apply.
+  let cached: Settings | undefined;
+  const settings = async (): Promise<Settings> => {
+    if (cached === undefined) {
+      const loaded = await deps.settings.load();
+      if (!loaded.ok) {
+        console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+      } else if (loaded.data.warning !== null) {
+        console.error(`tui-back: ${loaded.data.warning}`);
+      }
+      cached = loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
+    }
+    return cached;
+  };
+  const scope = (scopeFlag ?? (await settings()).realign.defaultScope) as RealignScope;
+  const restartMode = (restartFlag ?? (await settings()).realign.restartMode) as SwitchRestartMode;
   if (restartMode !== 'none' && (deps.docker === undefined || deps.healthProbe === undefined)) {
     return err('restart-unavailable', 'Post-realign restart needs the Docker and health-probe ports, which are not wired — nothing was realigned');
   }
 
   let restart: Parameters<typeof realignServices>[0]['restart'];
   if (restartMode !== 'none') {
-    // A load failure or warning goes to stderr and the built-in concurrency applies.
-    const loaded = await deps.settings.load();
-    if (!loaded.ok) {
-      console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
-    } else if (loaded.data.warning !== null) {
-      console.error(`tui-back: ${loaded.data.warning}`);
-    }
     restart = {
       mode: restartMode,
-      concurrency: (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).update.concurrency,
+      concurrency: (await settings()).update.concurrency,
       serviceActions: createServiceActions({
         manifest: deps.manifest,
         container: deps.container,

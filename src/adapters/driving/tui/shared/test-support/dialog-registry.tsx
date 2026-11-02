@@ -33,6 +33,7 @@ import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
 import { CommandBar } from '../command-bar.js';
 import { RepoRegistryScreen } from '../repo-registry-screen.js';
 import { SettingsScreen } from '../settings-screen.js';
+import { RealignDialog } from '../realign-dialog.js';
 
 export const LONG_TEXT = 'x'.repeat(5000);
 export const MULTILINE_ERROR = `first line of a failure\n${'\u001b[31mred\u001b[0m '.repeat(40)}\nthird line ${LONG_TEXT}`;
@@ -270,6 +271,10 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'shared/command-bar', file: 'shared/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/repo-registry', file: 'shared/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
   { id: 'shared/settings', file: 'shared/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },
+  { id: 'shared/realign-select', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignSelectStore() }) },
+  { id: 'shared/realign-run', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
+  { id: 'shared/realign-run-failed', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
+  { id: 'shared/realign-error', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
   { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
   { id: 'update/zone', file: 'zones/update/update-zone.tsx', embedded: 'update' },
   { id: 'routes/zone', file: 'zones/routes/routes-zone.tsx', embedded: 'routes' },
@@ -293,5 +298,52 @@ function registryStore() {
     },
     registryScanError: MULTILINE_ERROR,
   } as never);
+  return s;
+}
+
+function realignCandidates() {
+  return services.map((s, i) => ({
+    kind: i % 2 === 0 ? ('member' as const) : ('other' as const),
+    service: s.service,
+    path: s.path,
+    branch: i % 7 === 0 ? null : s.branch,
+    expectedBranch: `expected/${'e'.repeat(120)}-${i}`,
+    drift: 'drifted' as const,
+  }));
+}
+
+function realignSelectStore() {
+  const s = store();
+  const rows = realignCandidates();
+  s.setState({
+    realignScreenOpen: true,
+    realignCandidates: { status: 'ready', rows, error: null },
+    realignDraft: { cursor: 150, selected: [], restartMode: 'clean' },
+  } as never);
+  return s;
+}
+
+function realignRunStore(error: string | null = null) {
+  const s = store();
+  const rows = realignCandidates();
+  const statuses = ['realigned', 'unchanged', 'skipped', 'failed'] as const;
+  s.setState({
+    realignScreenOpen: true,
+    realignCandidates: { status: 'ready', rows, error: null },
+    realignRun: {
+      status: error === null ? 'done' : 'error',
+      restartMode: 'simple',
+      rows: rows.map((row, i) => ({ service: row.service, path: row.path, status: statuses[i % 4], detail: { code: 'x', message: MULTILINE_ERROR } })),
+      restartRows: rows.map((row, i) => ({ service: row.service, repoPath: row.path, phase: i % 2 === 0 ? 'down' : 'skipped', detail: MULTILINE_ERROR })),
+      restartError: MULTILINE_ERROR,
+      error,
+    },
+  } as never);
+  return s;
+}
+
+function realignErrorStore() {
+  const s = store();
+  s.setState({ realignScreenOpen: true, realignCandidates: { status: 'error', rows: [], error: MULTILINE_ERROR } } as never);
   return s;
 }

@@ -13,7 +13,7 @@ export type Keybinding = {
   description: string;
   // Rows of the same section are listed under one heading in the `?` help.
   section?: string;
-  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' | 'service-focused' | 'active-edt' };
+  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' | 'service-focused' | 'active-edt' | 'drift' };
 };
 
 // The retry key StateLine advertises beside a load error; zones bind R to their reload.
@@ -186,6 +186,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'a (Dashboard)',
     description: 'Dashboard: step through the Attention lines, moving the cursor to the line\'s service',
     footer: { key: 'a', verb: 'attention', zones: ['dashboard'] },
+  },
+  {
+    keys: 'A (Dashboard)',
+    description: 'Dashboard: open the realign dialog over the drifted services (also `:realign`)',
+    footer: { key: 'A', verb: 'realign', zones: ['dashboard'], when: 'drift' },
   },
   {
     keys: 'E (Dashboard)',
