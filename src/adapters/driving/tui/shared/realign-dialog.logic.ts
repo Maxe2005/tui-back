@@ -2,14 +2,12 @@
 // does, the footer context, the table cells and the per-row badges and summary. The component
 // only feeds raw Ink keys here and dispatches the result to the store.
 import type { DriftCandidate } from '../../../../core/dashboard/drift.js';
-import type { RealignScope } from '../../../../core/ports/settings.js';
+import { REALIGN_SCOPES, cycleRealignScope, type RealignScope } from '../../../../core/ports/settings.js';
 import type { FooterContextId } from '../keybindings/index.js';
 import type { RealignCandidates, RealignLiveRow, RealignLiveStatus, RealignRun } from '../store/app-store.js';
 import { nextCursorForKey } from './keys/list-cursor.js';
 import { STATUS_BADGES } from './components/status-badge.js';
 import { colors } from './theme/theme.js';
-
-export const REALIGN_PRESET_ORDER: readonly RealignScope[] = ['none', 'edt', 'all'];
 
 export const REALIGN_PRESET_LABELS: Record<RealignScope, string> = {
   none: 'Aucun',
@@ -37,10 +35,7 @@ export function realignView(candidates: RealignCandidates | null, run: RealignRu
 
 // From the preset the selection matches; a hand-edited selection starts over at the first one.
 export function nextRealignPreset(current: RealignScope | null): RealignScope {
-  if (current === null) {
-    return REALIGN_PRESET_ORDER[0]!;
-  }
-  return REALIGN_PRESET_ORDER[(REALIGN_PRESET_ORDER.indexOf(current) + 1) % REALIGN_PRESET_ORDER.length]!;
+  return current === null ? REALIGN_SCOPES[0] : cycleRealignScope(current, 1);
 }
 
 export type RealignKey = {

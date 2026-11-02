@@ -13,6 +13,7 @@ import { RestartModeSelector } from './components/restart-mode-selector.js';
 import { StateLine } from './components/state-line.js';
 import { ClampedParagraph } from './components/truncated-text.js';
 import { colors } from './theme/theme.js';
+import { REALIGN_SCOPES } from '../../../../core/ports/settings.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import { matchingPreset } from '../store/slices/realign-slice.js';
 import { BranchPlanTable } from '../zones/edts/dialogs/branch-plan-table.js';
@@ -21,7 +22,6 @@ import {
   REALIGN_ALIGNED_MESSAGE,
   REALIGN_NO_SELECTION_MESSAGE,
   REALIGN_PRESET_LABELS,
-  REALIGN_PRESET_ORDER,
   REALIGN_STATUS_BADGES,
   describeRealignRow,
   describeRealignSummary,
@@ -105,7 +105,7 @@ export function RealignDialog({ useStore = useAppStore, onClose = () => {} }: { 
       <Box flexDirection="column">
         <Text wrap="truncate-end">
           <Text color={colors.text}>Préréglage : </Text>
-          {REALIGN_PRESET_ORDER.map((value) => (
+          {REALIGN_SCOPES.map((value) => (
             <Text key={value} color={value === preset ? colors.accent : colors['text-dim']} wrap="truncate-end">
               {value === preset ? '(•)' : '( )'} {REALIGN_PRESET_LABELS[value]}
               {'   '}

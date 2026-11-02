@@ -4,7 +4,7 @@
 import type { StateCreator } from 'zustand';
 import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../../../../../core/dashboard/drift.js';
 import type { RestartRow } from '../../../../../core/edt/switch-restart.js';
-import { cycleSwitchRestartMode, type RealignScope, type SwitchRestartMode } from '../../../../../core/ports/settings.js';
+import { REALIGN_SCOPES, cycleSwitchRestartMode, type RealignScope, type SwitchRestartMode } from '../../../../../core/ports/settings.js';
 import { realignServices, type RealignOutcome, type RealignRow } from '../../../../../core/realign/index.js';
 import type { Result } from '../../../../../core/result.js';
 import { createServiceActions, type ServiceActions } from '../../../../../core/service-actions/index.js';
@@ -68,7 +68,7 @@ export function presetSelection(rows: readonly DriftCandidate[], preset: Realign
 // The preset the selection matches, or null once a row was toggled away from every preset.
 export function matchingPreset(rows: readonly DriftCandidate[], selected: readonly string[]): RealignScope | null {
   const chosen = new Set(selected);
-  for (const preset of ['none', 'edt', 'all'] as const) {
+  for (const preset of REALIGN_SCOPES) {
     const expected = presetSelection(rows, preset);
     if (expected.length === chosen.size && expected.every((path) => chosen.has(path))) {
       return preset;

@@ -19,10 +19,17 @@ export function cycleSwitchRestartMode(current: SwitchRestartMode, direction: 1 
   return SWITCH_RESTART_MODES[(index + direction + SWITCH_RESTART_MODES.length) % SWITCH_RESTART_MODES.length] ?? 'none';
 }
 
-// Which drifted services realign selects when no explicit choice is made: none, the active
-// EDT's members, or every managed repo.
+// Which drifted services realign selects when no explicit choice is made: none, the drifted
+// active-EDT members, or every drifted service (members and other managed repos).
 export const REALIGN_SCOPES = ['none', 'edt', 'all'] as const;
 export type RealignScope = (typeof REALIGN_SCOPES)[number];
+
+// none → edt → all → none (direction -1 goes back) — shared by the :settings control and the
+// realign dialog's preset key, like cycleSwitchRestartMode below.
+export function cycleRealignScope(current: RealignScope, direction: 1 | -1): RealignScope {
+  const index = REALIGN_SCOPES.indexOf(current);
+  return REALIGN_SCOPES[(index + direction + REALIGN_SCOPES.length) % REALIGN_SCOPES.length] ?? 'edt';
+}
 
 export interface Settings {
   // The `q` keybinding (quit the app) is global, so it lives on the General tab. Only the raw

@@ -36,7 +36,7 @@ import {
   MAX_UPDATE_CONCURRENCY,
   MIN_UPDATE_CONCURRENCY,
   cycleSwitchRestartMode,
-  REALIGN_SCOPES,
+  cycleRealignScope,
   type RealignScope,
   type Settings,
   type SwitchRestartMode,
@@ -419,11 +419,7 @@ export { cycleSwitchRestartMode };
 
 const REALIGN_SCOPE_LABELS: Record<RealignScope, string> = { none: 'None', edt: 'EDT services', all: 'All' };
 
-// none → edt → all → none (direction -1 goes back), same convention as cycleSwitchRestartMode.
-export function cycleRealignScope(current: RealignScope, direction: 1 | -1): RealignScope {
-  const index = REALIGN_SCOPES.indexOf(current);
-  return REALIGN_SCOPES[(index + direction + REALIGN_SCOPES.length) % REALIGN_SCOPES.length] ?? 'edt';
-}
+export { cycleRealignScope };
 
 // The Logs tab's group list: one field (or a small related cluster) per group, so no screen
 // renders more than a handful of lines. ModalDialog has no height cap, and a flat list of every
