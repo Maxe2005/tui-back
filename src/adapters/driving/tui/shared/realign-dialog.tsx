@@ -36,9 +36,34 @@ import {
 // Rows the selection view spends around its table: border and title, presets, header, the
 // restart selector and its hint, the empty-selection note.
 const SELECT_CHROME_ROWS = 14;
-// Rows the run view spends around its realign list and around the restart report's list.
-const RUN_CHROME_ROWS = 10;
-const RESTART_REPORT_CHROME_ROWS = 14;
+// The run view's fixed lines. Modal frame: border, padding, title, separator and the PgUp/PgDn
+// line. Then the run header, the run error (ClampedParagraph, up to 4 lines), and around the
+// restart list its header and its error annotation (DimAnnotation, up to 3 lines).
+const MODAL_CHROME_ROWS = 7;
+const RUN_HEADER_ROWS = 1;
+const RUN_ERROR_MAX_ROWS = 4;
+const RESTART_HEADER_ROWS = 1;
+const RESTART_ERROR_MAX_ROWS = 3;
+
+// One row budget for the run view, split between the realign list and the restart list so the
+// two never overflow together; each list counts its own ▲/▼ indicators inside its share.
+export function realignRunBudget(
+  regionRows: number,
+  run: { error: string | null; restartError: string | null },
+  showRestart: boolean,
+): { realignRows: number; restartRows: number } {
+  const chrome =
+    MODAL_CHROME_ROWS +
+    RUN_HEADER_ROWS +
+    (run.error !== null ? RUN_ERROR_MAX_ROWS : 0) +
+    (showRestart ? RESTART_HEADER_ROWS + (run.restartError !== null ? RESTART_ERROR_MAX_ROWS : 0) : 0);
+  const budget = Math.max(showRestart ? 2 : 1, regionRows - chrome);
+  if (!showRestart) {
+    return { realignRows: budget, restartRows: 0 };
+  }
+  const realignRows = Math.max(1, Math.ceil(budget / 2));
+  return { realignRows, restartRows: Math.max(1, budget - realignRows) };
+}
 
 export const REALIGN_TABLE_HEADERS = ['Service', 'Branche actuelle', 'Branche attendue', 'Type'] as const;
 
@@ -131,6 +156,7 @@ export function RealignDialog({ useStore = useAppStore, onClose = () => {} }: { 
     // Live: stable run order. Done: non-green first.
     const listedRows = running ? run.rows : orderRealignRows(run.rows);
     const showRestart = run.restartMode !== 'none' && (run.restartRows.length > 0 || run.restartError !== null);
+    const budget = realignRunBudget(bounds.rows, run, showRestart);
     body = (
       <Box flexDirection="column">
         <Text color={colors.text} wrap="truncate-end">
@@ -139,7 +165,7 @@ export function RealignDialog({ useStore = useAppStore, onClose = () => {} }: { 
         {run.error !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{run.error}</ClampedParagraph> : null}
         <BoundedList
           items={listedRows}
-          chromeRows={RUN_CHROME_ROWS + (showRestart ? RESTART_REPORT_CHROME_ROWS : 0)}
+          maxVisibleRows={budget.realignRows}
           renderItem={(row, index) => (
             <Text key={`${row.path}:${index}`} color={REALIGN_STATUS_BADGES[row.status].color} wrap="truncate-end">
               {'  '}
@@ -157,7 +183,7 @@ export function RealignDialog({ useStore = useAppStore, onClose = () => {} }: { 
               report: null,
               error: run.restartError,
             }}
-            chromeRows={RESTART_REPORT_CHROME_ROWS + RUN_CHROME_ROWS}
+            maxVisibleRows={budget.restartRows}
           />
         ) : null}
       </Box>

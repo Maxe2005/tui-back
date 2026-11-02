@@ -273,6 +273,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'shared/settings', file: 'shared/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/realign-select', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignSelectStore() }) },
   { id: 'shared/realign-run', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
+  { id: 'shared/realign-run-failed', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
   { id: 'shared/realign-error', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
   { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
   { id: 'update/zone', file: 'zones/update/update-zone.tsx', embedded: 'update' },
@@ -322,7 +323,7 @@ function realignSelectStore() {
   return s;
 }
 
-function realignRunStore() {
+function realignRunStore(error: string | null = null) {
   const s = store();
   const rows = realignCandidates();
   const statuses = ['realigned', 'unchanged', 'skipped', 'failed'] as const;
@@ -330,12 +331,12 @@ function realignRunStore() {
     realignScreenOpen: true,
     realignCandidates: { status: 'ready', rows, error: null },
     realignRun: {
-      status: 'done',
+      status: error === null ? 'done' : 'error',
       restartMode: 'simple',
       rows: rows.map((row, i) => ({ service: row.service, path: row.path, status: statuses[i % 4], detail: { code: 'x', message: MULTILINE_ERROR } })),
       restartRows: rows.map((row, i) => ({ service: row.service, repoPath: row.path, phase: i % 2 === 0 ? 'down' : 'skipped', detail: MULTILINE_ERROR })),
       restartError: MULTILINE_ERROR,
-      error: null,
+      error,
     },
   } as never);
   return s;

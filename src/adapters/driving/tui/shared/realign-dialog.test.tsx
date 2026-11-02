@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { DriftCandidate } from '../../../../core/dashboard/drift.js';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
-import { RealignDialog } from './realign-dialog.js';
+import { RealignDialog, realignRunBudget } from './realign-dialog.js';
 import {
   describeRealignRow,
   describeRealignSummary,
@@ -88,6 +88,16 @@ describe('realign dialog logic', () => {
     expect(orderRealignRows(rows).map((row) => row.service)).toEqual(['c', 'b', 'a']);
     expect(describeRealignSummary(rows)).toBe('1 realigned · 1 skipped · 1 failed');
     expect(describeRealignRow(rows[1]!)).toBe('⚠ b — skipped: dirty');
+  });
+});
+
+describe('realignRunBudget', () => {
+  it('splits one budget between the realign and restart lists, counting every chrome line', () => {
+    // 15 rows - 7 modal - 1 header - 4 run error - 1 restart header - 3 restart error = 0 → floor of 2.
+    expect(realignRunBudget(15, { error: 'x', restartError: 'y' }, true)).toEqual({ realignRows: 1, restartRows: 1 });
+    // 40 - 7 - 1 - 1 = 31 → 16 + 15.
+    expect(realignRunBudget(40, { error: null, restartError: null }, true)).toEqual({ realignRows: 16, restartRows: 15 });
+    expect(realignRunBudget(40, { error: null, restartError: null }, false)).toEqual({ realignRows: 32, restartRows: 0 });
   });
 });
 
