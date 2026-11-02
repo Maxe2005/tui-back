@@ -179,7 +179,8 @@ export function classifySwitchRepos(
 // anything is stashed, every failure before the checkout restores that stash.
 //
 // The outgoing lock peek is non-blocking and non-mutating: `--force` past a held lock never
-// aborts anything; it only marks the outgoing EDT `interrupted`.
+// aborts anything; it only marks the outgoing EDT `interrupted`. When the peek found it free,
+// that lock is then held across the per-repo work (an update or realign is rejected meanwhile).
 export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Result<SwitchActiveEdtData>> {
   const { edtRegistry, registry, manifest, manifestCarry, git, lock, state, edtRegistryResourceKey, force = false } = params;
 
@@ -261,20 +262,33 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
     target,
   };
   const results: SwitchEdtRepoResult[] = [];
-  for (const repo of classified) {
-    const resolution = preflight.data.get(repo.repoPath);
-    const { targetMember } = repo;
-    // A non-member's destination comes from its manifest as it sits on disk now, so it is read
-    // before the carry clears a dirty one.
-    const nonMemberManifest = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
-    const serviceName = targetMember?.service ?? (nonMemberManifest?.ok ? nonMemberManifest.data.service : repo.repoPath);
-    results.push(
-      await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, serviceName, () =>
-        targetMember !== undefined
-          ? switchMemberRepo(context, repo, targetMember, resolution)
-          : switchNonMemberRepo(context, repo, resolution, nonMemberManifest as Result<Manifest>),
-      ),
-    );
+  const switchRepos = async (): Promise<Result<void>> => {
+    for (const repo of classified) {
+      const resolution = preflight.data.get(repo.repoPath);
+      const { targetMember } = repo;
+      // A non-member's destination comes from its manifest as it sits on disk now, so it is read
+      // before the carry clears a dirty one.
+      const nonMemberManifest = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
+      const serviceName = targetMember?.service ?? (nonMemberManifest?.ok ? nonMemberManifest.data.service : repo.repoPath);
+      results.push(
+        await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, serviceName, () =>
+          targetMember !== undefined
+            ? switchMemberRepo(context, repo, targetMember, resolution)
+            : switchNonMemberRepo(context, repo, resolution, nonMemberManifest as Result<Manifest>),
+        ),
+      );
+    }
+    return ok(undefined);
+  };
+  // The outgoing EDT's action lock is held across the per-repo work when the peek found it
+  // free, so an update or realign cannot start mid-switch. Under --force past a held lock it
+  // is not taken: the holder keeps it.
+  const switchedRepos =
+    outgoing !== undefined && outgoingFinalStatus === 'inactive'
+      ? await withActionLock(lock, `edt:${outgoing.ulid}`, switchRepos)
+      : await switchRepos();
+  if (!switchedRepos.ok) {
+    return switchedRepos;
   }
 
   // A target member whose repoPath has dropped out of the managed-repo registry is surfaced as
