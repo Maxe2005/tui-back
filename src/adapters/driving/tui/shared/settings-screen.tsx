@@ -36,6 +36,8 @@ import {
   MAX_UPDATE_CONCURRENCY,
   MIN_UPDATE_CONCURRENCY,
   cycleSwitchRestartMode,
+  REALIGN_SCOPES,
+  type RealignScope,
   type Settings,
   type SwitchRestartMode,
   type UpdateMergeSourceDefault,
@@ -391,7 +393,13 @@ export function parseBranchDropdownMaxRowsDigit(input: string): number | null {
   return clampBranchDropdownMaxRows(Number(input));
 }
 
-export type SettingsGroupId = 'hint-visibility' | 'action-types' | 'branch-dropdown-rows' | 'switch-restart';
+export type SettingsGroupId =
+  | 'hint-visibility'
+  | 'action-types'
+  | 'branch-dropdown-rows'
+  | 'switch-restart'
+  | 'realign-scope'
+  | 'realign-restart';
 
 export type SettingsGroup = { id: SettingsGroupId; label: string };
 
@@ -400,12 +408,22 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'action-types', label: 'Recent action types' },
   { id: 'branch-dropdown-rows', label: 'Branch dropdown rows' },
   { id: 'switch-restart', label: 'Post-switch restart' },
+  { id: 'realign-scope', label: 'Realign default scope' },
+  { id: 'realign-restart', label: 'Post-realign restart' },
 ];
 
 const SWITCH_RESTART_LABELS: Record<SwitchRestartMode, string> = { none: 'None', simple: 'Simple restart', clean: 'Clean restart' };
 
 // Left/Right/Space cycle none → simple → clean (Left goes back).
 export { cycleSwitchRestartMode };
+
+const REALIGN_SCOPE_LABELS: Record<RealignScope, string> = { none: 'None', edt: 'EDT services', all: 'All' };
+
+// none → edt → all → none (direction -1 goes back), same convention as cycleSwitchRestartMode.
+export function cycleRealignScope(current: RealignScope, direction: 1 | -1): RealignScope {
+  const index = REALIGN_SCOPES.indexOf(current);
+  return REALIGN_SCOPES[(index + direction + REALIGN_SCOPES.length) % REALIGN_SCOPES.length] ?? 'edt';
+}
 
 // The Logs tab's group list: one field (or a small related cluster) per group, so no screen
 // renders more than a handful of lines. ModalDialog has no height cap, and a flat list of every
@@ -453,6 +471,8 @@ const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | Pale
   'action-types': 'settings-toggle',
   'branch-dropdown-rows': 'settings-adjust',
   'switch-restart': 'settings-toggle',
+  'realign-scope': 'settings-toggle',
+  'realign-restart': 'settings-toggle',
   'buffer-size': 'settings-adjust',
   'start-with-history': 'settings-toggle',
   'filter-history-size': 'settings-adjust',
@@ -948,6 +968,20 @@ export function SettingsScreen({
       return;
     }
 
+    if (edtsGroup === 'realign-scope' || edtsGroup === 'realign-restart') {
+      const direction = key.leftArrow ? -1 : key.rightArrow || input === ' ' ? 1 : null;
+      if (direction === null) {
+        return;
+      }
+      void updateSettings({
+        realign:
+          edtsGroup === 'realign-scope'
+            ? { defaultScope: cycleRealignScope(settings.realign.defaultScope, direction) }
+            : { restartMode: cycleSwitchRestartMode(settings.realign.restartMode, direction) },
+      });
+      return;
+    }
+
     // edtsGroup === 'action-types'
     const moved = nextCursorForKey(key, actionTypeCursor, HIDEABLE_ACTION_TYPES.length);
     if (moved !== null) {
@@ -1302,6 +1336,24 @@ export function SettingsScreen({
               Restart services after an EDT switch: <Text color={colors.accent}>{SWITCH_RESTART_LABELS[settings.switch.restartMode]}</Text>
             </Text>
             <DimAnnotation text="Default for the switch dialog and `edt switch --restart`. Clean restart falls back to a simple restart where no recipe exists." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'realign-scope' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Services pre-selected for a realign: <Text color={colors.accent}>{REALIGN_SCOPE_LABELS[settings.realign.defaultScope]}</Text>
+            </Text>
+            <DimAnnotation text="Initial preset of the realign dialog and `realign --scope` default. Only drifted services are ever listed." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'realign-restart' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Restart services after a realign: <Text color={colors.accent}>{SWITCH_RESTART_LABELS[settings.realign.restartMode]}</Text>
+            </Text>
+            <DimAnnotation text="Default for the realign dialog and `realign --restart`. Clean restart falls back to a simple restart where no recipe exists." />
           </Box>
         ) : null}
 

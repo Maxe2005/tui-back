@@ -14,14 +14,13 @@ import type { LockPort } from '../ports/lock.js';
 import type { ManifestCarryPort } from '../ports/manifest-carry.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
+import { REALIGN_SCOPES, type RealignScope } from '../ports/settings.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result } from '../result.js';
 import { edtUpdateLockKey, GROUP_UPDATE_LOCK_KEY } from '../scripts/group-update.js';
 import type { RestartMode, ServiceActions } from '../service-actions/index.js';
 
-export type RealignScope = 'none' | 'edt' | 'all';
-
-export const REALIGN_SCOPES: readonly RealignScope[] = ['none', 'edt', 'all'];
+export { REALIGN_SCOPES, type RealignScope };
 
 export type RealignOutcome = 'realigned' | 'unchanged' | 'skipped' | 'failed';
 
