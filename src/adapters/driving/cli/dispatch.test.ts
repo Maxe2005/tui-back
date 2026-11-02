@@ -1144,6 +1144,37 @@ describe('subcommand registry guards', () => {
       }
     });
 
+    it('reads no settings when --scope and --restart none are both explicit', async () => {
+      const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const load = vi.fn(async () => err('settings-read-error', 'settings.yaml unreadable'));
+        const { realign } = realignSetup({ settings: { load, save: async () => ok(undefined) } });
+        expect(await realign.run(['--scope', 'edt', '--restart', 'none'])).toMatchObject({ ok: true });
+        expect(load).not.toHaveBeenCalled();
+        expect(stderr).not.toHaveBeenCalled();
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    it('prints a settings warning on stderr and still applies the loaded defaults', async () => {
+      const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const { realign, checkout } = realignSetup({
+          settings: {
+            load: async () => ok({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'all', restartMode: 'none' } }, warning: 'settings.yaml: realign.defaultScope invalid' }),
+            save: async () => ok(undefined),
+          },
+        });
+        expect(await realign.run([])).toMatchObject({ ok: true });
+        expect(checkout).toHaveBeenCalledTimes(2);
+        expect(stderr).toHaveBeenCalledWith('tui-back: settings.yaml: realign.defaultScope invalid');
+        expect(stderr).toHaveBeenCalledTimes(1);
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
     it('rejects a restart request up front when the Docker port is not wired', async () => {
       const { realign, acquire } = realignSetup({ withDocker: false });
       expect(await realign.run(['--restart', 'clean'])).toMatchObject({ ok: false, error: { code: 'restart-unavailable' } });
