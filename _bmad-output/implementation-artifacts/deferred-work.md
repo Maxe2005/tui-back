@@ -826,3 +826,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-8-3-dashboard-active-edt-services-table-service-actions.md`
   summary: `restartAvailability` is evaluated twice per `ServiceActions.list` (simple and clean), loading the manifest and peeking locks twice.
   evidence: Both restart actions share one availability; the list runs on every Dashboard focus move, so the manifest is read twice per move.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-8-6-branch-drift-detection-snapshot-attention.md`
+  summary: Bound the concurrency of the Dashboard snapshot probes (members, others and registry summary each fan out through an unbounded Promise.all).
+  evidence: Story 8.6 adds one exists/manifest/git rev-parse probe per non-member registered repo on every refresh, on top of the existing unbounded member and registry-summary probes; a large registry spawns that many git processes at once.

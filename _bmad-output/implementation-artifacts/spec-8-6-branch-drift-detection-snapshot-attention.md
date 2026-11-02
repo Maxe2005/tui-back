@@ -2,7 +2,7 @@
 title: 'Story 8.6: Branch Drift Detection — Snapshot & Attention'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '46a8947fc5fc84d50d26ea1de8d3f8fc9c498af7'
 review_loop_iteration: 0
 context:
@@ -53,12 +53,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/adapters/driven/git/index.ts` (+ test) -- `git-detached-head` code for detached HEAD -- lets drift tell detached from probe failure
-- [ ] `src/core/dashboard/snapshot.ts` (+ test) -- drift fields, `others`, member/other/unknown/detached/no-active cases from the matrix -- the drift model
-- [ ] `src/adapters/driving/cli/dispatch.test.ts` -- assert `others` and drift in the `dashboard` envelope -- CLI contract (AD-3)
-- [ ] `dashboard.logic.ts` (+ test) -- drift items, ordering, text, detached suppressing "unknown (offline)", skipping cycle -- Attention rules
-- [ ] `dashboard-zone.tsx`, `dashboard-body.tsx`, store slice + their tests/fixtures -- wire `others`, count in header -- rendering
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 8-2…8-5 to `done` (stale), 8-6 to `in-progress` -- tracking
+- [x] `src/adapters/driven/git/index.ts` (+ test) -- `git-detached-head` code for detached HEAD -- lets drift tell detached from probe failure
+- [x] `src/core/dashboard/snapshot.ts` (+ test) -- drift fields, `others`, member/other/unknown/detached/no-active cases from the matrix -- the drift model
+- [x] `src/adapters/driving/cli/dispatch.test.ts` -- assert `others` and drift in the `dashboard` envelope -- CLI contract (AD-3)
+- [x] `dashboard.logic.ts` (+ test) -- drift items, ordering, text, detached suppressing "unknown (offline)", skipping cycle -- Attention rules
+- [x] `dashboard-zone.tsx`, `dashboard-body.tsx`, store slice + their tests/fixtures -- wire `others`, count in header -- rendering
+- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 8-2…8-5 to `done` (stale), 8-6 to `in-progress` -- tracking
 
 **Acceptance Criteria:**
 - Given drift lines and a protected-branch line, when Attention renders, then order is protected, drift, then the existing items, and the header count includes drift lines.
@@ -77,3 +77,55 @@ Drift rank (right after protected) satisfies "after protected, before behind sha
 - `npm test` -- expected: all green
 - `npm run typecheck` -- expected: no errors
 - `npm run depcheck` -- expected: no violations
+
+## Suggested Review Order
+
+**Drift model (core)**
+
+- Entry point: the closed drift state and how a branch read maps onto it.
+  [`snapshot.ts:198`](../../src/core/dashboard/snapshot.ts#L198)
+
+- Members reuse the divergence branch read — no extra git call.
+  [`snapshot.ts:250`](../../src/core/dashboard/snapshot.ts#L250)
+
+- Others: registered, managed, non-member repos; a throwing probe drops only its row.
+  [`snapshot.ts:170`](../../src/core/dashboard/snapshot.ts#L170)
+
+- Member paths resolved once, compared against resolved registry paths.
+  [`snapshot.ts:104`](../../src/core/dashboard/snapshot.ts#L104)
+
+- New additive shapes: `DriftState`, `DashboardOtherService`.
+  [`snapshot.ts:34`](../../src/core/dashboard/snapshot.ts#L34)
+
+**Detached HEAD contract**
+
+- Port-level constant so core and adapter cannot diverge.
+  [`git.ts:9`](../../src/core/ports/git.ts#L9)
+
+- Adapter returns it for the literal `HEAD`, distinct from probe failures.
+  [`index.ts:223`](../../src/adapters/driven/git/index.ts#L223)
+
+**Attention block**
+
+- Drift ranked right after protected branch; detached suppresses the offline line.
+  [`dashboard.logic.ts:152`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L152)
+
+- Line wording: current vs expected branch, member or other.
+  [`dashboard.logic.ts:145`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L145)
+
+- Cycling skips lines without a services-table row.
+  [`dashboard.logic.ts:205`](../../src/adapters/driving/tui/zones/dashboard/dashboard.logic.ts#L205)
+
+- Zone wiring of `others` and the skipping cycle.
+  [`dashboard-zone.tsx:81`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L81)
+
+**Tests**
+
+- Drift matrix: member, detached, unknown, others, throwing probes.
+  [`snapshot.test.ts:203`](../../src/core/dashboard/snapshot.test.ts#L203)
+
+- Cycling proven at zone level with a focusable line after an other line.
+  [`dashboard-zone.interaction.test.tsx:92`](../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.interaction.test.tsx#L92)
+
+- CLI envelope carries `others` and drift.
+  [`dispatch.test.ts:316`](../../src/adapters/driving/cli/dispatch.test.ts#L316)
