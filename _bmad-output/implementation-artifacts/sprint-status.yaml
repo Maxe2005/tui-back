@@ -33,7 +33,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-10-15
+last_updated: 2026-11-02
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -90,12 +90,12 @@ development_status:
   epic-8: in-progress
   # Dashboard rewrite (2026-10-15): active-EDT services table + shared service actions + Attention block.
   8-1-dashboard-snapshot-use-case-and-cli: done
-  8-2-dashboard-shell-states-fixed-banner-refresh: review
-  8-3-dashboard-active-edt-services-table-service-actions: review
-  8-4-dashboard-attention-block-registry-health: review
-  8-5-dashboard-edt-actions-visual-finish: review
+  8-2-dashboard-shell-states-fixed-banner-refresh: done
+  8-3-dashboard-active-edt-services-table-service-actions: done
+  8-4-dashboard-attention-block-registry-health: done
+  8-5-dashboard-edt-actions-visual-finish: done
   # 8-6/8-7/8-8 (branch drift detection & realignment) added 2026-10-15: sprint-change-proposal-2026-10-15-2.md. Order: 8-6 → 8-7 (needs 2-44 merged) → 8-8.
-  8-6-branch-drift-detection-snapshot-attention: backlog
+  8-6-branch-drift-detection-snapshot-attention: review
   8-7-realign-use-case-and-cli-selective-branch-realignment: backlog
   8-8-realign-dialog-shortcut-settings-defaults: backlog
   epic-8-retrospective: optional

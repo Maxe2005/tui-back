@@ -5,6 +5,9 @@
 // also rejects a branch registered as a *different* EDT's own branch for that repo.
 import type { Result } from '../result.js';
 
+// currentBranch's error code for a detached HEAD, distinct from a failed probe.
+export const GIT_DETACHED_HEAD = 'git-detached-head';
+
 export interface GitPort {
   // Rejects (before any git write) a branchName that is protected for this repo — the
   // protected set (the manifest's protectedBranches ∪ its sharedBranch) is resolved by the

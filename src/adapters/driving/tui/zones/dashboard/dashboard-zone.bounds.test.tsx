@@ -21,6 +21,8 @@ function row(i: number, overrides: Record<string, unknown> = {}) {
     workingTree: { ok: true as const, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
     protectedBranch: i % 2 === 0,
     usedByEdts: [`other-${LONG}`],
+    expectedBranch: `expected/${LONG}`,
+    drift: 'drifted' as const,
     ...overrides,
   };
 }
@@ -32,7 +34,14 @@ type State = 'anomalies' | 'all-clear' | 'no-edt';
 
 function storeFor(state: State): AppStore {
   const store = createAppStore();
-  const calm = (i: number) => row(i, { protectedBranch: false, usedByEdts: [], branch: 'feat/x', divergence: { status: 'current', ahead: 0, behind: 0 }, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } } });
+  const calm = (i: number) => row(i, { protectedBranch: false, usedByEdts: [], branch: 'feat/x', expectedBranch: 'feat/x', drift: 'aligned', divergence: { status: 'current', ahead: 0, behind: 0 }, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } } });
+  const others = Array.from({ length: 10 }, (_, i) => ({
+    service: `other-${i}-${LONG}`,
+    path: `/r/other-${i}`,
+    branch: i % 2 === 0 ? null : `hotfix/${LONG}`,
+    expectedBranch: `develop-${LONG}`,
+    drift: 'drifted' as const,
+  }));
   const services = Array.from({ length: 30 }, (_, i) => (state === 'anomalies' ? row(i) : calm(i)));
   store.setState({
     registryEmpty: false,
@@ -51,8 +60,8 @@ function storeFor(state: State): AppStore {
     dashboardUpdatedAt: Date.now(),
     dashboardServices:
       state === 'no-edt'
-        ? { status: 'no-active-edt', edt: null, services: [] }
-        : { status: 'active', edt: { ulid: 'e', topic: LONG, serviceCount: services.length }, services },
+        ? { status: 'no-active-edt', edt: null, services: [], others: [] }
+        : { status: 'active', edt: { ulid: 'e', topic: LONG, serviceCount: services.length }, services, others: state === 'anomalies' ? others : [] },
     dashboardActionState:
       state === 'all-clear' ? { '/r/service-0': { running: { text: `Restarting ${LONG}` }, result: null } } : {},
   } as never);

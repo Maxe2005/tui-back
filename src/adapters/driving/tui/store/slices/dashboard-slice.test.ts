@@ -42,6 +42,22 @@ describe('dashboard slice', () => {
     expect(state.dashboardUpdatedAt).not.toBeNull();
   });
 
+  it('carries the drift of the members and of the other managed services', async () => {
+    const store = createAppStore(
+      fakeDeps({
+        registry: { list: async () => ok(['/r/a', '/r/o']), exists: async () => ok(true) },
+        edtRegistry: {
+          list: async () => ok([{ ulid: 'e1', topic: 't', createdAt: '', status: 'active', members: [{ service: 'a', repoPath: '/r/a', branch: 'feat/y' }] }]),
+        },
+        state: { readActiveEdt: async () => ok('e1') },
+      }),
+    );
+    await store.getState().loadDashboard();
+    const services = store.getState().dashboardServices;
+    expect(services?.services[0]).toMatchObject({ branch: 'feat/x', expectedBranch: 'feat/y', drift: 'drifted' });
+    expect(services?.others).toEqual([{ service: 'a', path: '/r/o', branch: 'feat/x', expectedBranch: 'development', drift: 'drifted' }]);
+  });
+
   it('fails one section without touching the other', async () => {
     const store = createAppStore(fakeDeps({ edtRegistry: { list: async () => err('edt-error', 'x') } }));
     await store.getState().loadDashboard();

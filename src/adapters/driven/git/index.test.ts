@@ -432,7 +432,7 @@ describe('currentBranch', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('git-current-branch-error');
+      expect(result.error.code).toBe('git-detached-head');
       expect(result.error.message).toContain('detached');
     }
   });

@@ -176,6 +176,8 @@ describe('DashboardZone snapshot sections', () => {
         workingTree: { ok: true, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
         protectedBranch: false,
         usedByEdts: [],
+        expectedBranch: 'feat/x',
+        drift: 'aligned',
       },
       {
         service: 'svc-b',
@@ -187,8 +189,11 @@ describe('DashboardZone snapshot sections', () => {
         workingTree: { ok: false, error: { code: 'git-error', message: 'boom' } },
         protectedBranch: false,
         usedByEdts: [],
+        expectedBranch: 'feat/x',
+        drift: 'aligned',
       },
     ],
+    others: [],
   };
   const REGISTRY = { repoCount: 3, invalidManifests: 1, unreachable: 0, listingIssues: 0 };
 
@@ -270,6 +275,33 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('[:registry]');
   });
 
+  it('lists drift lines after the protected-branch line and before the other items, counted in the header', async () => {
+    const [first, second] = ACTIVE.services;
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: {
+        ...ACTIVE,
+        services: [
+          { ...first!, branch: 'main', drift: 'drifted', workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } } },
+          { ...second!, branch: 'development', protectedBranch: true, drift: 'drifted' },
+        ],
+        others: [{ service: 'svc-o', path: '/r/o', branch: null, expectedBranch: 'develop', drift: 'drifted' }],
+      },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Attention (4)');
+    const order = [
+      'svc-b · on protected branch development',
+      'svc-a · on main, expected feat/x (EDT member)',
+      'svc-b · on development, expected feat/x (EDT member)',
+      'svc-o · on detached HEAD, expected develop (other service)',
+    ].map((line) => output.indexOf(line));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
   it('shows single success lines when nothing needs attention and the registry is clear', async () => {
     const clean = { ...ACTIVE, services: [{ ...ACTIVE.services[0]!, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } } }] };
     const store = seed({
@@ -287,7 +319,7 @@ describe('DashboardZone snapshot sections', () => {
   it('prompts to create or choose an EDT when none is active, keeping the registry section', async () => {
     const store = seed({
       dashboardServicesStatus: 'ready',
-      dashboardServices: { status: 'no-active-edt', edt: null, services: [] },
+      dashboardServices: { status: 'no-active-edt', edt: null, services: [], others: [] },
       dashboardRegistryStatus: 'ready',
       dashboardRegistry: REGISTRY,
     });
