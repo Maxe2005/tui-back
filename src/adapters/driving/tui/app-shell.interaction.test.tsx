@@ -1750,6 +1750,49 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
+  it('Right/Left/Space on the EDTs tab realign groups cycle realign.defaultScope and realign.restartMode live and persist', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs (group list)
+      for (let i = 0; i < 4; i += 1) {
+        await press(instance, stdin, KEYS.down); // -> "Realign default scope"
+      }
+      await press(instance, stdin, KEYS.enter);
+
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().settings.realign.defaultScope).toBe('all');
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ realign: { defaultScope: 'all', restartMode: 'none' } }));
+      await press(instance, stdin, KEYS.left);
+      await press(instance, stdin, KEYS.left);
+      expect(store.getState().settings.realign.defaultScope).toBe('none');
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.realign.defaultScope).toBe('edt');
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ realign: { defaultScope: 'edt', restartMode: 'none' } }));
+
+      await pressEscape(instance, stdin); // back to the group list, cursor on "Realign default scope"
+      await press(instance, stdin, KEYS.down); // -> "Post-realign restart"
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().settings.realign.restartMode).toBe('simple');
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.realign.restartMode).toBe('clean');
+      await press(instance, stdin, KEYS.left);
+      expect(store.getState().settings.realign.restartMode).toBe('simple');
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ realign: { defaultScope: 'edt', restartMode: 'simple' } }));
+      expect(store.getState().settings.switch.restartMode).toBe('none');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   // End-to-end coverage of the filter-history fields and the clear actions, real-keypress
   // driven (mirrors the two tests just above).
   it('Left/Right on the "Filter history size"/"Filter history grid" groups adjusts them live and persists', async () => {
@@ -2817,6 +2860,36 @@ describe('AppShell realign overlay', () => {
 
       await pressEscape(instance, stdin);
       expect(store.getState().realignScreenOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('while a realign is running, q does not quit', async () => {
+    const store = createAppStore();
+    store.setState({
+      realignScreenOpen: true,
+      realignCandidates: { status: 'ready', rows: [], error: null },
+      realignRun: { status: 'running', restartMode: 'none', rows: [{ service: 'svc-a', path: '/repo/a', status: 'realigning' }], restartRows: [], restartError: null, error: null },
+    });
+    const stdout = new FakeTtyStdout();
+    const stdin = fakeInteractiveTtyStdin();
+    const onQuit = vi.fn();
+    const instance = render(createElement(AppShell, { useStore: store, onQuit }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'q');
+      await instance.waitUntilRenderFlush();
+      expect(onQuit).not.toHaveBeenCalled();
+      expect(store.getState().quitRequested).toBe(false);
+      expect(store.getState().realignScreenOpen).toBe(true);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

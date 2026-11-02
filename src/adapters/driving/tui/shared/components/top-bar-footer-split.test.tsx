@@ -129,6 +129,16 @@ describe('footerHintsFor', () => {
     const full = await renderToString(<Footer zone="dashboard" useStore={store} />);
     expect(full).toContain('[Ctrl+O]');
     expect(full).toContain('[E] enter EDT');
+    expect(full).not.toContain('[A] realign');
+    const edt = { ulid: 'e', topic: 't', serviceCount: 1 };
+    store.setState({
+      dashboardServices: { status: 'active', edt, services: [{ service: 'a', drift: 'drifted' }], others: [] },
+    } as never);
+    expect(await renderToString(<Footer zone="dashboard" useStore={store} />, { columns: 200, rows: 10 })).toContain('[A] realign');
+    store.setState({
+      dashboardServices: { status: 'active', edt, services: [{ service: 'a', drift: 'aligned' }], others: [{ service: 'o', drift: 'drifted' }] },
+    } as never);
+    expect(await renderToString(<Footer zone="dashboard" useStore={store} />, { columns: 200, rows: 10 })).toContain('[A] realign');
     store.setState({ dashboardServicesStatus: 'error' } as never);
     expect(await renderToString(<Footer zone="dashboard" useStore={store} />)).not.toContain('[Ctrl+O]');
   });

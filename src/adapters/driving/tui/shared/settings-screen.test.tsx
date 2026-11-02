@@ -550,16 +550,14 @@ describe('SettingsScreen', () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'all' as const, restartMode: 'none' as const } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="realign-scope" />);
-    expect(output).toContain('pre-selected for a realign');
-    expect(output).toContain('All');
+    expect(output).toContain('Services pre-selected for a realign: All');
   });
 
   it('renders the live post-realign restart mode', async () => {
     const store = createAppStore();
     store.setState({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'edt' as const, restartMode: 'simple' as const } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="realign-restart" />);
-    expect(output).toContain('after a realign');
-    expect(output).toContain('Simple restart');
+    expect(output).toContain('Restart services after a realign: Simple restart');
   });
 
   it('opens the EDTs tab on its group list, not a checkbox list', async () => {
