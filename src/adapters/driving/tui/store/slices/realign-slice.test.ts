@@ -17,7 +17,7 @@ import { applyRealignRow, matchingPreset, presetSelection } from './realign-slic
 // a, b: drifted members; c: drifted other (no container); d: other whose branch cannot be read.
 const BRANCHES: Record<string, string> = { '/repo/a': 'development', '/repo/b': 'development', '/repo/c': 'feat/x' };
 
-function fakeDeps(overrides: { checkout?: GitPort['checkout']; lock?: LockPort; git?: Partial<GitPort> } = {}) {
+function fakeDeps(overrides: { checkout?: GitPort['checkout']; lock?: LockPort; git?: Partial<GitPort>; withHealthProbe?: boolean } = {}) {
   const checkout = vi.fn(overrides.checkout ?? (async () => ok(undefined)));
   const registry = {
     list: vi.fn(async () => ok(['/repo/a', '/repo/b', '/repo/c', '/repo/d'])),
@@ -83,6 +83,7 @@ function fakeDeps(overrides: { checkout?: GitPort['checkout']; lock?: LockPort; 
     container: { restart: containerRestart },
     restart: { run: vi.fn(async () => ok({ output: '' })) },
     editor: { launch: vi.fn(() => ok(undefined)) },
+    ...(overrides.withHealthProbe === false ? {} : { healthProbe: { probe: vi.fn(async () => ok({ healthy: true, status: 200 })) } }),
   };
   return { deps, checkout, containerRestart };
 }
@@ -186,6 +187,50 @@ describe('realign slice', () => {
     expect(store.getState().realignScreenOpen).toBe(false);
   });
 
+  it('keeps the rows finished before a run error', async () => {
+    const { deps } = fakeDeps();
+    const store = createAppStore(deps);
+    await openLoaded(store);
+    // Throws inside the locked run once every row has finished (the action-log write).
+    Object.defineProperty(deps.edtRegistry, 'logAction', {
+      get() {
+        throw new Error('action log unreadable');
+      },
+    });
+    await store.getState().runRealign();
+    const run = store.getState().realignRun;
+    expect(run).toMatchObject({ status: 'error', error: 'action log unreadable' });
+    expect(run?.rows.map((row) => [row.service, row.status])).toEqual([
+      ['svc-a', 'realigned'],
+      ['svc-b', 'realigned'],
+    ]);
+  });
+
+  it.each([
+    ['the health-probe port is not wired', { withHealthProbe: false }, {}, 'health-probe'],
+    ['a standalone service restart is in flight', {}, { serviceRestartInFlight: { '/repo/z': 'restart' as const } }, 'already in progress'],
+    ['a post-switch restart is running', {}, { switchRestart: { topic: 't', mode: 'simple' as const, status: 'running' as const, rows: [], report: null, error: null } }, 'already in progress'],
+  ])('refuses a restart run when %s, touching nothing', async (_name, depsOverrides, state, message) => {
+    const { deps, checkout } = fakeDeps(depsOverrides);
+    const store = createAppStore(deps);
+    await openLoaded(store);
+    store.getState().cycleRealignRestartMode(1);
+    store.setState(state);
+    await store.getState().runRealign();
+    expect(store.getState().realignRun).toMatchObject({ status: 'error', rows: [] });
+    expect(store.getState().realignRun?.error).toContain(message);
+    expect(store.getState().realignRun?.error).not.toContain('editor');
+    expect(checkout).not.toHaveBeenCalled();
+  });
+
+  it('reads the preset scope at open, not when the candidates land', async () => {
+    const store = createAppStore(fakeDeps().deps);
+    store.getState().openRealignScreen();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'all', restartMode: 'clean' } } });
+    await vi.waitFor(() => expect(store.getState().realignCandidates?.status).toBe('ready'));
+    expect(store.getState().realignDraft).toMatchObject({ selected: ['/repo/a', '/repo/b'], restartMode: 'none' });
+  });
+
   it('does nothing on an empty selection', async () => {
     const { deps, checkout } = fakeDeps();
     const store = createAppStore(deps);
@@ -223,6 +268,15 @@ describe('realign selection helpers', () => {
     expect(matchingPreset(rows, ['/a', '/b'])).toBe('all');
     expect(matchingPreset(rows, [])).toBe('none');
     expect(matchingPreset(rows, ['/b'])).toBeNull();
+  });
+
+  it('drops a row matching no open row instead of relabelling another service', () => {
+    const live = [
+      { service: 'a', path: '/a', status: 'realigned' as const },
+      { service: 'b', path: '/b', status: 'realigning' as const },
+    ];
+    expect(applyRealignRow(live, { service: 'a', outcome: 'failed' })).toEqual(live);
+    expect(applyRealignRow(live, { service: 'zz', outcome: 'skipped' })).toEqual(live);
   });
 
   it('finalises a row and promotes the next pending one', () => {

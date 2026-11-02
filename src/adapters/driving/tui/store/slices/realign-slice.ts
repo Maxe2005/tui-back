@@ -78,13 +78,11 @@ export function matchingPreset(rows: readonly DriftCandidate[], selected: readon
 }
 
 // Finalises the first open row of `row.service` and promotes the next pending row: the use-case
-// reports each row once done and has no start event.
+// reports each row once done and has no start event. A row matching no open row (already
+// finalised, or not listed) is dropped rather than pinned on another service.
 export function applyRealignRow(rows: readonly RealignLiveRow[], row: RealignRow): RealignLiveRow[] {
   const open = (candidate: RealignLiveRow) => candidate.status === 'pending' || candidate.status === 'realigning';
-  let index = rows.findIndex((candidate) => open(candidate) && candidate.service === row.service);
-  if (index === -1) {
-    index = rows.findIndex(open);
-  }
+  const index = rows.findIndex((candidate) => open(candidate) && candidate.service === row.service);
   if (index === -1) {
     return [...rows];
   }
@@ -105,13 +103,15 @@ const EMPTY_DRAFT: RealignDraft = { cursor: 0, selected: [], restartMode: 'none'
 export function createRealignSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], RealignSlice> {
   // Bumped on every open so a candidates load from a superseded session never lands late.
   let session = 0;
+  // The restart phase needs to restart and verify; like the CLI, it is refused without the
+  // Docker and health-probe ports. The editor is never used by restart/verify.
   const serviceActions: ServiceActions | null =
-    deps?.container && deps.restart && deps.editor
+    deps?.container && deps.restart && deps.docker && deps.healthProbe
       ? createServiceActions({
           manifest: deps.manifest,
           container: deps.container,
           restart: deps.restart,
-          editor: deps.editor,
+          editor: deps.editor ?? { launch: () => ({ ok: false, error: { code: 'editor-launch-failed', message: 'No editor is wired' } }) },
           lock: deps.lock,
           docker: deps.docker,
           healthProbe: deps.healthProbe,
@@ -119,7 +119,7 @@ export function createRealignSlice(deps?: AppStoreDeps): StateCreator<AppState, 
       : null;
 
   return (set, get) => {
-    const loadCandidates = async (current: number) => {
+    const loadCandidates = async (current: number, preset: RealignScope) => {
       if (!deps) {
         set({ realignCandidates: { status: 'error', rows: [], error: NO_DEPS_ERROR } });
         return;
@@ -142,8 +142,6 @@ export function createRealignSlice(deps?: AppStoreDeps): StateCreator<AppState, 
         return;
       }
       const rows = [...listed.data.members, ...listed.data.others].filter((candidate) => candidate.drift === 'drifted');
-      // Read when the action starts, so a settings change applies to the next open.
-      const preset = get().settings.realign.defaultScope;
       set((state) => ({
         realignCandidates: { status: 'ready', rows, error: null },
         realignDraft: { ...state.realignDraft, cursor: 0, selected: presetSelection(rows, preset) },
@@ -160,13 +158,16 @@ export function createRealignSlice(deps?: AppStoreDeps): StateCreator<AppState, 
           return;
         }
         session += 1;
+        // Both defaults are read together when the dialog opens, so a settings change applies
+        // to the next open; the preset is applied once the candidates arrive.
+        const { defaultScope, restartMode } = get().settings.realign;
         set({
           realignScreenOpen: true,
           realignCandidates: { status: 'loading', rows: [], error: null },
-          realignDraft: { ...EMPTY_DRAFT, restartMode: get().settings.realign.restartMode },
+          realignDraft: { ...EMPTY_DRAFT, restartMode },
           realignRun: null,
         });
-        void loadCandidates(session);
+        void loadCandidates(session, defaultScope);
       },
       closeRealignScreen: () => {
         // A running realign cannot be abandoned mid-way — the overlay stays until it settles.
@@ -227,7 +228,7 @@ export function createRealignSlice(deps?: AppStoreDeps): StateCreator<AppState, 
         }
         if (restartMode !== 'none') {
           if (serviceActions === null) {
-            refuse('Post-realign restart needs the container, restart and editor ports, which are not wired — nothing was realigned.');
+            refuse('Post-realign restart needs the Docker and health-probe ports, which are not wired — nothing was realigned.');
             return;
           }
           if (get().switchRestart?.status === 'running' || Object.keys(get().serviceRestartInFlight).length > 0) {
@@ -306,8 +307,9 @@ export function createRealignSlice(deps?: AppStoreDeps): StateCreator<AppState, 
             },
           });
         } else {
-          // Nothing was touched (lock held, active EDT changed, unreadable registry): only rows
-          // that did finish stay listed.
+          // The run stopped before or between rows (lock held, active EDT changed, unreadable
+          // registry, a throw): rows that already finished stay listed so the developer sees what
+          // was realigned before the error; the rest are dropped.
           const finished = (get().realignRun?.rows ?? []).filter((row) => row.status !== 'pending' && row.status !== 'realigning');
           set({ realignRun: { status: 'error', restartMode, rows: finished, restartRows: [...liveRestart.values()], restartError: null, error: outcome.error.message } });
         }
