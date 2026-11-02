@@ -323,7 +323,7 @@ describe('subcommand registry guards', () => {
     const result = await dashboard.run([]);
     expect(result).toMatchObject({
       ok: true,
-      data: { status: 'no-active-edt', edt: null, services: [], registry: { repoCount: 0 } },
+      data: { status: 'no-active-edt', edt: null, services: [], others: [], registry: { repoCount: 0 } },
     });
   });
 
@@ -338,7 +338,19 @@ describe('subcommand registry guards', () => {
     const subcommands = buildTestSubcommands({
       edtRegistry,
       state: { ...fakeState(), readActiveEdt: async () => ok('e1') },
-      manifest: { load: async () => ok({ service: 'svc-a', container: 'ctr-a', sharedBranch: 'development', modules: {} }) },
+      registry: {
+        list: async () => ok(['/r/a', '/r/o']),
+        add: async () => ok(undefined),
+        exists: async () => ok(true),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      },
+      manifest: {
+        load: async (path: string) =>
+          ok({ service: path === '/r/o' ? 'svc-o' : 'svc-a', container: 'ctr-a', sharedBranch: 'development', modules: {} }),
+      },
+      git: fakeGitPort({ currentBranch: async (path: string) => ok(path === '/r/o' ? 'hotfix' : 'main') }),
       docker: { getContainerHealth: async () => ok('restarting' as const) } as unknown as DockerPort,
     });
     const dashboard = subcommands.find((subcommand) => subcommand.name === 'dashboard');
@@ -347,7 +359,12 @@ describe('subcommand registry guards', () => {
     const result = await dashboard.run([]);
     expect(result).toMatchObject({
       ok: true,
-      data: { status: 'active', edt: { topic: 'topic-a', serviceCount: 1 }, services: [{ service: 'svc-a', container: { ok: true, value: 'restarting' } }] },
+      data: {
+        status: 'active',
+        edt: { topic: 'topic-a', serviceCount: 1 },
+        services: [{ service: 'svc-a', container: { ok: true, value: 'restarting' }, branch: 'main', expectedBranch: 'feat/x', drift: 'drifted' }],
+        others: [{ service: 'svc-o', path: '/r/o', branch: 'hotfix', expectedBranch: 'development', drift: 'drifted' }],
+      },
     });
   });
 

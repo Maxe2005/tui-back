@@ -94,12 +94,15 @@ describe('buildDashboardSnapshot', () => {
       workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
       protectedBranch: false,
       usedByEdts: [],
+      expectedBranch: 'feat/x',
+      drift: 'aligned',
     });
+    expect(snapshot.others).toEqual([]);
   });
 
   it('reports no-active-edt with the registry summary still present', async () => {
     const snapshot = await data({ active: null });
-    expect(snapshot).toMatchObject({ status: 'no-active-edt', edt: null, services: [], registry: { repoCount: 2 } });
+    expect(snapshot).toMatchObject({ status: 'no-active-edt', edt: null, services: [], others: [], registry: { repoCount: 2 } });
     const unknown = await data({ active: 'missing' });
     expect(unknown.status).toBe('no-active-edt');
   });
@@ -195,5 +198,65 @@ describe('buildDashboardSnapshot', () => {
     expect((await buildDashboardServices(healthy)).ok).toBe(false);
     const summary = await buildDashboardRegistrySummary(healthy);
     expect(summary.ok && summary.data.repoCount).toBe(2);
+  });
+
+  describe('drift', () => {
+    const oneMember = [edt('e1', 'topic-a', [['/r/a', 'feat/x']])];
+
+    it('flags a member on another branch than its EDT branch', async () => {
+      const snapshot = await data({ edts: oneMember, paths: ['/r/a'], git: { currentBranch: async () => ok('main') } });
+      expect(snapshot.services[0]).toMatchObject({ branch: 'main', expectedBranch: 'feat/x', drift: 'drifted' });
+    });
+
+    it('treats a detached HEAD as drifted and any other branch failure as unknown', async () => {
+      const detached = await data({
+        edts: oneMember,
+        paths: ['/r/a', '/r/o'],
+        git: { currentBranch: async () => err('git-detached-head', 'HEAD is detached') },
+      });
+      expect(detached.services[0]).toMatchObject({ branch: null, drift: 'drifted' });
+      expect(detached.others[0]).toMatchObject({ path: '/r/o', branch: null, drift: 'drifted', detail: { code: 'git-detached-head' } });
+
+      const failed = await data({
+        edts: oneMember,
+        paths: ['/r/a', '/r/o'],
+        git: { currentBranch: async (path: string) => (path === '/r/o' ? err('git-current-branch-error', 'boom') : ok('feat/x')) },
+      });
+      expect(failed.services[0]).toMatchObject({ drift: 'aligned' });
+      expect(failed.others[0]).toMatchObject({ drift: 'unknown', detail: { code: 'git-current-branch-error', message: 'boom' } });
+      const memberFailed = await data({ edts: oneMember, paths: ['/r/a'], git: { currentBranch: async () => err('git-spawn', 'x') } });
+      expect(memberFailed.services[0]).toMatchObject({ branch: null, drift: 'unknown' });
+    });
+
+    it('judges other managed services against their sharedBranch', async () => {
+      const setup = build({
+        edts: oneMember,
+        paths: ['/r/a', '/r/./o', '/r/p', '/r/gone', '/r/err', '/r/bad', '/r/unmanaged'],
+        registry: { exists: async (path: string) => (path === '/r/err' ? err('fs', 'x') : ok(path !== '/r/gone')) },
+        manifests: {
+          '/r/o': manifestFor('/r/o', { sharedBranch: 'develop' }),
+          '/r/p': manifestFor('/r/p', { sharedBranch: 'develop' }),
+          '/r/bad': { code: 'manifest-invalid' },
+          '/r/unmanaged': { code: 'manifest-not-found' },
+        },
+        git: { currentBranch: vi.fn(async (path: string) => ok(path === '/r/o' ? 'hotfix' : path === '/r/p' ? 'develop' : 'feat/x')) },
+      });
+      const result = await setup.run();
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+      expect(result.data.others).toEqual([
+        { service: 'svc-o', path: '/r/o', branch: 'hotfix', expectedBranch: 'develop', drift: 'drifted' },
+        { service: 'svc-p', path: '/r/p', branch: 'develop', expectedBranch: 'develop', drift: 'aligned' },
+      ]);
+      // One currentBranch call per member and per other service, nothing more.
+      expect(setup.git.currentBranch).toHaveBeenCalledTimes(3);
+    });
+
+    it('keeps the services section when the registry listing fails', async () => {
+      const { deps } = build({ edts: oneMember, registry: { list: async () => err('registry-error', 'x') } });
+      const services = await buildDashboardServices(deps);
+      expect(services.ok && services.data.others).toEqual([]);
+    });
   });
 });
