@@ -89,6 +89,33 @@ describe('listDriftCandidates', () => {
     expect(result.ok && result.data.members[0]).toMatchObject({ service: 'svc-a', drift: 'unknown', detail: { message: 'spawn failed' } });
   });
 
+  it('returns a failed or throwing registry listing as the error instead of an empty list', async () => {
+    const failing = build();
+    failing.deps.registry.list = vi.fn(async () => err('registry-read-error', 'registry.yaml unreadable'));
+    expect(await listDriftCandidates(failing.deps)).toEqual({
+      ok: false,
+      error: { code: 'registry-read-error', message: 'registry.yaml unreadable' },
+    });
+
+    const throwing = build();
+    throwing.deps.registry.list = vi.fn(async () => {
+      throw new Error('EACCES');
+    });
+    expect(await listDriftCandidates(throwing.deps)).toMatchObject({ ok: false, error: { code: 'registry-list-error', message: 'EACCES' } });
+  });
+
+  it('flags a member whose repo is no longer in the managed-repo registry', async () => {
+    const { deps } = build();
+    deps.registry.list = vi.fn(async () => ok(['/r/b', '/r/c']));
+
+    const result = await listDriftCandidates(deps);
+
+    expect(result.ok && result.data.members).toEqual([
+      expect.objectContaining({ service: 'svc-a', unregistered: true }),
+      expect.not.objectContaining({ unregistered: true }),
+    ]);
+  });
+
   it('has no drift data without an active EDT', async () => {
     const { deps, currentBranch } = build({ active: null });
 

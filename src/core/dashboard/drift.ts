@@ -7,7 +7,7 @@ import { GIT_DETACHED_HEAD, type GitPort } from '../ports/git.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
-import { ok, type Result } from '../result.js';
+import { err, ok, type Result } from '../result.js';
 
 // aligned/drifted compare the current branch with the expected one (a detached HEAD is
 // drifted); unknown means the branch could not be read.
@@ -25,6 +25,8 @@ export interface DashboardOtherService {
 
 export interface DriftCandidate extends DashboardOtherService {
   kind: 'member' | 'other';
+  // A member whose repoPath is no longer in the managed-repo registry.
+  unregistered?: true;
 }
 
 export interface DriftCandidates {
@@ -51,7 +53,11 @@ export async function readOthers(params: OthersDeps, memberPaths: Set<string>): 
   if (registered === null || !registered.ok) {
     return [];
   }
-  const candidates = [...new Set(registered.data.map((path) => resolve(path)))].filter((path) => !memberPaths.has(path));
+  return readOthersFrom(params, registered.data, memberPaths);
+}
+
+async function readOthersFrom(params: OthersDeps, registered: readonly string[], memberPaths: Set<string>): Promise<DashboardOtherService[]> {
+  const candidates = [...new Set(registered.map((path) => resolve(path)))].filter((path) => !memberPaths.has(path));
   const rows = await Promise.all(candidates.map((path) => readOther(params, path).catch(() => null)));
   return rows.filter((row): row is DashboardOtherService => row !== null);
 }
@@ -89,7 +95,8 @@ async function readMember(git: GitPort, service: string, path: string, expectedB
 }
 
 // Every repo realign may act on: the active EDT's members (one current-branch read each, the
-// EDT's member name) then the other managed repos, each with its drift.
+// EDT's member name) then the other managed repos, each with its drift. Unlike the dashboard,
+// a failed (or throwing) registry listing is returned as the error, never an empty list.
 export async function listDriftCandidates(params: {
   registry: RegistryPort;
   manifest: ManifestPort;
@@ -118,13 +125,23 @@ export async function listDriftCandidates(params: {
     seen.add(path);
     return true;
   });
+  let registered: Result<string[]>;
+  try {
+    registered = await params.registry.list();
+  } catch (error) {
+    registered = err('registry-list-error', error instanceof Error ? error.message : String(error));
+  }
+  if (!registered.ok) {
+    return registered;
+  }
+  const registeredPaths = new Set(registered.data.map((path) => resolve(path)));
   const [memberRows, others] = await Promise.all([
     Promise.all(members.map((member) => readMember(params.git, member.service, resolve(member.repoPath), member.branch))),
-    readOthers(params, seen),
+    readOthersFrom(params, registered.data, seen),
   ]);
   return ok({
     active: { ulid: active.ulid, topic: active.topic },
-    members: memberRows,
+    members: memberRows.map((row) => (registeredPaths.has(row.path) ? row : { ...row, unregistered: true as const })),
     others: others.map((other) => ({ ...other, kind: 'other' as const })),
   });
 }
