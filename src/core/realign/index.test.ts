@@ -309,6 +309,49 @@ describe('realignServices', () => {
     expect(git.checkout).not.toHaveBeenCalled();
   });
 
+  it('re-judges the selection on a fresh read under the locks', async () => {
+    const { params, git, events } = build();
+    // Before the locks: svc-a drifted (main), svc-c drifted (hotfix). Under the locks: svc-a was
+    // fixed meanwhile, svc-c moved again.
+    const reads: Record<string, string[]> = { '/r/a': ['main', 'feat/a'], '/r/b': ['feat/b'], '/r/c': ['hotfix', 'other'] };
+    (git.currentBranch as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => {
+      const queue = reads[path];
+      return ok(queue !== undefined && queue.length > 1 ? (queue.shift() as string) : (queue?.[0] ?? 'develop'));
+    });
+
+    const result = await realignServices(params({ scope: 'all' }));
+
+    expect(result.ok && result.data.rows).toEqual([{ service: 'svc-a', outcome: 'unchanged' }, expect.objectContaining({ service: 'svc-c', outcome: 'realigned' })]);
+    expect(events.filter((event) => event.startsWith('checkout'))).toEqual(['checkout:/r/c:develop']);
+  });
+
+  it('skips a selected repo that left the candidates before the locks were taken', async () => {
+    const { params, git } = build();
+    const registry = params().registry;
+    (registry.list as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(ok(['/r/a', '/r/b', '/r/c', '/r/d']))
+      .mockResolvedValue(ok(['/r/a', '/r/b', '/r/d']));
+
+    const result = await realignServices(params({ scope: 'all' }));
+
+    expect(result.ok && result.data.rows).toEqual([
+      expect.objectContaining({ service: 'svc-a', outcome: 'realigned' }),
+      { service: 'svc-c', outcome: 'skipped', detail: { code: 'realign-candidate-gone', message: expect.stringContaining('/r/c') } },
+    ]);
+    expect(git.checkout).not.toHaveBeenCalledWith('/r/c', expect.anything());
+  });
+
+  it('resolves with an error when the candidate read or the still-active read throws', async () => {
+    const listing = build();
+    (listing.params().edtRegistry.list as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('yaml exploded'));
+    await expect(realignServices(listing.params())).resolves.toMatchObject({ ok: false, error: { code: 'realign-failed', message: 'yaml exploded' } });
+
+    const stillActive = build();
+    (stillActive.state.readActiveEdt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(ok('e1')).mockRejectedValueOnce(new Error('state gone'));
+    await expect(realignServices(stillActive.params())).resolves.toMatchObject({ ok: false, error: { code: 'realign-failed', message: 'state gone' } });
+    expect(stillActive.git.checkout).not.toHaveBeenCalled();
+  });
+
   it('writes one realign log entry naming the selection and every outcome', async () => {
     const { params, logAction } = build({ git: { hasUncommittedChanges: vi.fn(async (path: string) => ok(path === '/r/c')) } });
 

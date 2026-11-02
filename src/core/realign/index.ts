@@ -2,6 +2,7 @@
 // (active-EDT members: their EDT branch; other managed repos: their sharedBranch), then
 // optionally restarts the realigned ones. Work is never stashed, discarded or moved: a dirty or
 // mid-merge repo is skipped. One closed row per selected service; the run never rejects.
+import { resolve } from 'node:path';
 import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../dashboard/drift.js';
 import { checkoutExpectedBranch, type TargetBranchSpec } from '../edt/checkout-expected.js';
 import { MANIFEST_FILE, withCarriedManifest } from '../edt/manifest-carry.js';
@@ -99,8 +100,24 @@ export function resolveRealignSelection(
   );
 }
 
+// Turns a throwing port call into an error Result, so the run never rejects.
+async function guarded<T>(code: string, call: () => Promise<Result<T>>): Promise<Result<T>> {
+  try {
+    return await call();
+  } catch (error) {
+    return err(code, messageOf(error));
+  }
+}
+
+// The selection re-judged on fresh candidates read under the locks, matched by resolved path; a
+// selected repo no longer among them is reported `realign-candidate-gone`.
+function refreshSelection(selection: readonly DriftCandidate[], fresh: DriftCandidates): Array<DriftCandidate | { gone: DriftCandidate }> {
+  const byPath = new Map([...fresh.members, ...fresh.others].map((candidate) => [resolve(candidate.path), candidate]));
+  return selection.map((candidate) => byPath.get(resolve(candidate.path)) ?? { gone: candidate });
+}
+
 export async function realignServices(params: RealignServicesParams): Promise<Result<RealignServicesData>> {
-  const candidates = await listDriftCandidates(params);
+  const candidates = await guarded('realign-failed', () => listDriftCandidates(params));
   if (!candidates.ok) {
     return candidates;
   }
@@ -117,16 +134,25 @@ export async function realignServices(params: RealignServicesParams): Promise<Re
   const run = await withActionLock(params.lock, GROUP_UPDATE_LOCK_KEY, () =>
     withActionLock(params.lock, edtUpdateLockKey(active.ulid), async (): Promise<Result<RealignServicesData>> => {
       // The selection was read before the locks: a switch that completed meanwhile made it stale.
-      const stillActive = await params.state.readActiveEdt();
+      const stillActive = await guarded('realign-failed', () => params.state.readActiveEdt());
       if (!stillActive.ok) {
         return stillActive;
       }
       if (stillActive.data !== active.ulid) {
         return err('realign-active-edt-changed', 'The active EDT changed while realign was starting — nothing was touched, run it again');
       }
+      // Drift read before the locks may be stale: every selected repo is judged on a fresh read.
+      const fresh = await guarded('realign-failed', () => listDriftCandidates(params));
+      if (!fresh.ok) {
+        return fresh;
+      }
+      const refreshed = refreshSelection(selection, fresh.data);
       const rows: RealignRow[] = [];
-      for (const candidate of selection) {
-        const row = await realignOne(params, active.ulid, candidate).catch((error: unknown) => failedRow(candidate.service, 'realign-failed', messageOf(error)));
+      for (const entry of refreshed) {
+        const row =
+          'gone' in entry
+            ? skippedRow(entry.gone.service, 'realign-candidate-gone', `${entry.gone.path} is no longer an active-EDT member nor a managed service — left untouched`)
+            : await realignOne(params, active.ulid, entry).catch((error: unknown) => failedRow(entry.service, 'realign-failed', messageOf(error)));
         rows.push(row);
         try {
           params.onRow?.({ ...row });
@@ -136,7 +162,8 @@ export async function realignServices(params: RealignServicesParams): Promise<Re
       }
       const data: RealignServicesData = { edt: active, selection: selection.map((candidate) => candidate.service), rows };
       if (params.restart !== undefined) {
-        await runRestartPhase(params, params.restart, selection, rows, data);
+        const current = refreshed.map((entry) => ('gone' in entry ? entry.gone : entry));
+        await runRestartPhase(params, params.restart, current, rows, data);
       }
       await logRun(params.edtRegistry, active.ulid, data);
       return ok(data);
