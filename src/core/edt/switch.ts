@@ -7,6 +7,7 @@
 // is expanded per dirty state-2/3 repo into resolutions, so the seam is skipped when one is given.
 import { resolve } from 'node:path';
 import { withActionLock } from '../locking.js';
+import { edtUpdateLockKey } from '../scripts/group-update.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { LockPort } from '../ports/lock.js';
@@ -15,6 +16,7 @@ import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
+import { checkoutExpectedBranch, type CheckoutStep } from './checkout-expected.js';
 import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import { addMemberUnderLock } from './modify.js';
 import { isProtectedBranch } from './shared-branches.js';
@@ -178,7 +180,9 @@ export function classifySwitchRepos(
 // anything is stashed, every failure before the checkout restores that stash.
 //
 // The outgoing lock peek is non-blocking and non-mutating: `--force` past a held lock never
-// aborts anything; it only marks the outgoing EDT `interrupted`.
+// aborts anything; it only marks the outgoing EDT `interrupted`. When the peek found it free,
+// that lock is then held from the first repo until state.json and edts.yaml name the target, so
+// an update or realign is rejected for the whole switch.
 export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Result<SwitchActiveEdtData>> {
   const { edtRegistry, registry, manifest, manifestCarry, git, lock, state, edtRegistryResourceKey, force = false } = params;
 
@@ -224,10 +228,7 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
     }
     if (peeked.data.locked) {
       if (!force) {
-        return err(
-          'switch-blocked-action-in-progress',
-          `Cannot switch away from "${outgoing.topic}": an action is currently in progress on it. Pass --force to interrupt it and switch anyway.`,
-        );
+        return blockedBy(outgoing);
       }
       outgoingFinalStatus = 'interrupted';
     } else {
@@ -260,69 +261,92 @@ export async function switchActiveEdt(params: SwitchActiveEdtParams): Promise<Re
     target,
   };
   const results: SwitchEdtRepoResult[] = [];
-  for (const repo of classified) {
-    const resolution = preflight.data.get(repo.repoPath);
-    const { targetMember } = repo;
-    // A non-member's destination comes from its manifest as it sits on disk now, so it is read
-    // before the carry clears a dirty one.
-    const nonMemberManifest = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
-    const serviceName = targetMember?.service ?? (nonMemberManifest?.ok ? nonMemberManifest.data.service : repo.repoPath);
-    results.push(
-      await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, serviceName, () =>
-        targetMember !== undefined
-          ? switchMemberRepo(context, repo, targetMember, resolution)
-          : switchNonMemberRepo(context, repo, resolution, nonMemberManifest as Result<Manifest>),
-      ),
-    );
-  }
-
-  // A target member whose repoPath has dropped out of the managed-repo registry is surfaced as
-  // `failed` rather than skipped — otherwise "every target member sits on its own registered
-  // branch" would break with zero signal.
-  for (const member of target.members) {
-    if (!registeredPaths.has(resolve(member.repoPath))) {
+  const runSwitch = async (): Promise<Result<void>> => {
+    for (const repo of classified) {
+      const resolution = preflight.data.get(repo.repoPath);
+      const { targetMember } = repo;
+      // A non-member's destination comes from its manifest as it sits on disk now, so it is read
+      // before the carry clears a dirty one.
+      const nonMemberManifest = targetMember === undefined ? await manifest.load(repo.repoPath) : undefined;
+      const serviceName = targetMember?.service ?? (nonMemberManifest?.ok ? nonMemberManifest.data.service : repo.repoPath);
       results.push(
-        failed(member.service, {
-          code: 'repo-not-registered',
-          message: `Target member ${member.repoPath} is no longer in the managed-repo registry`,
-        }),
+        await withCarriedManifest({ git, carry: manifestCarry }, repo.repoPath, serviceName, () =>
+          targetMember !== undefined
+            ? switchMemberRepo(context, repo, targetMember, resolution)
+            : switchNonMemberRepo(context, repo, resolution, nonMemberManifest as Result<Manifest>),
+        ),
       );
     }
-  }
-
-  // state.json and edts.yaml are updated once the target is resolved and no blocking lock
-  // applies, independent of individual repo outcomes above (same philosophy as createEdt
-  // still registering an EDT despite member failures). The registry writes run under the
-  // edts.yaml lock so they cannot race a concurrent `edt create`/`edt switch` (AD-9), and a
-  // setStatus failure becomes a `failed` row in `results`, never a silent log line.
-  const written = await withActionLock(lock, edtRegistryResourceKey, async () => {
-    const wroteState = await state.writeActiveEdt(target.ulid);
-    if (!wroteState.ok) {
-      // Keep the per-repo results the caller already earned instead of discarding them —
-      // they report what actually happened to each working tree even though the pointer
-      // write itself failed.
-      return err(wroteState.error.code, wroteState.error.message, { results });
-    }
-
-    const activated = await edtRegistry.setStatus(target.ulid, 'active');
-    if (!activated.ok) {
-      results.push(failed('edt-registry:activate-target', activated.error));
-    }
-
-    if (outgoing !== undefined && outgoingFinalStatus !== undefined) {
-      const deactivated = await edtRegistry.setStatus(outgoing.ulid, outgoingFinalStatus);
-      if (!deactivated.ok) {
-        results.push(failed('edt-registry:deactivate-outgoing', deactivated.error));
+    // A target member whose repoPath has dropped out of the managed-repo registry is surfaced as
+    // `failed` rather than skipped — otherwise "every target member sits on its own registered
+    // branch" would break with zero signal.
+    for (const member of target.members) {
+      if (!registeredPaths.has(resolve(member.repoPath))) {
+        results.push(
+          failed(member.service, {
+            code: 'repo-not-registered',
+            message: `Target member ${member.repoPath} is no longer in the managed-repo registry`,
+          }),
+        );
       }
     }
 
-    return ok(undefined);
-  });
-  if (!written.ok) {
-    return written;
+    // state.json and edts.yaml are updated once the target is resolved and no blocking lock
+    // applies, independent of individual repo outcomes above (same philosophy as createEdt
+    // still registering an EDT despite member failures). The registry writes run under the
+    // edts.yaml lock so they cannot race a concurrent `edt create`/`edt switch` (AD-9), and a
+    // setStatus failure becomes a `failed` row in `results`, never a silent log line.
+    return withActionLock(lock, edtRegistryResourceKey, async () => {
+      const wroteState = await state.writeActiveEdt(target.ulid);
+      if (!wroteState.ok) {
+        // Keep the per-repo results the caller already earned instead of discarding them —
+        // they report what actually happened to each working tree even though the pointer
+        // write itself failed.
+        return err(wroteState.error.code, wroteState.error.message, { results });
+      }
+
+      const activated = await edtRegistry.setStatus(target.ulid, 'active');
+      if (!activated.ok) {
+        results.push(failed('edt-registry:activate-target', activated.error));
+      }
+
+      if (outgoing !== undefined && outgoingFinalStatus !== undefined) {
+        const deactivated = await edtRegistry.setStatus(outgoing.ulid, outgoingFinalStatus);
+        if (!deactivated.ok) {
+          results.push(failed('edt-registry:deactivate-outgoing', deactivated.error));
+        }
+      }
+
+      return ok(undefined);
+    });
+  };
+  // The outgoing EDT's action lock is held from the first repo through the state.json and
+  // edts.yaml writes when the peek found it free. Under --force past a held lock it is not
+  // taken: the holder keeps it. Taken between the peek and here, it blocks like the peek.
+  if (outgoing === undefined || outgoingFinalStatus !== 'inactive') {
+    const switched = await runSwitch();
+    if (!switched.ok) {
+      return switched;
+    }
+  } else {
+    let entered = false;
+    const switched = await withActionLock(lock, edtUpdateLockKey(outgoing.ulid), () => {
+      entered = true;
+      return runSwitch();
+    });
+    if (!switched.ok) {
+      return !entered && switched.error.code === 'action-in-progress' ? blockedBy(outgoing) : switched;
+    }
   }
 
   return ok({ ulid: target.ulid, topic: target.topic, results, wasInterrupted });
+}
+
+function blockedBy(outgoing: EdtRegistryEntry): Result<never> {
+  return err(
+    'switch-blocked-action-in-progress',
+    `Cannot switch away from "${outgoing.topic}": an action is currently in progress on it. Pass --force to interrupt it and switch anyway.`,
+  );
 }
 
 // Exported for activate.ts, which reports its per-repo rows the same way.
@@ -485,36 +509,9 @@ async function describeDirtyRepo(
   return row;
 }
 
-// ---- Destination rule (shared with activate.ts) ---------------------------------------------
+// ---- Destination rule (shared with activate.ts and realign) ---------------------------------
 
-// Where a repo goes when an EDT becomes active (FR-8): a member of that EDT goes to its own
-// registered branch, any other repo to its manifest `sharedBranch`.
-export type TargetBranchSpec = { kind: 'member'; branch: string; edtUlid: string } | { kind: 'shared'; branch: string };
-
-// Makes the destination checkout-ready, from reads only — except the FR-8 fetch of a missing
-// shared branch. A member branch is re-verified by the branch-scope gate
-// (`assertAllowedBranch(..., edtUlid)`, AD-8, never assumed) and is never fetched or
-// auto-created: missing (or unreadable) is `member-branch-missing`. A shared branch absent
-// locally is fetched first.
-export async function resolveTargetBranch(git: GitPort, repoPath: string, spec: TargetBranchSpec): Promise<Result<void>> {
-  if (spec.kind === 'member') {
-    const allowed = await git.assertAllowedBranch(repoPath, spec.branch, spec.edtUlid);
-    if (!allowed.ok) {
-      return allowed;
-    }
-  }
-  const existsLocally = await git.branchExistsLocally(repoPath, spec.branch);
-  if (!existsLocally.ok) {
-    return existsLocally;
-  }
-  if (existsLocally.data) {
-    return ok(undefined);
-  }
-  if (spec.kind === 'member') {
-    return err('member-branch-missing', `Member branch "${spec.branch}" does not exist locally in ${repoPath} — left untouched`);
-  }
-  return git.fetch(repoPath, spec.branch);
-}
+export { resolveTargetBranch, type TargetBranchSpec } from './checkout-expected.js';
 
 // ---- Per-repo switch -------------------------------------------------------------------------
 
@@ -546,7 +543,7 @@ interface Prepared {
   discardedPaths?: string[];
 }
 
-type Step<T> = { ok: true; value: T } | { ok: false; row: SwitchEdtRepoResult };
+type Step<T> = CheckoutStep<T, SwitchEdtRepoResult>;
 
 async function planDirtyWork(
   context: RepoSwitchContext,
@@ -832,32 +829,27 @@ async function switchMemberRepo(
 
   // Resolve (and gate) the destination before touching the working tree, so a missing member
   // branch never follows an irreversible discard (or a needless stash).
-  const destination = await resolveTargetBranch(git, repoPath, { kind: 'member', branch, edtUlid: target.ulid });
-  if (!destination.ok) {
-    return failed(service, destination.error);
-  }
-
-  const plan = await planDirtyWork(context, service, repo, resolution);
-  if (!plan.ok) {
-    return plan.row;
-  }
-
-  const prepared = await executeDirtyPlan(context, service, repoPath, plan.value);
-  if (!prepared.ok) {
-    return prepared.row;
-  }
-
-  const checkedOut = await git.checkout(repoPath, branch);
+  const checkedOut = await checkoutExpectedBranch({
+    git,
+    repoPath,
+    spec: { kind: 'member', branch, edtUlid: target.ulid },
+    prepare: async () => {
+      const plan = await planDirtyWork(context, service, repo, resolution);
+      return plan.ok ? executeDirtyPlan(context, service, repoPath, plan.value) : plan;
+    },
+    onResolveFailed: (error) => failed(service, error),
+    onCheckoutFailed: (prepared, error) => failAfterPrepare(git, service, repoPath, prepared, error),
+  });
   if (!checkedOut.ok) {
-    return failAfterPrepare(git, service, repoPath, prepared.value, checkedOut.error);
+    return checkedOut.row;
   }
 
   const popped = await git.restoreStash(repoPath, stashMessage(target.ulid));
   if (!popped.ok) {
-    return failAfterCheckout(service, prepared.value, popped.error);
+    return failAfterCheckout(service, checkedOut.value, popped.error);
   }
 
-  return succeeded(service, prepared.value);
+  return succeeded(service, checkedOut.value);
 }
 
 // Any repo that is not a target member: its dirty work handled per its state, then checked
@@ -885,20 +877,17 @@ async function switchNonMemberRepo(
 
   // Resolve the destination before touching the working tree, so a failed fetch never
   // follows an irreversible discard.
-  const destination = await resolveTargetBranch(git, repoPath, { kind: 'shared', branch: sharedBranch });
-  if (!destination.ok) {
-    return failed(service, destination.error);
-  }
-
-  const prepared = await executeDirtyPlan(context, service, repoPath, plan.value);
-  if (!prepared.ok) {
-    return prepared.row;
-  }
-
-  const checkedOut = await git.checkout(repoPath, sharedBranch);
+  const checkedOut = await checkoutExpectedBranch({
+    git,
+    repoPath,
+    spec: { kind: 'shared', branch: sharedBranch },
+    prepare: () => executeDirtyPlan(context, service, repoPath, plan.value),
+    onResolveFailed: (error) => failed(service, error),
+    onCheckoutFailed: (prepared, error) => failAfterPrepare(git, service, repoPath, prepared, error),
+  });
   if (!checkedOut.ok) {
-    return failAfterPrepare(git, service, repoPath, prepared.value, checkedOut.error);
+    return checkedOut.row;
   }
 
-  return succeeded(service, prepared.value);
+  return succeeded(service, checkedOut.value);
 }

@@ -786,7 +786,7 @@ describe('tui-back --help (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete']);
   });
 });
 
