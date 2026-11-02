@@ -102,6 +102,15 @@ describe('footerHintsFor', () => {
     }
   });
 
+  it('shows [A] realign on the Dashboard only while a service drifted, without colliding with other keys', () => {
+    expect(footerHintsFor('dashboard')).toContain('[A] realign');
+    expect(footerHintsFor('dashboard', { drift: false })).not.toContain('[A] realign');
+    expect(footerHintsFor('edts')).not.toContain('[A] realign');
+    const keys = footerHintsFor('dashboard').map((hint) => hint.slice(1, hint.indexOf(']')));
+    expect(keys.filter((key) => key === 'A')).toHaveLength(1);
+    expect(keys).toEqual(expect.arrayContaining(['A', 'a', 'R', 'Ctrl+O', 'Ctrl+R', 'Ctrl+L']));
+  });
+
   it('shows [E] enter EDT on the Dashboard only with an active EDT', () => {
     expect(footerHintsFor('dashboard')).toContain('[E] enter EDT');
     expect(footerHintsFor('dashboard', { activeEdt: false })).not.toContain('[E] enter EDT');

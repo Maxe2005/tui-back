@@ -285,3 +285,10 @@ describe('EDT section', () => {
     expect(edtKeyEffect('x', 'active')).toBeNull();
   });
 });
+
+describe('attentionHeader', () => {
+  it('counts the lines and offers the realign key only with a drift line', () => {
+    expect(attentionHeader(3)).toBe('Attention (3)');
+    expect(attentionHeader(3, true)).toBe('Attention (3)  [A] realign');
+  });
+});
