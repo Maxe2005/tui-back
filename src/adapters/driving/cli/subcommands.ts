@@ -19,7 +19,6 @@ import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core
 import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import { buildDashboardSnapshot } from '../../../core/dashboard/snapshot.js';
-import type { DockerPort } from '../../../core/ports/docker.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { DockerPort } from '../../../core/ports/docker.js';
 import type { EditorPort } from '../../../core/ports/editor.js';
@@ -107,10 +106,9 @@ export function buildSubcommands(deps: {
   state: StatePort;
   // Source of the `update` defaults (runMigrations / cleanRestart); a load failure or warning is reported on stderr and the built-in defaults apply.
   settings: SettingsPort;
-  // The post-switch restart's verification ports (`edt switch --restart`). Optional: without
-  // them a restart request is rejected up front, before anything is touched.
+  // The post-switch restart's verification ports (`edt switch --restart`, with `docker` above).
+  // Optional: without them a restart request is rejected up front, before anything is touched.
   editor?: EditorPort;
-  docker?: DockerPort;
   healthProbe?: HealthProbePort;
   // Gates `registry clean`'s bare-invocation interactive list-then-confirm prompt. Defaults to
   // false (never prompts); only bin/main.ts wires it, and only when BOTH stdout and stdin are

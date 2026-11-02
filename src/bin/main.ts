@@ -10,7 +10,6 @@ import { loadManifest } from '../adapters/driven/manifest/index.js';
 import { createDockerPort } from '../adapters/driven/docker/index.js';
 import { createContainerPort } from '../adapters/driven/container/index.js';
 import { createMigrationPort } from '../adapters/driven/migration/index.js';
-import { createDockerPort } from '../adapters/driven/docker/index.js';
 import { createEditorPort } from '../adapters/driven/editor/index.js';
 import { createHttpHealthProbe } from '../adapters/driven/health/http-probe.js';
 import { createRestartPort } from '../adapters/driven/restart/index.js';
@@ -90,7 +89,6 @@ const subcommands = buildSubcommands({
   state,
   settings: createSettingsPort(resolveSettingsFile(xdg)),
   editor: createEditorPort(),
-  docker: createDockerPort(),
   healthProbe: createHttpHealthProbe(),
   isTTY: interactiveIsTTY,
   scanner: routeExplorer.scanner,
