@@ -15,6 +15,7 @@ import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
+import { checkoutExpectedBranch, type CheckoutStep } from './checkout-expected.js';
 import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import { addMemberUnderLock } from './modify.js';
 import { isProtectedBranch } from './shared-branches.js';
@@ -485,36 +486,9 @@ async function describeDirtyRepo(
   return row;
 }
 
-// ---- Destination rule (shared with activate.ts) ---------------------------------------------
+// ---- Destination rule (shared with activate.ts and realign) ---------------------------------
 
-// Where a repo goes when an EDT becomes active (FR-8): a member of that EDT goes to its own
-// registered branch, any other repo to its manifest `sharedBranch`.
-export type TargetBranchSpec = { kind: 'member'; branch: string; edtUlid: string } | { kind: 'shared'; branch: string };
-
-// Makes the destination checkout-ready, from reads only — except the FR-8 fetch of a missing
-// shared branch. A member branch is re-verified by the branch-scope gate
-// (`assertAllowedBranch(..., edtUlid)`, AD-8, never assumed) and is never fetched or
-// auto-created: missing (or unreadable) is `member-branch-missing`. A shared branch absent
-// locally is fetched first.
-export async function resolveTargetBranch(git: GitPort, repoPath: string, spec: TargetBranchSpec): Promise<Result<void>> {
-  if (spec.kind === 'member') {
-    const allowed = await git.assertAllowedBranch(repoPath, spec.branch, spec.edtUlid);
-    if (!allowed.ok) {
-      return allowed;
-    }
-  }
-  const existsLocally = await git.branchExistsLocally(repoPath, spec.branch);
-  if (!existsLocally.ok) {
-    return existsLocally;
-  }
-  if (existsLocally.data) {
-    return ok(undefined);
-  }
-  if (spec.kind === 'member') {
-    return err('member-branch-missing', `Member branch "${spec.branch}" does not exist locally in ${repoPath} — left untouched`);
-  }
-  return git.fetch(repoPath, spec.branch);
-}
+export { resolveTargetBranch, type TargetBranchSpec } from './checkout-expected.js';
 
 // ---- Per-repo switch -------------------------------------------------------------------------
 
@@ -546,7 +520,7 @@ interface Prepared {
   discardedPaths?: string[];
 }
 
-type Step<T> = { ok: true; value: T } | { ok: false; row: SwitchEdtRepoResult };
+type Step<T> = CheckoutStep<T, SwitchEdtRepoResult>;
 
 async function planDirtyWork(
   context: RepoSwitchContext,
@@ -832,32 +806,27 @@ async function switchMemberRepo(
 
   // Resolve (and gate) the destination before touching the working tree, so a missing member
   // branch never follows an irreversible discard (or a needless stash).
-  const destination = await resolveTargetBranch(git, repoPath, { kind: 'member', branch, edtUlid: target.ulid });
-  if (!destination.ok) {
-    return failed(service, destination.error);
-  }
-
-  const plan = await planDirtyWork(context, service, repo, resolution);
-  if (!plan.ok) {
-    return plan.row;
-  }
-
-  const prepared = await executeDirtyPlan(context, service, repoPath, plan.value);
-  if (!prepared.ok) {
-    return prepared.row;
-  }
-
-  const checkedOut = await git.checkout(repoPath, branch);
+  const checkedOut = await checkoutExpectedBranch({
+    git,
+    repoPath,
+    spec: { kind: 'member', branch, edtUlid: target.ulid },
+    prepare: async () => {
+      const plan = await planDirtyWork(context, service, repo, resolution);
+      return plan.ok ? executeDirtyPlan(context, service, repoPath, plan.value) : plan;
+    },
+    onResolveFailed: (error) => failed(service, error),
+    onCheckoutFailed: (prepared, error) => failAfterPrepare(git, service, repoPath, prepared, error),
+  });
   if (!checkedOut.ok) {
-    return failAfterPrepare(git, service, repoPath, prepared.value, checkedOut.error);
+    return checkedOut.row;
   }
 
   const popped = await git.restoreStash(repoPath, stashMessage(target.ulid));
   if (!popped.ok) {
-    return failAfterCheckout(service, prepared.value, popped.error);
+    return failAfterCheckout(service, checkedOut.value, popped.error);
   }
 
-  return succeeded(service, prepared.value);
+  return succeeded(service, checkedOut.value);
 }
 
 // Any repo that is not a target member: its dirty work handled per its state, then checked
@@ -885,20 +854,17 @@ async function switchNonMemberRepo(
 
   // Resolve the destination before touching the working tree, so a failed fetch never
   // follows an irreversible discard.
-  const destination = await resolveTargetBranch(git, repoPath, { kind: 'shared', branch: sharedBranch });
-  if (!destination.ok) {
-    return failed(service, destination.error);
-  }
-
-  const prepared = await executeDirtyPlan(context, service, repoPath, plan.value);
-  if (!prepared.ok) {
-    return prepared.row;
-  }
-
-  const checkedOut = await git.checkout(repoPath, sharedBranch);
+  const checkedOut = await checkoutExpectedBranch({
+    git,
+    repoPath,
+    spec: { kind: 'shared', branch: sharedBranch },
+    prepare: () => executeDirtyPlan(context, service, repoPath, plan.value),
+    onResolveFailed: (error) => failed(service, error),
+    onCheckoutFailed: (prepared, error) => failAfterPrepare(git, service, repoPath, prepared, error),
+  });
   if (!checkedOut.ok) {
-    return failAfterPrepare(git, service, repoPath, prepared.value, checkedOut.error);
+    return checkedOut.row;
   }
 
-  return succeeded(service, prepared.value);
+  return succeeded(service, checkedOut.value);
 }
