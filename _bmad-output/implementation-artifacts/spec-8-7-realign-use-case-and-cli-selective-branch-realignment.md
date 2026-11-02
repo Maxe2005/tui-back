@@ -2,7 +2,7 @@
 title: 'Story 8.7: realign Use-Case & CLI — Selective Branch Realignment'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 baseline_commit: '97e1082aaa5d8251032813ccb38694a306dbda5f'
 review_loop_iteration: 0
 context:
@@ -81,3 +81,73 @@ Dirty work is skipped rather than stashed: a stash taken on the wrong branch has
 - `npm test` -- expected: all green
 - `npm run typecheck` -- expected: no errors
 - `npm run depcheck` -- expected: no violations
+
+## Suggested Review Order
+
+**Realign use-case (core)**
+
+- Entry point: validate up front, lock, re-check the active EDT, re-read drift under the lock.
+  [`index.ts:128`](../../src/core/realign/index.ts#L128)
+
+- Per-service pipeline: unchanged/unknown/merge/rebase/dirty guards before the shared checkout.
+  [`index.ts:204`](../../src/core/realign/index.ts#L204)
+
+- Scope + names resolve to candidates; unknown or ambiguous names rejected before anything runs.
+  [`index.ts:72`](../../src/core/realign/index.ts#L72)
+
+- Selection refreshed by resolved path; a vanished repo becomes `realign-candidate-gone`.
+  [`index.ts:123`](../../src/core/realign/index.ts#L123)
+
+- Restart only realigned services, paths normalised; restart failure never rolls back.
+  [`index.ts:274`](../../src/core/realign/index.ts#L274)
+
+- One action-log entry; `failed` when any row failed or the restart needs attention.
+  [`index.ts:326`](../../src/core/realign/index.ts#L326)
+
+**Shared checkout step (switch ↔ realign)**
+
+- Gate → prepare hook → checkout → undo on failure; one implementation for both callers.
+  [`checkout-expected.ts:52`](../../src/core/edt/checkout-expected.ts#L52)
+
+- AD-8 gate moved unchanged; still re-exported by switch for `activate.ts`.
+  [`checkout-expected.ts:16`](../../src/core/edt/checkout-expected.ts#L16)
+
+**Action lock between switch and realign/update**
+
+- Switch holds `edt:<outgoing>` through its state/registry writes, closing the mid-switch gap.
+  [`switch.ts:333`](../../src/core/edt/switch.ts#L333)
+
+- Losing the peek/acquire race reports the same blocked error, keeping the TUI force prompt.
+  [`switch.ts:345`](../../src/core/edt/switch.ts#L345)
+
+**Drift candidates**
+
+- Members (one branch read each, registry membership flagged) plus managed others; listing errors surface.
+  [`drift.ts:100`](../../src/core/dashboard/drift.ts#L100)
+
+- Dashboard keeps its swallow-to-empty others behaviour through the shared helper.
+  [`drift.ts:51`](../../src/core/dashboard/drift.ts#L51)
+
+**Restart reuse**
+
+- Optional `changedServices` override; switch callers unchanged.
+  [`switch-restart.ts:133`](../../src/core/edt/switch-restart.ts#L133)
+
+**CLI**
+
+- Flag parsing and validation before any lock; settings warning on stderr; exit rules.
+  [`subcommands.ts:1006`](../../src/adapters/driving/cli/subcommands.ts#L1006)
+
+- Usage string generating `--help`.
+  [`subcommands.ts:88`](../../src/adapters/driving/cli/subcommands.ts#L88)
+
+**Tests**
+
+- Use-case matrix, locks, log, restart, re-read and throw guards.
+  [`index.test.ts:168`](../../src/core/realign/index.test.ts#L168)
+
+- Shared checkout step ordering and short-circuits.
+  [`checkout-expected.test.ts:1`](../../src/core/edt/checkout-expected.test.ts#L1)
+
+- CLI envelope, exit codes, lock rejection, restart-phase failure.
+  [`dispatch.test.ts:925`](../../src/adapters/driving/cli/dispatch.test.ts#L925)
