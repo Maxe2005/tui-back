@@ -200,7 +200,7 @@ describe('listEdtBranchesDivergence', () => {
   it('folds any other git error (e.g. currentBranch failure) into the same "unknown (offline)" treatment', async () => {
     const registry = fakeRegistry(['/repo/a']);
     const git = fakeGit({
-      currentBranch: vi.fn(async () => err('git-current-branch-error', 'HEAD is detached')),
+      currentBranch: vi.fn(async () => err('git-detached-head', 'HEAD is detached')),
     });
 
     const result = await listEdtBranchesDivergence({
@@ -223,7 +223,7 @@ describe('listEdtBranchesDivergence', () => {
         ahead: null,
         behind: null,
         status: 'unknown-offline',
-        detail: { code: 'git-current-branch-error', message: 'HEAD is detached' },
+        detail: { code: 'git-detached-head', message: 'HEAD is detached' },
       },
     ]);
   });

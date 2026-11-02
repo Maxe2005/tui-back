@@ -9,7 +9,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import type { GitPort, VersionBumpWalkOptions, VersionBumpWalkSummary, VersionWalkEnd } from '../../../core/ports/git.js';
+import { GIT_DETACHED_HEAD, type GitPort, type VersionBumpWalkOptions, type VersionBumpWalkSummary, type VersionWalkEnd } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import { branchOwners } from '../../../core/edt/branch-owners.js';
 // The FR-7 protected-branch rule lives in core, shared with the TUI's advisory check.
@@ -217,10 +217,10 @@ export async function currentBranch(repoPath: string): Promise<Result<string>> {
   }
   const branch = String(result.stdout).trim();
   // On a detached HEAD, `git rev-parse --abbrev-ref HEAD` exits 0 and prints the literal
-  // "HEAD" — that is not a branch name and must never be recorded as one (unborn repos
-  // already error via exit 128).
+  // "HEAD" — that is not a branch name and must never be recorded as one. It gets its own
+  // code so callers can tell it from a probe failure (unborn repos already error via exit 128).
   if (branch === 'HEAD') {
-    return err('git-current-branch-error', `Cannot determine a named branch in ${repoPath}: HEAD is detached or unborn`);
+    return err(GIT_DETACHED_HEAD, `Cannot determine a named branch in ${repoPath}: HEAD is detached`);
   }
   return ok(branch);
 }
@@ -975,7 +975,7 @@ async function showFullRef(repoPath: string, fullRef: string): Promise<ShowRefOu
 }
 
 // The branch-scope gate for a write that has no branch argument: judges the repo's current
-// branch (a detached HEAD fails as `git-current-branch-error`, never writes).
+// branch (a detached HEAD fails as `git-detached-head`, never writes).
 async function assertCurrentBranchAllowed(manifest: ManifestPort, repoPath: string): Promise<Result<void>> {
   const branch = await currentBranch(repoPath);
   if (!branch.ok) {

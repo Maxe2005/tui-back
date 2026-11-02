@@ -1,6 +1,6 @@
 // tui/zones/dashboard: pure helpers for the Dashboard shell — which body the zone shows, the
 // "updated Ns ago" line and the short labels a service row prints for each probed field.
-import type { DashboardRegistrySummary, DashboardService } from '../../../../../core/dashboard/snapshot.js';
+import type { DashboardOtherService, DashboardRegistrySummary, DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import type { ServiceAction } from '../../../../../core/service-actions/index.js';
 import { formatHint } from '../../shared/components/hints.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
@@ -128,35 +128,60 @@ export function actionForKey(actions: readonly ServiceAction[], input: string): 
   return actions.find((action) => action.key.toLowerCase() === `ctrl+${input.toLowerCase()}`);
 }
 
-export type AttentionReason = 'protected-branch' | 'no-upstream' | 'unknown-offline' | 'uncommitted' | 'merging' | 'rebasing' | 'behind' | 'used-by-edt';
+export type AttentionReason =
+  | 'protected-branch'
+  | 'drift'
+  | 'no-upstream'
+  | 'unknown-offline'
+  | 'uncommitted'
+  | 'merging'
+  | 'rebasing'
+  | 'behind'
+  | 'used-by-edt';
 
-export type AttentionItem = { service: string; path: string; reason: AttentionReason; text: string };
+// `focusable` is false for an item with no services-table row (an other service's drift).
+export type AttentionItem = { service: string; path: string; reason: AttentionReason; text: string; focusable: boolean };
 
-// One item per (service, reason), severity-ordered: protected branch, upstream trouble, working
-// tree, behind, then branch shared with another EDT. A failed probe is never an item.
-export function buildAttentionItems(services: readonly DashboardService[]): AttentionItem[] {
+export function driftText(branch: string | null, expectedBranch: string, member: boolean): string {
+  return `on ${branch ?? 'detached HEAD'}, expected ${expectedBranch} (${member ? 'EDT member' : 'other service'})`;
+}
+
+// One item per (service, reason), severity-ordered: protected branch, drift (members, then
+// others), upstream trouble, working tree, behind, then branch shared with another EDT. A failed
+// probe is never an item; a detached HEAD shows as drift, not as unknown divergence.
+export function buildAttentionItems(services: readonly DashboardService[], others: readonly DashboardOtherService[] = []): AttentionItem[] {
   const items: Array<AttentionItem & { rank: number }> = [];
   for (const s of services) {
-    const push = (reason: AttentionReason, rank: number, text: string) => items.push({ service: s.service, path: s.path, reason, rank, text });
+    const push = (reason: AttentionReason, rank: number, text: string) =>
+      items.push({ service: s.service, path: s.path, reason, rank, text, focusable: true });
+    const detached = s.drift === 'drifted' && s.branch === null;
     if (s.protectedBranch) {
       push('protected-branch', 0, `on protected branch${s.branch === null ? '' : ` ${s.branch}`}`);
     }
+    if (s.drift === 'drifted') {
+      push('drift', 1, driftText(s.branch, s.expectedBranch, true));
+    }
     if (s.divergence.status === 'no-upstream') {
-      push('no-upstream', 1, 'no upstream');
-    } else if (s.divergence.status === 'unknown-offline') {
-      push('unknown-offline', 1, 'divergence unknown (offline)');
+      push('no-upstream', 2, 'no upstream');
+    } else if (s.divergence.status === 'unknown-offline' && !detached) {
+      push('unknown-offline', 2, 'divergence unknown (offline)');
     }
     if (s.workingTree.ok) {
       const { uncommitted, mergeInProgress, rebaseInProgress } = s.workingTree.value;
-      if (uncommitted) push('uncommitted', 2, 'uncommitted changes');
-      if (mergeInProgress) push('merging', 2, 'merge in progress');
-      if (rebaseInProgress) push('rebasing', 2, 'rebase in progress');
+      if (uncommitted) push('uncommitted', 3, 'uncommitted changes');
+      if (mergeInProgress) push('merging', 3, 'merge in progress');
+      if (rebaseInProgress) push('rebasing', 3, 'rebase in progress');
     }
     if (s.divergence.behind !== null && s.divergence.behind > 0) {
-      push('behind', 3, `behind by ${s.divergence.behind}`);
+      push('behind', 4, `behind by ${s.divergence.behind}`);
     }
     if (s.usedByEdts.length > 0) {
-      push('used-by-edt', 4, `branch also used by EDT ${s.usedByEdts.join(', ')}`);
+      push('used-by-edt', 5, `branch also used by EDT ${s.usedByEdts.join(', ')}`);
+    }
+  }
+  for (const o of others) {
+    if (o.drift === 'drifted') {
+      items.push({ service: o.service, path: o.path, reason: 'drift', rank: 1, text: driftText(o.branch, o.expectedBranch, false), focusable: false });
     }
   }
   // Array.prototype.sort is stable, so services keep their listing order within a severity.
@@ -175,12 +200,17 @@ export function registryAllClear(summary: DashboardRegistrySummary): boolean {
   return summary.repoCount > 0 && summary.invalidManifests === 0 && summary.unreachable === 0 && summary.listingIssues === 0;
 }
 
-// The next attention line after `current` (none yet = the first), wrapping around; null when empty.
-export function nextAttentionIndex(current: number | null, count: number): number | null {
-  if (count === 0) {
-    return null;
+// The next focusable attention line after `current` (none yet = the first), wrapping around;
+// null when no line is focusable.
+export function nextAttentionIndex(current: number | null, items: readonly AttentionItem[]): number | null {
+  const count = items.length;
+  for (let step = 1; step <= count; step += 1) {
+    const index = current === null ? step - 1 : (current + step) % count;
+    if (items[index]?.focusable === true) {
+      return index;
+    }
   }
-  return current === null || current >= count - 1 ? 0 : current + 1;
+  return null;
 }
 
 // Index of the row (in listing order) an attention item points at; -1 when the row is gone.
