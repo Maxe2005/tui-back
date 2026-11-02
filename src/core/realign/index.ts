@@ -67,8 +67,8 @@ export interface RealignServicesData {
 }
 
 // The scope's drifted candidates (`edt`: members, `all`: members then others; `none`: nothing)
-// plus every named service, deduplicated by path, members first. An unknown scope or name is an
-// `invalid-argument`.
+// plus every named service, deduplicated by path, members first. An unknown scope, an unknown
+// name or a name matching several repos is an `invalid-argument`.
 export function resolveRealignSelection(
   candidates: Pick<DriftCandidates, 'members' | 'others'>,
   scope: string,
@@ -84,6 +84,15 @@ export function resolveRealignSelection(
       'invalid-argument',
       `Unknown service ${unknown.map((name) => `"${name}"`).join(', ')} — not a member of the active EDT nor a managed service`,
     );
+  }
+  for (const name of new Set(services)) {
+    const matches = all.filter((candidate) => candidate.service === name);
+    if (matches.length > 1) {
+      return err(
+        'invalid-argument',
+        `Service name "${name}" is ambiguous — it matches ${matches.map((candidate) => candidate.path).join(', ')}; nothing was realigned`,
+      );
+    }
   }
   const inScope = (candidate: DriftCandidate): boolean =>
     candidate.drift === 'drifted' && (scope === 'all' || (scope === 'edt' && candidate.kind === 'member'));

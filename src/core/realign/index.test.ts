@@ -133,6 +133,32 @@ describe('resolveRealignSelection', () => {
     expect(names(resolveRealignSelection(candidates, 'none', ['c']))).toEqual(['c']);
   });
 
+  it('rejects a name matching several repos as ambiguous, naming their paths', () => {
+    const clash = {
+      members: [candidate('a', 'member', 'drifted')],
+      others: [{ ...candidate('c', 'other', 'drifted'), service: 'a' }, candidate('d', 'other', 'drifted'), { ...candidate('e', 'other', 'aligned'), service: 'd' }],
+    };
+    for (const name of ['a', 'd']) {
+      const result = resolveRealignSelection(clash, 'none', [name]);
+      expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(!result.ok && result.error.message).toContain(name === 'a' ? '/r/a, /r/c' : '/r/d, /r/e');
+    }
+    // A clash only matters when the name is used.
+    expect(names(resolveRealignSelection(clash, 'all'))).toEqual(['a', 'a', 'd']);
+  });
+
+  it('rejects an ambiguous --service before locking or touching anything', async () => {
+    const { params, lock, git } = build();
+    // The two managed others share one manifest service name.
+    (params().manifest.load as ReturnType<typeof vi.fn>).mockImplementation(async () => ok({ service: 'svc-x', sharedBranch: 'develop', modules: {} }));
+
+    const result = await realignServices(params({ services: ['svc-x'] }));
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument', message: expect.stringContaining('ambiguous') } });
+    expect(lock.acquire).not.toHaveBeenCalled();
+    expect(git.checkout).not.toHaveBeenCalled();
+  });
+
   it('rejects an unknown scope or service name', () => {
     expect(names(resolveRealignSelection(candidates, 'foo'))).toBe('invalid-argument');
     expect(names(resolveRealignSelection(candidates, 'edt', ['nope']))).toBe('invalid-argument');
