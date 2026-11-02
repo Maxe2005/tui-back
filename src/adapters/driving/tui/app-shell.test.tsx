@@ -647,6 +647,17 @@ it('shouldQuit returns true for q', () => {
         pendingServiceFocus: null,
         openServiceInZone: () => {},
         clearPendingServiceFocus: () => {},
+        realignScreenOpen: false,
+        realignCandidates: null,
+        realignDraft: { cursor: 0, selected: [], restartMode: 'none' },
+        realignRun: null,
+        openRealignScreen: () => {},
+        closeRealignScreen: () => {},
+        moveRealignCursor: () => {},
+        toggleRealignRow: () => {},
+        applyRealignPreset: () => {},
+        cycleRealignRestartMode: () => {},
+        runRealign: async () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);
