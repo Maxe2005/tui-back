@@ -321,6 +321,14 @@ export const FOOTER_CONTEXTS = {
   'reset-summary': { label: 'Reset summary', hints: [['Enter', 'continue'], CANCEL] },
   'reset-wait': { label: 'Reset summary (not ready)', hints: [CANCEL] },
   'reset-confirm': { label: 'Reset confirmation', hints: [['Enter', 'delete'], CANCEL] },
+  'realign-select': {
+    label: 'Realign selection',
+    hints: [MOVE, ['Space', 'toggle'], ['p', 'preset'], ['←/→', 'restart'], ['Enter', 'realign'], CANCEL],
+  },
+  'realign-select-empty': {
+    label: 'Realign selection (none checked)',
+    hints: [MOVE, ['Space', 'toggle'], ['p', 'preset'], ['←/→', 'restart'], CANCEL],
+  },
   'settings-general': {
     label: 'Settings General tab',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'edit'], TAB_SWITCH, CLOSE],
@@ -355,9 +363,9 @@ export type FooterContextId = keyof typeof FOOTER_CONTEXTS;
 
 // Who may register a footer context. Overlays sit above the zone they cover, so they win over a
 // zone that registers or re-registers while one is open.
-export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
+export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'realign' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
 
-export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset'];
+export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset', 'realign'];
 
 export type FooterContextEntry = { owner: FooterOwner; id: FooterContextId };
 

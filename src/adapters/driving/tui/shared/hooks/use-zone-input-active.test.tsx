@@ -35,6 +35,7 @@ const OVERLAYS: Array<[string, Partial<AppState>]> = [
   ['registry screen', { registryScreenOpen: true }],
   ['settings screen', { settingsScreenOpen: true }],
   ['reset screen', { resetScreenOpen: true }],
+  ['realign dialog', { realignScreenOpen: true }],
   ['help panel', { helpOpen: true }],
   ['resize mode', { resizeMode: { zone: 'update', targetBoundary: 0 } as AppState['resizeMode'] }],
 ];

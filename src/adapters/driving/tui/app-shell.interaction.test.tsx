@@ -2791,3 +2791,54 @@ describe('AppShell footer contexts (real keypress)', () => {
     }
   });
 });
+
+describe('AppShell realign overlay', () => {
+  it('opens through `:realign`, owns every key while open, and Esc closes it', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'realign');
+      await press(instance, stdin, KEYS.enter);
+      await flushAsyncLoad(instance);
+
+      expect(store.getState().realignScreenOpen).toBe(true);
+      expect(stdout.output).toContain('REALIGN');
+      const zoneBefore = store.getState().activeZone;
+
+      for (const key of ['e', 'u', ':', '?', KEYS.right]) {
+        await press(instance, stdin, key);
+      }
+      expect(store.getState().activeZone).toBe(zoneBefore);
+      expect(store.getState().commandBarOpen).toBe(false);
+      expect(store.getState().helpOpen).toBe(false);
+      expect(store.getState().realignScreenOpen).toBe(true);
+
+      await pressEscape(instance, stdin);
+      expect(store.getState().realignScreenOpen).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('while a realign is running, Esc is ignored', async () => {
+    const store = createAppStore();
+    store.setState({
+      realignScreenOpen: true,
+      realignCandidates: { status: 'ready', rows: [], error: null },
+      realignRun: { status: 'running', restartMode: 'none', rows: [{ service: 'svc-a', path: '/repo/a', status: 'realigning' }], restartRows: [], restartError: null, error: null },
+    });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('Realigning services…');
+      await pressEscape(instance, stdin);
+      expect(store.getState().realignScreenOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
