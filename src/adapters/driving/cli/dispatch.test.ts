@@ -931,20 +931,23 @@ describe('subcommand registry guards', () => {
       members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
     };
 
-    function realignSetup(opts: { checkout?: GitPort['checkout']; healthy?: boolean; withDocker?: boolean } = {}) {
+    function realignSetup(
+      opts: { checkout?: GitPort['checkout']; healthy?: boolean; withDocker?: boolean; registryList?: RegistryPort['list']; settings?: SettingsPort } = {},
+    ) {
       const checkout = vi.fn(opts.checkout ?? (async () => ok(undefined)));
       const acquire = vi.fn(async () => ok({ release: async () => ok(undefined) }));
       const containerRestart = vi.fn(async () => ok(undefined));
       const logAction = vi.fn(async () => ok(undefined));
       const subcommands = buildTestSubcommands({
         registry: {
-          list: async () => ok(['/repo/a', '/repo/b']),
+          list: opts.registryList ?? (async () => ok(['/repo/a', '/repo/b'])),
           add: async () => ok(undefined),
           exists: async () => ok(true),
           scan: async () => ok({ candidates: [], skipped: [] }),
           reset: async () => ok({ path: '/p', backupPath: null }),
           remove: async () => ok(undefined),
         },
+        ...(opts.settings !== undefined ? { settings: opts.settings } : {}),
         manifest: {
           load: async (repoPath: string) =>
             ok({
@@ -1058,6 +1061,46 @@ describe('subcommand registry guards', () => {
       const line = JSON.parse(rendered.output) as { error: { code: string; details: { rows: unknown[]; restart: unknown[] } } };
       expect(line.error.code).toBe('realign-restart-needs-attention');
       expect(line.error.details.rows).toEqual([expect.objectContaining({ service: 'svc-a', outcome: 'realigned' })]);
+    });
+
+    it('exits non-zero with realign-restart-needs-attention when the restart phase cannot run', async () => {
+      const list = vi
+        .fn<RegistryPort['list']>()
+        .mockResolvedValueOnce(ok(['/repo/a', '/repo/b']))
+        .mockResolvedValueOnce(ok(['/repo/a', '/repo/b']))
+        .mockResolvedValue(err('registry-read-error', 'registry.yaml vanished'));
+      const { subcommands, containerRestart } = realignSetup({ registryList: list });
+      const rendered = await runCli(['realign', '--restart', 'simple'], subcommands, false);
+      expect(rendered.exitCode).toBe(1);
+      const line = JSON.parse(rendered.output) as { error: { code: string; details: { rows: unknown[]; restartError: unknown } } };
+      expect(line.error.code).toBe('realign-restart-needs-attention');
+      expect(line.error.details.rows).toEqual([expect.objectContaining({ service: 'svc-a', outcome: 'realigned' })]);
+      expect(line.error.details.restartError).toEqual({ code: 'registry-read-error', message: 'registry.yaml vanished' });
+      expect(containerRestart).not.toHaveBeenCalled();
+    });
+
+    it('reports a failed registry listing as itself, not as an unknown service', async () => {
+      const { realign, checkout } = realignSetup({ registryList: async () => err('registry-read-error', 'registry.yaml unreadable') });
+      expect(await realign.run(['--service', 'svc-b'])).toEqual({
+        ok: false,
+        error: { code: 'registry-read-error', message: 'registry.yaml unreadable' },
+      });
+      expect(checkout).not.toHaveBeenCalled();
+    });
+
+    it('warns on stderr when settings cannot be read for the restart, then uses the defaults', async () => {
+      const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const { realign, containerRestart } = realignSetup({
+          settings: { load: async () => err('settings-read-error', 'settings.yaml unreadable'), save: async () => ok(undefined) },
+        });
+        const result = await realign.run(['--restart', 'simple']);
+        expect(result.ok).toBe(true);
+        expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+        expect(stderr).toHaveBeenCalledWith(expect.stringContaining('could not read settings, using defaults: settings.yaml unreadable'));
+      } finally {
+        stderr.mockRestore();
+      }
     });
 
     it('rejects a restart request up front when the Docker port is not wired', async () => {

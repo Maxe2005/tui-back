@@ -1073,7 +1073,13 @@ async function runRealign(
 
   let restart: Parameters<typeof realignServices>[0]['restart'];
   if (restartMode !== 'none') {
+    // A load failure or warning goes to stderr and the built-in concurrency applies.
     const loaded = await deps.settings.load();
+    if (!loaded.ok) {
+      console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+    } else if (loaded.data.warning !== null) {
+      console.error(`tui-back: ${loaded.data.warning}`);
+    }
     restart = {
       mode: restartMode,
       concurrency: (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).update.concurrency,
