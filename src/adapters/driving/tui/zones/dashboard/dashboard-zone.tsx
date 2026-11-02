@@ -1,7 +1,8 @@
 // tui/zones/dashboard: the fixed launch banner, then the registry prompt or the snapshot sections.
 // The snapshot loads on mount, on `R` and when the active EDT changes. Up/Down move the row cursor,
 // Ctrl+O/R/L run the focused row's actions, Enter opens it in Logs, `a` steps through Attention
-// lines, `E` enters the active EDT, `e` seeds the EDT quick-pick. Overlays make the zone inert.
+// lines, `A` opens the realign dialog, `E` enters the active EDT, `e` seeds the EDT quick-pick.
+// Overlays make the zone inert.
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import type { DashboardOtherService } from '../../../../../core/dashboard/snapshot.js';
@@ -48,6 +49,7 @@ export function DashboardZone({
   const openEdtSwitchDialog = useStore((state) => state.openEdtSwitchDialog);
   const openEdtCreateDialog = useStore((state) => state.openEdtCreateDialog);
   const setActiveZone = useStore((state) => state.setActiveZone);
+  const openRealignScreen = useStore((state) => state.openRealignScreen);
   const [cursor, setCursor] = useState(0);
   const [attentionPick, setAttentionPick] = useState<number | null>(null);
   const zoneInputActive = useZoneInputActive(useStore);
@@ -135,6 +137,10 @@ export function DashboardZone({
           }
           setActiveZone(effect.zone);
         }
+        return;
+      }
+      if (input === 'A') {
+        openRealignScreen();
         return;
       }
       if (input === 'a') {

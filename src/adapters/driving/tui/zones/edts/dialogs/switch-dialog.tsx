@@ -11,6 +11,7 @@ import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
 import { SwitchRestartReport } from './switch-restart-report.js';
 import { ModalDialog } from '../../../shared/components/modal-dialog.js';
+import { RestartModeSelector } from '../../../shared/components/restart-mode-selector.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   initialSwitchDialog,
@@ -51,14 +52,6 @@ export type SwitchDialogDeps = {
 export function effectiveRestartMode(dialog: SwitchDialogState, defaultMode: SwitchRestartRunMode): SwitchRestartRunMode {
   return dialog.restartMode ?? defaultMode;
 }
-
-const RESTART_MODE_ORDER: readonly SwitchRestartRunMode[] = ['none', 'simple', 'clean'];
-
-const RESTART_MODE_LABELS: Record<SwitchRestartRunMode, string> = {
-  none: 'Aucun',
-  simple: 'Redémarrage simple',
-  clean: 'Clean restart',
-};
 
 export function createSwitchDialogHandlers(deps: SwitchDialogDeps) {
   async function handleSwitchConfirm(current: SwitchDialogState, force: boolean) {
@@ -261,25 +254,6 @@ function SwitchResultsView({ dialog, results, compact = false }: { dialog: Switc
       />
       {dialog.failedRows.length > 0 ? <FailedResultList rows={dialog.failedRows} /> : null}
     </>
-  );
-}
-
-// "Redémarrer les services après le switch" — a three-way radio. ←/→/Space change it for this
-// switch only; the setting is never written back.
-function RestartModeSelector({ mode }: { mode: SwitchRestartRunMode }) {
-  return (
-    <Box flexDirection="column" marginTop={1}>
-      <Text color={colors.text} wrap="truncate-end">Redémarrer les services après le switch</Text>
-      <Text wrap="truncate-end">
-        {RESTART_MODE_ORDER.map((value) => (
-          <Text key={value} color={value === mode ? colors.accent : colors['text-dim']}>
-            {value === mode ? '(•)' : '( )'} {RESTART_MODE_LABELS[value]}
-            {'   '}
-          </Text>
-        ))}
-      </Text>
-      <DimAnnotation text="←/→ ou Espace pour changer. Le clean restart retombe sur un redémarrage simple là où aucune recette n'existe." />
-    </Box>
   );
 }
 

@@ -279,7 +279,7 @@ describe('subcommand registry guards', () => {
     });
   }
 
-  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/registry/list-routes/fire-request/dashboard without name collisions', () => {
+  it('buildSubcommands wires register/list-repos/scan/ping/edts/edt/update/realign/registry/list-routes/fire-request/dashboard without name collisions', () => {
     const subcommands = buildTestSubcommands();
 
     expect(subcommands.map((subcommand) => subcommand.name)).toEqual([
@@ -291,6 +291,7 @@ describe('subcommand registry guards', () => {
       'dashboard',
       'edt',
       'update',
+      'realign',
       'registry',
       'list-routes',
       'fire-request',
@@ -918,6 +919,280 @@ describe('subcommand registry guards', () => {
       const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
       if (!edt) throw new Error('expected edt subcommand');
       expect(await edt.run(['switch', '--to', 'demo', '--restart', 'simple'])).toMatchObject({ ok: false, error: { code: 'restart-unavailable' } });
+    });
+  });
+
+  describe('realign', () => {
+    const active = {
+      ulid: 'e1',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'active' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+    };
+
+    function realignSetup(
+      opts: { checkout?: GitPort['checkout']; healthy?: boolean; withDocker?: boolean; registryList?: RegistryPort['list']; settings?: SettingsPort } = {},
+    ) {
+      const checkout = vi.fn(opts.checkout ?? (async () => ok(undefined)));
+      const acquire = vi.fn(async () => ok({ release: async () => ok(undefined) }));
+      const containerRestart = vi.fn(async () => ok(undefined));
+      const logAction = vi.fn(async () => ok(undefined));
+      const subcommands = buildTestSubcommands({
+        registry: {
+          list: opts.registryList ?? (async () => ok(['/repo/a', '/repo/b'])),
+          add: async () => ok(undefined),
+          exists: async () => ok(true),
+          scan: async () => ok({ candidates: [], skipped: [] }),
+          reset: async () => ok({ path: '/p', backupPath: null }),
+          remove: async () => ok(undefined),
+        },
+        ...(opts.settings !== undefined ? { settings: opts.settings } : {}),
+        manifest: {
+          load: async (repoPath: string) =>
+            ok({
+              service: repoPath === '/repo/a' ? 'svc-a' : 'svc-b',
+              container: repoPath === '/repo/a' ? 'ctr-a' : undefined,
+              healthUrl: 'http://localhost:1/health',
+              sharedBranch: 'develop',
+              modules: {},
+            }),
+        },
+        // Both repos sit on `development`: svc-a drifted from feat/a, svc-b from develop.
+        git: fakeGitPort({ checkout }),
+        lock: { acquire, peek: async () => ok({ locked: false }) },
+        edtRegistry: { ...fakeEdtRegistry(), list: async () => ok([active]), logAction },
+        state: { ...fakeState(), readActiveEdt: async () => ok('e1') },
+        container: { restart: containerRestart },
+        ...(opts.withDocker === false
+          ? {}
+          : {
+              docker: {
+                streamLogs: () => () => {},
+                fetchLogsBefore: async () => ok([]),
+                getContainerHealth: async () => ok('up' as const),
+                restartContainer: async () => ok(undefined),
+              },
+              healthProbe: { probe: async () => ok({ healthy: opts.healthy ?? true, status: 200 }) },
+            }),
+      });
+      const realign = subcommands.find((subcommand) => subcommand.name === 'realign');
+      if (!realign) throw new Error('expected realign subcommand');
+      return { realign, checkout, acquire, containerRestart, logAction, subcommands };
+    }
+
+    it.each([
+      [['--scope', 'foo']],
+      [['--scope']],
+      [['--scope', 'edt', '--scope', 'all']],
+      [['--restart', 'bogus']],
+      [['--restart', 'simple', '--restart', 'none']],
+      [['--service']],
+      [['--service', '--scope']],
+      [['--bogus']],
+      [['extra']],
+      [['--service', 'nope']],
+    ])('rejects %j with invalid-argument before locking or touching anything', async (args) => {
+      const { realign, checkout, acquire } = realignSetup();
+      expect(await realign.run(args)).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+      expect(acquire).not.toHaveBeenCalled();
+      expect(checkout).not.toHaveBeenCalled();
+    });
+
+    it('defaults to scope edt with no restart and returns {rows}', async () => {
+      const { realign, checkout, containerRestart, logAction } = realignSetup();
+      const result = await realign.run([]);
+      expect(result).toEqual({
+        ok: true,
+        data: { rows: [{ service: 'svc-a', outcome: 'realigned', detail: { code: 'realigned', message: 'Checked out "feat/a"' } }] },
+      });
+      expect(checkout).toHaveBeenCalledWith('/repo/a', 'feat/a');
+      expect(containerRestart).not.toHaveBeenCalled();
+      expect(logAction).toHaveBeenCalledWith('e1', 'realign', 'success', expect.stringContaining('svc-a realigned'));
+    });
+
+    it('--scope none with no service is an empty success', async () => {
+      const { realign, checkout } = realignSetup();
+      expect(await realign.run(['--scope', 'none'])).toEqual({ ok: true, data: { rows: [] } });
+      expect(checkout).not.toHaveBeenCalled();
+    });
+
+    it('--service adds a managed other to the scope', async () => {
+      const { realign, checkout } = realignSetup();
+      const result = await realign.run(['--scope', 'none', '--service', 'svc-b']);
+      expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-b', outcome: 'realigned' }] } });
+      expect(checkout).toHaveBeenCalledWith('/repo/b', 'develop');
+    });
+
+    it('exits non-zero with the rows when a service fails', async () => {
+      const { subcommands } = realignSetup({ checkout: async () => err('git-checkout-error', 'refused') });
+      const rendered = await runCli(['realign'], subcommands, false);
+      expect(rendered.exitCode).toBe(1);
+      const line = JSON.parse(rendered.output) as { error: { code: string; details: { rows: unknown[] } } };
+      expect(line.error.code).toBe('realign-failed');
+      expect(line.error.details.rows).toEqual([{ service: 'svc-a', outcome: 'failed', detail: { code: 'git-checkout-error', message: 'refused' } }]);
+    });
+
+    it('--restart simple restarts the realigned container services and emits restart rows', async () => {
+      const { realign, containerRestart } = realignSetup();
+      const result = await realign.run(['--scope', 'all', '--restart', 'simple']);
+      expect(result.ok).toBe(true);
+      expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+      expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
+        expect.arrayContaining([
+          { service: 'svc-a', mode: 'simple', state: 'functional' },
+          { service: 'svc-b', mode: 'simple', state: 'skipped', detail: 'no container' },
+        ]),
+      );
+    });
+
+    it('exits non-zero when a restarted service ends unhealthy', async () => {
+      const { subcommands } = realignSetup({ healthy: false });
+      let rendered: Awaited<ReturnType<typeof runCli>>;
+      vi.useFakeTimers();
+      try {
+        const pending = runCli(['realign', '--restart', 'simple'], subcommands, false);
+        await vi.advanceTimersByTimeAsync(31_000);
+        rendered = await pending;
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(rendered.exitCode).toBe(1);
+      const line = JSON.parse(rendered.output) as { error: { code: string; details: { rows: unknown[]; restart: unknown[] } } };
+      expect(line.error.code).toBe('realign-restart-needs-attention');
+      expect(line.error.details.rows).toEqual([expect.objectContaining({ service: 'svc-a', outcome: 'realigned' })]);
+    });
+
+    it('exits non-zero with realign-restart-needs-attention when the restart phase cannot run', async () => {
+      const list = vi
+        .fn<RegistryPort['list']>()
+        .mockResolvedValueOnce(ok(['/repo/a', '/repo/b']))
+        .mockResolvedValueOnce(ok(['/repo/a', '/repo/b']))
+        .mockResolvedValue(err('registry-read-error', 'registry.yaml vanished'));
+      const { subcommands, containerRestart } = realignSetup({ registryList: list });
+      const rendered = await runCli(['realign', '--restart', 'simple'], subcommands, false);
+      expect(rendered.exitCode).toBe(1);
+      const line = JSON.parse(rendered.output) as { error: { code: string; details: { rows: unknown[]; restartError: unknown } } };
+      expect(line.error.code).toBe('realign-restart-needs-attention');
+      expect(line.error.details.rows).toEqual([expect.objectContaining({ service: 'svc-a', outcome: 'realigned' })]);
+      expect(line.error.details.restartError).toEqual({ code: 'registry-read-error', message: 'registry.yaml vanished' });
+      expect(containerRestart).not.toHaveBeenCalled();
+    });
+
+    it('reports a failed registry listing as itself, not as an unknown service', async () => {
+      const { realign, checkout } = realignSetup({ registryList: async () => err('registry-read-error', 'registry.yaml unreadable') });
+      expect(await realign.run(['--service', 'svc-b'])).toEqual({
+        ok: false,
+        error: { code: 'registry-read-error', message: 'registry.yaml unreadable' },
+      });
+      expect(checkout).not.toHaveBeenCalled();
+    });
+
+    it('warns on stderr when settings cannot be read for the restart, then uses the defaults', async () => {
+      const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const { realign, containerRestart } = realignSetup({
+          settings: { load: async () => err('settings-read-error', 'settings.yaml unreadable'), save: async () => ok(undefined) },
+        });
+        const result = await realign.run(['--restart', 'simple']);
+        expect(result.ok).toBe(true);
+        expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+        expect(stderr).toHaveBeenCalledWith(expect.stringContaining('could not read settings, using defaults: settings.yaml unreadable'));
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    function realignSettings(realign: { defaultScope: 'none' | 'edt' | 'all'; restartMode: 'none' | 'simple' | 'clean' }): SettingsPort {
+      return { load: async () => ok({ settings: { ...DEFAULT_SETTINGS, realign }, warning: null }), save: async () => ok(undefined) };
+    }
+
+    it('uses realign.defaultScope and realign.restartMode when --scope and --restart are absent', async () => {
+      const { realign, checkout, containerRestart } = realignSetup({ settings: realignSettings({ defaultScope: 'all', restartMode: 'clean' }) });
+      const result = await realign.run([]);
+      expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-a', outcome: 'realigned' }, { service: 'svc-b', outcome: 'realigned' }] } });
+      expect(checkout).toHaveBeenCalledTimes(2);
+      expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+      expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
+        expect.arrayContaining([expect.objectContaining({ service: 'svc-a', mode: 'clean', state: 'functional' })]),
+      );
+    });
+
+    it('lets explicit --scope and --restart override the settings', async () => {
+      const { realign, checkout, containerRestart } = realignSetup({ settings: realignSettings({ defaultScope: 'all', restartMode: 'clean' }) });
+      const result = await realign.run(['--scope', 'edt', '--restart', 'none']);
+      expect(result).toEqual({
+        ok: true,
+        data: { rows: [{ service: 'svc-a', outcome: 'realigned', detail: { code: 'realigned', message: 'Checked out "feat/a"' } }] },
+      });
+      expect(checkout).toHaveBeenCalledTimes(1);
+      expect(containerRestart).not.toHaveBeenCalled();
+    });
+
+    it('warns on stderr and applies the built-in scope and restart when settings cannot be read', async () => {
+      const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const { realign, checkout, containerRestart } = realignSetup({
+          settings: { load: async () => err('settings-read-error', 'settings.yaml unreadable'), save: async () => ok(undefined) },
+        });
+        expect(await realign.run([])).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-a', outcome: 'realigned' }] } });
+        expect(checkout).toHaveBeenCalledTimes(1);
+        expect(containerRestart).not.toHaveBeenCalled();
+        expect(stderr).toHaveBeenCalledWith(expect.stringContaining('could not read settings, using defaults'));
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    it('reads no settings when --scope and --restart none are both explicit', async () => {
+      const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const load = vi.fn(async () => err('settings-read-error', 'settings.yaml unreadable'));
+        const { realign } = realignSetup({ settings: { load, save: async () => ok(undefined) } });
+        expect(await realign.run(['--scope', 'edt', '--restart', 'none'])).toMatchObject({ ok: true });
+        expect(load).not.toHaveBeenCalled();
+        expect(stderr).not.toHaveBeenCalled();
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    it('prints a settings warning on stderr and still applies the loaded defaults', async () => {
+      const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const { realign, checkout } = realignSetup({
+          settings: {
+            load: async () => ok({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'all', restartMode: 'none' } }, warning: 'settings.yaml: realign.defaultScope invalid' }),
+            save: async () => ok(undefined),
+          },
+        });
+        expect(await realign.run([])).toMatchObject({ ok: true });
+        expect(checkout).toHaveBeenCalledTimes(2);
+        expect(stderr).toHaveBeenCalledWith('tui-back: settings.yaml: realign.defaultScope invalid');
+        expect(stderr).toHaveBeenCalledTimes(1);
+      } finally {
+        stderr.mockRestore();
+      }
+    });
+
+    it('rejects a restart request up front when the Docker port is not wired', async () => {
+      const { realign, acquire } = realignSetup({ withDocker: false });
+      expect(await realign.run(['--restart', 'clean'])).toMatchObject({ ok: false, error: { code: 'restart-unavailable' } });
+      expect(acquire).not.toHaveBeenCalled();
+    });
+
+    it('is rejected while an update, switch or realign holds the lock', async () => {
+      const checkout = vi.fn(async () => ok(undefined));
+      const blocked = buildTestSubcommands({
+        registry: { list: async () => ok(['/repo/a']), exists: async () => ok(true) } as unknown as RegistryPort,
+        manifest: { load: async () => ok({ service: 'svc-a', sharedBranch: 'develop', modules: {} }) },
+        git: fakeGitPort({ checkout }),
+        lock: { acquire: async () => err('action-in-progress', 'busy'), peek: async () => ok({ locked: true }) },
+        edtRegistry: { ...fakeEdtRegistry(), list: async () => ok([active]) },
+        state: { ...fakeState(), readActiveEdt: async () => ok('e1') },
+      }).find((subcommand) => subcommand.name === 'realign');
+      expect(await blocked?.run([])).toMatchObject({ ok: false, error: { code: 'realign-blocked-action-in-progress' } });
+      expect(checkout).not.toHaveBeenCalled();
     });
   });
 

@@ -5,7 +5,7 @@
 import { resolve } from 'node:path';
 import type { DockerPort, HealthState } from '../ports/docker.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import { GIT_DETACHED_HEAD, type GitPort } from '../ports/git.js';
+import type { GitPort } from '../ports/git.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
@@ -13,6 +13,9 @@ import { ok, type Result } from '../result.js';
 import { getServiceHealth } from '../logs/use-cases.js';
 import { isProtectedBranch } from '../edt/shared-branches.js';
 import { readServiceDivergence, type BranchDivergenceStatus } from '../edt/list.js';
+import { driftOf, readOthers, type DashboardOtherService, type DriftState } from './drift.js';
+
+export type { DashboardOtherService, DriftState } from './drift.js';
 
 export type Probed<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } };
 
@@ -29,10 +32,6 @@ export interface DashboardDivergence {
   detail?: { code: string; message: string };
 }
 
-// aligned/drifted compare the current branch with the expected one (a detached HEAD is
-// drifted); unknown means the branch could not be read.
-export type DriftState = 'aligned' | 'drifted' | 'unknown';
-
 export interface DashboardService {
   service: string;
   path: string;
@@ -47,16 +46,6 @@ export interface DashboardService {
   // The member's branch for the active EDT.
   expectedBranch: string;
   drift: DriftState;
-}
-
-// A registered, managed repo outside the active EDT, judged against its sharedBranch.
-export interface DashboardOtherService {
-  service: string;
-  path: string;
-  branch: string | null;
-  expectedBranch: string;
-  drift: DriftState;
-  detail?: { code: string; message: string };
 }
 
 export interface DashboardRegistrySummary {
@@ -162,44 +151,6 @@ async function summarizeRegistry(
     }),
   );
   return summary;
-}
-
-// Registered paths outside the active EDT whose manifest loads; unreachable, unmanaged and
-// invalid paths (and a failed registry listing) are left to the registry-health section. A port
-// that throws drops only its own row (or every row, for the listing): members never depend on it.
-async function readOthers(params: BuildDashboardSnapshotParams, memberPaths: Set<string>): Promise<DashboardOtherService[]> {
-  const registered = await params.registry.list().catch(() => null);
-  if (registered === null || !registered.ok) {
-    return [];
-  }
-  const candidates = [...new Set(registered.data.map((path) => resolve(path)))].filter((path) => !memberPaths.has(path));
-  const rows = await Promise.all(candidates.map((path) => readOther(params, path).catch(() => null)));
-  return rows.filter((row): row is DashboardOtherService => row !== null);
-}
-
-async function readOther(params: BuildDashboardSnapshotParams, path: string): Promise<DashboardOtherService | null> {
-  const exists = await params.registry.exists(path);
-  if (!exists.ok || !exists.data) {
-    return null;
-  }
-  const loaded = await params.manifest.load(path);
-  if (!loaded.ok) {
-    return null;
-  }
-  const expectedBranch = loaded.data.sharedBranch;
-  const branch = await params.git.currentBranch(path);
-  if (branch.ok) {
-    return { service: loaded.data.service, path, branch: branch.data, expectedBranch, drift: driftOf(branch.data, expectedBranch, null) };
-  }
-  const detail = { code: branch.error.code, message: branch.error.message };
-  return { service: loaded.data.service, path, branch: null, expectedBranch, drift: driftOf(null, expectedBranch, detail.code), detail };
-}
-
-function driftOf(branch: string | null, expectedBranch: string, errorCode: string | null | undefined): DriftState {
-  if (branch !== null) {
-    return branch === expectedBranch ? 'aligned' : 'drifted';
-  }
-  return errorCode === GIT_DETACHED_HEAD ? 'drifted' : 'unknown';
 }
 
 async function readService(

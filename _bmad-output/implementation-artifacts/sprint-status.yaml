@@ -50,7 +50,7 @@ development_status:
   2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: done
   2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: done
   2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: review
-  2-44-edt-switch-optional-parallel-service-restart-verified-state: review
+  2-44-edt-switch-optional-parallel-service-restart-verified-state: done
   epic-2-retrospective: optional
 
   epic-3: in-progress
@@ -95,7 +95,7 @@ development_status:
   8-4-dashboard-attention-block-registry-health: done
   8-5-dashboard-edt-actions-visual-finish: done
   # 8-6/8-7/8-8 (branch drift detection & realignment) added 2026-10-15: sprint-change-proposal-2026-10-15-2.md. Order: 8-6 → 8-7 (needs 2-44 merged) → 8-8.
-  8-6-branch-drift-detection-snapshot-attention: review
-  8-7-realign-use-case-and-cli-selective-branch-realignment: backlog
-  8-8-realign-dialog-shortcut-settings-defaults: backlog
+  8-6-branch-drift-detection-snapshot-attention: done
+  8-7-realign-use-case-and-cli-selective-branch-realignment: done
+  8-8-realign-dialog-shortcut-settings-defaults: done
   epic-8-retrospective: optional
