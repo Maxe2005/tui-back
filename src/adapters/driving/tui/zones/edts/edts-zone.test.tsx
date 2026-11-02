@@ -382,7 +382,7 @@ describe('EdtsZone', () => {
           ahead: null,
           behind: null,
           status: 'unknown-offline',
-          detail: { code: 'git-current-branch-error', message: 'HEAD is detached' },
+          detail: { code: 'git-detached-head', message: 'HEAD is detached' },
         }),
       ],
       loadEdtsBranches: noopLoad,

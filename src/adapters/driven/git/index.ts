@@ -9,7 +9,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import type { GitPort, VersionBumpWalkOptions, VersionBumpWalkSummary, VersionWalkEnd } from '../../../core/ports/git.js';
+import { GIT_DETACHED_HEAD, type GitPort, type VersionBumpWalkOptions, type VersionBumpWalkSummary, type VersionWalkEnd } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import { branchOwners } from '../../../core/edt/branch-owners.js';
 // The FR-7 protected-branch rule lives in core, shared with the TUI's advisory check.
@@ -220,7 +220,7 @@ export async function currentBranch(repoPath: string): Promise<Result<string>> {
   // "HEAD" — that is not a branch name and must never be recorded as one. It gets its own
   // code so callers can tell it from a probe failure (unborn repos already error via exit 128).
   if (branch === 'HEAD') {
-    return err('git-detached-head', `Cannot determine a named branch in ${repoPath}: HEAD is detached`);
+    return err(GIT_DETACHED_HEAD, `Cannot determine a named branch in ${repoPath}: HEAD is detached`);
   }
   return ok(branch);
 }
