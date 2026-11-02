@@ -459,4 +459,55 @@ describe('realignServices', () => {
 
     expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-a', outcome: 'realigned' }], restart: { summary: { down: 1 } } } });
   });
+
+  it('logs the run failed when a restarted service needs attention, like the CLI exit code', async () => {
+    const { params, logAction } = build();
+    const serviceActions = {
+      restart: vi.fn(async () => ok({})),
+      verifyService: vi.fn(async () => ok({ state: 'unhealthy' as ServiceFinalState })),
+    };
+
+    await realignServices(params({ restart: { mode: 'simple', concurrency: 1, serviceActions: serviceActions as never } }));
+
+    expect(logAction).toHaveBeenCalledWith('e1', 'realign', 'failed', expect.stringContaining('svc-a unhealthy'));
+  });
+
+  it('keeps the realigned rows and reports restartError when the restart phase cannot list repos', async () => {
+    const { params, logAction } = build();
+    const serviceActions = { restart: vi.fn(async () => ok({})), verifyService: vi.fn() };
+    // Listing #1 (selection) and #2 (fresh read under the locks) succeed; #3 (restart) fails.
+    (params().registry.list as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(ok(['/r/a', '/r/b', '/r/c', '/r/d']))
+      .mockResolvedValueOnce(ok(['/r/a', '/r/b', '/r/c', '/r/d']))
+      .mockResolvedValue(err('registry-read-error', 'registry.yaml vanished'));
+
+    const result = await realignServices(params({ restart: { mode: 'simple', concurrency: 1, serviceActions: serviceActions as never } }));
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        edt: { ulid: 'e1', topic: 'topic-a' },
+        selection: ['svc-a'],
+        rows: [expect.objectContaining({ service: 'svc-a', outcome: 'realigned' })],
+        restartError: { code: 'registry-read-error', message: 'registry.yaml vanished' },
+      },
+    });
+    expect(serviceActions.restart).not.toHaveBeenCalled();
+    expect(logAction).toHaveBeenCalledWith('e1', 'realign', 'failed', expect.stringContaining('restart failed: registry.yaml vanished'));
+  });
+
+  it('matches restart targets by resolved path, whatever trailing slash the registry or EDT uses', async () => {
+    const { params, edtRegistry } = build();
+    (edtRegistry.list as ReturnType<typeof vi.fn>).mockResolvedValue(ok([{ ...EDT, members: [{ service: 'svc-a', repoPath: '/r/a/', branch: 'feat/a' }] }]));
+    (params().registry.list as ReturnType<typeof vi.fn>).mockResolvedValue(ok(['/r/a/', '/r/c']));
+    const serviceActions = {
+      restart: vi.fn(async () => ok({})),
+      verifyService: vi.fn(async () => ok({ state: 'functional' as ServiceFinalState })),
+    };
+
+    const result = await realignServices(params({ restart: { mode: 'simple', concurrency: 1, serviceActions: serviceActions as never } }));
+
+    expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-a', outcome: 'realigned' }], restart: { rows: [{ service: 'svc-a', phase: 'functional' }] } } });
+    expect(serviceActions.restart).toHaveBeenCalledWith('/r/a', 'simple');
+  });
 });

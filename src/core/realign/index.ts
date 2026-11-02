@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../dashboard/drift.js';
 import { checkoutExpectedBranch, type TargetBranchSpec } from '../edt/checkout-expected.js';
 import { MANIFEST_FILE, withCarriedManifest } from '../edt/manifest-carry.js';
-import { listSwitchRestartRepos, restartAfterSwitch, type RestartReport, type RestartRow } from '../edt/switch-restart.js';
+import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention, type RestartReport, type RestartRow } from '../edt/switch-restart.js';
 import { withActionLock } from '../locking.js';
 import type { EdtRegistryPort } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
@@ -285,16 +285,19 @@ async function runRestartPhase(
     data.restartError = { code: repos.error.code, message: repos.error.message };
     return;
   }
-  const selectedPaths = new Set(selection.map((candidate) => candidate.path));
-  const realignedPaths = new Set(selection.filter((_, index) => rows[index]?.outcome === 'realigned').map((candidate) => candidate.path));
-  const covered = repos.data.filter((repo) => selectedPaths.has(repo.repoPath));
+  // Paths are compared resolve()'d on both sides, so a trailing slash never drops a target.
+  const selectedPaths = new Set(selection.map((candidate) => resolve(candidate.path)));
+  const realignedPaths = new Set(
+    selection.filter((_, index) => rows[index]?.outcome === 'realigned').map((candidate) => resolve(candidate.path)),
+  );
+  const covered = repos.data.filter((repo) => selectedPaths.has(resolve(repo.repoPath)));
   const report = await restartAfterSwitch({
     results: [],
     repos: covered,
     mode: options.mode,
     concurrency: options.concurrency,
     serviceActions: options.serviceActions,
-    changedServices: covered.filter((repo) => realignedPaths.has(repo.repoPath)).map((repo) => repo.service),
+    changedServices: covered.filter((repo) => realignedPaths.has(resolve(repo.repoPath))).map((repo) => repo.service),
     ...(options.onPhase !== undefined ? { onPhase: options.onPhase } : {}),
   });
   if (report.ok) {
@@ -318,12 +321,18 @@ function describeRun(data: RealignServicesData): string {
   return `Selection: ${selection} — ${outcomes === '' ? 'nothing to realign' : outcomes}${restart}`;
 }
 
-// One action-log entry per run; a log failure (or a port without a log) never fails the run.
+// One action-log entry per run, `failed` exactly when the CLI exits non-zero; a log failure (or
+// a port without a log) never fails the run.
 async function logRun(edtRegistry: EdtRegistryPort, ulid: string, data: RealignServicesData): Promise<void> {
   if (edtRegistry.logAction === undefined) {
     return;
   }
-  const outcome = data.rows.some((row) => row.outcome === 'failed') ? 'failed' : 'success';
+  const outcome =
+    data.rows.some((row) => row.outcome === 'failed') ||
+    data.restartError !== undefined ||
+    (data.restart !== undefined && restartNeedsAttention(data.restart.summary))
+      ? 'failed'
+      : 'success';
   try {
     await edtRegistry.logAction(ulid, 'realign', outcome, describeRun(data));
   } catch {
