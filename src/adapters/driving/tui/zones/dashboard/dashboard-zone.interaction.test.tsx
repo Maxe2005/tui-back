@@ -95,18 +95,22 @@ describe('DashboardZone interaction', () => {
     store.setState({
       dashboardServices: {
         ...services,
-        services: [serviceRow('a'), { ...serviceRow('b'), branch: 'main', drift: 'drifted' }],
+        services: [
+          { ...serviceRow('a'), divergence: { status: 'current', ahead: 0, behind: 3 } },
+          { ...serviceRow('b'), branch: 'main', drift: 'drifted' },
+        ],
         others: [{ service: 'o', path: '/r/o', branch: 'hotfix', expectedBranch: 'development', drift: 'drifted' }],
       },
     });
     const { instance, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      // Lines: b (member drift), o (other drift). The second `a` wraps back to b.
+      // Lines: b (member drift), o (other drift, no row), a (behind). The second `a` must
+      // jump over o straight to a's line.
       await press(instance, stdin, 'a');
       await press(instance, stdin, 'a');
       await press(instance, stdin, '\r');
-      expect(openServiceInZone).toHaveBeenCalledWith('/r/b');
+      expect(openServiceInZone).toHaveBeenLastCalledWith('/r/a');
     } finally {
       instance.unmount();
     }

@@ -4,6 +4,7 @@
 // lines, `E` enters the active EDT, `e` seeds the EDT quick-pick. Overlays make the zone inert.
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
+import type { DashboardOtherService } from '../../../../../core/dashboard/snapshot.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { useInput } from '../../shared/hooks/use-input.js';
@@ -13,7 +14,6 @@ import { DashboardBody } from './dashboard-body.js';
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import { actionForKey, buildAttentionItems, edtKeyEffect, resolveEdtSection, nextAttentionIndex, resolveDashboardBody, rowIndexForAttention } from './dashboard.logic.js';
 import { LaunchBanner } from './launch-banner.js';
-import type { DashboardOtherService } from '../../../../../core/dashboard/snapshot.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 
 export const EMPTY_REGISTRY_MESSAGE = 'No repos registered yet.';
@@ -22,9 +22,11 @@ export const EMPTY_REGISTRY_HINT = 'Press [:] to scan a root path and register r
 // than silently falling through to whatever registryEmpty last was.
 export const REGISTRY_CHECK_ERROR_MESSAGE = 'Failed to check the repo registry.';
 
+// A stable empty list, so a snapshot without others does not rebuild the attention items.
+const NO_OTHERS: readonly DashboardOtherService[] = [];
+
 // Used only while the registry's action list is not loaded (unwired ports): the key still
 // reaches the store, which reports the missing port inline.
-const NO_OTHERS: readonly DashboardOtherService[] = [];
 const FALLBACK_ACTION_IDS: Record<string, string> = { o: 'open-in-ide', r: 'restart-simple', l: 'restart-clean' };
 
 export function DashboardZone({

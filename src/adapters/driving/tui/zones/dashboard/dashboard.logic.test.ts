@@ -1,5 +1,6 @@
-// tui/zones/dashboard: the pure helpers — body precedence, the "updated Ns ago" wording and the
-// field-level error labels.
+// tui/zones/dashboard: the pure helpers — body precedence, the "updated Ns ago" wording, the
+// field-level error labels, the Attention items (severity order, drift lines for members and
+// other services) and the attention cycling that skips lines without a row.
 import { describe, expect, it } from 'vitest';
 import type { DashboardOtherService, DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import { MIN_TERMINAL_ROWS, SHELL_CHROME_ROWS } from '../../shared/bounds/bounds.js';
