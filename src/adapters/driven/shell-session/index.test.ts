@@ -45,6 +45,23 @@ function alive(pid: number): boolean {
   }
 }
 
+// The process group is gone when signalling it reports ESRCH.
+function groupErrorCode(pgid: number): string | undefined {
+  try {
+    process.kill(-pgid, 0);
+    return undefined;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code;
+  }
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 describe('createShellSessionPort — service target (real sh)', () => {
   it('streams tagged stdout/stderr lines, hides the sentinel and reports exit code and cwd', async () => {
     const repo = await makeRepo();
@@ -63,8 +80,91 @@ describe('createShellSessionPort — service target (real sh)', () => {
     const target: ShellTarget = { kind: 'service', repoPath: repo };
 
     expect((await runIn(target, repo, 'false')).outcome).toEqual({ status: 'exited', exitCode: 1, cwd: repo });
-    // `exit` skips the sentinel: no cwd reported.
-    expect((await runIn(target, repo, 'exit 3')).outcome).toEqual({ status: 'exited', exitCode: 3 });
+    // The EXIT trap still reports cwd when the command calls `exit`.
+    const exited = await runIn(target, repo, 'exit 3');
+    expect(exited.outcome).toEqual({ status: 'exited', exitCode: 3, cwd: repo });
+    expect(exited.lines).toEqual([]);
+  });
+
+  it('survives a trailing backslash, keeping the sentinel hidden', async () => {
+    const repo = await makeRepo();
+
+    const { lines, outcome } = await runIn({ kind: 'service', repoPath: repo }, repo, 'echo a \\');
+
+    expect(outcome).toEqual({ status: 'exited', exitCode: 0, cwd: repo });
+    expect(lines.every((line) => !line.text.includes('__TUI_BACK_CWD_'))).toBe(true);
+    expect(lines[0]?.text.startsWith('a')).toBe(true);
+  });
+
+  it('reports the exit code and cwd under set -e, keeping the sentinel hidden', async () => {
+    const repo = await makeRepo();
+
+    const { lines, outcome } = await runIn({ kind: 'service', repoPath: repo }, repo, 'set -e; false; echo x');
+
+    expect(outcome).toEqual({ status: 'exited', exitCode: 1, cwd: repo });
+    expect(lines).toEqual([]);
+  });
+
+  it('maps a signal death to 128 + signal number', async () => {
+    const repo = await makeRepo();
+    const target: ShellTarget = { kind: 'service', repoPath: repo };
+
+    // SIGKILL can't run the EXIT trap: no cwd.
+    expect((await runIn(target, repo, 'kill -KILL $$')).outcome).toEqual({ status: 'exited', exitCode: 137 });
+    // POSIX sh (dash) skips the EXIT trap on an untrapped fatal signal; bash-as-sh may run it.
+    const term = await runIn(target, repo, 'kill -TERM $$');
+    expect(term.outcome).toMatchObject({ status: 'exited', exitCode: 143 });
+    if (term.outcome.status === 'exited' && term.outcome.cwd !== undefined) {
+      expect(term.outcome.cwd).toBe(repo);
+    }
+    expect(term.lines).toEqual([]);
+  });
+
+  it('settles shortly after the shell exits even when a background job holds the pipes', async () => {
+    const repo = await makeRepo();
+    const started = Date.now();
+
+    const { lines, outcome } = await runIn({ kind: 'service', repoPath: repo }, repo, 'sleep 5 & echo "$!"; echo started');
+
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(outcome).toEqual({ status: 'exited', exitCode: 0, cwd: repo });
+    expect(lines[1]).toEqual({ stream: 'stdout', text: 'started' });
+    // A normally completed run leaves its background job alone; clean it up here.
+    const sleeper = Number(lines[0]?.text);
+    expect(alive(sleeper)).toBe(true);
+    process.kill(sleeper, 'SIGKILL');
+  });
+
+  it('ignores cancel once the shell exited: the run keeps its exited outcome', async () => {
+    const repo = await makeRepo();
+    const lines: ShellLine[] = [];
+    // The background sleep holds the pipes, so the run stays in its drain window after exit.
+    const handle = createShellSessionPort().run(
+      { kind: 'service', repoPath: repo },
+      repo,
+      'sleep 3 & echo "$!"; exit 4',
+      (line) => lines.push(line),
+    );
+    await waitFor(() => lines.length > 0);
+    const sleeper = Number(lines[0]?.text);
+    expect(Number.isInteger(sleeper)).toBe(true);
+    // Give the shell time to exit (the sleeper keeps the pipes open).
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    handle.cancel();
+
+    expect(await handle.done).toEqual({ status: 'exited', exitCode: 4, cwd: repo });
+    // No signal reached the group: the background job is untouched.
+    expect(alive(sleeper)).toBe(true);
+    process.kill(sleeper, 'SIGKILL');
+  });
+
+  it('settles failed/cwd-missing when the requested cwd no longer exists', async () => {
+    const repo = await makeRepo();
+
+    const { outcome } = await runIn({ kind: 'service', repoPath: repo }, join(repo, 'deleted'), 'ls');
+
+    expect(outcome).toMatchObject({ status: 'failed', error: { code: 'cwd-missing' } });
   });
 
   it('reports the new cwd after cd and runs the next command there', async () => {
@@ -98,16 +198,40 @@ describe('createShellSessionPort — service target (real sh)', () => {
     expect(outcome).toMatchObject({ status: 'exited', exitCode: 0 });
   });
 
-  it('runs without a TTY and with a dumb terminal and cat pagers', async () => {
+  it('runs without a TTY, with a dumb terminal, cat pagers and colours disabled', async () => {
+    const repo = await makeRepo();
+    const saved = { FORCE_COLOR: process.env.FORCE_COLOR, CLICOLOR_FORCE: process.env.CLICOLOR_FORCE };
+    process.env.FORCE_COLOR = '1';
+    process.env.CLICOLOR_FORCE = '1';
+    try {
+      const { lines } = await runIn(
+        { kind: 'service', repoPath: repo },
+        repo,
+        'test -t 0 && echo tty0; test -t 1 && echo tty1; echo "$TERM $PAGER $GIT_PAGER $NO_COLOR [${FORCE_COLOR-unset}] [${CLICOLOR_FORCE-unset}]"',
+      );
+
+      expect(lines).toEqual([{ stream: 'stdout', text: 'dumb cat cat 1 [unset] [unset]' }]);
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = value;
+        }
+      }
+    }
+  });
+
+  it('delivers a held empty stdout line before a following stderr line', async () => {
     const repo = await makeRepo();
 
-    const { lines } = await runIn(
-      { kind: 'service', repoPath: repo },
-      repo,
-      'test -t 0 && echo tty0; test -t 1 && echo tty1; echo "$TERM $PAGER $GIT_PAGER"',
-    );
+    const { lines } = await runIn({ kind: 'service', repoPath: repo }, repo, "printf 'a\\n\\n'; sleep 0.1; echo b >&2");
 
-    expect(lines).toEqual([{ stream: 'stdout', text: 'dumb cat cat' }]);
+    expect(lines).toEqual([
+      { stream: 'stdout', text: 'a' },
+      { stream: 'stdout', text: '' },
+      { stream: 'stderr', text: 'b' },
+    ]);
   });
 
   it('cancel kills the whole process group, grandchildren included, then settles cancelled', async () => {
@@ -116,22 +240,21 @@ describe('createShellSessionPort — service target (real sh)', () => {
     const handle = createShellSessionPort().run(
       { kind: 'service', repoPath: repo },
       repo,
-      // The grandchild `sleep` runs in the background; the shell waits on it.
-      'sleep 30 & echo "$!"; wait',
+      // The grandchild `sleep` runs in the background; the shell (its group leader) waits on it.
+      'sleep 30 & echo "$$ $!"; wait',
       (line) => lines.push(line),
     );
-    // Wait for the grandchild's pid to be printed.
-    for (let attempt = 0; attempt < 100 && lines.length === 0; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    const grandchild = Number(lines[0]?.text);
-    expect(alive(grandchild)).toBe(true);
+    await waitFor(() => lines.length > 0);
+    const [pgid, grandchild] = (lines[0]?.text ?? '').split(' ').map(Number);
+    expect(Number.isInteger(pgid) && Number.isInteger(grandchild)).toBe(true);
+    expect(alive(grandchild!)).toBe(true);
 
     handle.cancel();
     handle.cancel();
 
     expect(await handle.done).toEqual({ status: 'cancelled' });
-    expect(alive(grandchild)).toBe(false);
+    expect(alive(grandchild!)).toBe(false);
+    expect(groupErrorCode(pgid!)).toBe('ESRCH');
     handle.cancel();
   });
 
@@ -141,16 +264,17 @@ describe('createShellSessionPort — service target (real sh)', () => {
     const handle = createShellSessionPort({ killGraceMs: 100 }).run(
       { kind: 'service', repoPath: repo },
       repo,
-      "trap '' TERM; echo ready; while :; do sleep 0.05; done",
+      "trap '' TERM; echo ready $$; while :; do sleep 0.05; done",
       (line) => lines.push(line),
     );
-    for (let attempt = 0; attempt < 100 && lines.length === 0; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
+    await waitFor(() => lines.length > 0);
+    expect(lines[0]?.text).toMatch(/^ready \d+$/);
+    const pgid = Number(lines[0]?.text.split(' ')[1]);
 
     handle.cancel();
 
     expect(await handle.done).toEqual({ status: 'cancelled' });
+    expect(groupErrorCode(pgid)).toBe('ESRCH');
   });
 
   it('settles failed/shell-unavailable when the shell cannot be spawned, never rejecting', async () => {
@@ -165,8 +289,8 @@ describe('createShellSessionPort — service target (real sh)', () => {
 });
 
 describe('createShellSessionPort — container target (stub docker)', () => {
-  // A stub `docker` that logs its argv (one arg per line, then a separator) and runs the
-  // trailing `sh -c <script>` locally, so the sentinel round-trip is exercised too.
+  // A stub `docker` that logs its argv (one arg per line, then a separator), honours `-w` and
+  // runs the trailing `sh -c <script>` locally, so the sentinel round-trip is exercised too.
   async function makeStubDocker(): Promise<{ docker: string; logPath: string }> {
     const stubDir = await mkdtemp(join(tmpdir(), 'tui-back-docker-stub-'));
     tmpDirs.push(stubDir);
@@ -175,7 +299,7 @@ describe('createShellSessionPort — container target (stub docker)', () => {
     await writeFile(
       docker,
       `#!/bin/sh\nfor a in "$@"; do printf '%s\\n' "$a" >> "${logPath}"; done\necho --- >> "${logPath}"\n` +
-        `while [ "$#" -gt 1 ] && [ "$1" != "-c" ]; do shift; done\nshift\nexec sh -c "$1"\n`,
+        `while [ "$#" -gt 0 ]; do case "$1" in -w) shift; cd "$1" || exit 126;; -c) shift; exec sh -c "$1";; esac; shift; done\n`,
       { mode: 0o755 },
     );
     return { docker, logPath };
@@ -189,7 +313,9 @@ describe('createShellSessionPort — container target (stub docker)', () => {
       .map((chunk) => chunk.split('\n'));
   }
 
-  it('runs `docker exec <container> sh -c <wrapped>` without -t/-i, adding -w only when a cwd is known', async () => {
+  const ENV_ARGS = ['-e', 'TERM=dumb', '-e', 'PAGER=cat', '-e', 'GIT_PAGER=cat', '-e', 'NO_COLOR=1'];
+
+  it('runs `docker exec -e … <container> sh -c <wrapped>` without -t/-i, adding -w only when a cwd is known', async () => {
     const { docker, logPath } = await makeStubDocker();
     const target: ShellTarget = { kind: 'container', container: 'api' };
 
@@ -201,16 +327,27 @@ describe('createShellSessionPort — container target (stub docker)', () => {
     expect(second.lines).toEqual([{ stream: 'stdout', text: 'again' }]);
 
     const [argv1, argv2] = await argvOf(logPath);
-    expect(argv1?.slice(0, 4)).toEqual(['exec', 'api', 'sh', '-c']);
-    // The wrapped script spans several log lines: the command, then the sentinel trailer.
-    expect(argv1?.[4]).toBe('echo hi');
-    expect(argv1?.[5]).toMatch(/^__rc=\$\?; printf /);
-    expect(argv2?.slice(0, 6)).toEqual(['exec', '-w', '/tmp', 'api', 'sh', '-c']);
+    expect(argv1?.slice(0, 12)).toEqual(['exec', ...ENV_ARGS, 'api', 'sh', '-c']);
+    // The wrapped script spans several log lines: the sentinel trap, then the command.
+    expect(argv1?.[12]).toMatch(/^trap '__rc=\$\?; printf /);
+    expect(argv1?.[13]).toBe('echo hi');
+    expect(argv2?.slice(0, 14)).toEqual(['exec', ...ENV_ARGS, '-w', '/tmp', 'api', 'sh', '-c']);
     for (const argv of [argv1, argv2]) {
       expect(argv).not.toContain('-t');
       expect(argv).not.toContain('-i');
       expect(argv).not.toContain('-it');
     }
+  });
+
+  it('reports the container-side cwd from the sentinel', async () => {
+    const { docker } = await makeStubDocker();
+    const repo = await makeRepo();
+    const target: ShellTarget = { kind: 'container', container: 'api' };
+
+    const { lines, outcome } = await runIn(target, join(repo, 'sub'), 'cd ..; echo moved', { docker });
+
+    expect(lines).toEqual([{ stream: 'stdout', text: 'moved' }]);
+    expect(outcome).toEqual({ status: 'exited', exitCode: 0, cwd: repo });
   });
 
   it('settles failed/shell-unavailable when the docker executable is missing', async () => {

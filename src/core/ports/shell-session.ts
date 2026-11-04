@@ -1,7 +1,8 @@
 // core/ports/shell-session: the line-oriented command-execution seam (AD-22). One `run` spawns
 // one command — `sh -c` in a service's repo dir, or `docker exec` (no TTY) inside its
 // container — and streams its stdout/stderr back line by line. Deliberately not a PTY: a PTY
-// adapter can later implement this same contract without touching core.
+// adapter can later implement this same contract without touching core. The shipped adapter is
+// POSIX-only (a POSIX `sh`, detached process groups signalled via `kill(-pgid)`).
 import type { ResultError } from '../result.js';
 
 export type ShellTarget =
@@ -21,10 +22,14 @@ export type ShellRunOutcome =
   // e.g. when the command itself called `exit`).
   | { status: 'exited'; exitCode: number; cwd?: string }
   | { status: 'cancelled' }
+  // Could not start: `shell-unavailable` (executable missing / unspawnable) or `cwd-missing`
+  // (the requested working directory no longer exists).
   | { status: 'failed'; error: ResultError };
 
 export interface ShellRunHandle {
-  // Terminates the run's whole process group; idempotent, a no-op once `done` settled.
+  // Terminates the run's whole process group; idempotent, a no-op once `done` settled or the
+  // command already exited. For a container target only the local `docker exec` client is
+  // terminated: the process inside the container may keep running.
   cancel(): void;
   // Settles once the run is over. Never rejects.
   done: Promise<ShellRunOutcome>;

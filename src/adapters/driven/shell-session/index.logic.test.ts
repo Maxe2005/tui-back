@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createLineSplitter, createSentinelFilter, wrapCommand } from './index.logic.js';
+import { createLineSplitter, createSentinelFilter, MAX_LINE_LENGTH, wrapCommand } from './index.logic.js';
 
 describe('wrapCommand', () => {
-  it('appends the sentinel printf on its own line and preserves the exit status', () => {
-    expect(wrapCommand('ls # note', 'S:')).toBe(`ls # note\n__rc=$?; printf '\\n%s%s\\n' 'S:' "$PWD"; exit $__rc`);
+  it('installs the sentinel EXIT trap before the command', () => {
+    expect(wrapCommand('ls # note', 'S:')).toBe(`trap '__rc=$?; printf "\\n%s%s\\n" "S:" "$PWD"; exit $__rc' EXIT\nls # note`);
   });
 });
 
@@ -17,6 +17,27 @@ describe('createLineSplitter', () => {
     splitter.end();
     splitter.end();
     expect(lines).toEqual(['a', 'bc', '', 'd']);
+  });
+
+  it('cuts a line with no newline every MAX_LINE_LENGTH characters', () => {
+    const lines: string[] = [];
+    const splitter = createLineSplitter((text) => lines.push(text));
+    splitter.push('x'.repeat(MAX_LINE_LENGTH - 1));
+    expect(lines).toEqual([]);
+    splitter.push('x'.repeat(MAX_LINE_LENGTH + 10));
+    expect(lines).toEqual(['x'.repeat(MAX_LINE_LENGTH), 'x'.repeat(MAX_LINE_LENGTH)]);
+    splitter.push('y\nz');
+    expect(lines[2]).toBe(`${'x'.repeat(9)}y`);
+    splitter.end();
+    expect(lines).toHaveLength(4);
+  });
+
+  it('keeps a line of exactly MAX_LINE_LENGTH characters whole', () => {
+    const lines: string[] = [];
+    const splitter = createLineSplitter((text) => lines.push(text), 4);
+    splitter.push('abcd\nef');
+    splitter.end();
+    expect(lines).toEqual(['abcd', 'ef']);
   });
 });
 
@@ -42,5 +63,18 @@ describe('createSentinelFilter', () => {
 
   it('flushes a held empty line and reports no cwd when the sentinel never came', () => {
     expect(run(['a', ''])).toEqual({ out: ['a', ''] });
+  });
+
+  it('flushHeld emits a held empty line first, so a following stderr line keeps its order', () => {
+    const out: string[] = [];
+    const filter = createSentinelFilter('S:', (text) => out.push(`out:${text}`));
+    filter.line('a');
+    filter.line('');
+    // The adapter calls flushHeld right before delivering a stderr line.
+    filter.flushHeld();
+    out.push('err:b');
+    filter.line('S:/x');
+    expect(out).toEqual(['out:a', 'out:', 'err:b']);
+    expect(filter.end()).toEqual({ cwd: '/x' });
   });
 });
