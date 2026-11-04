@@ -431,7 +431,8 @@ calculé à partir de `healthUrl` et du conteneur selon le tableau ci-dessus :
   décidé de l'état (2xx malgré une erreur Docker).
 - `probeReason` (optionnel) : pourquoi la sonde n'a pas répondu 2xx.
 - Quand le statut ne peut pas être calculé (manifeste illisible, ou Docker en erreur sans sonde
-  2xx), `status` vaut `{ "ok": false, "error": { "code", "message" } }`.
+  2xx), `status` vaut `{ "ok": false, "error": { "code", "message" } }`. Quand Docker et la
+  sonde ont tous deux échoué, `error.details.probeReason` porte la raison de la sonde.
 
 ## Erreurs de chargement possibles
 
