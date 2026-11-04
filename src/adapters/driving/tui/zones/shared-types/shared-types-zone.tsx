@@ -49,8 +49,10 @@ export const SHARED_TYPES_PUBLISH_TITLE = 'PUBLISH';
 
 // Rows the form/run views use around their windowed consumer list: title, version row, two
 // section headers, the option rows, the issue lines, the run notice and hint; the form view also
-// carries the action bar and its one-line reasons (the run view never shows them).
-const FORM_CHROME_ROWS = 4 + OPTION_ROWS.length + 4 + 2;
+// carries the action bar and its one-line reasons (the run view never shows them), plus the blank
+// spacer rows that air out its sections (before the bar, the form, Services and Options).
+const SECTION_GAP_ROWS = 4;
+const FORM_CHROME_ROWS = 4 + OPTION_ROWS.length + 4 + 2 + SECTION_GAP_ROWS;
 const RUN_CHROME_ROWS = 6;
 // The warning H leaves under the bar when History cannot open.
 const HISTORY_NOTICE_ROWS = 2;
@@ -329,7 +331,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
           {renderPublish()}
           {renderActionBar()}
           {/* The post-publish choice screen stands alone: "Back to the form" brings the form back. */}
-          {choiceScreen ? null : renderBody()}
+          {choiceScreen ? null : <Box flexDirection="column" marginTop={1}>{renderBody()}</Box>}
         </>
       )}
       <ModalDialog title={SHARED_TYPES_QUIT_TITLE} open={quitConfirm}>
@@ -357,7 +359,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     });
     const why = actions.flatMap((action) => (action.availability.available ? [] : [`${action.key}: ${action.availability.reason}`])).join(' · ');
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" marginTop={1}>
         <ServiceActionsRow actions={actions} />
         {/* One line: a clamped paragraph would trade the whole line for a "+N lines" marker. */}
         {why === '' ? null : <TruncatedText color={colors['text-dim']}>{why}</TruncatedText>}
@@ -376,8 +378,10 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
           <ClampedParagraph color={colors.error} maxLines={2}>
             {publish.error !== null ? `Publish failed [${publish.error.code}]: ${publish.error.message}` : 'Publish failed.'}
           </ClampedParagraph>
-          <MenuList items={PUBLISH_FAILED_CHOICES} cursor={clampChoiceCursor(choiceCursor, PUBLISH_FAILED_CHOICES.length)} />
-          {publish.output ? <TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText> : null}
+          <Box flexDirection="column" marginTop={1}>
+            <MenuList items={PUBLISH_FAILED_CHOICES} cursor={clampChoiceCursor(choiceCursor, PUBLISH_FAILED_CHOICES.length)} gap={1} />
+          </Box>
+          {publish.output ? <Box marginTop={1}><TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText></Box> : null}
           {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
         </Box>
       );
@@ -386,8 +390,10 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       <Box flexDirection="column">
         <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_PUBLISH_TITLE}</Text>
         <TruncatedText color={colors.success}>{publish.version !== null ? `Published ${publish.version}` : 'Published'}</TruncatedText>
-        <MenuList items={doneChoices} cursor={clampChoiceCursor(choiceCursor, doneChoices.length)} />
-        {publish.output ? <TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText> : null}
+        <Box flexDirection="column" marginTop={1}>
+          <MenuList items={doneChoices} cursor={clampChoiceCursor(choiceCursor, doneChoices.length)} gap={1} />
+        </Box>
+        {publish.output ? <Box marginTop={1}><TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText></Box> : null}
         {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
       </Box>
     );
@@ -483,7 +489,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
             highlighted={form.row === 0}
           />
         </Box>
-        <Text color={colors['text-dim']}>Services</Text>
+        <Box marginTop={1}><Text color={colors['text-dim']}>Services</Text></Box>
         <BoundedList
           items={consumers}
           chromeRows={FORM_CHROME_ROWS + (historyNotice !== null ? HISTORY_NOTICE_ROWS : 0)}
@@ -499,7 +505,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
             </Box>
           )}
         />
-        <Text color={colors['text-dim']}>Options</Text>
+        <Box marginTop={1}><Text color={colors['text-dim']}>Options</Text></Box>
         {OPTION_ROWS.map((option, index) => {
           const row = consumers.length + 1 + index;
           return (

@@ -53,16 +53,23 @@ export function resolveMenuKey<V extends string>(
   return { type: 'ignore' };
 }
 
-export function MenuList<V extends string>({ items, cursor }: { items: readonly MenuItem<V>[]; cursor: number }) {
+// `gap` puts blank rows between items (default 0, so existing menus are unchanged).
+export function MenuList<V extends string>({ items, cursor, gap = 0 }: { items: readonly MenuItem<V>[]; cursor: number; gap?: number }) {
   return (
     <>
       {items.map((item, index) =>
         item.description === undefined || item.description === '' ? (
-          <ListRow key={item.value} label={item.label} meta={item.note} selected={index === cursor} />
+          gap > 0 && index > 0 ? (
+            <Box key={item.value} marginTop={gap}>
+              <ListRow label={item.label} meta={item.note} selected={index === cursor} />
+            </Box>
+          ) : (
+            <ListRow key={item.value} label={item.label} meta={item.note} selected={index === cursor} />
+          )
         ) : (
           // A two-line row never gives up height: a squeezed parent clips what follows the menu
           // instead of collapsing the label and leaving its caption orphaned.
-          <Box key={item.value} flexDirection="column" flexShrink={0}>
+          <Box key={item.value} flexDirection="column" flexShrink={0} marginTop={index > 0 ? gap : 0}>
             <ListRow label={item.label} meta={item.note} selected={index === cursor} />
             {/* Indented past the selection bar + marker so it reads as the row's caption. */}
             <Box paddingLeft={2} height={1} overflow="hidden">
