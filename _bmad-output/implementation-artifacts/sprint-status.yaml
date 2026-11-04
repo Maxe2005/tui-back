@@ -33,69 +33,36 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-11-02
+last_updated: 2026-11-04
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
-  # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-10-14); only open work is listed here.
+  # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-11-04); only open work is listed here.
   epic-1: done
   epic-1-retrospective: done
 
   epic-2: in-progress
-  2-28-registry-manifest-semantic-validation: done
-  2-38-edt-creation-wizard-step-4-activation-switch-choice: done
-  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: done
-  2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: done
-  2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: review
-  2-44-edt-switch-optional-parallel-service-restart-verified-state: done
   epic-2-retrospective: optional
 
-  epic-3: in-progress
-  3-15-update-zone-per-service-detail-pane-last-run-live-step-tracking: done
-  # 3-18/3-19 added by sprint-change-proposal-2026-10-08-2.md. Order: merge 3-15, then 3-19, then 3-18; 4-4 builds on 3-18.
-  3-18-parallel-update-run-incident-queue: done
-  3-19-full-screen-service-report: done
-  3-20-update-configurable-global-defaults: done
+  epic-3: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
-  4-3-publish-a-new-shared-types-version: done
-  4-4-smart-group-update-shared-types-first: done
-  4-5-auto-resolve-shared-types-only-merge-conflicts: done
-  # 4-6 rewritten 2026-10-12 (version history library); 4-7 added. Order: 4-3 merged -> 4-7 -> 4-6. Prerequisite relaxed to 7-3/7-4 done.
-  4-6-shared-types-version-history-library: done
-  4-7-shared-types-zone-configurable-default-options-busy-tab-indicator: done
+  epic-4: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
-  5-6-command-history-recall-shared-input-history-primitive: done
-  5-7-logs-restart-mode-setting-open-ide-shortcut: done
+  epic-5: done
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-3-save-customize-and-re-fire-a-request: done
   6-4-see-response-and-relevant-logs-together: backlog
   6-5-manage-the-saved-request-library-across-edts: backlog
   epic-6-retrospective: optional
 
-  epic-7: in-progress
-  # 7-5/7-6 (Dashboard) removed 2026-10-15: replaced by epic-8.
-  7-9-bounded-rendering-audit-global-fix-regression-guard: done
-  7-12-shared-service-actions-open-in-ide-simple-clean-restart: done
+  epic-7: done
   epic-7-retrospective: optional
 
-  epic-8: in-progress
-  # Dashboard rewrite (2026-10-15): active-EDT services table + shared service actions + Attention block.
-  8-1-dashboard-snapshot-use-case-and-cli: done
-  8-2-dashboard-shell-states-fixed-banner-refresh: done
-  8-3-dashboard-active-edt-services-table-service-actions: done
-  8-4-dashboard-attention-block-registry-health: done
-  8-5-dashboard-edt-actions-visual-finish: done
-  # 8-6/8-7/8-8 (branch drift detection & realignment) added 2026-10-15: sprint-change-proposal-2026-10-15-2.md. Order: 8-6 → 8-7 (needs 2-44 merged) → 8-8.
-  8-6-branch-drift-detection-snapshot-attention: done
-  8-7-realign-use-case-and-cli-selective-branch-realignment: done
-  8-8-realign-dialog-shortcut-settings-defaults: done
+  epic-8: done
   epic-8-retrospective: optional
