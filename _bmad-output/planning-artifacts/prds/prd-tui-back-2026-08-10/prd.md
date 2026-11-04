@@ -373,6 +373,24 @@ When switching the active EDT, the developer can choose to restart the services 
 - A restart failure never rolls the switch back; a clean restart without a recipe falls back to a simple restart with a visible notice.
 - The default choice is the setting `switch.restartMode`; the CLI `edt switch --restart none|simple|clean` overrides it.
 
+#### FR-39: Service and container terminal (added 2026-11-04, Sprint Change Proposal)
+
+The developer can open a command terminal on a service (its repo directory) and, when the service has a container, on that container, inside the tool.
+
+**Consequences (testable):**
+- Commands are typed at a prompt; stdout/stderr stream back as lines; the output scrolls and can go full screen (shared with the Logs view).
+- A running command can be cancelled without quitting the tool; history recall works at the prompt.
+- Line-oriented only: no interactive TTY programs; a command needing a TTY fails with a visible hint.
+- A container-less service offers no container terminal (disabled, reason `no container`); a non-running container is disabled with its reason.
+
+#### FR-40: Unified service actions (added 2026-11-04, Sprint Change Proposal)
+
+Open in IDE, restart, clean restart, service terminal and container terminal are available from the Dashboard and from the Logs tab, from one registry with the same availability rules. Amends FR-35.
+
+#### FR-41: Shared Types action discoverability (added 2026-11-04, Sprint Change Proposal)
+
+In the Shared Types tab every action is shown as a labelled command with its key and, when unavailable, its reason. After a successful publish the next steps (propagate this version, back to the form, close) are presented as an explicit choice, not a hint line.
+
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
 **Description:** Absorbs `shared-types`'s release script and removes the manual `package.json` bump across services, including inside a group update (amended 2026-10-05). Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation and drift (FR-14/FR-15) apply only to repos declaring `shared-types-consumer`; the smart update (FR-30/FR-31) builds on Epic 3's group update.

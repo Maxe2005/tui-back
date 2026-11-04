@@ -49,6 +49,9 @@ FR-32 (added 2026-10-05, Sprint Change Proposal): Per-service last-run merge/mig
 FR-34 (added 2026-10-08, Sprint Change Proposal): Full-screen, scrollable per-service update report; FR-10/FR-11 amended for parallel runs and the incident queue.
 FR-33 (added 2026-10-05, Sprint Change Proposal): Reversible, unified focus navigation — Shift+Tab reverses Tab everywhere via one configurable primitive.
 FR-38 (added 2026-10-15, Sprint Change Proposal): Branch drift detection and realignment — detect repos no longer on their expected branch (EDT members: the EDT-defined branch; others: their `sharedBranch`) and realign a chosen selection (global presets + per-service refinement), with optional post-realign restart and settings defaults.
+FR-39 (added 2026-11-04, Sprint Change Proposal): Open a line-oriented command terminal on a service (repo directory) or its container from the Dashboard/Logs: run commands, read output, scroll, cancel, full screen. No interactive TTY programs.
+FR-40 (added 2026-11-04): All per-service actions are available from the Dashboard and the Logs tab from the same registry, with the same availability rules.
+FR-41 (added 2026-11-04): Shared Types shows every action as a labelled command and presents post-publish next steps as an explicit choice screen.
 
 ### NonFunctional Requirements
 
@@ -165,6 +168,9 @@ FR-35: Epic 7/5 - Service actions: open IDE, simple/clean restart (added 2026-10
 FR-36: Epics 3/4/5 - Configurable defaults: Update globals, st options, Logs restart mode (added 2026-10-12 — Stories 3.20, 4.7, 5.7)
 FR-37: Epic 2 - Post-switch service restart (none/simple/clean), parallel, verified per-service state; default in settings (added 2026-10-14 — Story 2.44)
 FR-38: Epic 8 - Branch drift detection & realignment: Attention lines, `realign` command + shortcut, selection table, optional restart, settings defaults (added 2026-10-15 — Stories 8.6, 8.7, 8.8)
+FR-39: Epic 9 - Service/container terminal inside the tool: type commands, scroll, cancel, full screen (added 2026-11-04 — Stories 9.1–9.4)
+FR-40: Epic 9 - Every service action available from Dashboard and Logs through one registry (added 2026-11-04 — Stories 9.2, 9.5)
+FR-41: Epic 9 - Shared Types: labelled action bar and explicit post-publish choice screen (added 2026-11-04 — Story 9.6)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
@@ -178,6 +184,13 @@ FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint C
 A developer lands on a Dashboard that answers "should I worry about anything?" at a glance: the active EDT's services with state, branch and divergence, the shared per-service actions (open in IDE, restart, clean restart), an Attention block and a registry-health summary, under the permanent banner.
 **FRs covered:** FR-38 (Stories 8.6–8.8, added 2026-10-15); otherwise draws on FR-9, FR-29, FR-35, FR-36, FR-37; completes UX-DR19
 **Implementation notes:** Prerequisites all done: 7.3 layout contract, 7.7 focus navigation, 7.9 bounded rendering, 7.11 overlay ownership, 7.12 service actions; 2.42 protected branches, 2.43 cross-EDT branch usage. Refresh is on mount and on `R` (no live poll). Execution order: 8.1 → 8.2 → 8.3 / 8.4 (parallelizable) → 8.5; then 8.6 → 8.7 → 8.8 (branch realignment, added 2026-10-15 — 8.6 extends the 8.1 snapshot and 8.4's Attention block; 8.7/8.8 reuse the Epic 2 switch core and Story 2.44's restart phase). Dropped on purpose: last group-update outcome, background-event badges, operation-in-progress indicator.
+
+### Epic 9: Service Terminals & Unified Service Actions
+> Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`).
+
+A developer opens a terminal on a service or its container from the Dashboard or Logs, every service action is identical everywhere, and Shared Types makes its commands and post-publish choices obvious.
+**FRs covered:** FR-39, FR-40, FR-41; draws on FR-35
+**Implementation notes:** Order: 9.1 → 9.3 (parallelizable) → 9.2 → 9.4 → 9.5; 9.6 independent. Line-oriented shell (AD-22), no PTY.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 A developer can launch the tool, see the full navigation shell (top bar, six zone-tabs, footer, resizable list/detail split, modal-dialog, `?` help screen), register managed repos via a manifest, and run any action identically via the TUI or as a standalone CLI script.
@@ -3633,3 +3646,101 @@ As a developer, I want a selection table to choose which repos to realign — wi
 **Given** the docs **When** updated **Then** the user docs describe the `realign` command, its flags, the shortcut and the two settings.
 
 **Implementation notes:** build in this order, one commit each: settings group (`core/ports/settings.ts`) → store slice + action → dialog (selection table, presets, restart selector) → command-bar entry and Dashboard shortcut → results view → docs.
+
+## Epic 9: Service Terminals & Unified Service Actions
+
+> Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`). Adds FR-39, FR-40, FR-41; extends AD-21, adds AD-22. Branch: `epic-9-service-terminals-unified-service-actions`.
+
+A developer can open a terminal on a service or on its container from the Dashboard or Logs, every service action is the same everywhere, and the Shared Types tab makes its commands and post-publish choices obvious.
+
+### Story 9.1: Shell Session Port, Driven Adapter & `core/shell` Use-Case
+
+As a developer, I want a safe command-execution seam, so that terminals are testable and `child_process` stays in adapters.
+
+**Acceptance Criteria:**
+
+**Given** a service repo path **When** a command is run **Then** stdout/stderr stream as tagged lines and the run settles with its exit code; the use-case returns `Result` and never rejects.
+
+**Given** `cd` or `cd ..` in a service shell **When** the next command runs **Then** it executes in the new cwd; a bad `cd` reports an error and keeps the previous cwd.
+
+**Given** a running command **When** cancel is requested **Then** the process (group) is terminated and the run settles `cancelled`.
+
+**Given** a container target **When** a command is run **Then** it executes through `docker exec` without a TTY; a container that is not running yields `container-not-running` before anything runs.
+
+**Given** long output **When** retained **Then** only a bounded number of lines are kept, with a "N lines dropped" marker.
+
+**Given** a command that needs a TTY **When** run **Then** it fails with a clear hint, never hangs.
+
+**Given** a blank command **Then** it is a no-op; a blank repo path is rejected.
+
+**Implementation notes:** `core/ports/shell-session.ts`, `adapters/driven/shell-session/`, `core/shell/`. AD-22. Core tested against a fake port; adapter against the real system (temp dir).
+
+### Story 9.2: Registry Entries for Service & Container Terminals
+
+As a developer, I want the terminals listed with the other service actions, so that every consumer offers them without layout changes.
+
+**Acceptance Criteria:**
+
+**Given** any service **When** `list` is called **Then** it also returns `terminal-service` and `terminal-container` with availability and reason (`no container`, `container not running`).
+
+**Given** the Dashboard focused row **When** rendered **Then** `ServiceActionsRow` shows them after Open in IDE / Restart / Clean restart with no component change.
+
+**Given** the proposed keys `Ctrl+T` and `Ctrl+E` **When** either collides with a UX-DR36 canonical key or an existing zone binding **Then** HALT and ask.
+
+**Prerequisites:** 9.1, 7.12.
+
+### Story 9.3: Shared Scrollable Output & Fullscreen Primitive
+
+As a developer, I want Logs and Terminal to share one scroll/wrap/fullscreen behaviour, so that they feel identical and stay maintainable.
+
+**Acceptance Criteria:**
+
+**Given** the Logs fullscreen pane **When** its scroll, wrap and fullscreen logic is extracted into `tui/shared/` **Then** Logs behaves exactly as before and all existing Logs tests pass.
+
+**Given** any size **When** rendered **Then** the primitive respects bounded rendering (AD-19) and is registered in the dialog/zone registries as needed.
+
+### Story 9.4: Terminal View in the TUI
+
+As a developer, I want to type commands on a service or its container and read the results without leaving the tool.
+
+**Acceptance Criteria:**
+
+**Given** a focused Dashboard service **When** the terminal action is chosen **Then** a terminal view opens on that service as an overlay owning the keys (Story 7.11), prompt at the bottom, output scrollable.
+
+**Given** a container **When** the container terminal action is chosen **Then** the same view opens targeting the container, the header naming it.
+
+**Given** the prompt focused **When** Enter is pressed **Then** the command runs; `Up/Down` recall history (Story 5.6 primitive); a key switches focus to the output for scrolling; `F` toggles fullscreen; `Ctrl+C` cancels the running command without quitting the app; `Esc` closes, asking confirmation when a command is running.
+
+**Given** the view **Then** the header shows target, cwd and a running indicator; footer and `?` help come from keybinding declarations; stdout/stderr are coloured like Logs; no unbounded `.map` (AD-19).
+
+**Prerequisites:** 9.1, 9.2, 9.3.
+
+### Story 9.5: Unified Service Actions in the Logs Tab
+
+As a developer, I want every service action from the Logs tab, so that I do not go back to the Dashboard.
+
+**Acceptance Criteria:**
+
+**Given** a Logs pane (grid or fullscreen) **When** the actions key is pressed **Then** a menu lists the registry's actions for that service (Open in IDE, Restart, Clean restart, Terminal, Container terminal) with disabled reasons; Enter runs the selected one.
+
+**Given** the existing `R` and `O` **Then** they keep working as shortcuts, routed through the registry with no duplicated availability rules in `logs-zone.tsx`.
+
+**Given** a container-less pane **Then** restart and container terminal are listed disabled with their reason.
+
+**Prerequisites:** 9.2, 9.4.
+
+### Story 9.6: Shared Types UX — Action Bar & Post-Publish Choice Screen
+
+As a developer, I want the Shared Types commands and my next steps after a publish to be obvious.
+
+**Acceptance Criteria:**
+
+**Given** the form view **Then** an action bar lists Publish, Propagate, History and Reload with keys and disabled reasons (e.g. `historyDisabledReason`), generated from keybinding declarations and shown in `?` help.
+
+**Given** a successful publish **Then** a choice screen replaces the dim hint: "Propagate <version> to consumers" (pre-fills the version), "Back to the form", "Close"; `↑/↓` + Enter select, Esc = Close; each choice has a one-line explanation.
+
+**Given** a failed publish **Then** the failure screen lists its choices (Relaunch, Back) the same way.
+
+**Given** the existing use-cases and the `q` mid-run guard **Then** they are unchanged; only the zone and its logic change.
+
+**Implementation notes:** independent of 9.1–9.5. Optional unscheduled backlog 9.7: PTY adapter behind the AD-22 port.

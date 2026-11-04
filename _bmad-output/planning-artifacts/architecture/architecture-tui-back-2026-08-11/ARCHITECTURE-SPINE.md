@@ -256,3 +256,9 @@ graph LR
 - **Extension (2026-10-14, FR-37, Story 2.44):** `ServiceActions.verifyService(repoPath)` settles a service's post-action state (container health + optional manifest `healthUrl` probe through a driven `HealthProbePort`); `core/` never does inline HTTP. A post-switch restart is a second use-case call after a successful switch (`core/edt/switch-restart.ts` over `runPool`), leaving `switchActiveEdt` unchanged.
 - **Settings:** new `switch.restartMode` (`none` default) alongside the `sharedTypes` group (`historyDepth`, `maxCommitsScanned`, option defaults), `logs.restartMode`, Update global defaults — every zod default equals today's behaviour.
 
+### AD-22 — Shell session port (added 2026-11-04)
+
+- **Binds:** FR-39, FR-40, Stories 9.1, 9.2, 9.4
+- **Prevents:** `child_process` leaking into `core/` or the TUI; unbounded terminal output; a terminal hanging on a TTY-only command.
+- **Rule:** `core/ports/shell-session.ts` with a driven adapter in `adapters/driven/shell-session/`. Line-oriented: each command runs in the service directory (`sh -c`) or via `docker exec` (no TTY) for the container; cwd persists across commands in the service shell; output streams as stdout/stderr-tagged lines; `cancel()` terminates the process group; retained output is a bounded ring buffer. `core/shell` use-cases return `Result`. Not a PTY; a PTY adapter could replace the driven adapter later without touching core.
+- **AD-21 extension:** the service action registry also lists `terminal-service` and `terminal-container` (availability: `no container`, `container not running`).
