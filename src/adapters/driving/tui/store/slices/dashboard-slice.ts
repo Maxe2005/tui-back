@@ -1,6 +1,7 @@
 // tui/store/slices: the Dashboard's state — the services and registry-health sections, each with
 // its own load status so they fill independently, plus the time of the last completed load.
 // Builders run in-process over injected ports; unwired, a section degrades to an error state.
+import { basename } from 'node:path';
 import type { StateCreator } from 'zustand';
 import { err, type Result } from '../../../../../core/result.js';
 import {
@@ -18,6 +19,7 @@ import {
   type DashboardServicesSection,
 } from '../../../../../core/dashboard/snapshot.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
+import type { TerminalKind } from './terminal-slice.js';
 
 export type DashboardSectionStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -50,6 +52,12 @@ export type DashboardSlice = {
 const RESTART_MODES: Record<string, RestartMode> = {
   'restart-simple': 'simple',
   'restart-clean': 'clean',
+};
+// The registry's terminal entries open the Terminal overlay on the row's target; their
+// availability was already re-read by runDashboardServiceAction, like every other action.
+const TERMINAL_KINDS: Record<string, TerminalKind> = {
+  'terminal-service': 'service',
+  'terminal-container': 'container',
 };
 const RESTART_LABELS: Record<RestartMode, string> = {
   simple: 'Restart',
@@ -146,6 +154,12 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
         patchActionState(repoPath, {
           result: opened.ok ? { ok: true, text: 'Opened in IDE' } : { ok: false, text: firstLine(opened.error.message) },
         });
+        return;
+      }
+      const terminalKind = TERMINAL_KINDS[actionId];
+      if (terminalKind !== undefined) {
+        const row = get().dashboardServices?.services.find((service) => service.path === repoPath);
+        await get().openTerminal(repoPath, terminalKind, row?.service ?? basename(repoPath));
         return;
       }
       const mode = RESTART_MODES[actionId];
