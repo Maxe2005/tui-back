@@ -5,7 +5,7 @@
 // zone region. It owns every key while open: decisions live in terminal-view.logic.ts, the
 // session in the store's terminal slice; the draft, focus, scroll and confirmation are local.
 // Not a ModalDialog: its body must be a measured, flex-grown box for ScrollableOutput.
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import { markerText } from '../../../../core/shell/line-buffer.js';
 import { useAppStore, type AppStore, type TerminalLine } from '../store/app-store.js';
@@ -23,6 +23,7 @@ import { TERMINAL_BUSY_NOTICE } from '../store/slices/terminal-text.js';
 import {
   TERMINAL_CONFIRM_CLOSE_TEXT,
   pageScrollOffset,
+  toSingleLine,
   resolveTerminalKey,
   terminalFooterContext,
   terminalWindowRows,
@@ -41,6 +42,18 @@ function lineColor(line: TerminalLine): string {
     return colors.text;
   }
   return line.kind === 'stderr' ? colors.error : colors['text-dim'];
+}
+
+// useState plus a synchronously updated current value, read by event handlers between renders.
+function useSyncedState<T>(initialValue: T): [T, (next: T) => void, () => T] {
+  const [value, setValue] = useState(initialValue);
+  const ref = useRef(value);
+  const set = useCallback((next: T) => {
+    ref.current = next;
+    setValue(next);
+  }, []);
+  const read = useCallback(() => ref.current, []);
+  return [value, set, read];
 }
 
 function lineText(line: TerminalLine): string {
@@ -65,11 +78,13 @@ export function TerminalView({
   const notice = useStore((state) => state.terminalNotice);
   const helpOpen = useStore((state) => state.helpOpen);
   const bounds = useBounds();
-  const [draft, setDraft] = useState<TextInputState>(EMPTY_DRAFT);
-  const [browsing, setBrowsing] = useState<HistoryBrowseState | null>(null);
-  const [focus, setFocus] = useState<TerminalFocus>(initial.focus ?? 'prompt');
+  // Ink can deliver several keypresses from one stdin chunk before React re-renders, so the key
+  // handler reads these through refs that are updated synchronously with each state change.
+  const [draft, setDraft, draftRef] = useSyncedState<TextInputState>(EMPTY_DRAFT);
+  const [browsing, setBrowsing, browsingRef] = useSyncedState<HistoryBrowseState | null>(null);
+  const [focus, setFocus, focusRef] = useSyncedState<TerminalFocus>(initial.focus ?? 'prompt');
   const [offset, setOffset] = useState(0);
-  const [confirming, setConfirming] = useState(initial.confirming ?? false);
+  const [confirming, setConfirming, confirmingRef] = useSyncedState(initial.confirming ?? false);
 
   // The dropped-lines marker heads the retained output, scrolled like any other line.
   const displayLines = useMemo<readonly TerminalLine[]>(
@@ -93,9 +108,17 @@ export function TerminalView({
   useInput(
     (input, key) => {
       const state = useStore.getState();
-      const action = resolveTerminalKey(input, key, { focus, confirming, running: state.terminalRunning, ready: state.terminalReady });
+      const draft = draftRef();
+      const browsing = browsingRef();
+      const action = resolveTerminalKey(input, key, {
+        focus: focusRef(),
+        confirming: confirmingRef(),
+        running: state.terminalRunning,
+        ready: state.terminalReady,
+      });
       const edit = () => {
-        const next = nextTextInputValue(draft, input, key);
+        // The draft is one line: a pasted newline run becomes a single space.
+        const next = nextTextInputValue(draft, toSingleLine(input), key);
         if (next.value !== draft.value || next.cursor !== draft.cursor) {
           setDraft(next);
           // Editing a recalled entry adopts it as the draft.

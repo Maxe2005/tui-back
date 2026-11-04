@@ -128,3 +128,8 @@ export function pageScrollOffset(offset: number, direction: 'up' | 'down', lineC
   const next = direction === 'up' ? offset + step : offset - step;
   return Math.min(Math.max(next, 0), Math.max(lineCount - 1, 0));
 }
+
+// The prompt is one line: each run of pasted line breaks becomes a single space.
+export function toSingleLine(input: string): string {
+  return input.replace(/[\r\n]+/g, ' ');
+}

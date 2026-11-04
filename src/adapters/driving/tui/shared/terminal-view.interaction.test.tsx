@@ -202,6 +202,31 @@ describe('TerminalView interaction', () => {
     }
   });
 
+  it('applies every keypress of one stdin chunk in order, and flattens a pasted newline', async () => {
+    const { store } = terminalStore();
+    await store.getState().openTerminal('/repo/api', 'service', 'api');
+    const runTerminalCommand = vi.fn((_command: string) => ({ accepted: true, done: Promise.resolve() }));
+    store.setState({ runTerminalCommand });
+    const { instance, stdin } = mount(createElement(TerminalView, { useStore: store }));
+    try {
+      await instance.waitUntilRenderFlush();
+      // One chunk: text, a Left arrow, more text, two backspaces, more text.
+      await press(instance, stdin, `ab${KEYS.left}cd${KEYS.backspace}${KEYS.backspace}x`);
+      await press(instance, stdin, KEYS.enter);
+      expect(runTerminalCommand).toHaveBeenLastCalledWith('axb');
+      // From the output focus, one chunk: a printable key returns to the prompt and the next keys
+      // of the same chunk already edit there.
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, `q${KEYS.left}z`);
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, 'a\r\nb');
+      await press(instance, stdin, KEYS.enter);
+      expect(runTerminalCommand).toHaveBeenLastCalledWith('zqa b');
+    } finally {
+      instance.unmount();
+    }
+  });
+
   it('keeps the draft when the store refuses the run', async () => {
     const { store } = terminalStore();
     await store.getState().openTerminal('/repo/api', 'service', 'api');

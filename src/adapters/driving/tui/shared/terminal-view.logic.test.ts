@@ -4,6 +4,7 @@ import {
   resolveTerminalKey,
   terminalFooterContext,
   terminalWindowRows,
+  toSingleLine,
   type TerminalKeyState,
 } from './terminal-view.logic.js';
 
@@ -86,5 +87,12 @@ describe('layout helpers', () => {
     expect(pageScrollOffset(95, 'up', 100, 10)).toBe(99);
     expect(pageScrollOffset(5, 'down', 100, 10)).toBe(0);
     expect(pageScrollOffset(0, 'up', 0, 10)).toBe(0);
+  });
+});
+
+describe('toSingleLine', () => {
+  it('turns each run of pasted line breaks into one space', () => {
+    expect(toSingleLine('ls\r\n\npwd\n')).toBe('ls pwd ');
+    expect(toSingleLine('plain')).toBe('plain');
   });
 });
