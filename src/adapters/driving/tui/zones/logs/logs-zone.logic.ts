@@ -3,7 +3,8 @@
 // filter-history recall. Every keystroke behavior is a pure function, unit-tested directly; the
 // generic list navigation and EDT-membership partition are reused from edts-zone.logic.ts.
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
+import type { LogLine } from '../../../../../core/ports/docker.js';
+import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
 import type { Hint } from '../../shared/components/hints.js';
@@ -12,12 +13,12 @@ import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../
 import { spacing } from '../../shared/theme/theme.js';
 import type { HistoryBrowseState } from '../../shared/input-history/index.js';
 
-// HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
-// `⣾`/info (StatusBadge's `in-progress`). A service with no Docker runtime is its own dim
-// state, never the down treatment. Glyph+color always paired, never color alone; accent is
-// never a health color. Shared by every place a health badge renders (list rows, grid panes,
-// fullscreen pane).
-export function healthBadgeState(health: HealthState | 'no-container'): StatusBadgeState {
+// ServiceStatusState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
+// `⣾`/info (StatusBadge's `in-progress`), `unhealthy` → `◐`/warning, `inconsistent` → `⚠`/warning.
+// A service with no Docker runtime is its own dim state, never the down treatment. Glyph+color
+// always paired, never color alone; accent is never a health color. Shared by every place a
+// health badge renders (list rows, grid panes, fullscreen pane).
+export function healthBadgeState(health: ServiceStatusState): StatusBadgeState {
   if (health === 'no-container') {
     return 'no-container';
   }
@@ -31,7 +32,7 @@ export function healthBadgeState(health: HealthState | 'no-container'): StatusBa
 // reads as words rather than a kebab-case code, and a restarting service, which names both
 // halves of what is happening (a restart was requested, the container is being re-verified)
 // instead of the bare state.
-export function formatHealthLabel(health: HealthState | 'no-container'): string {
+export function formatHealthLabel(health: ServiceStatusState): string {
   if (health === 'no-container') {
     return 'no container';
   }
@@ -44,7 +45,7 @@ export function formatHealthLabel(health: HealthState | 'no-container'): string 
 // True when a row or pane must read as restarting — either the slice's in-flight restart flag
 // or docker itself reporting the state. One predicate so list rows and pane headers agree.
 // A container-less row never restarts, so it never reads as restarting either.
-export function isRestartingDisplay(restarting: boolean, health: HealthState | 'no-container'): boolean {
+export function isRestartingDisplay(restarting: boolean, health: ServiceStatusState): boolean {
   if (health === 'no-container') {
     return false;
   }

@@ -7,7 +7,7 @@ import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { HealthState } from '../../../../../core/ports/docker.js';
+import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
@@ -245,7 +245,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // Every listed row carries a badge — its subscribed pane's health, else the listed-row
   // poll's value, else `down` (the Update zone's missing-reads-as-down precedent). A
   // requested restart reads explicitly, never as the bare state.
-  function displayHealthFor(repoPath: string): HealthState | 'no-container' {
+  function displayHealthFor(repoPath: string): ServiceStatusState {
     const pane = logsPanes[repoPath];
     const rowHealth = pane?.health ?? logsListedHealth[repoPath] ?? 'down';
     return isRestartingDisplay(pane?.restarting ?? false, rowHealth) ? 'restarting' : rowHealth;
@@ -915,15 +915,20 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   <BoundedList
                     items={withoutContainerServices}
                     maxVisibleRows={WITHOUT_CONTAINER_MAX_ROWS}
-                    renderItem={(service) => (
-                      <Box key={service.path} flexDirection="row">
-                        <Text color={colors['text-dim']} wrap="truncate-end"> {service.service}</Text>
-                        <Box marginLeft={1}>
-                          <Box flexShrink={0}><StatusBadge state={healthBadgeState('no-container')} /></Box>
-                          <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel('no-container')}</Text>
+                    renderItem={(service) => {
+                      // A container-less service declaring a `healthUrl` still gets its real
+                      // up/down status (AD-23); the others read as no container.
+                      const health = logsListedHealth[service.path] ?? 'no-container';
+                      return (
+                        <Box key={service.path} flexDirection="row">
+                          <Text color={colors['text-dim']} wrap="truncate-end"> {service.service}</Text>
+                          <Box marginLeft={1}>
+                            <Box flexShrink={0}><StatusBadge state={healthBadgeState(health)} /></Box>
+                            <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel(health)}</Text>
+                          </Box>
                         </Box>
-                      </Box>
-                    )}
+                      );
+                    }}
                   />
                 </Box>
               ) : null}
