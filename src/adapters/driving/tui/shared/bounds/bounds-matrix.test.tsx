@@ -3,6 +3,7 @@
 // columns, and the top bar and footer must stay on screen.
 import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
+import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
 import { AppShell } from '../../app-shell.js';
 import { createAppStore, type AppStore } from '../../store/app-store.js';
 import { ZONES } from '../../zones/zones.js';
@@ -177,11 +178,10 @@ describe('size matrix: Update zone with health-first states', () => {
     it(`update list of unhealthy / inconsistent services at ${size.columns}x${size.rows} stays inside the terminal`, async () => {
       const store = adversarialStore();
       const services = store.getState().edtsBranches ?? [];
-      store.setState({
-        updateStatus: 'idle',
-        updateResults: null,
-        updateServiceHealth: Object.fromEntries(services.map((s, i) => [s.path, i % 2 === 0 ? 'unhealthy' : 'inconsistent'])),
-      } as never);
+      const updateServiceHealth: Record<string, ServiceStatusState> = Object.fromEntries(
+        services.map((s, i) => [s.path, i % 2 === 0 ? 'unhealthy' : 'inconsistent']),
+      );
+      store.setState({ updateStatus: 'idle', updateResults: [], updateServiceHealth });
       store.getState().setActiveZone('update');
       const frame = frameLines(await renderToString(createElement(AppShell, { useStore: store, onQuit: () => {} }), size));
       expect(frame.length).toBeLessThanOrEqual(size.rows);
