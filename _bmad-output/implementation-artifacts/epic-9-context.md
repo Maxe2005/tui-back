@@ -19,7 +19,7 @@ A developer can open a command terminal on a service (its repo directory) or on 
 
 - Terminal: type commands at a prompt, stdout/stderr stream back as lines, output scrolls and can go fullscreen (shared with Logs), a running command can be cancelled without quitting the app, history recall at the prompt.
 - Line-oriented only: no interactive TTY programs; a command needing a TTY fails fast with a visible hint, never hangs.
-- Container-less service: container terminal disabled with reason `no container`; non-running container disabled with `container not running`.
+- Container terminal disabled reasons: `no container` (container-less service), `container not running`, `container state unknown` (Docker unreachable or probe slower than 1.5 s), `manifest unreadable`.
 - Unified actions: Open in IDE, Restart, Clean restart, service terminal, container terminal are available from Dashboard and Logs from one registry with the same availability rules (amends the earlier restart/open-in-IDE requirement).
 - Shared Types: every action shown as a labelled command with its key and, if unavailable, its reason; after a successful publish the next steps (propagate this version, back to form, close) are an explicit choice, not a dim hint.
 - No new dependency. Done when `npm test && npm run typecheck && npm run depcheck` plus the bounded-rendering and dialog-registry guards are green.
@@ -40,7 +40,7 @@ A developer can open a command terminal on a service (its repo directory) or on 
 - Service action menu: the registry list as a navigable menu in Logs panes (grid and fullscreen), disabled entries show reasons, Enter runs; `R` and `O` remain shortcuts.
 - Shared Types action bar: Publish, Propagate, History, Reload with keys and disabled reasons (e.g. `historyDisabledReason`), also in `?` help.
 - Post-publish choice screen: "Propagate <version> to consumers" (pre-fills version), "Back to the form", "Close"; Up/Down + Enter, Esc = Close, one-line explanation each. Failed publish lists Relaunch / Back the same way.
-- Keys must obey the interaction consistency contract. Proposed `Ctrl+T` (service terminal) and `Ctrl+E` (container terminal): HALT and ask if either collides with a canonical key or zone binding. Note `Ctrl+E` is already the canonical second-step key for irreversible file-loss confirmations, and `Ctrl+O/R/L`, `R`, `e` are used on the Dashboard — check before binding.
+- Keys (decided in Story 9.2, obey the interaction consistency contract): Dashboard service actions are `Ctrl+O` open in IDE, `Ctrl+R` restart, `Ctrl+L` clean restart, `Ctrl+T` service terminal, `Ctrl+X` container terminal. `Ctrl+T` is shared with rename-branch in `BranchPicker` overlays, which is safe only because overlays own their keys; `Ctrl+E` was rejected for the container terminal because it is the canonical second-step confirm for irreversible file loss. Any new binding (e.g. the Logs actions-menu key, the terminal's focus-to-output key) must be checked against canonical keys and zone bindings; HALT and ask on a collision.
 
 ## Cross-Story Dependencies
 
