@@ -20,6 +20,7 @@ import {
 import { serviceRestart as serviceRestartUseCase } from '../../../../../core/scripts/service-restart.js';
 import { openInIde } from '../../../../../core/service-actions/index.js';
 import { resolveServiceStatus, type ServiceStatusState } from '../../../../../core/service-status/index.js';
+import { createInFlightGuard } from '../../shared/poll/in-flight-guard.js';
 import { err, ok, type Result } from '../../../../../core/result.js';
 import {
   advanceServiceSteps,
@@ -355,8 +356,9 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
   // service that appears/disappears from `edtsBranches` is picked up without leaking a
   // stale timer. Held in closure, mirrors logs-slice.ts's own healthPollTimers convention.
   let healthPollTimer: ReturnType<typeof setInterval> | null = null;
-  // Per-repo in-flight guard for the health poll: a slow health route never stacks probes.
-  const healthInFlight = new Set<string>();
+  // Per-repo in-flight guard for the health poll: a slow health route never stacks probes, and a
+  // poll still settling after stop/retarget is dropped.
+  const healthInFlight = createInFlightGuard();
   let pollingRepoPaths: readonly string[] = [];
   // The service quick-pick's generation — bumped on every open and every
   // close so a slow enumeration from an earlier open can never pop the pick open after
@@ -369,16 +371,20 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     // last-known health and never crashes the view. A tick for a repo whose previous poll (probe
     // included) is still awaiting is skipped.
     async function pollServiceHealth(repoPath: string): Promise<void> {
-      if (!deps || healthInFlight.has(repoPath)) {
+      if (!deps) {
         return;
       }
-      healthInFlight.add(repoPath);
+      const token = healthInFlight.begin(repoPath);
+      if (token === null) {
+        return;
+      }
       try {
         const status = await resolveServiceStatus(
           { manifest: deps.manifest, docker: deps.docker, ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }) },
           repoPath,
         );
-        if (!status.ok) {
+        // A repo no longer polled (stopped, or retargeted away) keeps no late write.
+        if (!status.ok || !pollingRepoPaths.includes(repoPath) || !healthInFlight.isCurrent(repoPath, token)) {
           return;
         }
         const health = status.data.state;
@@ -389,7 +395,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           return { updateServiceHealth: { ...state.updateServiceHealth, [repoPath]: health } };
         });
       } finally {
-        healthInFlight.delete(repoPath);
+        healthInFlight.end(repoPath, token);
       }
     }
 
@@ -1502,6 +1508,11 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       updateServiceHealth: {},
       lastServiceOutcomes: {},
       startUpdateHealthPolling: (repoPaths) => {
+        for (const path of pollingRepoPaths) {
+          if (!repoPaths.includes(path)) {
+            healthInFlight.release(path);
+          }
+        }
         pollingRepoPaths = [...repoPaths];
         pollAll(pollingRepoPaths);
         if (healthPollTimer !== null) {
@@ -1523,6 +1534,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           healthPollTimer = null;
         }
         pollingRepoPaths = [];
+        healthInFlight.releaseAll();
       },
     };
   };

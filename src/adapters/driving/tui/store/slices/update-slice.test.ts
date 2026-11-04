@@ -840,6 +840,73 @@ describe('update slice: service health polling', () => {
     store.getState().stopUpdateHealthPolling();
   });
 
+  it('a container-less service declaring a healthUrl gets a real up/down, without Docker', async () => {
+    const getContainerHealth = vi.fn(async () => ok('up' as const));
+    const manifest: ManifestPort = {
+      load: vi.fn(async () => ok({ service: 'svc-lib', healthUrl: 'http://lib/health', sharedBranch: 'development', modules: {} })),
+    };
+    const store = createAppStore(
+      fakeDeps({ docker: fakeDocker(getContainerHealth), manifest, healthProbe: { probe: async () => ok({ healthy: false, reason: 'timeout' }) } }),
+    );
+
+    store.getState().startUpdateHealthPolling(['/repo/lib']);
+    await flushPolls();
+
+    expect(store.getState().updateServiceHealth['/repo/lib']).toBe('down');
+    expect(getContainerHealth).not.toHaveBeenCalled();
+    store.getState().stopUpdateHealthPolling();
+  });
+
+  it('drops a poll settling after its repo stopped being polled, and never blocks a restarted poll', async () => {
+    vi.useFakeTimers();
+    try {
+      const releases: Array<() => void> = [];
+      const probe = vi.fn(
+        () =>
+          new Promise<ReturnType<typeof ok<{ healthy: boolean }>>>((resolve) => {
+            releases.push(() => resolve(ok({ healthy: true })));
+          }),
+      );
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(vi.fn(async () => ok('up' as const))), manifest: manifestWithHealth(), healthProbe: { probe } }));
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      store.getState().stopUpdateHealthPolling();
+      releases[0]!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBeUndefined();
+
+      // Retargeted away: the late result is dropped too.
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      store.getState().startUpdateHealthPolling(['/repo/b']);
+      await vi.advanceTimersByTimeAsync(0);
+      releases[1]!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBeUndefined();
+      store.getState().stopUpdateHealthPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases the guard after a rejected poll, so the next tick polls again', async () => {
+    vi.useFakeTimers();
+    try {
+      const load = vi.fn(async (): Promise<never> => {
+        throw new Error('io');
+      });
+      const store = createAppStore(fakeDeps({ manifest: { load } }));
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(load).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS);
+      expect(load).toHaveBeenCalledTimes(2);
+      store.getState().stopUpdateHealthPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('skips a tick while the previous probe for that repo is still awaiting', async () => {
     vi.useFakeTimers();
     try {
