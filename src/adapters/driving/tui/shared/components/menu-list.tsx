@@ -1,7 +1,9 @@
 // tui/shared/components: the one fixed-menu list — rows with a clamped cursor, Home/End, Enter
 // chooses the highlighted row, Esc answers the menu's own "cancel" choice. The reducer is pure
 // (renderToString never delivers keys) and the view only renders the rows.
+import { Box, Text } from 'ink';
 import { nextCursorForKey } from '../keys/list-cursor.js';
+import { colors } from '../theme/theme.js';
 import { ListRow } from './list-row.js';
 
 export type MenuItem<V extends string = string> = {
@@ -11,6 +13,8 @@ export type MenuItem<V extends string = string> = {
   disabled?: boolean;
   // Dim text after the label (e.g. why a row is disabled).
   note?: string;
+  // One dim, truncated explanation line rendered under the row (the row then takes two lines).
+  description?: string;
 };
 
 export type MenuKey = {
@@ -52,9 +56,21 @@ export function resolveMenuKey<V extends string>(
 export function MenuList<V extends string>({ items, cursor }: { items: readonly MenuItem<V>[]; cursor: number }) {
   return (
     <>
-      {items.map((item, index) => (
-        <ListRow key={item.value} label={item.label} meta={item.note} selected={index === cursor} />
-      ))}
+      {items.map((item, index) =>
+        item.description === undefined || item.description === '' ? (
+          <ListRow key={item.value} label={item.label} meta={item.note} selected={index === cursor} />
+        ) : (
+          // A two-line row never gives up height: a squeezed parent clips what follows the menu
+          // instead of collapsing the label and leaving its caption orphaned.
+          <Box key={item.value} flexDirection="column" flexShrink={0}>
+            <ListRow label={item.label} meta={item.note} selected={index === cursor} />
+            {/* Indented past the selection bar + marker so it reads as the row's caption. */}
+            <Box paddingLeft={2} height={1} overflow="hidden">
+              <Text color={colors['text-dim']} wrap="truncate-end">{item.description}</Text>
+            </Box>
+          </Box>
+        ),
+      )}
     </>
   );
 }
