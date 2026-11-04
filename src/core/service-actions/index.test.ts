@@ -354,6 +354,20 @@ describe('service actions verifyService', () => {
     expect(!none.ok && none.error.code).toBe('no-container');
   });
 
+  it('keeps polling an inconsistent service and reports the container state at the timeout', async () => {
+    const { actions, clock } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['restarting'], [{ healthy: true }]);
+    expect(await actions.verifyService('/r')).toEqual({
+      ok: true,
+      data: { state: 'restarting', detail: 'health route answers but container is restarting' },
+    });
+    expect(clock.sleep.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('is functional when the route answers even though Docker errors (AD-23)', async () => {
+    const { actions } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['unavailable'], [{ healthy: true }]);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'functional' } });
+  });
+
   it('rejects a blank repoPath', async () => {
     const result = await verifySetup({ container: 'api' }, ['up']).actions.verifyService('  ');
     expect(!result.ok && result.error.code).toBe('invalid-argument');

@@ -14,6 +14,7 @@ import type { RestartPort } from '../ports/restart.js';
 import { err, ok, type Result } from '../result.js';
 import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update.js';
 import { serviceRestartLockKey } from '../scripts/service-restart.js';
+import { combineStatus, hasContainer, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
 
 export type RestartMode = 'simple' | 'clean';
 
@@ -128,10 +129,6 @@ const AVAILABLE: ServiceActionAvailability = { available: true };
 // Blank recipe entries are not a recipe: only runnable commands count.
 function recipeCommands(manifest: Manifest): string[] {
   return (manifest.restartCommands ?? []).filter((command) => command.trim() !== '');
-}
-
-function hasContainer(manifest: Manifest): boolean {
-  return manifest.container !== undefined && manifest.container.trim() !== '';
 }
 
 // The editor needs nothing else from the registry, so a consumer that only opens the IDE
@@ -295,35 +292,43 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
       const deadline = clock.now() + VERIFY_TIMEOUT_MS;
       let lastDockerError: Result<never> | null = null;
       let lastProbeReason: string | undefined;
-      let sawRestarting = false;
+      let lastWaiting: ServiceStatus | null = null;
       for (;;) {
-        const health = await docker.getContainerHealth(containerName);
-        if (!health.ok) {
-          lastDockerError = health;
-        } else if (health.data === 'down') {
-          return ok({ state: 'down', detail: 'container is not running' });
-        } else if (health.data === 'restarting') {
-          sawRestarting = true;
-          lastProbeReason = undefined;
+        // Each attempt is decided by the AD-23 table: the same rule every status view uses.
+        const remaining = Math.max(1, deadline - clock.now());
+        const [probe, container] = await Promise.all([
+          healthUrl === undefined || healthProbe === undefined
+            ? Promise.resolve<ProbeReading>({ kind: 'none' })
+            : readProbe({ healthProbe }, loaded.data, Math.min(HEALTH_PROBE_TIMEOUT_MS, remaining)),
+          readContainer({ docker }, loaded.data),
+        ]);
+        const status = combineStatus(probe, container);
+        if (!status.ok) {
+          lastDockerError = status;
         } else {
-          sawRestarting = false;
-          if (healthUrl === undefined || healthProbe === undefined) {
-            return ok({ state: 'up-unverified' });
+          const { state, verified } = status.data;
+          if (state === 'up') {
+            return ok({ state: verified ? 'functional' : 'up-unverified' });
           }
-          const remaining = Math.max(1, deadline - clock.now());
-          const probed = await healthProbe.probe(healthUrl, Math.min(HEALTH_PROBE_TIMEOUT_MS, remaining));
-          if (probed.ok && probed.data.healthy) {
-            return ok({ state: 'functional' });
+          if (state === 'down') {
+            return ok({ state: 'down', detail: status.data.probeReason ?? 'container is not running' });
           }
-          lastProbeReason = probed.ok ? probed.data.reason : probed.error.message;
+          // restarting, inconsistent and unhealthy keep polling until the timeout.
+          lastWaiting = status.data;
+          lastProbeReason = state === 'unhealthy' ? status.data.probeReason : undefined;
         }
         if (clock.now() + VERIFY_POLL_INTERVAL_MS > deadline) {
           break;
         }
         await clock.sleep(VERIFY_POLL_INTERVAL_MS);
       }
-      if (sawRestarting) {
+      if (lastWaiting?.state === 'restarting') {
         return ok({ state: 'restarting', detail: 'still restarting after the verification timeout' });
+      }
+      if (lastWaiting?.state === 'inconsistent') {
+        // The health route answers but the container never came up: report the container's state.
+        const container = lastWaiting.container === 'restarting' ? 'restarting' : 'down';
+        return ok({ state: container, detail: `health route answers but container is ${container}` });
       }
       if (lastProbeReason !== undefined) {
         return ok({ state: 'unhealthy', detail: lastProbeReason });
