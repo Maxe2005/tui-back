@@ -154,6 +154,51 @@ describe('buildDashboardSnapshot', () => {
     expect(result.ok && result.data.services[1]?.status).toEqual({ ok: true, value: { state: 'up', verified: true, container: 'up' } });
   });
 
+  it('keeps the probe reason in details when Docker and the probe both fail', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x']])],
+      manifests: { '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }) },
+      docker: { getContainerHealth: async () => err('docker-unavailable', 'no docker') },
+    });
+    const probe = vi.fn(async () => ok({ healthy: false, reason: 'HTTP 503' }));
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe } });
+    expect(result.ok && result.data.services[0]?.status).toEqual({
+      ok: false,
+      error: { code: 'docker-unavailable', message: 'no docker', details: { probeReason: 'HTTP 503' } },
+    });
+  });
+
+  it('carries the container error next to a 2xx probe, as up', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x']])],
+      manifests: { '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }) },
+      docker: { getContainerHealth: async () => err('docker-unavailable', 'no docker') },
+    });
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe: async () => ok({ healthy: true }) } });
+    expect(result.ok && result.data.services[0]?.status).toEqual({
+      ok: true,
+      value: { state: 'up', verified: true, container: null, containerError: { code: 'docker-unavailable', message: 'no docker' } },
+    });
+  });
+
+  it('gives a container-less service declaring healthUrl a real up/down, without Docker', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x'], ['/r/b', 'feat/x']])],
+      manifests: {
+        '/r/a': manifestFor('/r/a', { container: undefined, healthUrl: 'http://a/h' }),
+        '/r/b': manifestFor('/r/b', { container: undefined, healthUrl: 'http://b/h' }),
+      },
+    });
+    const probe = vi.fn(async (url: string) => ok(url === 'http://a/h' ? { healthy: true } : { healthy: false, reason: 'timeout' }));
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe } });
+    expect(result.ok && result.data.services[0]?.status).toEqual({ ok: true, value: { state: 'up', verified: true, container: 'no-container' } });
+    expect(result.ok && result.data.services[1]?.status).toEqual({
+      ok: true,
+      value: { state: 'down', verified: true, container: 'no-container', probeReason: 'timeout' },
+    });
+    expect(setup.docker.getContainerHealth).not.toHaveBeenCalled();
+  });
+
   it('ignores healthUrl when no probe is wired', async () => {
     const snapshot = await data({ manifests: { '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }) } });
     expect(snapshot.services[0]?.status).toEqual({ ok: true, value: { state: 'up', verified: false, container: 'up' } });

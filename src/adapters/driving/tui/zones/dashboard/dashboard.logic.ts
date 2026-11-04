@@ -55,7 +55,11 @@ function statusReasonParts(service: DashboardService): string[] {
   const { status } = service;
   if (!status.ok) {
     // A manifest failure is already reported on its own; anything else is the container read.
-    return service.manifest.ok ? [`container error: ${status.error.message}`] : [];
+    if (!service.manifest.ok) {
+      return [];
+    }
+    const probeReason = status.error.details?.probeReason;
+    return [`container error: ${status.error.message}`, ...(probeReason === undefined ? [] : [`health check: ${probeReason}`])];
   }
   const parts: string[] = [];
   if (status.value.state === 'inconsistent') {

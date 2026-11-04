@@ -106,6 +106,10 @@ describe('reasonParts details', () => {
     );
     expect(reasonLine(row({ manifest: { ok: false, error: { code: 'manifest-invalid', message: 'bad yaml' } } }))).toBe('manifest error: bad yaml');
     expect(reasonLine(row({ status: { ok: false, error: { code: 'd', message: 'docker down' } } }))).toBe('container error: docker down');
+    // Docker and the probe both failed: both reasons are shown.
+    expect(
+      reasonLine(row({ status: { ok: false, error: { code: 'd', message: 'docker down', details: { probeReason: 'HTTP 503' } } } })),
+    ).toBe('container error: docker down · health check: HTTP 503');
     // A manifest failure is reported once, not again as a status error.
     expect(
       reasonLine(row({ manifest: { ok: false, error: { code: 'm', message: 'bad yaml' } }, status: { ok: false, error: { code: 'm', message: 'bad yaml' } } })),

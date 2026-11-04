@@ -20,6 +20,10 @@ export type { DashboardOtherService, DriftState } from './drift.js';
 
 export type Probed<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } };
 
+export interface StatusErrorDetails {
+  probeReason?: string;
+}
+
 export interface DashboardWorkingTree {
   uncommitted: boolean;
   mergeInProgress: boolean;
@@ -37,8 +41,9 @@ export interface DashboardService {
   service: string;
   path: string;
   manifest: Probed<{ sharedBranch: string; protectedBranches: string[] }>;
-  // Health-first status (AD-23); the raw container state and probe reason ride along.
-  status: Probed<ServiceStatus>;
+  // Health-first status (AD-23); the raw container state and probe reason ride along. When
+  // Docker fails and the probe fails too, the probe reason stays in `error.details`.
+  status: { ok: true; value: ServiceStatus } | { ok: false; error: { code: string; message: string; details?: StatusErrorDetails } };
   branch: string | null;
   divergence: DashboardDivergence;
   workingTree: Probed<DashboardWorkingTree>;
@@ -215,7 +220,20 @@ async function readStatus(
     return { ok: false, error: { code: manifestError?.code ?? 'manifest-error', message: manifestError?.message ?? 'manifest unavailable' } };
   }
   const status = await resolveManifestStatus(ports, manifest);
-  return status.ok ? { ok: true, value: status.data } : { ok: false, error: { code: status.error.code, message: status.error.message } };
+  if (status.ok) {
+    return { ok: true, value: status.data };
+  }
+  const details = statusErrorDetails(status.error.details);
+  return { ok: false, error: { code: status.error.code, message: status.error.message, ...(details === undefined ? {} : { details }) } };
+}
+
+// The resolver's error details are `unknown` on the Result envelope; keep only the probe reason.
+function statusErrorDetails(details: unknown): StatusErrorDetails | undefined {
+  if (typeof details !== 'object' || details === null || !('probeReason' in details)) {
+    return undefined;
+  }
+  const { probeReason } = details;
+  return typeof probeReason === 'string' ? { probeReason } : undefined;
 }
 
 async function readWorkingTree(git: GitPort, path: string): Promise<Probed<DashboardWorkingTree>> {
