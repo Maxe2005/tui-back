@@ -1,8 +1,6 @@
 // tui/shared/terminal-view.logic: the Terminal overlay's pure decisions — which action a key
-// resolves to for the current focus and run state, which footer context shows, and the display
-// text of the status lines the store appends after a run (`exit N`, `cancelled`, errors).
-import type { ShellRunResult } from '../../../../core/shell/index.js';
-import type { Result } from '../../../../core/result.js';
+// resolves to for the current focus and run state, which footer context shows, and the layout
+// numbers. The status-line wording lives store-side (store/slices/terminal-text.ts).
 import type { FooterContextId } from '../keybindings/index.js';
 import type { TextEditKey } from './components/text-edit.js';
 import { resolveFocusStep } from './keys/focus-navigation.js';
@@ -42,7 +40,6 @@ export type TerminalKeyAction =
   | { type: 'type-into-prompt' }
   | { type: 'ignore' };
 
-export const TERMINAL_BUSY_NOTICE = 'a command is running';
 export const TERMINAL_CONFIRM_CLOSE_TEXT = 'A command is running — Enter cancels it and closes the terminal, Esc keeps it running.';
 
 function isPrintable(input: string, key: TerminalKey): boolean {
@@ -117,36 +114,6 @@ export function terminalFooterContext(state: Pick<TerminalKeyState, 'focus' | 'c
     return 'terminal-output';
   }
   return state.running ? 'terminal-running' : 'terminal-prompt';
-}
-
-function firstLine(message: string): string {
-  return message.split('\n')[0] ?? message;
-}
-
-// The status line a finished run leaves under its output, or null when it needs none (a clean
-// exit, a blank command). A TTY refusal shows the guard's hint as is.
-export function terminalStatusText(result: Result<ShellRunResult>): string | null {
-  if (!result.ok) {
-    if (result.error.code === 'tty-required') {
-      return firstLine(result.error.message);
-    }
-    return `error: ${firstLine(result.error.message)}`;
-  }
-  const outcome = result.data;
-  switch (outcome.status) {
-    case 'exited':
-      return outcome.exitCode === 0 ? null : `exit ${String(outcome.exitCode)}`;
-    case 'cancelled':
-      return 'cancelled';
-    case 'failed':
-      return `error: ${firstLine(outcome.error.message)}`;
-    case 'noop':
-      return null;
-  }
-}
-
-export function terminalEchoText(command: string): string {
-  return `$ ${command}`;
 }
 
 // The output box's height while windowed: two thirds of the region, at least 8 rows, never more

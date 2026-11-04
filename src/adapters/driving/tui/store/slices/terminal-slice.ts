@@ -11,7 +11,7 @@ import { err, type Result } from '../../../../../core/result.js';
 import { createShellSession, type ShellRunResult, type ShellSession } from '../../../../../core/shell/index.js';
 import { DEFAULT_MAX_LINES } from '../../../../../core/shell/line-buffer.js';
 import { pushHistoryEntry } from '../../shared/input-history/index.js';
-import { TERMINAL_BUSY_NOTICE, terminalEchoText, terminalStatusText } from '../../shared/terminal-view.logic.js';
+import { TERMINAL_BUSY_NOTICE, firstLine, terminalEchoText, terminalStatusText } from './terminal-text.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 export type TerminalKind = 'service' | 'container';
@@ -81,10 +81,6 @@ const CLOSED_STATE = {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function firstLine(message: string): string {
-  return message.split('\n')[0] ?? message;
 }
 
 export function createTerminalSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], TerminalSlice> {

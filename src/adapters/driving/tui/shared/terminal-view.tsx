@@ -19,8 +19,8 @@ import { useInput } from './hooks/use-input.js';
 import { resolveHistoryBrowseDown, resolveHistoryBrowseUp, type HistoryBrowseState } from './input-history/index.js';
 import { adjustScrollOffset } from './scrollable-output/index.js';
 import { colors, spacing } from './theme/theme.js';
+import { TERMINAL_BUSY_NOTICE } from '../store/slices/terminal-text.js';
 import {
-  TERMINAL_BUSY_NOTICE,
   TERMINAL_CONFIRM_CLOSE_TEXT,
   pageScrollOffset,
   resolveTerminalKey,

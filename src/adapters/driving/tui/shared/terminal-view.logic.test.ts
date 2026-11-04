@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { err, ok } from '../../../../core/result.js';
 import {
   pageScrollOffset,
   resolveTerminalKey,
   terminalFooterContext,
-  terminalStatusText,
   terminalWindowRows,
   type TerminalKeyState,
 } from './terminal-view.logic.js';
@@ -73,18 +71,6 @@ describe('terminalFooterContext', () => {
     expect(terminalFooterContext({ focus: 'prompt', confirming: false, running: true })).toBe('terminal-running');
     expect(terminalFooterContext({ focus: 'output', confirming: false, running: true })).toBe('terminal-output');
     expect(terminalFooterContext({ focus: 'output', confirming: true, running: true })).toBe('terminal-confirm-close');
-  });
-});
-
-describe('terminalStatusText', () => {
-  it('names non-zero exits, cancels and errors; a clean exit and a blank command say nothing', () => {
-    expect(terminalStatusText(ok({ status: 'exited', exitCode: 0 }))).toBeNull();
-    expect(terminalStatusText(ok({ status: 'noop' }))).toBeNull();
-    expect(terminalStatusText(ok({ status: 'exited', exitCode: 127 }))).toBe('exit 127');
-    expect(terminalStatusText(ok({ status: 'cancelled' }))).toBe('cancelled');
-    expect(terminalStatusText(ok({ status: 'failed', error: { code: 'shell-unavailable', message: 'no sh\nmore' } }))).toBe('error: no sh');
-    expect(terminalStatusText(err('container-not-running', 'Container api is not running (down)'))).toBe('error: Container api is not running (down)');
-    expect(terminalStatusText(err('tty-required', 'vim needs a terminal'))).toBe('vim needs a terminal');
   });
 });
 
