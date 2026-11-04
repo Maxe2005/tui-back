@@ -838,3 +838,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-7-realign-use-case-and-cli-selective-branch-realignment.md`
   summary: `restartAfterSwitch` keys restart targets by service name, so two managed repos sharing a manifest service name can be conflated in the restart report.
   evidence: Pre-existing in Story 2.44's restart phase; realign rejects ambiguous `--service` names but `--scope all` can still select both repos.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-6-shared-types-ux-action-bar-and-post-publish-choice-screen.md`
+  summary: In the Shared Types form, long consumer checkbox rows wrap onto two lines while `BoundedList` counts them as one, so the 120x40 adversarial frame overdraws lines.
+  evidence: Reproduced at baseline 72dc5611 once the size-matrix test stubs `loadSharedTypesSource`/`loadSharedTypesConsumers` so the form actually renders; the frame still fits rows x columns, so the matrix guard does not catch it.
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-6-shared-types-ux-action-bar-and-post-publish-choice-screen.md`
+  summary: `app-shell.interaction.test.tsx > AppShell reset screen (:reset) > opens only through the reset command, and Esc closes it with zero writes` fails (`RESET TOOL DATA` not in output).
+  evidence: Fails at baseline 72dc5611 with the story changes stashed (1 failed / 5 passed in that file), so it predates story 9.6.
