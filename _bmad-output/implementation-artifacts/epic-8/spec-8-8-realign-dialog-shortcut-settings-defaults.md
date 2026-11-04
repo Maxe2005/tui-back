@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '59d1a5b478022e7d9298a7ef6e824950df681819'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-8-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/epic-8/epic-8-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">

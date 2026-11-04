@@ -2,7 +2,7 @@
 
 ## Deferred from: spec-filterable-pick-list-shared-component (2026-09-30)
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md`
+- source_spec: `_bmad-output/implementation-artifacts/no-epic/spec-filterable-pick-list-shared-component.md`
   summary: `branch-picker.tsx`'s `FilterableBranchList` (pick-existing mode) is a third hand-written filter-and-select list that does not yet render through the shared `FilterablePickList`.
   evidence: kept out of scope by the spec's own Never tier (same two-step split as the branch-autocomplete component: shared component first, adoption as a follow-up spec). `FilterableBranchList` still draws its own `› ` rows and the picker still owns its own `pickCursor` handling (`handlePickExistingKey`). **Track:** a follow-up adoption spec, which also has to decide whether the picker's prefix/substring conventions converge with the shared filter.
 
@@ -11,7 +11,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-11-update-commands-main-all-repos-single-service.md`
   summary: A future epic-2 → epic-3 merge must reconcile two parallel implementations of the command zone-switch (`runCommand()` + `zoneId`) and the filterable quick-pick (update-service pick vs 2.30 EDT pick).
   evidence: the 3.11 spec required syncing epic-2 first, but epic-2 has diverged (wizard stories 2.35-2.38), so 3.11 built the assumed contracts locally in `src/adapters/driving/tui/shared/command-bar.tsx` (`runCommand`) and `src/adapters/driving/tui/zones/update/` (service pick) instead of reusing epic-2's `670bfcb`/`7fcf592` — a side-effect fix to `edt-switch <topic>` arg dispatch is also bundled in. Surfaced by design (documented in the spec's own task 1 DONE AS), not by review layers.
-  resolved_by: the 2026-09-30 epic sync merge `5557b8a` (command zone-switch — `command-bar.tsx`'s `runCommand` now delegates to `commands.ts`'s) and `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30, quick-pick — both dialogs now render through the shared `FilterablePickList`).
+  resolved_by: the 2026-09-30 epic sync merge `5557b8a` (command zone-switch — `command-bar.tsx`'s `runCommand` now delegates to `commands.ts`'s) and `_bmad-output/implementation-artifacts/no-epic/spec-filterable-pick-list-shared-component.md` (2026-09-30, quick-pick — both dialogs now render through the shared `FilterablePickList`).
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-11-update-commands-main-all-repos-single-service.md`
   summary: Duplicate service names across managed repos have no disambiguation in the `:update-service <name>` path — it resolves to the first match with no ambiguous-name handling.
   evidence: `src/adapters/driving/tui/store/slices/update-slice.ts`'s `openSingleServiceConfig` returns the first case-insensitive match in both the EDT-member and registry loops; the same duplicate-name collision is already tracked for the Update zone's outcome map (see 3-6 deferred entries). Surfaced by blind-hunter review layer.
@@ -35,12 +35,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
   summary: No test opens quick-pick when the candidate pool is genuinely empty (not just filtered-to-zero) — reachable in switch mode whenever exactly one EDT exists total (it's active, so the non-active candidate pool is `[]`).
   evidence: Flagged by blind-hunter. In the zero-*total*-EDTs case the zone's pre-existing "auto-open the create dialog" guard (`edts.length === 0 && dialog.kind === 'none'`, edts-zone.tsx:321) fires first and quick-pick can never open at all, so that sub-case is unreachable — but the "exactly 1 EDT, it's active" sub-case for switch mode specifically *is* reachable and untested.
-  resolved_by: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30). `edts-zone.test.tsx` now opens the switch-mode pick with a single, active EDT and asserts the empty-pool line; the shared reducer's own tests cover Enter/Esc on an empty pool.
+  resolved_by: `_bmad-output/implementation-artifacts/no-epic/spec-filterable-pick-list-shared-component.md` (2026-09-30). `edts-zone.test.tsx` now opens the switch-mode pick with a single, active EDT and asserts the empty-pool line; the shared reducer's own tests cover Enter/Esc on an empty pool.
 
 - source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-30-edt-quick-pick-filterable-list-for-edt-switch-edt-modify-edt-delete.md`
   summary: `QuickPickDialogView` renders the identical "No matching EDT" wording whether the pool is genuinely empty (nothing to select, ever, for this mode) or just the current filter text matches nothing — unlike the base EDT list's own distinct "No EDTs yet." message for its own true-empty state.
   evidence: Flagged by blind-hunter. Not incorrect, just imprecise in the genuinely-empty-pool case (most reachable for switch mode with exactly one, active, EDT — see the entry above). Cosmetic wording polish, not a behavior bug.
-  resolved_by: `_bmad-output/implementation-artifacts/spec-filterable-pick-list-shared-component.md` (2026-09-30). The shared `FilterablePickList` takes two distinct lines — the EDT pick shows "No EDT to select" for an empty pool and keeps "No matching EDT" for a filter matching nothing.
+  resolved_by: `_bmad-output/implementation-artifacts/no-epic/spec-filterable-pick-list-shared-component.md` (2026-09-30). The shared `FilterablePickList` takes two distinct lines — the EDT pick shows "No EDT to select" for an empty pool and keeps "No matching EDT" for a filter matching nothing.
 
 ## Deferred from: review of 3-8-manifest-defined-clean-restart-recipe (2026-09-24)
 
@@ -140,13 +140,13 @@
 
 ## Deferred from: code review of 2-8-fullscreen-tui-rendering (2026-08-20)
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-fullscreen-tui-rendering.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-8-fullscreen-tui-rendering.md`
   summary: `src/bin/tui.ts`'s own `render()` call — the actual production wiring that passes `alternateScreen: true` to Ink — is never exercised by any test; nothing would fail if that flag were dropped, renamed, or misspelled during a future refactor.
   evidence: `tui.ts` is a top-level-await composition-root script (checks `process.stdin.isTTY`, acquires a real lock, wires all driven ports) that `tui-back.e2e.test.ts` already documents as unexercised for the same reason (no pty lib, `spawnSync`'s piped stdin trips the `isTTY` guard). The new `app-shell.alternate-screen.test.tsx` calls `render()` directly with its own hard-coded `alternateScreen: true`, so it verifies Ink's mechanism but not that `tui.ts` actually passes the option through. Closing this within the story's bounded "two prop/option additions" scope would need extracting the composition root's `render()` options into an importable, independently-testable unit — an architecture change beyond what the approved sprint-change-proposal scoped. **Track:** revisit if `tui.ts` is ever refactored to separate composition wiring from process-lifecycle side effects (e.g. for the pty-based e2e coverage story eventually), at which point this option can be asserted directly.
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-fullscreen-tui-rendering.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-8-fullscreen-tui-rendering.md`
   summary: The real `q`/Ctrl+C quit paths (`onQuit` → `process.exit(0)`, and Ink's own `exitOnCtrlC` handler) are not exercised by any test — `app-shell.alternate-screen.test.tsx` verifies alt-screen restoration only via a direct `instance.unmount()` call, a narrower proxy for the same `signal-exit`-patches-`process.exit` mechanism.
   evidence: testing a real `process.exit()`/SIGINT path in-process, without killing the test runner, is inherently difficult without a pty (same documented constraint as the composition-root gap above); the Design Notes' reasoning for trusting this path rests on `signal-exit`'s well-known patching behavior, not on new code this story adds. **Track:** covered only by the manual verification step in the spec until a pty-based e2e story exists.
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-fullscreen-tui-rendering.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-8-fullscreen-tui-rendering.md`
   summary: `FakeTtyStdout`/`fakeTtyStdin` in `app-shell.alternate-screen.test.tsx` are cast through `as unknown as NodeJS.WriteStream`/`NodeJS.ReadStream`, papering over missing standard stream members (`getColorDepth`, `cursorTo`, `clearLine`, `fd`, etc.) that today's Ink code path happens not to touch.
   evidence: a future Ink upgrade that reads any of those would fail with a cryptic runtime error inside `node_modules` rather than a clear type error at the test's own call site. Low priority — the same risk already exists in `render-to-string.ts`'s established fake-stdin technique this file deliberately mirrors. **Track:** revisit if an Ink upgrade ever breaks either fake-stream test with an unclear error.
 
@@ -232,7 +232,7 @@
 ## Deferred from: code review of 1-11-permanent-app-shell.md (2026-08-17)
 
 - **AppShell never mounted in a runnable entry point** (`src/adapters/driving/tui/app-shell.tsx:11`): referenced only by `app-shell.test.tsx`; `src/bin/main.ts` mounts only the CLI dispatch path, so AC1 ("Given the app is running") and AD-2 are unmet end-to-end. **Track:** wire the TUI entry point (composition root) in Story 1.12 (launch banner / entry point).
-- **AD-13 wording contradicts task T2** (`_bmad-output/implementation-artifacts/1-11-permanent-app-shell.md`): the Technical Requirements say "TUI gets smoke-tests via Ink's `render()` only", yet `app-store.test.ts` unit-tests the Zustand store directly with no Ink render; the story's own task T2 explicitly endorses this, so the diff follows the task line and AD-13's wording should be reconciled. **Track:** amend AD-13 (or the story requirement) when the architecture doc next gets edited.
+- **AD-13 wording contradicts task T2** (`_bmad-output/implementation-artifacts/epic-1/1-11-permanent-app-shell.md`): the Technical Requirements say "TUI gets smoke-tests via Ink's `render()` only", yet `app-store.test.ts` unit-tests the Zustand store directly with no Ink render; the story's own task T2 explicitly endorses this, so the diff follows the task line and AD-13's wording should be reconciled. **Track:** amend AD-13 (or the story requirement) when the architecture doc next gets edited.
 
 ## Deferred from: code review of 1-8-atelier-design-tokens-theme-module (2026-08-14)
 
@@ -583,10 +583,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: Zero EDTs but a stale `state.json` active pointer (to a removed EDT) makes the first-EDT activation refuse with `activate-has-outgoing`, leaving the new EDT inactive.
   evidence: Story 2.38 review (blind hunter). The wizard decides "first EDT" from the EDT count while `activateEdt` checks the pointer; delete refuses the active EDT, so the stale pointer needs an out-of-band edit, but nothing clears it.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-reset-command.md`
+- source_spec: `_bmad-output/implementation-artifacts/no-epic/spec-reset-command.md`
   summary: After a `:reset` of services, Logs zone panes stay subscribed to (and keep streaming/health-polling) repos that are no longer registered.
   evidence: runReset rehydrates edts/tabVisibility/registryEmpty/filterHistory only; logs-slice pane subscriptions are never pruned against the new registry.
-- source_spec: `_bmad-output/implementation-artifacts/spec-reset-command.md`
+- source_spec: `_bmad-output/implementation-artifacts/no-epic/spec-reset-command.md`
   summary: After a `:reset` of EDTs, per-zone UI state tied to deleted EDTs (EDT action log/detail pane, zone cursors, Update zone service list) is not cleared until the next natural reload.
   evidence: runReset only calls four loaders; other slices cache EDT/service-derived state with no reset hook.
 
@@ -603,7 +603,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: The `:` command-bar grid truncates command labels (e.g. `edt-switch` renders as `edt-switc`) once a longer command name widens the layout.
   evidence: Story 2.31 adding `edt-create-from` made `app-shell.interaction.test.tsx`'s grid assertion fail on the clipped label; the test was re-anchored on `edt-delete`, the layout itself was not fixed.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate.md`
   summary: Cross-EDT ownership check (renameBranch and assertAllowedBranch) is not atomic with the git write and compares repo paths with resolve() only (no realpath/symlink canonicalisation).
   evidence: Pre-existing pattern in assertAllowedBranch (story 2.4); story 2.43 reuses it for renameBranch, so a concurrent registration or a symlinked repo path can bypass the gate.
 - source_spec: `_bmad-output/implementation-artifacts/epic-6/spec-6-6-scanner-extension-parameters-request-body-skeletons.md`
@@ -764,13 +764,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: Gate `issues-dialog.tsx`'s `useInput` on the zone-input predicate and derive AppShell's two hand-written overlay-flag lists from `isZoneInputActive`.
   evidence: Story 7.11 review — both are unreachable leaks today, but a new overlay registered only in the predicate would not update AppShell.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
   summary: Harden `tokenizeCommandLine`/`resolveEditorCommand` (unterminated quote, quotes-only value that should fall through to `$EDITOR`, `<repo>` in the binary position).
   evidence: The code was moved unchanged from the Update zone; the edge cases exist in the original (command.ts tokenizer swallows an unclosed quote into one token; an empty-string first token is chosen as the binary).
-- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
   summary: The editor launch runs `spawnSync` with inherited stdio without suspending Ink raw mode / alternate screen, and ignores signal/non-zero exit.
   evidence: Same behaviour as the pre-move `launchEditor`; terminal editors launched from the TUI may share the terminal with Ink's rendering.
-- source_spec: `_bmad-output/implementation-artifacts/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-7/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md`
   summary: Restart conflict is reported with the code `update-already-running`, which is misleading outside the update flow; the Update slice's `describeServiceRestart` still offers restart for a container-less service with a recipe, unlike the registry.
   evidence: Code reused from `service-restart.ts`; the two availability rules diverge until Stories 5.7/7.5 adopt the registry.
 - source_spec: `_bmad-output/implementation-artifacts/epic-3/spec-3-20-update-configurable-global-defaults.md`
@@ -799,42 +799,42 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: Tab toggles the History search mode while the branch autocomplete dropdown may be open, instead of letting the autocomplete consume it; it also conflicts with the Tab-moves-focus convention.
   evidence: `shared-types-history.logic.ts` was added to the focus-navigation guard allowlist.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
   summary: The post-switch restart has no cancel and no timeout on `ServiceActions.restart` / `docker.getContainerHealth`; a hung call keeps the run `running` and blocks switches, updates and standalone restarts.
   evidence: `verifyService` only budgets its own poll loop (30 s); a hung `docker restart` or recipe command never resolves, and the TUI offers no escape hatch.
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
   summary: With a restart mode set, the switch's action-log entry is written only after the whole restart run, so quitting mid-run loses the switch entry.
   evidence: `handleSwitchConfirm` awaits `runSwitchRestart` before `logEdtAction`; log the switch first and the restart outcome separately.
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
   summary: A repo with an unreadable manifest, or two repos sharing a service name, is matched by service name only and may be reported `skipped (unchanged)` instead of surfacing the manifest error.
   evidence: `listSwitchRestartRepos` falls back to `service: repoPath` and `restartAfterSwitch` maps switch rows by `service` string (`SwitchEdtRepoResult` carries no repoPath).
-- source_spec: `_bmad-output/implementation-artifacts/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-2/spec-2-44-edt-switch-optional-parallel-service-restart-verified-state.md`
   summary: The EDTs zone's restart-report reopen effect reads `dialog`/`edtsRows` without listing them as dependencies, and the CLI gives no progress output during a long `--restart` run.
   evidence: `edts-zone.tsx` effect deps are `[switchRestart, edts]`; `runEdtSwitch` passes no `onPhase`.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-8-1-dashboard-snapshot-use-case-and-cli.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-1-dashboard-snapshot-use-case-and-cli.md`
   summary: Bound the dashboard snapshot's parallelism and add per-probe timeouts.
   evidence: buildDashboardSnapshot runs exists/manifest.load for every registered repo and 3 git calls + 1 docker call per member through unbounded Promise.all; a hung docker/git call blocks the whole snapshot.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
   summary: Keep the previous Dashboard data on screen (with a dim "refreshing" cue) while a refresh runs, instead of swapping it for a spinner.
   evidence: `DashboardBody` renders the spinner whenever a section status is `loading`, so every `R` blanks the sections briefly; the spec only requires per-section spinners.
-- source_spec: `_bmad-output/implementation-artifacts/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-2-dashboard-shell-states-fixed-banner-refresh.md`
   summary: Surface the cause (error code/message) of a failed Dashboard section load instead of a bare "Failed to load".
   evidence: `dashboard-slice.ts` drops the `Result` error on failure, so unwired ports, docker and registry errors look identical.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-8-3-dashboard-active-edt-services-table-service-actions.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-3-dashboard-active-edt-services-table-service-actions.md`
   summary: `restartAvailability` is evaluated twice per `ServiceActions.list` (simple and clean), loading the manifest and peeking locks twice.
   evidence: Both restart actions share one availability; the list runs on every Dashboard focus move, so the manifest is read twice per move.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-8-6-branch-drift-detection-snapshot-attention.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-6-branch-drift-detection-snapshot-attention.md`
   summary: Bound the concurrency of the Dashboard snapshot probes (members, others and registry summary each fan out through an unbounded Promise.all).
   evidence: Story 8.6 adds one exists/manifest/git rev-parse probe per non-member registered repo on every refresh, on top of the existing unbounded member and registry-summary probes; a large registry spawns that many git processes at once.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-8-7-realign-use-case-and-cli-selective-branch-realignment.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-7-realign-use-case-and-cli-selective-branch-realignment.md`
   summary: `edt switch --force` past a held `edt:<ulid>` lock proceeds without the lock, so it can run checkouts concurrently with the update or realign holding it.
   evidence: Pre-existing `--force` semantics (no abort primitive exists); story 8.7 made realign a new holder of that lock, widening the exposure, but the race already existed with EDT updates.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-8-7-realign-use-case-and-cli-selective-branch-realignment.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-7-realign-use-case-and-cli-selective-branch-realignment.md`
   summary: `restartAfterSwitch` keys restart targets by service name, so two managed repos sharing a manifest service name can be conflated in the restart report.
   evidence: Pre-existing in Story 2.44's restart phase; realign rejects ambiguous `--service` names but `--scope all` can still select both repos.
