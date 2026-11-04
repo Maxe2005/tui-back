@@ -159,7 +159,7 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
       const terminalKind = TERMINAL_KINDS[actionId];
       if (terminalKind !== undefined) {
         const row = get().dashboardServices?.services.find((service) => service.path === repoPath);
-        await get().openTerminal(repoPath, terminalKind, row?.service ?? basename(repoPath));
+        await get().openTerminal(repoPath, terminalKind, row?.service ?? (basename(repoPath) || repoPath));
         return;
       }
       const mode = RESTART_MODES[actionId];

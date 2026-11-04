@@ -173,6 +173,15 @@ describe('dashboard slice', () => {
       expect(store.getState().terminalTarget).toEqual({ kind: 'container', repoPath: '/r/a', label: 'api' });
     });
 
+    it('labels an unlisted row after its repo directory, or the whole path when that is empty', async () => {
+      const store = terminalStore('up');
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-service');
+      expect(store.getState().terminalTarget?.label).toBe('a');
+      store.getState().closeTerminal();
+      await store.getState().runDashboardServiceAction('/', 'terminal-service');
+      expect(store.getState().terminalTarget?.label).toBe('/');
+    });
+
     it('opens nothing when the fresh availability says the container is not running', async () => {
       const store = terminalStore('down');
       await store.getState().runDashboardServiceAction('/r/a', 'terminal-container');
