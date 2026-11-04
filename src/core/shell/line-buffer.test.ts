@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLineBuffer, markerText } from './line-buffer.js';
+import { clampCapacity, createLineBuffer, DEFAULT_MAX_LINES, markerText } from './line-buffer.js';
 
 const out = (text: string) => ({ stream: 'stdout' as const, text });
 
@@ -34,8 +34,36 @@ describe('createLineBuffer', () => {
   });
 });
 
+describe('createLineBuffer capacity clamping', () => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('falls back to the default for %s', (capacity) => {
+    expect(clampCapacity(capacity)).toBe(DEFAULT_MAX_LINES);
+    const buffer = createLineBuffer(capacity);
+    buffer.push(out('a'));
+    expect(buffer.snapshot()).toEqual({ lines: [out('a')], droppedCount: 0 });
+  });
+
+  it.each([
+    [-3, 1],
+    [0, 1],
+    [0.5, 1],
+    [2.9, 2],
+  ])('clamps %s to %s', (capacity, expected) => {
+    expect(clampCapacity(capacity)).toBe(expected);
+  });
+
+  it('floors a fractional capacity', () => {
+    const buffer = createLineBuffer(2.9);
+    ['a', 'b', 'c'].forEach((text) => buffer.push(out(text)));
+    expect(buffer.snapshot()).toEqual({ lines: [out('b'), out('c')], droppedCount: 1 });
+  });
+});
+
 describe('markerText', () => {
   it('renders the dropped-lines marker', () => {
     expect(markerText(42)).toBe('42 lines dropped');
+  });
+
+  it('uses the singular for one line', () => {
+    expect(markerText(1)).toBe('1 line dropped');
   });
 });

@@ -13,8 +13,16 @@ export interface LineBuffer {
   snapshot(): LineBufferSnapshot;
 }
 
+export const DEFAULT_MAX_LINES = 5000;
+
+// A non-finite capacity (NaN, ±Infinity) falls back to the default; anything else is floored
+// and clamped to at least one line, so construction never throws.
+export function clampCapacity(capacity: number): number {
+  return Number.isFinite(capacity) ? Math.max(1, Math.floor(capacity)) : DEFAULT_MAX_LINES;
+}
+
 export function createLineBuffer(capacity: number): LineBuffer {
-  const size = Math.max(1, Math.floor(capacity));
+  const size = clampCapacity(capacity);
   const slots: (ShellLine | undefined)[] = new Array<ShellLine | undefined>(size);
   let start = 0;
   let count = 0;
@@ -45,5 +53,5 @@ export function createLineBuffer(capacity: number): LineBuffer {
 }
 
 export function markerText(droppedCount: number): string {
-  return `${String(droppedCount)} lines dropped`;
+  return `${String(droppedCount)} ${droppedCount === 1 ? 'line' : 'lines'} dropped`;
 }
