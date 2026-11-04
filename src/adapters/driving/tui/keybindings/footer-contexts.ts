@@ -296,8 +296,8 @@ export const FOOTER_CONTEXTS = {
   'shared-types-version-row': { label: 'Shared types version row', hints: [['Enter', 'edit version'], MOVE, ['H', 'history']] },
   'shared-types-form': { label: 'Shared types form', hints: [MOVE, ['Space', 'toggle'], ['Enter', 'propagate'], ['H', 'history']] },
   'shared-types-results': { label: 'Shared types results', hints: [MOVE, ['R', 'retry failed'], ['Esc', 'new run']] },
-  'shared-types-publish-failed': { label: 'Shared types publish failed', hints: [['R', 'relaunch'], ['Esc', 'back']] },
-  'shared-types-publish-done': { label: 'Shared types publish done', hints: [['C', 'chain into propagation'], ['Esc', 'stop']] },
+  'shared-types-publish-failed': { label: 'Shared types publish failed', hints: [MOVE, ['Enter', 'select'], ['R', 'relaunch'], BACK] },
+  'shared-types-publish-done': { label: 'Shared types publish done', hints: [MOVE, ['Enter', 'select'], ['C', 'propagate'], CLOSE] },
   'shared-types-history-input': {
     label: 'Shared types history search',
     hints: [['Enter', 'search'], ['Tab', 'mode'], ['Esc', 'close']],
