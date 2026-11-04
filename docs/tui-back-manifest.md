@@ -169,6 +169,11 @@ modules:
   `functional`, `up` non vérifié `up-unverified`, `down` s'arrête aussitôt ;
   `restarting`, `inconsistent` et `unhealthy` continuent jusqu'au délai, puis
   un `unhealthy` persistant est rapporté `unhealthy`.
+  Un développeur peut désactiver localement la sonde pour un service
+  (`:settings` → onglet Services, `services.healthCheckDisabled` dans
+  `settings.yaml`) : le service est alors traité partout comme sans
+  `healthUrl` (statut, heal, vérification après redémarrage), et son statut
+  porte `healthCheck: "disabled"`.
 - **Exemple** : `healthUrl: http://localhost:3000/health`
 
 ### `protectedBranches` (optionnel)

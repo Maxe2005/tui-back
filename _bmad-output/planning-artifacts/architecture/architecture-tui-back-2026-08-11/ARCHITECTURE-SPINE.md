@@ -265,6 +265,7 @@ graph LR
 
 ### AD-23 — Service status resolution (added 2026-11-04, SCP 2)
 
-- **Binds:** FR-42, FR-43, FR-29, Stories 9.7, 9.8, 9.9
+- **Binds:** FR-42, FR-43, FR-45, FR-29, Stories 9.7, 9.8, 9.9, 9.11
 - **Prevents:** each view combining health probe and container state its own way; a service shown `up` while it does not answer; a Docker outage marking every service inconsistent.
 - **Rule:** `core/service-status/resolveServiceStatus(repoPath)` is the only producer of a service's displayed state. Order: manifest `healthUrl` probe first (`HealthProbePort`), then container (`DockerPort.getContainerHealth`). Closed set: `up | unhealthy | inconsistent | restarting | down | no-container`, plus `Probed` error. The combination table lives in the resolver and nowhere else. `healthUrl` stays the only probe kind; a new kind (command, TCP) is added inside the resolver, not in consumers. Returns `Result`, never rejects.
+- **Extension (2026-11-04, SCP 3, FR-45, Story 9.11):** whether a declared `healthUrl` is probed is decided inside the resolver from the local setting `services.healthCheckDisabled` (manifest service names, default empty = probe). A disabled check takes the "no `healthUrl`" rows of the table and marks the status `healthCheck: 'disabled'`. `verifyService` uses the same decision. No consumer reads the setting.

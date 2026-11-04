@@ -3653,7 +3653,7 @@ As a developer, I want a selection table to choose which repos to realign — wi
 
 ## Epic 9: Service Terminals & Unified Service Actions
 
-> Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`). Adds FR-39, FR-40, FR-41; extends AD-21, adds AD-22. Extended the same day (`sprint-change-proposal-2026-11-04-2.md`): FR-42, FR-43, AD-23, Stories 9.7–9.9. Branch: `epic-9-service-terminals-unified-service-actions`.
+> Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`). Adds FR-39, FR-40, FR-41; extends AD-21, adds AD-22. Extended the same day (`sprint-change-proposal-2026-11-04-2.md`): FR-42, FR-43, AD-23, Stories 9.7–9.9. Extended again (`sprint-change-proposal-2026-11-04-3.md`): FR-44, FR-45, AD-23 extension, Stories 9.10–9.11. Branch: `epic-9-service-terminals-unified-service-actions`.
 
 A developer can open a terminal on a service or on its container from the Dashboard or Logs, every service action is the same everywhere, and the Shared Types tab makes its commands and post-publish choices obvious.
 
@@ -3812,3 +3812,47 @@ As a developer, I want to restart every service that is not up from the Dashboar
 **Implementation notes:** reuse the realign dialog's restart-report rendering. The Dashboard's no-live-poll rule (Story 8.3) still holds outside the Heal screen.
 
 **Prerequisites:** 9.8.
+
+### Story 9.10: Text Filter in the Keybinding Help
+
+As a developer, I want to type a few letters in the `?` help and see only the matching keybindings, so that I find a key without scrolling the whole list.
+
+**Acceptance Criteria:**
+
+**Given** the help overlay open **When** a printable key is typed **Then** it is appended to a filter shown on a line under the title (`filter: <text>`, dim placeholder `type to filter` when empty); Backspace removes the last character.
+
+**Given** a non-empty filter **When** the list renders **Then** only the rows whose keys, description or section contain the filter (case-insensitive substring) are listed; a section heading shows only when at least one of its rows matches; the scroll offset resets to the top on every filter change.
+
+**Given** a filter matching nothing **Then** one dim line says `no keybinding matches "<text>"`; the overlay keeps its size.
+
+**Given** a non-empty filter **When** `?` is pressed **Then** it is typed into the filter; **When** Esc is pressed **Then** the filter is cleared and the help stays open. **Given** an empty filter **Then** `?` and Esc close the help as today.
+
+**Given** the arrows, Home/End and PgUp/PgDn **Then** they scroll the filtered list; the help reopens with an empty filter.
+
+**Given** any size **Then** the filter line and the filtered list respect bounded rendering (AD-19): a long filter is truncated, no unbounded `.map`; the help's own footer context lists the filter keys from the keybinding declarations.
+
+**Implementation notes:** a pure `filterKeybindings(rows, query)` next to `withSectionHeadings`, unit-tested. The `?`/Esc decision moves into `resolveHelpDispatch` (app-shell), which needs the filter state from the store or the help component. Applies wherever the help opens (zones, dialogs, terminal view output focus). Independent of other stories.
+
+### Story 9.11: Per-Service Health Check Toggle
+
+As a developer, I want to turn the `healthUrl` check off or on for chosen services, so that a slow or meaningless health route on my machine does not make a service look unhealthy or slow every poll down.
+
+**Acceptance Criteria:**
+
+**Given** the settings **Then** a new `services.healthCheckDisabled` list (manifest `service` names) exists, default empty; a missing, empty or corrupt value falls back to the default with the usual field-naming warning; unknown names are kept and ignored.
+
+**Given** a service whose name is in the list and whose manifest declares `healthUrl` **When** its status is resolved **Then** no probe is sent and the result equals the "no `healthUrl`" rows of AD-23 (container state, `up` unverified; container-less → `no-container`), marked `healthCheck: 'disabled'`.
+
+**Given** a service not in the list **Then** its resolution is unchanged (Story 9.7).
+
+**Given** a disabled service **When** it is restarted (switch/realign restart, Logs `R`, Dashboard restart, heal) **Then** `verifyService` does not probe either: a started container is reported `up-unverified`; heal (9.8) never targets it as `unhealthy`.
+
+**Given** the `:settings` screen **Then** a new **Services** tab lists every registered service, one checkbox per service ("health check"), checked = enabled; a service without `healthUrl` is listed disabled with the dim reason `no healthUrl`; a service whose manifest fails to load is listed disabled with `manifest unavailable`; toggling persists immediately and applies on the next resolution (next poll / refresh) without restart. The list is bounded (AD-19) and its keys come from the keybinding declarations.
+
+**Given** the Dashboard focused row of a disabled service **Then** the reason line shows a dim `health check off`; the CLI `dashboard` JSON carries `healthCheck: "disabled"` on that service's status.
+
+**Given** the resolver **Then** it is the only reader of the setting: no consumer (snapshot, slices, `verifyService`, CLI, heal) checks the list itself.
+
+**Implementation notes:** `ServiceStatusDeps` gets `isHealthCheckEnabled?: (manifest) => boolean` (absent = enabled), wired from the live settings so a change applies at the next call. Settings port, zod schema, defaults and `SETTINGS_TABS` (new `services` tab, last) updated with tests. `docs/tui-back-manifest.md` § `healthUrl` and the CLI `dashboard` envelope doc mention the toggle. AD-23 extension.
+
+**Prerequisites:** 9.7.

@@ -68,7 +68,7 @@ development_status:
   epic-8-retrospective: optional
 
   epic-9: in-progress
-  # Service terminals & unified service actions (2026-11-04): sprint-change-proposal-2026-11-04.md. Order: 9-1 -> 9-3 -> 9-2 -> 9-4 -> 9-5; 9-6 independent. + health-first status & heal (2026-11-04, sprint-change-proposal-2026-11-04-2.md): 9-7 -> 9-8 -> 9-9.
+  # Service terminals & unified service actions (2026-11-04): sprint-change-proposal-2026-11-04.md. Order: 9-1 -> 9-3 -> 9-2 -> 9-4 -> 9-5; 9-6 independent. + health-first status & heal (2026-11-04, sprint-change-proposal-2026-11-04-2.md): 9-7 -> 9-8 -> 9-9. + help filter & per-service health check toggle (2026-11-04, sprint-change-proposal-2026-11-04-3.md): 9-10 independent; 9-7 -> 9-11.
   9-1-shell-session-port-driven-adapter-core-shell-use-case: done
   9-2-registry-entries-for-service-and-container-terminals: done
   9-3-shared-scrollable-output-and-fullscreen-primitive: done
@@ -78,4 +78,6 @@ development_status:
   9-7-health-first-service-status-resolution: review
   9-8-heal-use-case-and-cli: backlog
   9-9-dashboard-heal-action: backlog
+  9-10-text-filter-in-the-keybinding-help: backlog
+  9-11-per-service-health-check-toggle: backlog
   epic-9-retrospective: optional
