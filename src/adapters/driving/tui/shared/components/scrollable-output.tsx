@@ -4,7 +4,7 @@
 // axes (AD-19): the content Box is measured for its real row budget, only the row-cost-aware
 // window is mapped, and each line either truncates or wraps within the measured width.
 import type { ReactNode } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, type TextProps } from 'ink';
 import { useElementSize } from '../hooks/use-element-size.js';
 import { computeLineRowCount, sliceVisibleWindow } from '../scrollable-output/index.js';
 
@@ -17,7 +17,7 @@ export type ScrollableOutputProps<T> = {
   fallbackRows: number;
   fallbackWidth: number;
   format: (line: T) => string;
-  color: (line: T) => string;
+  color: (line: T) => TextProps['color'];
   // Rendered when the window is empty; the caller passes `null` when something else (e.g. an
   // error annotation) already explains the emptiness.
   placeholder?: ReactNode;
@@ -27,9 +27,11 @@ export function ScrollableOutput<T>({ lines, offset, wrap, fallbackRows, fallbac
   const [contentRef, measuredSize] = useElementSize();
   const rowBudget = measuredSize !== null ? measuredSize.height : fallbackRows;
   const width = measuredSize !== null ? Math.max(measuredSize.width, 1) : fallbackWidth;
-  const windowLines = sliceVisibleWindow(lines, offset, rowBudget, (line) => computeLineRowCount(format(line), width, wrap));
+  // Truncated lines always cost one row, so `format` only runs for row cost under wrap.
+  const rowCost = wrap ? (line: T) => computeLineRowCount(format(line), width, true) : () => 1;
+  const windowLines = sliceVisibleWindow(lines, offset, rowBudget, rowCost);
   return (
-    <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
+    <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0} overflow="hidden">
       {windowLines.length === 0 ? placeholder : null}
       {windowLines.map((line, index) => (
         <Text key={index} color={color(line)} wrap={wrap ? 'wrap' : 'truncate-end'}>

@@ -97,6 +97,7 @@ export type { MenuItem, MenuKey, MenuStep } from './menu-list.js';
 export { ScrollableOutput } from './scrollable-output.js';
 export type { ScrollableOutputProps } from './scrollable-output.js';
 export { FullscreenFrame } from './fullscreen-frame.js';
+export type { FullscreenFrameProps } from './fullscreen-frame.js';
 export { StateLine, resolveStateLineText } from './state-line.js';
 export type { StateLineProps } from './state-line.js';
 export { formatHint, formatHints, CONFIRM_CANCEL_HINTS, KEY_UP_DOWN, HINT_SEPARATOR } from './hints.js';

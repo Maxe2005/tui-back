@@ -5,7 +5,9 @@ import type { ReactNode } from 'react';
 import { Box } from 'ink';
 import { spacing } from '../theme/theme.js';
 
-export function FullscreenFrame({ children }: { children?: ReactNode }) {
+export type FullscreenFrameProps = { children?: ReactNode };
+
+export function FullscreenFrame({ children }: FullscreenFrameProps) {
   return (
     <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
       {children}
