@@ -857,3 +857,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-3-shared-scrollable-output-and-fullscreen-primitive.md`
   summary: A stored scroll offset larger than the current visible line count (e.g. stream toggle or filter applied while scrolled up) yields an empty window and a misleading "Waiting for logs" placeholder; offset is only clamped at keypress time.
   evidence: `sliceVisibleWindow` computes `end = max(lines.length - offset, 0)` and returns [] when offset >= length; behaviour pre-dates story 9.3 (moved verbatim from logs-zone.logic.ts) and fixing it would change Logs frames, which 9.3 forbids. Terminal view (9.4) will hit the same path when its buffer is cleared.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-2-registry-entries-for-service-and-container-terminals.md`
+  summary: The Dashboard service-actions row now carries five entries and is truncated at common widths (~120 cols), hiding the container terminal and its greyed reason.
+  evidence: The story 9.2 zone test must render at 240 columns to see all five entries; ServiceActionsRow is a single truncate-end line and was out of scope to change (Ask First).
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-2-registry-entries-for-service-and-container-terminals.md`
+  summary: Each Dashboard row-focus change and every pre-run re-check now spawns a docker inspect for the container terminal, with no short-lived health cache or debounce.
+  evidence: list() probes getContainerHealth on every call (dashboard-slice fetchActions on focus change and in runDashboardServiceAction); scrolling the services table can stack concurrent inspects.
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-2-registry-entries-for-service-and-container-terminals.md`
+  summary: app-shell.interaction.test.tsx "AppShell reset screen (:reset) > opens only through the reset command, and Esc closes it with zero writes" fails on the epic-9 branch.
+  evidence: Fails 3/3 on story 9.2 and at the baseline 198de464 (output lacks 'RESET TOOL DATA'); not caused by story 9.2.

@@ -70,9 +70,9 @@ development_status:
   epic-9: in-progress
   # Service terminals & unified service actions (2026-11-04): sprint-change-proposal-2026-11-04.md. Order: 9-1 -> 9-3 -> 9-2 -> 9-4 -> 9-5; 9-6 independent.
   9-1-shell-session-port-driven-adapter-core-shell-use-case: done
-  9-2-registry-entries-for-service-and-container-terminals: backlog
-  9-3-shared-scrollable-output-and-fullscreen-primitive: review
+  9-2-registry-entries-for-service-and-container-terminals: review
+  9-3-shared-scrollable-output-and-fullscreen-primitive: done
   9-4-terminal-view-in-the-tui: backlog
   9-5-unified-service-actions-in-the-logs-tab: backlog
-  9-6-shared-types-ux-action-bar-and-post-publish-choice-screen: review
+  9-6-shared-types-ux-action-bar-and-post-publish-choice-screen: done
   epic-9-retrospective: optional

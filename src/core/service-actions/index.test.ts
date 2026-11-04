@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { HealthState } from '../ports/docker.js';
 import type { Manifest } from '../ports/manifest.js';
 import { err, ok } from '../result.js';
-import { createServiceActions, NO_CLEAN_RECIPE_NOTICE, restartBlockingLocks } from './index.js';
+import { createServiceActions, NO_CLEAN_RECIPE_NOTICE, restartBlockingLocks, TERMINAL_HEALTH_TIMEOUT_MS } from './index.js';
 
-function setup(manifest: Partial<Manifest> | 'broken', opts: { locked?: boolean; acquire?: 'busy' } = {}) {
+// `health` wires a docker fake whose container health is that state (`unavailable` = probe error);
+// omitted, no docker port is wired at all.
+function setup(
+  manifest: Partial<Manifest> | 'broken',
+  opts: { locked?: boolean; acquire?: 'busy'; health?: HealthState | 'unavailable' } = {},
+) {
   const container = { restart: vi.fn(async () => ok(undefined)) };
   const restart = { run: vi.fn(async (_repoPath: string, _command: string) => ok({ output: '' })) };
   const editor = { launch: vi.fn(() => ok(undefined)) };
@@ -17,29 +23,120 @@ function setup(manifest: Partial<Manifest> | 'broken', opts: { locked?: boolean;
       ? err('manifest-invalid', 'bad')
       : ok({ service: 'api', sharedBranch: 'development', modules: {}, ...manifest } as Manifest),
   );
-  const actions = createServiceActions({ manifest: { load }, container, restart, editor, lock });
-  return { actions, container, restart, editor, lock };
+  const health = opts.health;
+  const docker =
+    health === undefined
+      ? undefined
+      : {
+          getContainerHealth: vi.fn(async (_container: string) =>
+            health === 'unavailable' ? err('docker-unavailable', 'no docker') : ok(health),
+          ),
+        };
+  const actions = createServiceActions({ manifest: { load }, container, restart, editor, lock, docker: docker as never });
+  return { actions, container, restart, editor, lock, load, docker };
 }
 
 describe('service actions list', () => {
-  it('lists open-in-IDE, simple and clean restart, all available for a container service', async () => {
-    const { actions } = setup({ container: 'api', restartCommands: ['make'] });
+  it('lists open-in-IDE, simple and clean restart, then both terminals, all available for a running container service', async () => {
+    const { actions, docker, load } = setup({ container: 'api', restartCommands: ['make'] }, { health: 'up' });
     const listed = await actions.list('/repo/a');
-    expect(listed.ok && listed.data.map((a) => [a.id, a.key, a.availability.available])).toEqual([
-      ['open-in-ide', 'Ctrl+O', true],
-      ['restart-simple', 'Ctrl+R', true],
-      ['restart-clean', 'Ctrl+L', true],
+    expect(listed.ok && listed.data.map((a) => [a.id, a.label, a.key, a.availability.available])).toEqual([
+      ['open-in-ide', 'Open in IDE', 'Ctrl+O', true],
+      ['restart-simple', 'Restart', 'Ctrl+R', true],
+      ['restart-clean', 'Clean restart', 'Ctrl+L', true],
+      ['terminal-service', 'Terminal', 'Ctrl+T', true],
+      ['terminal-container', 'Container terminal', 'Ctrl+X', true],
     ]);
+    expect(docker?.getContainerHealth).toHaveBeenCalledWith('api');
+    // The manifest is read once per list, whatever the number of rules derived from it.
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
-  it('marks restarts unavailable with "no container" for a container-less service, never a failure', async () => {
-    const { actions } = setup({});
+  it('marks restarts and the container terminal unavailable with "no container" for a container-less service, never a failure', async () => {
+    const { actions, docker } = setup({}, { health: 'up' });
     const listed = await actions.list('/repo/a');
     expect(listed.ok && listed.data.map((a) => a.availability)).toEqual([
       { available: true },
       { available: false, reason: 'no container' },
       { available: false, reason: 'no container' },
+      { available: true },
+      { available: false, reason: 'no container' },
     ]);
+    expect(docker?.getContainerHealth).not.toHaveBeenCalled();
+  });
+
+  it('treats a blank container name as no container, without querying health', async () => {
+    const { actions, docker } = setup({ container: '  ' }, { health: 'up' });
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok && listed.data[4]?.availability).toEqual({ available: false, reason: 'no container' });
+    expect(docker?.getContainerHealth).not.toHaveBeenCalled();
+  });
+
+  it.each(['down', 'restarting'] as const)('marks the container terminal "container not running" when health is %s', async (health) => {
+    const { actions } = setup({ container: 'api' }, { health });
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok && listed.data.map((a) => [a.id, a.availability])).toEqual(
+      expect.arrayContaining([
+        ['terminal-service', { available: true }],
+        ['terminal-container', { available: false, reason: 'container not running' }],
+      ]),
+    );
+  });
+
+  it('reads "container state unknown" when Docker cannot be reached, never a list failure', async () => {
+    const { actions } = setup({ container: 'api' }, { health: 'unavailable' });
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok).toBe(true);
+    expect(listed.ok && listed.data[4]?.availability).toEqual({ available: false, reason: 'container state unknown' });
+  });
+
+  it('reads "container state unknown" when the health probe rejects', async () => {
+    const { actions, docker } = setup({ container: 'api' }, { health: 'up' });
+    docker?.getContainerHealth.mockRejectedValueOnce(new Error('boom'));
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok && listed.data[4]?.availability).toEqual({ available: false, reason: 'container state unknown' });
+  });
+
+  it('reads "container state unknown" when no Docker port is wired', async () => {
+    const { actions } = setup({ container: 'api' });
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok && listed.data[4]?.availability).toEqual({ available: false, reason: 'container state unknown' });
+  });
+
+  it('reads "container state unknown" when the health probe hangs past the timeout, without stalling the list', async () => {
+    const getContainerHealth = vi.fn(() => new Promise<never>(() => {}));
+    const sleep = vi.fn(async (_ms: number) => {});
+    const actions = createServiceActions({
+      manifest: { load: async () => ok({ service: 'api', sharedBranch: 'development', modules: {}, container: 'api' } as Manifest) },
+      container: { restart: async () => ok(undefined) },
+      restart: { run: async () => ok({ output: '' }) },
+      editor: { launch: () => ok(undefined) },
+      lock: { acquire: async () => err('action-in-progress', 'busy'), peek: async () => ok({ locked: false }) },
+      docker: { getContainerHealth } as never,
+      clock: { now: () => 0, sleep },
+    });
+    const listed = await actions.list('/repo/a');
+    expect(sleep).toHaveBeenCalledWith(TERMINAL_HEALTH_TIMEOUT_MS);
+    expect(listed.ok && listed.data.map((a) => a.availability)).toEqual([
+      { available: true },
+      { available: true },
+      { available: false, reason: 'no clean recipe' },
+      { available: true },
+      { available: false, reason: 'container state unknown' },
+    ]);
+  });
+
+  it('reads "no container" rather than "container state unknown" for a container-less service with no Docker port', async () => {
+    const { actions } = setup({});
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok && listed.data[4]?.availability).toEqual({ available: false, reason: 'no container' });
+  });
+
+  it('leaves both terminals unaffected by held restart and group-update locks', async () => {
+    const { actions, lock } = setup({ container: 'api', restartCommands: ['x'] }, { health: 'up', locked: true });
+    lock.peek.mockImplementation(async () => ok({ locked: true }));
+    const listed = await actions.list('/repo/a', { blockingLocks: restartBlockingLocks('01ABC') });
+    expect(listed.ok && listed.data.map((a) => a.availability.available)).toEqual([true, false, false, true, true]);
   });
 
   it('marks restarts unavailable while the restart lock is held', async () => {
@@ -49,12 +146,14 @@ describe('service actions list', () => {
   });
 
   it('marks only the clean restart unavailable when no recipe is declared', async () => {
-    const { actions } = setup({ container: 'api' });
+    const { actions } = setup({ container: 'api' }, { health: 'up' });
     const listed = await actions.list('/repo/a');
     expect(listed.ok && listed.data.map((a) => a.availability)).toEqual([
       { available: true },
       { available: true },
       { available: false, reason: 'no clean recipe' },
+      { available: true },
+      { available: true },
     ]);
   });
 
@@ -74,10 +173,17 @@ describe('service actions list', () => {
     expect(listed.ok && listed.data[0]?.availability).toEqual({ available: true });
   });
 
-  it('keeps open-in-IDE available when the manifest cannot be read', async () => {
-    const { actions } = setup('broken');
+  it('keeps open-in-IDE and the service terminal available when the manifest cannot be read', async () => {
+    const { actions, docker } = setup('broken', { health: 'up' });
     const listed = await actions.list('/repo/a');
-    expect(listed.ok && listed.data.map((a) => a.availability.available)).toEqual([true, false, false]);
+    expect(listed.ok && listed.data.map((a) => a.availability)).toEqual([
+      { available: true },
+      { available: false, reason: 'manifest unreadable' },
+      { available: false, reason: 'manifest unreadable' },
+      { available: true },
+      { available: false, reason: 'manifest unreadable' },
+    ]);
+    expect(docker?.getContainerHealth).not.toHaveBeenCalled();
   });
 });
 

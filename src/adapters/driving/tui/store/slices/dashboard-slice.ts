@@ -87,6 +87,8 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
           restart: deps.restart,
           editor: deps.editor,
           lock: deps.lock,
+          // The container terminal's availability reads the container's live health.
+          docker: deps.docker,
         })
       : null;
   return (set, get) => {
