@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { HealthState } from '../ports/docker.js';
 import type { Manifest } from '../ports/manifest.js';
 import { err, ok } from '../result.js';
-import { createServiceActions, NO_CLEAN_RECIPE_NOTICE, restartBlockingLocks } from './index.js';
+import { createServiceActions, NO_CLEAN_RECIPE_NOTICE, restartBlockingLocks, TERMINAL_HEALTH_TIMEOUT_MS } from './index.js';
 
 // `health` wires a docker fake whose container health is that state (`unavailable` = probe error);
 // omitted, no docker port is wired at all.
@@ -101,6 +101,35 @@ describe('service actions list', () => {
     const { actions } = setup({ container: 'api' });
     const listed = await actions.list('/repo/a');
     expect(listed.ok && listed.data[4]?.availability).toEqual({ available: false, reason: 'container state unknown' });
+  });
+
+  it('reads "container state unknown" when the health probe hangs past the timeout, without stalling the list', async () => {
+    const getContainerHealth = vi.fn(() => new Promise<never>(() => {}));
+    const sleep = vi.fn(async (_ms: number) => {});
+    const actions = createServiceActions({
+      manifest: { load: async () => ok({ service: 'api', sharedBranch: 'development', modules: {}, container: 'api' } as Manifest) },
+      container: { restart: async () => ok(undefined) },
+      restart: { run: async () => ok({ output: '' }) },
+      editor: { launch: () => ok(undefined) },
+      lock: { acquire: async () => err('action-in-progress', 'busy'), peek: async () => ok({ locked: false }) },
+      docker: { getContainerHealth } as never,
+      clock: { now: () => 0, sleep },
+    });
+    const listed = await actions.list('/repo/a');
+    expect(sleep).toHaveBeenCalledWith(TERMINAL_HEALTH_TIMEOUT_MS);
+    expect(listed.ok && listed.data.map((a) => a.availability)).toEqual([
+      { available: true },
+      { available: true },
+      { available: false, reason: 'no clean recipe' },
+      { available: true },
+      { available: false, reason: 'container state unknown' },
+    ]);
+  });
+
+  it('reads "no container" rather than "container state unknown" for a container-less service with no Docker port', async () => {
+    const { actions } = setup({});
+    const listed = await actions.list('/repo/a');
+    expect(listed.ok && listed.data[4]?.availability).toEqual({ available: false, reason: 'no container' });
   });
 
   it('leaves both terminals unaffected by held restart and group-update locks', async () => {

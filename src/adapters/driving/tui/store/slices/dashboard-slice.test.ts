@@ -128,7 +128,13 @@ describe('dashboard slice', () => {
     await store.getState().loadDashboardServiceActions('/r/a');
     const actions = store.getState().dashboardServiceActions['/r/a'];
     expect(actions?.map((a) => a.id)).toEqual(['open-in-ide', 'restart-simple', 'restart-clean', 'terminal-service', 'terminal-container']);
-    expect(actions?.[4]?.availability).toEqual({ available: false, reason: 'container not running' });
+    expect(actions?.map((a) => a.availability)).toEqual([
+      { available: true },
+      { available: true },
+      { available: false, reason: 'no clean recipe' },
+      { available: true },
+      { available: false, reason: 'container not running' },
+    ]);
     expect(getContainerHealth).toHaveBeenCalledWith('api');
   });
 

@@ -37,6 +37,10 @@ export const VERIFY_POLL_INTERVAL_MS = 1000;
 export const VERIFY_TIMEOUT_MS = 30_000;
 // One health GET never waits longer than this, whatever time the overall budget has left.
 export const HEALTH_PROBE_TIMEOUT_MS = 5000;
+// The container-terminal check in `list()` gives Docker this long before reading
+// `container state unknown`: the Dashboard re-lists right before every action, so a hung daemon
+// must not stall Open in IDE or the restarts.
+export const TERMINAL_HEALTH_TIMEOUT_MS = 1500;
 
 // The closed set of per-service states a post-restart run ends on. `failed` is assigned by the
 // caller when the restart itself errored — verifyService never returns it.
@@ -184,7 +188,10 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
     if (deps.docker === undefined) {
       return { available: false, reason: 'container state unknown' };
     }
-    const health = await deps.docker.getContainerHealth(containerName).catch(() => null);
+    const health = await Promise.race([
+      deps.docker.getContainerHealth(containerName).catch(() => null),
+      clock.sleep(TERMINAL_HEALTH_TIMEOUT_MS).then(() => null),
+    ]);
     if (health === null || !health.ok) {
       return { available: false, reason: 'container state unknown' };
     }
@@ -199,9 +206,12 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
       }
       const blockingLocks = options?.blockingLocks ?? [];
       const loaded = await manifest.load(repoPath);
-      const simpleState = await restartAvailability(repoPath, loaded, 'simple', blockingLocks);
-      const cleanState = await restartAvailability(repoPath, loaded, 'clean', blockingLocks);
-      const containerTerminalState = await containerTerminalAvailability(loaded);
+      // Independent checks: the Docker probe runs alongside the lock peeks, not after them.
+      const [simpleState, cleanState, containerTerminalState] = await Promise.all([
+        restartAvailability(repoPath, loaded, 'simple', blockingLocks),
+        restartAvailability(repoPath, loaded, 'clean', blockingLocks),
+        containerTerminalAvailability(loaded),
+      ]);
       return ok([
         { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: AVAILABLE },
         { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: simpleState },
