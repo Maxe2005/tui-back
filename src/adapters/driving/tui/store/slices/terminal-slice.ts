@@ -194,7 +194,7 @@ export function createTerminalSlice(deps?: AppStoreDeps): StateCreator<AppState,
         const current = generation;
         flush();
         set((state) => ({
-          terminalHistory: pushHistoryEntry(state.terminalHistory, command, TERMINAL_HISTORY_MAX),
+          terminalHistory: pushHistoryEntry(state.terminalHistory, command.trim(), TERMINAL_HISTORY_MAX),
           terminalRunning: true,
           terminalNotice: null,
         }));
@@ -227,9 +227,11 @@ export function createTerminalSlice(deps?: AppStoreDeps): StateCreator<AppState,
           set((state) => ({ terminalFullscreen: !state.terminalFullscreen }));
         }
       },
+      // The notice has a one-row budget in the view: only its first line is kept.
       setTerminalNotice: (notice) => {
-        if (get().terminalNotice !== notice) {
-          set({ terminalNotice: notice });
+        const next = notice === null ? null : firstLine(notice);
+        if (get().terminalNotice !== next) {
+          set({ terminalNotice: next });
         }
       },
       // Idempotent; also the app's exit-path cleanup: the running command is cancelled and the

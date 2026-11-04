@@ -253,6 +253,26 @@ describe('terminal slice', () => {
     expect(store.getState()).toMatchObject({ terminalOpen: false, terminalReady: false, terminalTarget: null });
   });
 
+  it('keeps only the first line of a notice', () => {
+    const { store } = setup();
+    store.getState().setTerminalNotice('first\nsecond\nthird');
+    expect(store.getState().terminalNotice).toBe('first');
+    store.getState().setTerminalNotice(null);
+    expect(store.getState().terminalNotice).toBeNull();
+  });
+
+  it('records the trimmed command in the history, so padded repeats are one entry', async () => {
+    const { store, shell } = setup();
+    await store.getState().openTerminal('/repo/api', 'service', 'api');
+    for (const [index, command] of [' ls', 'ls  '].entries()) {
+      const running = store.getState().runTerminalCommand(command);
+      await vi.waitFor(() => expect(shell.runs).toHaveLength(index + 1));
+      shell.runs.at(-1)!.finish({ status: 'exited', exitCode: 0 });
+      await running;
+    }
+    expect(store.getState().terminalHistory).toEqual(['ls']);
+  });
+
   it('toggles fullscreen only while open', async () => {
     const { store } = setup();
     store.getState().toggleTerminalFullscreen();
