@@ -14,7 +14,7 @@ import type { RestartPort } from '../ports/restart.js';
 import { err, ok, type Result } from '../result.js';
 import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update.js';
 import { serviceRestartLockKey } from '../scripts/service-restart.js';
-import { combineStatus, hasContainer, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
+import { DEFAULT_PROBE_REASON, combineStatus, hasContainer, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
 
 export type RestartMode = 'simple' | 'clean';
 
@@ -290,9 +290,9 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
         return err('verification-unavailable', 'No health probe is wired — cannot verify the declared healthUrl');
       }
       const deadline = clock.now() + VERIFY_TIMEOUT_MS;
-      let lastDockerError: Result<never> | null = null;
-      let lastProbeReason: string | undefined;
-      let lastWaiting: ServiceStatus | null = null;
+      // Only the latest attempt's observation is reported at the timeout: an older one (a
+      // restarting read followed by Docker errors, say) would describe a state that is gone.
+      let latest: Result<ServiceStatus> | null = null;
       for (;;) {
         // Each attempt is decided by the AD-23 table: the same rule every status view uses.
         const remaining = Math.max(1, deadline - clock.now());
@@ -302,38 +302,39 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
             : readProbe({ healthProbe }, loaded.data, Math.min(HEALTH_PROBE_TIMEOUT_MS, remaining)),
           readContainer({ docker }, loaded.data),
         ]);
-        const status = combineStatus(probe, container);
-        if (!status.ok) {
-          lastDockerError = status;
-        } else {
-          const { state, verified } = status.data;
+        latest = combineStatus(probe, container);
+        if (latest.ok) {
+          const { state, verified } = latest.data;
           if (state === 'up') {
             return ok({ state: verified ? 'functional' : 'up-unverified' });
           }
           if (state === 'down') {
-            return ok({ state: 'down', detail: status.data.probeReason ?? 'container is not running' });
+            // verifyService only runs on a declared container, so `down` is always the container.
+            return ok({ state: 'down', detail: 'container is not running' });
           }
           // restarting, inconsistent and unhealthy keep polling until the timeout.
-          lastWaiting = status.data;
-          lastProbeReason = state === 'unhealthy' ? status.data.probeReason : undefined;
         }
         if (clock.now() + VERIFY_POLL_INTERVAL_MS > deadline) {
           break;
         }
         await clock.sleep(VERIFY_POLL_INTERVAL_MS);
       }
-      if (lastWaiting?.state === 'restarting') {
-        return ok({ state: 'restarting', detail: 'still restarting after the verification timeout' });
+      if (latest === null) {
+        return err('verification-timeout', `Could not verify ${repoPath} within the verification timeout`);
       }
-      if (lastWaiting?.state === 'inconsistent') {
+      if (!latest.ok) {
+        return latest;
+      }
+      const observed = latest.data;
+      if (observed.state === 'inconsistent') {
         // The health route answers but the container never came up: report the container's state.
-        const container = lastWaiting.container === 'restarting' ? 'restarting' : 'down';
+        const container = observed.container === 'restarting' ? 'restarting' : 'down';
         return ok({ state: container, detail: `health route answers but container is ${container}` });
       }
-      if (lastProbeReason !== undefined) {
-        return ok({ state: 'unhealthy', detail: lastProbeReason });
+      if (observed.state === 'unhealthy') {
+        return ok({ state: 'unhealthy', detail: observed.probeReason ?? DEFAULT_PROBE_REASON });
       }
-      return lastDockerError ?? err('verification-timeout', `Could not verify ${repoPath} within the verification timeout`);
+      return ok({ state: 'restarting', detail: 'still restarting after the verification timeout' });
     },
   };
 }
