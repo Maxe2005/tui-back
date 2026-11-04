@@ -82,6 +82,10 @@ const EXPECTED = [
   ['Ctrl+R (Routes)', 'Routes: fire the request of the open pane'],
   ['Ctrl+T (branch picker)', 'Branch picker: rename the highlighted branch'],
   ['PgUp / PgDn', 'Scroll a dialog taller than the window; page the Update last-run recap and full report'],
+  ['P (Shared Types)', 'Shared Types: publish a new version of the shared-types source repo'],
+  ['Enter (Shared Types)', 'Shared Types: on the version row, edit the version; from a consumer or option row, propagate it to the checked consuming services; on a choice screen, select the highlighted choice'],
+  ['H (Shared Types)', "Shared Types: browse the source repo's published versions and pick one"],
+  ['R (Shared Types)', 'Shared Types: reload the source repo and consuming services after a load error; relaunch a failed publish; retry the highlighted failed service in the results'],
 ] as const;
 
 describe('KEYBINDINGS (canonical contract, EXPERIENCE.md Interaction Primitives)', () => {

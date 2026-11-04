@@ -196,7 +196,7 @@ describe('size matrix: Update zone mid-run', () => {
 });
 
 describe('size matrix: Shared types zone', () => {
-  const states = ['form', 'running', 'done', 'blocked'] as const;
+  const states = ['form', 'running', 'done', 'blocked', 'publish-done', 'publish-blocked'] as const;
   for (const state of states) {
     for (const size of MATRIX_SIZES) {
       it(`${state} with 200 consumers at ${size.columns}x${size.rows} stays inside the terminal`, async () => {
@@ -212,8 +212,21 @@ describe('size matrix: Shared types zone', () => {
           sharedTypesConsumers: consumers,
           sharedTypesConsumersStatus: 'ready',
           sharedTypesIssues: consumers.slice(0, 30).map((c) => ({ repoPath: c.repoPath, service: c.service, message: MULTILINE })),
+          // Keep the seeded state: the zone's mount effects would otherwise reload (and fail) it.
+          loadSharedTypesConsumers: async () => {},
+          loadSharedTypesSource: async () => {},
+          sharedTypesSources: [{ service: `source-${'s'.repeat(80)}`, repoPath: '/repos/source', branch: 'main', publishCommand: 'npm run v', packageName: '@scope/types' }],
+          sharedTypesSourcesStatus: 'ready',
+          sharedTypesSourceIssues: [],
+          sharedTypesSourcesError: null,
+          sharedTypesPublish:
+            state === 'publish-done'
+              ? { status: 'done', version: `0.1.${'9'.repeat(80)}`, output: MULTILINE, error: null, notice: MULTILINE }
+              : state === 'publish-blocked'
+                ? { status: 'blocked', version: null, output: MULTILINE, error: { code: 'publish-failed', message: MULTILINE }, notice: MULTILINE }
+                : { status: 'idle', version: null, output: null, error: null, notice: null },
           sharedTypesRun: {
-            status: state === 'form' ? 'idle' : state,
+            status: state === 'form' || state === 'publish-done' || state === 'publish-blocked' ? 'idle' : state,
             version: '0.1.0',
             options: {},
             blocked: state === 'blocked' ? { code: 'boom', message: MULTILINE } : null,
@@ -231,6 +244,13 @@ describe('size matrix: Shared types zone', () => {
         }
         expect(frame[0]).toContain('tui-back');
         expect(frame.at(-1)?.trim()).not.toBe('');
+        // The highlighted choice is on screen at every size: the menu sits above output/notice.
+        if (state === 'publish-done') {
+          expect(frame.some((line) => line.includes('›') && line.includes('Propagate')), frame.join('\n')).toBe(true);
+        }
+        if (state === 'publish-blocked') {
+          expect(frame.some((line) => line.includes('›') && line.includes('Relaunch')), frame.join('\n')).toBe(true);
+        }
       });
     }
   }

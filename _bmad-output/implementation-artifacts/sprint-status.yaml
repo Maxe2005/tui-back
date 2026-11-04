@@ -74,5 +74,5 @@ development_status:
   9-3-shared-scrollable-output-and-fullscreen-primitive: backlog
   9-4-terminal-view-in-the-tui: backlog
   9-5-unified-service-actions-in-the-logs-tab: backlog
-  9-6-shared-types-ux-action-bar-and-post-publish-choice-screen: backlog
+  9-6-shared-types-ux-action-bar-and-post-publish-choice-screen: review
   epic-9-retrospective: optional

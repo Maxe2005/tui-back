@@ -21,6 +21,16 @@ export const CONTEXT_SECTION = 'Keys per dialog, pane and screen';
 
 export const RETRY_HINT: Hint = ['R', 'retry'];
 
+// The Shared Types tab's commands, declared once: the zone's action bar reads key + label, the
+// `?` help reads the description (one row per action, appended below).
+export type SharedTypesActionId = 'publish' | 'propagate' | 'history' | 'reload';
+export const SHARED_TYPES_ACTIONS: readonly { id: SharedTypesActionId; key: string; label: string; description: string }[] = [
+  { id: 'publish', key: 'P', label: 'publish', description: 'Shared Types: publish a new version of the shared-types source repo' },
+  { id: 'propagate', key: 'Enter', label: 'propagate', description: 'Shared Types: on the version row, edit the version; from a consumer or option row, propagate it to the checked consuming services; on a choice screen, select the highlighted choice' },
+  { id: 'history', key: 'H', label: 'history', description: "Shared Types: browse the source repo's published versions and pick one" },
+  { id: 'reload', key: 'R', label: 'reload', description: 'Shared Types: reload the source repo and consuming services after a load error; relaunch a failed publish; retry the highlighted failed service in the results' },
+];
+
 export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: '↑ / ↓',
@@ -265,6 +275,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'PgUp / PgDn',
     description: 'Scroll a dialog taller than the window; page the Update last-run recap and full report',
   },
+  ...SHARED_TYPES_ACTIONS.map((action) => ({ keys: `${action.key} (Shared Types)`, description: action.description })),
   ...Object.values(FOOTER_CONTEXTS).map((context) => ({
     keys: context.label,
     description: context.hints.length > 0 ? formatHints(context.hints) : 'No keys while it runs',

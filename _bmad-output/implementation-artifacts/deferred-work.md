@@ -846,3 +846,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-1-shell-session-port-driven-adapter-core-shell-use-case.md`
   summary: Background jobs started with `cmd &` in a terminal run keep running after the run settles (until tui-back exits); decide whether the terminal view should list or reap them.
   evidence: Review of story 9.1 — adapter settles after the pipe-drain grace and only reaps groups on app exit; no policy exists for long-lived background jobs.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-6-shared-types-ux-action-bar-and-post-publish-choice-screen.md`
+  summary: In the Shared Types form, long consumer checkbox rows wrap onto two lines while `BoundedList` counts them as one, so the 120x40 adversarial frame overdraws lines.
+  evidence: Reproduced at baseline 72dc5611 once the size-matrix test stubs `loadSharedTypesSource`/`loadSharedTypesConsumers` so the form actually renders; the frame still fits rows x columns, so the matrix guard does not catch it.
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-6-shared-types-ux-action-bar-and-post-publish-choice-screen.md`
+  summary: `app-shell.interaction.test.tsx > AppShell reset screen (:reset) > opens only through the reset command, and Esc closes it with zero writes` fails (`RESET TOOL DATA` not in output).
+  evidence: Fails at baseline 72dc5611 with the story changes stashed (1 failed / 5 passed in that file), so it predates story 9.6.
