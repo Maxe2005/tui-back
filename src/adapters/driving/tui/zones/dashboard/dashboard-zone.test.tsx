@@ -239,6 +239,28 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('[e] ▸ Choose another EDT / create one');
   });
 
+  it('lists an inconsistent service in Attention with its own glyph and text, and an unhealthy row with its reason', async () => {
+    const [first, second] = ACTIVE.services;
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: {
+        ...ACTIVE,
+        services: [
+          { ...first, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } }, status: { ok: true, value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' } } },
+          { ...second, status: { ok: true, value: { state: 'inconsistent', verified: true, container: 'down' } } },
+        ],
+      },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toMatch(/◐\s*svc-a\s+unhealthy/);
+    expect(output).toMatch(/⚠\s*svc-b\s+inconsistent/);
+    // The focused (first) row's reason line carries the probe reason.
+    expect(output).toContain('health check: HTTP 503');
+    expect(output).toMatch(/⚠\s*svc-b · health route answers but container is down/);
+  });
+
   it('shows the focused row actions with their unavailable reasons, and the running progress', async () => {
     const actions = [
       { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: { available: true as const } },
