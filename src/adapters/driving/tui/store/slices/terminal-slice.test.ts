@@ -80,7 +80,7 @@ describe('terminal slice', () => {
     expect(manifest.load).toHaveBeenCalledWith('/repo/api');
     expect(store.getState().terminalTarget).toEqual({ kind: 'container', repoPath: '/repo/api', label: 'api-ctr' });
     expect(store.getState().terminalCwd).toBeNull();
-    const running = store.getState().runTerminalCommand('ls');
+    const running = store.getState().runTerminalCommand('ls').done;
     await vi.waitFor(() => expect(shell.runs).toHaveLength(1));
     expect(shell.runs[0]!.target).toEqual({ kind: 'container', container: 'api-ctr' });
     shell.runs[0]!.finish({ status: 'exited', exitCode: 0, cwd: '/app' });
@@ -91,7 +91,7 @@ describe('terminal slice', () => {
   it('shows one error status line when the container is not running, the prompt stays usable', async () => {
     const { store, shell } = setup({ health: 'down' });
     await store.getState().openTerminal('/repo/api', 'container', 'api');
-    await store.getState().runTerminalCommand('ls');
+    await store.getState().runTerminalCommand('ls').done;
     expect(shell.runs).toHaveLength(0);
     const lines = store.getState().terminalLines;
     expect(lines).toEqual([
@@ -117,14 +117,16 @@ describe('terminal slice', () => {
     const { store } = setup({ shell: false });
     await store.getState().openTerminal('/repo/api', 'service', 'api');
     expect(store.getState()).toMatchObject({ terminalOpen: true, terminalReady: false, terminalLines: [{ kind: 'status', text: NO_SHELL_ERROR }] });
-    await expect(store.getState().runTerminalCommand('ls')).resolves.toBeUndefined();
+    const refused = store.getState().runTerminalCommand('ls');
+    expect(refused.accepted).toBe(false);
+    await expect(refused.done).resolves.toBeUndefined();
     await expect(createAppStore().getState().openTerminal('/repo/api', 'service', 'api')).resolves.toBeUndefined();
   });
 
   it('echoes the command, streams stdout/stderr, and leaves an exit status on a non-zero exit', async () => {
     const { store, shell } = setup();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
-    const running = store.getState().runTerminalCommand('make');
+    const running = store.getState().runTerminalCommand('make').done;
     await vi.waitFor(() => expect(shell.runs).toHaveLength(1));
     expect(store.getState().terminalRunning).toBe(true);
     shell.runs[0]!.emit({ stream: 'stdout', text: 'building' });
@@ -144,12 +146,12 @@ describe('terminal slice', () => {
   it('adds no status line on a clean exit and carries the new cwd into the next command', async () => {
     const { store, shell } = setup();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
-    const first = store.getState().runTerminalCommand('cd src');
+    const first = store.getState().runTerminalCommand('cd src').done;
     await vi.waitFor(() => expect(shell.runs).toHaveLength(1));
     shell.runs[0]!.finish({ status: 'exited', exitCode: 0, cwd: '/repo/api/src' });
     await first;
     expect(store.getState().terminalLines).toEqual([{ kind: 'command', text: '$ cd src' }]);
-    const second = store.getState().runTerminalCommand('pwd');
+    const second = store.getState().runTerminalCommand('pwd').done;
     await vi.waitFor(() => expect(shell.runs).toHaveLength(2));
     expect(shell.runs[1]!.cwd).toBe('/repo/api/src');
     shell.runs[1]!.finish({ status: 'exited', exitCode: 0, cwd: '/repo/api/src' });
@@ -160,7 +162,7 @@ describe('terminal slice', () => {
     vi.useFakeTimers();
     const { store, shell } = setup();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
-    const running = store.getState().runTerminalCommand('yes');
+    const running = store.getState().runTerminalCommand('yes').done;
     await vi.waitFor(() => expect(shell.runs).toHaveLength(1));
     const updates = vi.fn();
     const unsubscribe = store.subscribe(updates);
@@ -179,7 +181,7 @@ describe('terminal slice', () => {
   it('keeps the display bounded with a dropped count on huge output', async () => {
     const { store, shell } = setup();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
-    const running = store.getState().runTerminalCommand('seq 10000');
+    const running = store.getState().runTerminalCommand('seq 10000').done;
     await vi.waitFor(() => expect(shell.runs).toHaveLength(1));
     for (let index = 0; index < 10_000; index += 1) {
       shell.runs[0]!.emit({ stream: 'stdout', text: String(index) });
@@ -195,13 +197,15 @@ describe('terminal slice', () => {
   it('refuses a second command while one runs with the busy notice, and no-ops a blank one', async () => {
     const { store, shell } = setup();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
-    await store.getState().runTerminalCommand('   ');
+    const blank = store.getState().runTerminalCommand('   ');
+    expect(blank.accepted).toBe(true);
+    await blank.done;
     expect(shell.runs).toHaveLength(0);
     expect(store.getState().terminalLines).toEqual([]);
     expect(store.getState().terminalHistory).toEqual([]);
-    const running = store.getState().runTerminalCommand('sleep 30');
+    const running = store.getState().runTerminalCommand('sleep 30').done;
     await vi.waitFor(() => expect(shell.runs).toHaveLength(1));
-    await store.getState().runTerminalCommand('ls');
+    expect(store.getState().runTerminalCommand('ls').accepted).toBe(false);
     expect(shell.runs).toHaveLength(1);
     expect(store.getState().terminalNotice).toBe('a command is running');
     store.getState().cancelTerminalCommand();
@@ -214,7 +218,7 @@ describe('terminal slice', () => {
   it('shows the TTY hint for an interactive program without running it', async () => {
     const { store, shell } = setup();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
-    await store.getState().runTerminalCommand('vim');
+    await store.getState().runTerminalCommand('vim').done;
     expect(shell.runs).toHaveLength(0);
     const last = store.getState().terminalLines.at(-1);
     expect(last?.kind).toBe('status');
@@ -225,7 +229,7 @@ describe('terminal slice', () => {
   it('close cancels the running command, discards the session and ignores its late lines; history is kept', async () => {
     const { store, shell } = setup();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
-    const running = store.getState().runTerminalCommand('sleep 30');
+    const running = store.getState().runTerminalCommand('sleep 30').done;
     await vi.waitFor(() => expect(shell.runs).toHaveLength(1));
     store.getState().closeTerminal();
     expect(shell.runs[0]!.cancel).toHaveBeenCalled();
@@ -265,7 +269,7 @@ describe('terminal slice', () => {
     const { store, shell } = setup();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
     for (const [index, command] of [' ls', 'ls  '].entries()) {
-      const running = store.getState().runTerminalCommand(command);
+      const running = store.getState().runTerminalCommand(command).done;
       await vi.waitFor(() => expect(shell.runs).toHaveLength(index + 1));
       shell.runs.at(-1)!.finish({ status: 'exited', exitCode: 0 });
       await running;

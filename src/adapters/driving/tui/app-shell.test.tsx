@@ -669,7 +669,7 @@ it('shouldQuit returns true for q', () => {
         terminalNotice: null,
         terminalHistory: [],
         openTerminal: async () => {},
-        runTerminalCommand: async () => {},
+        runTerminalCommand: () => ({ accepted: true, done: Promise.resolve() }),
         cancelTerminalCommand: () => {},
         toggleTerminalFullscreen: () => {},
         setTerminalNotice: () => {},

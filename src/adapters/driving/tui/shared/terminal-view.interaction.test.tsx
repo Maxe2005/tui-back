@@ -202,6 +202,27 @@ describe('TerminalView interaction', () => {
     }
   });
 
+  it('keeps the draft when the store refuses the run', async () => {
+    const { store } = terminalStore();
+    await store.getState().openTerminal('/repo/api', 'service', 'api');
+    const runTerminalCommand = vi.fn((_command: string) => ({ accepted: false, done: Promise.resolve() }));
+    store.setState({ runTerminalCommand });
+    const { instance, stdin, stdout } = mount(createElement(TerminalView, { useStore: store }));
+    try {
+      await instance.waitUntilRenderFlush();
+      await type(instance, stdin, 'ls');
+      await press(instance, stdin, KEYS.enter);
+      runTerminalCommand.mockReturnValue({ accepted: true, done: Promise.resolve() });
+      await press(instance, stdin, KEYS.enter);
+      expect(runTerminalCommand.mock.calls).toEqual([['ls'], ['ls']]);
+      await press(instance, stdin, KEYS.enter);
+      expect(runTerminalCommand).toHaveBeenLastCalledWith('');
+      expect(stdout.output).toContain('$ ls');
+    } finally {
+      instance.unmount();
+    }
+  });
+
   it('opens with an error line and a disabled prompt when no shell port is wired', async () => {
     const store = createAppStore();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
@@ -224,7 +245,7 @@ describe('TerminalView interaction', () => {
 describe('AppShell with the Terminal open', () => {
   it('types q, :, ? and zone mnemonics into the prompt while nothing global or zone-level fires', async () => {
     const store = createAppStore();
-    const runTerminalCommand = vi.fn(async () => {});
+    const runTerminalCommand = vi.fn((_command: string) => ({ accepted: true, done: Promise.resolve() }));
     store.setState({
       terminalOpen: true,
       terminalReady: true,

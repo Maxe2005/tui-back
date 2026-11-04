@@ -29,6 +29,11 @@ export type TerminalLineKind = 'stdout' | 'stderr' | 'command' | 'status';
 
 export type TerminalLine = { kind: TerminalLineKind; text: string };
 
+export type TerminalRun = { accepted: boolean; done: Promise<void> };
+
+const REFUSED_RUN: TerminalRun = { accepted: false, done: Promise.resolve() };
+const ACCEPTED_NOOP_RUN: TerminalRun = { accepted: true, done: Promise.resolve() };
+
 export type TerminalSlice = {
   terminalOpen: boolean;
   terminalTarget: TerminalTarget | null;
@@ -43,7 +48,10 @@ export type TerminalSlice = {
   terminalNotice: string | null;
   terminalHistory: string[];
   openTerminal: (repoPath: string, kind: TerminalKind, service: string) => Promise<void>;
-  runTerminalCommand: (command: string) => Promise<void>;
+  // Decided synchronously: `accepted` is false when the command was refused (no session, or one
+  // already running — the busy notice then shows), so the caller keeps its draft. A blank
+  // command is accepted as a no-op. `done` settles once the run is over.
+  runTerminalCommand: (command: string) => TerminalRun;
   cancelTerminalCommand: () => void;
   toggleTerminalFullscreen: () => void;
   setTerminalNotice: (notice: string | null) => void;
@@ -127,6 +135,37 @@ export function createTerminalSlice(deps?: AppStoreDeps): StateCreator<AppState,
       }
     };
     const status = (text: string) => append([{ kind: 'status', text }]);
+    // Runs one accepted command to its end: echo, streamed output, status line.
+    const execute = async (active: ShellSession, command: string): Promise<void> => {
+      const current = generation;
+      flush();
+      set((state) => ({
+        terminalHistory: pushHistoryEntry(state.terminalHistory, command.trim(), TERMINAL_HISTORY_MAX),
+        terminalRunning: true,
+        terminalNotice: null,
+      }));
+      append([{ kind: 'command', text: terminalEchoText(command) }]);
+      let result: Result<ShellRunResult>;
+      try {
+        result = await active.run(command, (line: ShellLine) => {
+          if (current === generation) {
+            queue({ kind: line.stream, text: line.text });
+          }
+        });
+      } catch (error) {
+        result = err('shell-unavailable', errorMessage(error));
+      }
+      if (current !== generation) {
+        return;
+      }
+      flush();
+      const text = terminalStatusText(result);
+      if (text !== null) {
+        status(text);
+      }
+      set({ terminalRunning: false, terminalCwd: active.cwd() ?? null, terminalNotice: null });
+    };
+
 
     return {
       ...CLOSED_STATE,
@@ -179,45 +218,19 @@ export function createTerminalSlice(deps?: AppStoreDeps): StateCreator<AppState,
         session = created.data;
         set({ terminalReady: true, terminalCwd: session.cwd() ?? null });
       },
-      runTerminalCommand: async (command) => {
+      runTerminalCommand: (command) => {
         const active = session;
         if (active === null || !get().terminalOpen) {
-          return;
+          return REFUSED_RUN;
         }
         if (active.isRunning() || get().terminalRunning) {
           set({ terminalNotice: TERMINAL_BUSY_NOTICE });
-          return;
+          return REFUSED_RUN;
         }
         if (command.trim() === '') {
-          return;
+          return ACCEPTED_NOOP_RUN;
         }
-        const current = generation;
-        flush();
-        set((state) => ({
-          terminalHistory: pushHistoryEntry(state.terminalHistory, command.trim(), TERMINAL_HISTORY_MAX),
-          terminalRunning: true,
-          terminalNotice: null,
-        }));
-        append([{ kind: 'command', text: terminalEchoText(command) }]);
-        let result: Result<ShellRunResult>;
-        try {
-          result = await active.run(command, (line: ShellLine) => {
-            if (current === generation) {
-              queue({ kind: line.stream, text: line.text });
-            }
-          });
-        } catch (error) {
-          result = err('shell-unavailable', errorMessage(error));
-        }
-        if (current !== generation) {
-          return;
-        }
-        flush();
-        const text = terminalStatusText(result);
-        if (text !== null) {
-          status(text);
-        }
-        set({ terminalRunning: false, terminalCwd: active.cwd() ?? null, terminalNotice: null });
+        return { accepted: true, done: execute(active, command) };
       },
       cancelTerminalCommand: () => {
         session?.cancel();

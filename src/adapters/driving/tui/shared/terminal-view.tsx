@@ -105,10 +105,12 @@ export function TerminalView({
       };
       switch (action.type) {
         case 'run':
-          setDraft(EMPTY_DRAFT);
-          setBrowsing(null);
-          setOffset(0);
-          void state.runTerminalCommand(draft.value);
+          // A refused run (busy race, no session) keeps the draft and the scroll position.
+          if (state.runTerminalCommand(draft.value).accepted) {
+            setDraft(EMPTY_DRAFT);
+            setBrowsing(null);
+            setOffset(0);
+          }
           return;
         case 'busy':
           state.setTerminalNotice(TERMINAL_BUSY_NOTICE);
