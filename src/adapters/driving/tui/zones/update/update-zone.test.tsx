@@ -968,6 +968,27 @@ describe('UpdateZone service-list shell rendering', () => {
     expect(output).toContain('No update has run for this service yet.');
   });
 
+  it('unhealthy and inconsistent rows show their glyph and their name', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+      updateServiceHealth: { [SERVICE_A.path]: 'unhealthy', [SERVICE_B.path]: 'inconsistent' },
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
+    const lines = output.split('\n');
+    const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+    const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
+
+    expect(svcARow).toMatch(/◐\s*unhealthy/);
+    expect(svcBRow).toMatch(/⚠\s*inconsistent/);
+  });
+
   it('updating: only the service targeted by the in-flight EDT-scoped run shows the updating glyph — the non-targeted service keeps its raw-health glyph', async () => {
     const store = createAppStore();
     store.setState({
