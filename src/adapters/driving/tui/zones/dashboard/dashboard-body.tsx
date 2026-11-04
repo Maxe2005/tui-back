@@ -122,7 +122,7 @@ function ServiceDetail({ service, useStore }: { service: DashboardService; useSt
       ) : (
         <ServiceActionsRow actions={shown} />
       )}
-      {/* The one-line row clips on a narrow pane, so the reasons are also spelled out below it. */}
+      {/* The row wraps up to SERVICE_ACTIONS_MAX_LINES and can still cut a reason, so the reasons are also spelled out below it. */}
       {why === '' ? null : <ClampedParagraph color={colors['text-dim']} maxLines={2}>{why}</ClampedParagraph>}
       {running !== null ? (
         <TruncatedText color={colors.info}>{running.text}</TruncatedText>
