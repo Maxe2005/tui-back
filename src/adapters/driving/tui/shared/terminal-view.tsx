@@ -25,6 +25,7 @@ import {
   pageScrollOffset,
   toSingleLine,
   resolveTerminalKey,
+  sanitizeTerminalText,
   terminalFooterContext,
   terminalWindowRows,
   type TerminalFocus,
@@ -57,7 +58,7 @@ function useSyncedState<T>(initialValue: T): [T, (next: T) => void, () => T] {
 }
 
 function lineText(line: TerminalLine): string {
-  return line.text;
+  return sanitizeTerminalText(line.text);
 }
 
 export function TerminalView({

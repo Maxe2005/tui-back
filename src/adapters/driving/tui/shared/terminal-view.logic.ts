@@ -133,3 +133,26 @@ export function pageScrollOffset(offset: number, direction: 'up' | 'down', lineC
 export function toSingleLine(input: string): string {
   return input.replace(/[\r\n]+/g, ' ');
 }
+
+// CSI (`ESC [ … final`), OSC (`ESC ] … BEL` or `ESC ] … ESC \\`) and the other two-byte escapes.
+const ANSI_ESCAPE = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|\u001b[@-Z\\-_]/g;
+// C0 controls (tab excluded, it is expanded first) and DEL.
+const CONTROL_CHARS = /[\u0000-\u0008\u000a-\u001f\u007f]/g;
+const TAB_WIDTH = 8;
+
+// One line of program output as the terminal can show it: escape sequences stripped (colours,
+// cursor moves, titles), only what follows the last carriage return kept (a progress bar's final
+// state; a trailing CR from CRLF output is ignored), tabs expanded to the next 8-column stop, and
+// any remaining control character dropped — raw bytes must never reach Ink.
+export function sanitizeTerminalText(text: string): string {
+  let clean = text.replace(ANSI_ESCAPE, '').replace(/\r+$/, '');
+  const carriage = clean.lastIndexOf('\r');
+  if (carriage !== -1) {
+    clean = clean.slice(carriage + 1);
+  }
+  let expanded = '';
+  for (const char of clean) {
+    expanded += char === '\t' ? ' '.repeat(TAB_WIDTH - (expanded.length % TAB_WIDTH)) : char;
+  }
+  return expanded.replace(CONTROL_CHARS, '');
+}

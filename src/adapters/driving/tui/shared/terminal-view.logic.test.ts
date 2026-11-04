@@ -5,6 +5,7 @@ import {
   terminalFooterContext,
   terminalWindowRows,
   toSingleLine,
+  sanitizeTerminalText,
   type TerminalKeyState,
 } from './terminal-view.logic.js';
 
@@ -94,5 +95,30 @@ describe('toSingleLine', () => {
   it('turns each run of pasted line breaks into one space', () => {
     expect(toSingleLine('ls\r\n\npwd\n')).toBe('ls pwd ');
     expect(toSingleLine('plain')).toBe('plain');
+  });
+});
+
+describe('sanitizeTerminalText', () => {
+  it('strips CSI and OSC escape sequences', () => {
+    expect(sanitizeTerminalText('\u001b[1;31mred\u001b[0m text')).toBe('red text');
+    expect(sanitizeTerminalText('\u001b]0;title\u0007after')).toBe('after');
+    expect(sanitizeTerminalText('\u001b]8;;http://x\u001b\\link\u001b]8;;\u001b\\')).toBe('link');
+    expect(sanitizeTerminalText('\u001b[2K\u001b[1Gclear')).toBe('clear');
+  });
+
+  it('keeps only the text after the last carriage return, ignoring a trailing CRLF one', () => {
+    expect(sanitizeTerminalText('10%\r50%\r100%')).toBe('100%');
+    expect(sanitizeTerminalText('windows line\r')).toBe('windows line');
+  });
+
+  it('expands tabs to the next 8-column stop', () => {
+    expect(sanitizeTerminalText('a\tb')).toBe('a       b');
+    expect(sanitizeTerminalText('\tx')).toBe('        x');
+    expect(sanitizeTerminalText('12345678\ty')).toBe('12345678        y');
+  });
+
+  it('drops the remaining control characters and DEL', () => {
+    expect(sanitizeTerminalText('bell\u0007 back\u0008 nul\u0000 del\u007f end\u001b')).toBe('bell back nul del end');
+    expect(sanitizeTerminalText('plain text')).toBe('plain text');
   });
 });
