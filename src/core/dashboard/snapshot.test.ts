@@ -88,7 +88,7 @@ describe('buildDashboardSnapshot', () => {
     expect(snapshot.services.map((s) => s.path)).toEqual(['/r/a', '/r/b']);
     expect(snapshot.services[0]).toMatchObject({
       service: 'svc-a',
-      container: { ok: true, value: 'up' },
+      status: { ok: true, value: { state: 'up', verified: false, container: 'up' } },
       branch: 'feat/x',
       divergence: { status: 'current', ahead: 1, behind: 2 },
       workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
@@ -113,7 +113,7 @@ describe('buildDashboardSnapshot', () => {
       manifests: { '/r/a': manifestFor('/r/a', { container }) },
     });
     const result = await setup.run();
-    expect(result.ok && result.data.services[0]?.container).toEqual({ ok: true, value: 'no-container' });
+    expect(result.ok && result.data.services[0]?.status).toEqual({ ok: true, value: { state: 'no-container', verified: false, container: 'no-container' } });
     expect(setup.docker.getContainerHealth).not.toHaveBeenCalled();
   });
 
@@ -132,9 +132,31 @@ describe('buildDashboardSnapshot', () => {
         getContainerHealth: async (name: string) => (name === 'ctr-a' ? err('docker-unavailable', 'no docker') : ok('down' as const)),
       },
     });
-    expect(snapshot.services[0]?.container).toEqual({ ok: false, error: { code: 'docker-unavailable', message: 'no docker' } });
+    expect(snapshot.services[0]?.status).toEqual({ ok: false, error: { code: 'docker-unavailable', message: 'no docker' } });
     expect(snapshot.services[0]?.branch).toBe('feat/x');
-    expect(snapshot.services[1]?.container).toEqual({ ok: true, value: 'down' });
+    expect(snapshot.services[1]?.status).toEqual({ ok: true, value: { state: 'down', verified: false, container: 'down' } });
+  });
+
+  it('resolves each row health-first through the wired probe', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x'], ['/r/b', 'feat/x']])],
+      manifests: {
+        '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }),
+        '/r/b': manifestFor('/r/b', { healthUrl: 'http://b/h' }),
+      },
+    });
+    const probe = vi.fn(async (url: string) => ok(url === 'http://a/h' ? { healthy: false, reason: 'HTTP 503' } : { healthy: true }));
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe } });
+    expect(result.ok && result.data.services[0]?.status).toEqual({
+      ok: true,
+      value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' },
+    });
+    expect(result.ok && result.data.services[1]?.status).toEqual({ ok: true, value: { state: 'up', verified: true, container: 'up' } });
+  });
+
+  it('ignores healthUrl when no probe is wired', async () => {
+    const snapshot = await data({ manifests: { '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }) } });
+    expect(snapshot.services[0]?.status).toEqual({ ok: true, value: { state: 'up', verified: false, container: 'up' } });
   });
 
   it('classifies no-upstream and unknown-offline divergence', async () => {
@@ -178,7 +200,7 @@ describe('buildDashboardSnapshot', () => {
     expect(snapshot.services[0]).toMatchObject({
       service: 'svc-a',
       manifest: { ok: false, error: { code: 'manifest-invalid' } },
-      container: { ok: false, error: { code: 'manifest-invalid' } },
+      status: { ok: false, error: { code: 'manifest-invalid' } },
     });
     expect(snapshot.services[1]?.manifest.ok).toBe(true);
   });

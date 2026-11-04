@@ -40,7 +40,7 @@ function serviceRow(name: string) {
     service: name,
     path: `/r/${name}`,
     manifest: { ok: true as const, value: { sharedBranch: 'development', protectedBranches: [] } },
-    container: { ok: true as const, value: 'up' as const },
+    status: { ok: true as const, value: { state: 'up' as const, verified: false, container: 'up' as const } },
     branch: 'feat/x',
     divergence: { status: 'current' as const, ahead: 0, behind: 0 },
     workingTree: { ok: true as const, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },

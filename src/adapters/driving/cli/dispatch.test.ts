@@ -349,10 +349,11 @@ describe('subcommand registry guards', () => {
       },
       manifest: {
         load: async (path: string) =>
-          ok({ service: path === '/r/o' ? 'svc-o' : 'svc-a', container: 'ctr-a', sharedBranch: 'development', modules: {} }),
+          ok({ service: path === '/r/o' ? 'svc-o' : 'svc-a', container: 'ctr-a', healthUrl: 'http://a/h', sharedBranch: 'development', modules: {} }),
       },
       git: fakeGitPort({ currentBranch: async (path: string) => ok(path === '/r/o' ? 'hotfix' : 'main') }),
       docker: { getContainerHealth: async () => ok('restarting' as const) } as unknown as DockerPort,
+      healthProbe: { probe: async () => ok({ healthy: true, status: 200 }) },
     });
     const dashboard = subcommands.find((subcommand) => subcommand.name === 'dashboard');
     if (!dashboard) throw new Error('expected dashboard subcommand');
@@ -363,7 +364,7 @@ describe('subcommand registry guards', () => {
       data: {
         status: 'active',
         edt: { topic: 'topic-a', serviceCount: 1 },
-        services: [{ service: 'svc-a', container: { ok: true, value: 'restarting' }, branch: 'main', expectedBranch: 'feat/x', drift: 'drifted' }],
+        services: [{ service: 'svc-a', status: { ok: true, value: { state: 'inconsistent', verified: true, container: 'restarting' } }, branch: 'main', expectedBranch: 'feat/x', drift: 'drifted' }],
         others: [{ service: 'svc-o', path: '/r/o', branch: 'hotfix', expectedBranch: 'development', drift: 'drifted' }],
       },
     });

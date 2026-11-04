@@ -170,7 +170,7 @@ describe('DashboardZone snapshot sections', () => {
         service: 'svc-a',
         path: '/r/a',
         manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
-        container: { ok: true, value: 'up' },
+        status: { ok: true, value: { state: 'up', verified: false, container: 'up' } },
         branch: 'feat/x',
         divergence: { status: 'current', ahead: 0, behind: 0 },
         workingTree: { ok: true, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
@@ -183,7 +183,7 @@ describe('DashboardZone snapshot sections', () => {
         service: 'svc-b',
         path: '/r/b',
         manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
-        container: { ok: false, error: { code: 'docker-error', message: 'boom' } },
+        status: { ok: false, error: { code: 'docker-error', message: 'boom' } },
         branch: 'feat/x',
         divergence: { status: 'current', ahead: 0, behind: 0 },
         workingTree: { ok: false, error: { code: 'git-error', message: 'boom' } },
@@ -229,7 +229,7 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('EDT topic-a · 2 services');
     expect(output).toMatch(/SERVICE\s+STATUS\s+BRANCH\s+SYNC/);
     expect(output).toMatch(/svc-a\s+up\s+feat\/x\s+↑0 ↓0/);
-    expect(output).toMatch(/svc-b\s+container error\s+feat\/x\s+↑0 ↓0/);
+    expect(output).toMatch(/svc-b\s+status error\s+feat\/x\s+↑0 ↓0/);
     // The focused (first) row explains its anomaly and lists the actions' absence while unloaded.
     expect(output).toContain('uncommitted changes');
     expect(output).toContain('Actions unavailable.');

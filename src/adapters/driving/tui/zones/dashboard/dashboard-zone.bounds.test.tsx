@@ -15,7 +15,7 @@ function row(i: number, overrides: Record<string, unknown> = {}) {
     service: `service-${i}-${LONG}`,
     path: `/r/service-${i}`,
     manifest: { ok: true as const, value: { sharedBranch: 'development', protectedBranches: [] } },
-    container: { ok: true as const, value: 'up' as const },
+    status: { ok: true as const, value: { state: 'up' as const, verified: false, container: 'up' as const } },
     branch: `feature/${LONG}`,
     divergence: { status: 'current' as const, ahead: 1, behind: 3 },
     workingTree: { ok: true as const, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
