@@ -208,8 +208,12 @@ describe('.dependency-cruiser.cjs no-child-process-outside-driven-adapters rule'
       "import { spawn } from 'node:child_process';\nexport const s = spawn;\n",
     );
 
+    expect(childProcessRule).toBeDefined();
     const result = await cruiseFixture(fixtureRoot, [childProcessRule]);
 
+    // The driven fixture must actually have been cruised for its absence below to mean anything.
+    const cruised = result.modules.map((module: { source: string }) => module.source);
+    expect(cruised).toContain('src/adapters/driven/spawner.ts');
     const offenders = result.summary.violations.map((v: { from: string }) => v.from).sort();
     expect(offenders).toEqual(['src/adapters/driving/spawner.ts', 'src/core/spawner.ts']);
     expect(result.summary.violations).toEqual(
