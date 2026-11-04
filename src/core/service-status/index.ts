@@ -45,12 +45,17 @@ export interface ServiceStatusDeps {
 
 export const DEFAULT_PROBE_REASON = 'health route did not answer 2xx';
 
-export function hasContainer(manifest: Manifest): boolean {
+export function hasContainer(manifest: Manifest): manifest is Manifest & { container: string } {
   return manifest.container !== undefined && manifest.container.trim() !== '';
 }
 
-export function hasHealthUrl(manifest: Manifest): boolean {
+export function hasHealthUrl(manifest: Manifest): manifest is Manifest & { healthUrl: string } {
   return manifest.healthUrl !== undefined && manifest.healthUrl.trim() !== '';
+}
+
+// A blank reason (empty message, whitespace) would print as "health check: " — use the default.
+function probeReason(reason: string | undefined): string {
+  return reason === undefined || reason.trim() === '' ? DEFAULT_PROBE_REASON : reason;
 }
 
 // The AD-23 combination table. Pure: the one place probe and container are combined.
@@ -112,22 +117,22 @@ export async function resolveServiceStatus(deps: ServiceStatusDeps, repoPath: st
 
 export async function readProbe(deps: Pick<ServiceStatusDeps, 'healthProbe'>, manifest: Manifest, timeoutMs: number): Promise<ProbeReading> {
   const { healthProbe } = deps;
-  if (healthProbe === undefined || !hasHealthUrl(manifest) || manifest.healthUrl === undefined) {
+  if (healthProbe === undefined || !hasHealthUrl(manifest)) {
     return { kind: 'none' };
   }
   try {
     const probed = await healthProbe.probe(manifest.healthUrl.trim(), timeoutMs);
     if (!probed.ok) {
-      return { kind: 'failed', reason: probed.error.message };
+      return { kind: 'failed', reason: probeReason(probed.error.message) };
     }
-    return probed.data.healthy ? { kind: 'healthy' } : { kind: 'failed', reason: probed.data.reason ?? DEFAULT_PROBE_REASON };
+    return probed.data.healthy ? { kind: 'healthy' } : { kind: 'failed', reason: probeReason(probed.data.reason) };
   } catch (cause) {
-    return { kind: 'failed', reason: messageOf(cause) };
+    return { kind: 'failed', reason: probeReason(messageOf(cause)) };
   }
 }
 
 export async function readContainer(deps: Pick<ServiceStatusDeps, 'docker'>, manifest: Manifest): Promise<ContainerReading> {
-  if (!hasContainer(manifest) || manifest.container === undefined) {
+  if (!hasContainer(manifest)) {
     return { kind: 'none' };
   }
   try {

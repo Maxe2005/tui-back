@@ -3,7 +3,7 @@ import type { HealthState } from '../ports/docker.js';
 import type { HealthProbeOutcome } from '../ports/health-probe.js';
 import type { Manifest } from '../ports/manifest.js';
 import { err, ok, type Result } from '../result.js';
-import { STATUS_PROBE_TIMEOUT_MS, combineStatus, resolveServiceStatus, type ServiceStatusDeps } from './index.js';
+import { DEFAULT_PROBE_REASON, STATUS_PROBE_TIMEOUT_MS, combineStatus, resolveServiceStatus, type ServiceStatusDeps } from './index.js';
 
 function deps(
   manifest: Partial<Manifest> | 'broken',
@@ -125,6 +125,15 @@ describe('resolveServiceStatus (AD-23 matrix)', () => {
     expect(!result.ok && result.error.message).toBe('boom');
     const thrownManifest = await resolveServiceStatus({ ...d, manifest: { load: async () => { throw new Error('io'); } } }, '/r');
     expect(!thrownManifest.ok && thrownManifest.error.message).toBe('io');
+  });
+
+  it.each([
+    ['a blank reason', ok({ healthy: false, reason: '   ' })],
+    ['an empty reason', ok({ healthy: false, reason: '' })],
+    ['a blank error message', err('probe-error', ' ')],
+  ] as const)('falls back to the default probe reason for %s', async (_label, probe) => {
+    const result = await resolveServiceStatus(deps(WITH_BOTH, ok('up'), probe).deps, '/r');
+    expect(result.ok && result.data.probeReason).toBe(DEFAULT_PROBE_REASON);
   });
 
   it('rejects a blank repoPath', async () => {
