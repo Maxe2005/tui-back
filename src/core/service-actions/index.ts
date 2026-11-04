@@ -1,6 +1,8 @@
-// core/service-actions: the shared per-service action registry — open in IDE and simple/clean
-// restart, with availability computed once from the manifest and lock state so every consumer
-// (Logs, Dashboard, Update) lists and runs the same actions. Ports are injected.
+// core/service-actions: the shared per-service action registry — open in IDE, simple/clean
+// restart and the service/container terminals, with availability computed once from the
+// manifest, lock state and container health. It is the one registry: every consumer (Logs,
+// Dashboard, Update) renders whatever it lists, so a new entry needs no consumer change.
+// Ports are injected.
 import { withActionLock } from '../locking.js';
 import type { ContainerPort } from '../ports/container.js';
 import type { DockerPort } from '../ports/docker.js';
@@ -52,7 +54,8 @@ export interface ServiceActionsDeps {
   restart: RestartPort;
   editor: EditorPort;
   lock: LockPort;
-  // Only `verifyService` needs these two; a consumer that never verifies may omit them.
+  // `verifyService` needs these two, and `list` reads container health through `docker` for the
+  // container terminal's availability; without it that entry reads `container state unknown`.
   docker?: DockerPort;
   healthProbe?: HealthProbePort;
   // Test seams for the verification poll: defaults are the wall clock and a real timer.
@@ -141,12 +144,13 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
   const { manifest, container, restart, editor, lock } = deps;
   const clock = deps.clock ?? { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) };
 
+  // `loaded` is the manifest read once per `list()` call, shared by every availability rule.
   async function restartAvailability(
     repoPath: string,
+    loaded: Result<Manifest>,
     mode: RestartMode,
     blockingLocks: readonly NamedLock[],
   ): Promise<ServiceActionAvailability> {
-    const loaded = await manifest.load(repoPath);
     if (!loaded.ok) {
       return { available: false, reason: 'manifest unreadable' };
     }
@@ -167,6 +171,26 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
     return AVAILABLE;
   }
 
+  // The container terminal needs a running container. Never fails: a Docker probe error (or no
+  // Docker port wired) reads `container state unknown` rather than claiming the container is down.
+  async function containerTerminalAvailability(loaded: Result<Manifest>): Promise<ServiceActionAvailability> {
+    if (!loaded.ok) {
+      return { available: false, reason: 'manifest unreadable' };
+    }
+    const containerName = loaded.data.container;
+    if (!hasContainer(loaded.data) || containerName === undefined) {
+      return { available: false, reason: 'no container' };
+    }
+    if (deps.docker === undefined) {
+      return { available: false, reason: 'container state unknown' };
+    }
+    const health = await deps.docker.getContainerHealth(containerName).catch(() => null);
+    if (health === null || !health.ok) {
+      return { available: false, reason: 'container state unknown' };
+    }
+    return health.data === 'up' ? AVAILABLE : { available: false, reason: 'container not running' };
+  }
+
   return {
     async list(repoPath, options) {
       const invalid = rejectBlankRepoPath(repoPath);
@@ -174,12 +198,17 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
         return invalid;
       }
       const blockingLocks = options?.blockingLocks ?? [];
-      const simpleState = await restartAvailability(repoPath, 'simple', blockingLocks);
-      const cleanState = await restartAvailability(repoPath, 'clean', blockingLocks);
+      const loaded = await manifest.load(repoPath);
+      const simpleState = await restartAvailability(repoPath, loaded, 'simple', blockingLocks);
+      const cleanState = await restartAvailability(repoPath, loaded, 'clean', blockingLocks);
+      const containerTerminalState = await containerTerminalAvailability(loaded);
       return ok([
         { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: AVAILABLE },
         { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: simpleState },
         { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: cleanState },
+        // The service terminal only needs the repo directory, which `list` already requires.
+        { id: 'terminal-service', label: 'Terminal', key: 'Ctrl+T', availability: AVAILABLE },
+        { id: 'terminal-container', label: 'Container terminal', key: 'Ctrl+X', availability: containerTerminalState },
       ]);
     },
 
