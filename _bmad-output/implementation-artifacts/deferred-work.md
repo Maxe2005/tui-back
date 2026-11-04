@@ -838,3 +838,11 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-8/spec-8-7-realign-use-case-and-cli-selective-branch-realignment.md`
   summary: `restartAfterSwitch` keys restart targets by service name, so two managed repos sharing a manifest service name can be conflated in the restart report.
   evidence: Pre-existing in Story 2.44's restart phase; realign rejects ambiguous `--service` names but `--scope all` can still select both repos.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-1-shell-session-port-driven-adapter-core-shell-use-case.md`
+  summary: Cancelling a container-shell run only kills the local `docker exec` client; the in-container process can keep running (mitigation: record the in-container PGID and `docker exec <c> kill -TERM -<pgid>`, or the 9.7 PTY adapter).
+  evidence: Accepted limitation of the no-PTY decision (AD-22); without `-t` docker does not forward the signal into the container.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-1-shell-session-port-driven-adapter-core-shell-use-case.md`
+  summary: Background jobs started with `cmd &` in a terminal run keep running after the run settles (until tui-back exits); decide whether the terminal view should list or reap them.
+  evidence: Review of story 9.1 — adapter settles after the pipe-drain grace and only reaps groups on app exit; no policy exists for long-lived background jobs.
