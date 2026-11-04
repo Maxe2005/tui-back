@@ -296,8 +296,12 @@ export function AppShell({
 
     // An open help panel is the sole consumer of keys, so it can always be closed — even when a
     // zone dialog captured input after it opened (the zones are inert behind it meanwhile).
+    // Help opened by another handler during this very keypress (the Terminal's `?` on its output)
+    // is not rendered yet: that same `?` must not close it again.
     if (state.helpOpen) {
-      resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+      if (helpOpen) {
+        resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+      }
       return;
     }
 

@@ -329,4 +329,41 @@ describe('AppShell with the Terminal open', () => {
       await instance.waitUntilExit();
     }
   });
+
+  it('opens help from the output focus; keys go to help only, and Esc returns to the Terminal as it was', async () => {
+    const store = createAppStore();
+    const runTerminalCommand = vi.fn((_command: string) => ({ accepted: true, done: Promise.resolve() }));
+    store.setState({
+      terminalOpen: true,
+      terminalReady: true,
+      terminalTarget: { kind: 'service', repoPath: '/repo/api', label: 'api' },
+      terminalCwd: '/repo/api',
+      runTerminalCommand,
+    });
+    const { instance, stdin } = mount(createElement(AppShell, { useStore: store, onQuit: () => {} }));
+    try {
+      await settle(instance);
+      await type(instance, stdin, 'ab');
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, '?');
+      expect(store.getState().helpOpen).toBe(true);
+      expect(footerIdOf(store)).toBe('help');
+
+      await press(instance, stdin, 'z');
+      await press(instance, stdin, KEYS.enter);
+      expect(runTerminalCommand).not.toHaveBeenCalled();
+
+      await pressEscape(instance, stdin);
+      expect(store.getState().helpOpen).toBe(false);
+      expect(store.getState().terminalOpen).toBe(true);
+      // Focus is still on the output, and the draft is still `ab`.
+      expect(footerIdOf(store)).toBe('terminal-output');
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter);
+      expect(runTerminalCommand).toHaveBeenCalledWith('ab');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
 });
