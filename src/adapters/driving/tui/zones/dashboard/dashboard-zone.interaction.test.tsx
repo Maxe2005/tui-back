@@ -243,6 +243,21 @@ describe('DashboardZone interaction', () => {
     }
   });
 
+  it('falls back to the service terminal on Ctrl+T while the action list is unloaded, never the container one', async () => {
+    const { store, runDashboardServiceAction } = seedServices();
+    store.setState({ dashboardServiceActions: {} });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '\x18');
+      expect(runDashboardServiceAction).not.toHaveBeenCalled();
+      await press(instance, stdin, '\x14');
+      expect(runDashboardServiceAction.mock.calls).toEqual([['/r/a', 'terminal-service']]);
+    } finally {
+      instance.unmount();
+    }
+  });
+
   it('opens the focused service in its zone on Enter', async () => {
     const { store, openServiceInZone } = seedServices();
     const { instance, stdin } = mount(store);
