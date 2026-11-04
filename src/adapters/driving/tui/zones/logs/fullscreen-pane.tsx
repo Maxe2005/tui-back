@@ -59,7 +59,7 @@ export function FullscreenPane({
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   const paneHealth = pane?.health ?? 'down';
   const displayHealth = isRestartingDisplay(pane?.restarting ?? false, paneHealth) ? 'restarting' : paneHealth;
-  const noContainer = paneHealth === 'no-container';
+  const noContainer = paneHealth === 'no-container' || pane?.noContainer === true;
   return (
     <FullscreenFrame>
       <Box flexDirection="row">

@@ -493,6 +493,116 @@ describe('logs slice: health-first status', () => {
       vi.useRealTimers();
     }
   });
+
+  it('a container-less pane declaring a healthUrl polls a real up/down and keeps its timer', async () => {
+    vi.useFakeTimers();
+    try {
+      const docker = fakeDocker();
+      let healthy = true;
+      const probe = vi.fn(async () => ok(healthy ? { healthy: true } : { healthy: false, reason: 'timeout' }));
+      const store = createAppStore(fakeDeps({ docker, manifest: manifestWithHealth(false), healthProbe: { probe } }));
+      await store.getState().subscribeLogsPane('/repo/lib', 'lib');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes['/repo/lib']).toMatchObject({ health: 'up', noContainer: true });
+
+      healthy = false;
+      await vi.advanceTimersByTimeAsync(LOGS_HEALTH_POLL_INTERVAL_MS);
+      expect(store.getState().logsPanes['/repo/lib']?.health).toBe('down');
+      expect(docker.getContainerHealth).not.toHaveBeenCalled();
+      expect(docker.streamLogs).not.toHaveBeenCalled();
+
+      // Container-less: R stays a no-op whatever the status.
+      await store.getState().restartLogsPane('/repo/lib');
+      expect(store.getState().logsPanes['/repo/lib']?.streamError).toBeNull();
+      store.getState().stopAllLogsPanes();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases the listed-row guard after a rejected poll, so the next tick polls again', async () => {
+    vi.useFakeTimers();
+    try {
+      const load = vi.fn(async (): Promise<never> => {
+        throw new Error('io');
+      });
+      const store = createAppStore(fakeDeps({ manifest: { load } }));
+      store.getState().startLogsListedHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(load).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(LOGS_LISTED_HEALTH_POLL_INTERVAL_MS);
+      expect(load).toHaveBeenCalledTimes(2);
+      store.getState().stopLogsListedHealthPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a listed poll settling after stop writes nothing, and a restarted poll is not blocked by it', async () => {
+    vi.useFakeTimers();
+    try {
+      const releases: Array<() => void> = [];
+      const probe = vi.fn(
+        () =>
+          new Promise<ReturnType<typeof ok<{ healthy: boolean }>>>((resolve) => {
+            releases.push(() => resolve(ok({ healthy: true })));
+          }),
+      );
+      const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+      store.getState().startLogsListedHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      store.getState().stopLogsListedHealthPolling();
+
+      store.getState().startLogsListedHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(probe).toHaveBeenCalledTimes(2);
+
+      store.setState({ logsListedHealth: { '/repo/a': 'down' } });
+      releases[0]!();
+      await vi.advanceTimersByTimeAsync(0);
+      // The stale poll neither wrote nor freed the live poll's entry.
+      expect(store.getState().logsListedHealth['/repo/a']).toBe('down');
+      await vi.advanceTimersByTimeAsync(LOGS_LISTED_HEALTH_POLL_INTERVAL_MS);
+      expect(probe).toHaveBeenCalledTimes(2);
+
+      releases[1]!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsListedHealth['/repo/a']).toBe('up');
+      store.getState().stopLogsListedHealthPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pane poll settling after the pane stopped writes nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      const releases: Array<() => void> = [];
+      const probe = vi.fn(
+        () =>
+          new Promise<ReturnType<typeof ok<{ healthy: boolean }>>>((resolve) => {
+            releases.push(() => resolve(ok({ healthy: true })));
+          }),
+      );
+      const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+      await store.getState().subscribeLogsPane('/repo/a', 'a');
+      await vi.advanceTimersByTimeAsync(0);
+      store.getState().unsubscribeLogsPane('/repo/a');
+      await store.getState().subscribeLogsPane('/repo/a', 'a');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(probe).toHaveBeenCalledTimes(2);
+      store.setState((state) => ({ logsPanes: { ...state.logsPanes, '/repo/a': { ...state.logsPanes['/repo/a']!, health: 'unhealthy' } } }));
+      releases[0]!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes['/repo/a']?.health).toBe('unhealthy');
+      releases[1]!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes['/repo/a']?.health).toBe('up');
+      store.getState().stopAllLogsPanes();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('logs display settings (session-only)', () => {

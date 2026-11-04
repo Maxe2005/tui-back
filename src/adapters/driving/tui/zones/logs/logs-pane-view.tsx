@@ -58,7 +58,7 @@ export function LogsPaneView({
   // the re-verifying poll lands, never as the bare state.
   const paneHealth = pane?.health ?? 'down';
   const displayHealth = isRestartingDisplay(pane?.restarting ?? false, paneHealth) ? 'restarting' : paneHealth;
-  const noContainer = paneHealth === 'no-container';
+  const noContainer = paneHealth === 'no-container' || pane?.noContainer === true;
   return (
     <Box
       flexDirection="column"

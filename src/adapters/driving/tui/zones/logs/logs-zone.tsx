@@ -277,7 +277,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     'logs',
     logsFooterContext(filterEditor !== null, historyGridCursor !== null, {
       open: logsFullscreenTarget !== null,
-      restartable: logsFullscreenTarget === null || logsPanes[logsFullscreenTarget]?.health !== 'no-container',
+      restartable:
+        logsFullscreenTarget === null ||
+        (logsPanes[logsFullscreenTarget]?.health !== 'no-container' && logsPanes[logsFullscreenTarget]?.noContainer !== true),
     }, restartMode),
     useStore,
   );
@@ -605,7 +607,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         // here would both restart a container and switch zones on one keypress.
         if (input === 'R') {
           const pane = logsPanes[logsFullscreenTarget];
-          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container') {
+          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container' && pane.noContainer !== true) {
             void restartLogsPane(logsFullscreenTarget);
           }
           return;
@@ -808,7 +810,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
           const pane = logsPanes[focused.path];
-          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container') {
+          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container' && pane.noContainer !== true) {
             void restartLogsPane(focused.path);
           }
         }
