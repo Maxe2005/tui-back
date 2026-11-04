@@ -262,6 +262,32 @@ describe('DashboardZone snapshot sections', () => {
     expect(running).toContain('Ctrl+R: operation in progress');
   });
 
+  it('shows the registry terminals after the restarts on the one actions line, the container terminal greyed with its reason', async () => {
+    const actions = [
+      { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: { available: true as const } },
+      { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: { available: true as const } },
+      { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: { available: true as const } },
+      { id: 'terminal-service', label: 'Terminal', key: 'Ctrl+T', availability: { available: true as const } },
+      { id: 'terminal-container', label: 'Container terminal', key: 'Ctrl+X', availability: { available: false as const, reason: 'container not running' } },
+    ];
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: ACTIVE,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+      dashboardServiceActions: { '/r/a': actions },
+    });
+    // Wide enough for the whole line: at 120 columns the row truncates (bounded rendering), as intended.
+    const output = await renderToString(<DashboardZone useStore={store} />, { columns: 240, rows: 40 });
+    const line = output.split('\n').find((row) => row.includes('[Ctrl+O] Open in IDE'));
+    expect(line).toBeDefined();
+    const order = ['[Ctrl+O] Open in IDE', '[Ctrl+R] Restart', '[Ctrl+L] Clean restart', '[Ctrl+T] Terminal', '[Ctrl+X] Container terminal (container not running)'].map(
+      (label) => line!.indexOf(label),
+    );
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
   it('lists attention lines with a count, and the registry hint with its counts', async () => {
     const store = seed({
       dashboardServicesStatus: 'ready',

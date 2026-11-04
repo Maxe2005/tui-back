@@ -133,6 +133,16 @@ describe('action helpers', () => {
     expect(actionForKey(actions, 'r')?.id).toBe('restart-simple');
     expect(actionForKey(actions, 'x')).toBeUndefined();
   });
+  it('resolves the terminal keys to the registry terminal entries with no change to the matcher', () => {
+    const withTerminals = [
+      ...actions,
+      { id: 'terminal-service', label: 'Terminal', key: 'Ctrl+T', availability: { available: true as const } },
+      { id: 'terminal-container', label: 'Container terminal', key: 'Ctrl+X', availability: { available: true as const } },
+    ];
+    expect(actionForKey(withTerminals, 't')?.id).toBe('terminal-service');
+    expect(actionForKey(withTerminals, 'x')?.id).toBe('terminal-container');
+    expect(actionForKey(withTerminals, 'T')?.id).toBe('terminal-service');
+  });
 });
 
 function svc(over: Partial<DashboardService>): DashboardService {
