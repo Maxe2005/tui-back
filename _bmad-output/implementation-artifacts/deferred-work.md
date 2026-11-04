@@ -874,3 +874,9 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-4-terminal-view-in-the-tui.md`
   summary: No test covers the composition root `src/bin/tui.ts` wiring the shell port and closing the terminal on exit.
   evidence: every slice/view test injects its own fake `shell`; removing `shell: createShellSessionPort()` from `src/bin/tui.ts` would leave the real app's terminal disabled with the suite green.
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-7-health-first-service-status-resolution.md`
+  summary: A `healthUrl` added to the manifest of a container-less service while the Logs zone is open is not picked up until container presence is re-resolved, because the presence cache short-circuits the manifest reload.
+  evidence: Flagged by blind-hunter in the 9.7 review. The presence cache (`logsNoContainer`) predates 9.7; the resolver only reloads the manifest for rows already known to be probe-only. Manifest edits mid-session are rare; a zone re-entry or app restart picks the change up.
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-7-health-first-service-status-resolution.md`
+  summary: The same `healthUrl` can be probed by up to three independent pollers per 5 s interval (Logs pane, Logs listed row, Update list) with no shared cache or dedupe.
+  evidence: Flagged by blind-hunter in the 9.7 review. Each poller existed before 9.7 with its own container read; 9.7 routes each through the resolver, so steady health-route traffic now scales with the number of open views. Acceptable for local dev services; a shared short-TTL status cache would remove it.

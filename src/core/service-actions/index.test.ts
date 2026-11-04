@@ -354,6 +354,48 @@ describe('service actions verifyService', () => {
     expect(!none.ok && none.error.code).toBe('no-container');
   });
 
+  it('keeps polling an inconsistent service and reports the container state at the timeout', async () => {
+    const { actions, clock } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['restarting'], [{ healthy: true }]);
+    expect(await actions.verifyService('/r')).toEqual({
+      ok: true,
+      data: { state: 'restarting', detail: 'health route answers but container is restarting' },
+    });
+    expect(clock.sleep.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('is functional when the route answers even though Docker errors (AD-23)', async () => {
+    const { actions } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['unavailable'], [{ healthy: true }]);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'functional' } });
+  });
+
+  it('keeps polling while the route answers but the container is down, then reports the container', async () => {
+    const { actions, clock } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['down'], [{ healthy: true }]);
+    expect(await actions.verifyService('/r')).toEqual({
+      ok: true,
+      data: { state: 'down', detail: 'health route answers but container is down' },
+    });
+    expect(clock.sleep.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('settles on down with the container detail, not the probe reason', async () => {
+    const { actions, clock } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['down'], [{ healthy: false, reason: 'HTTP 503' }]);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'down', detail: 'container is not running' } });
+    expect(clock.sleep).not.toHaveBeenCalled();
+  });
+
+  it('reports the Docker error when Docker errors and the probe fails until the timeout', async () => {
+    const { actions } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['unavailable'], [{ healthy: false, reason: 'HTTP 503' }]);
+    const result = await actions.verifyService('/r');
+    expect(!result.ok && result.error.code).toBe('docker-unavailable');
+    expect(!result.ok && result.error.details).toEqual({ probeReason: 'HTTP 503' });
+  });
+
+  it('reports the latest observation at the timeout, not an earlier restarting read', async () => {
+    const { actions } = verifySetup({ container: 'api' }, ['restarting', 'restarting', 'unavailable']);
+    const result = await actions.verifyService('/r');
+    expect(!result.ok && result.error.code).toBe('docker-unavailable');
+  });
+
   it('rejects a blank repoPath', async () => {
     const result = await verifySetup({ container: 'api' }, ['up']).actions.verifyService('  ');
     expect(!result.ok && result.error.code).toBe('invalid-argument');

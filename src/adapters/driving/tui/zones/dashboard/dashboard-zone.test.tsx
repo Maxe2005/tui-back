@@ -170,7 +170,7 @@ describe('DashboardZone snapshot sections', () => {
         service: 'svc-a',
         path: '/r/a',
         manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
-        container: { ok: true, value: 'up' },
+        status: { ok: true, value: { state: 'up', verified: false, container: 'up' } },
         branch: 'feat/x',
         divergence: { status: 'current', ahead: 0, behind: 0 },
         workingTree: { ok: true, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
@@ -183,7 +183,7 @@ describe('DashboardZone snapshot sections', () => {
         service: 'svc-b',
         path: '/r/b',
         manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
-        container: { ok: false, error: { code: 'docker-error', message: 'boom' } },
+        status: { ok: false, error: { code: 'docker-error', message: 'boom' } },
         branch: 'feat/x',
         divergence: { status: 'current', ahead: 0, behind: 0 },
         workingTree: { ok: false, error: { code: 'git-error', message: 'boom' } },
@@ -229,7 +229,7 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('EDT topic-a · 2 services');
     expect(output).toMatch(/SERVICE\s+STATUS\s+BRANCH\s+SYNC/);
     expect(output).toMatch(/svc-a\s+up\s+feat\/x\s+↑0 ↓0/);
-    expect(output).toMatch(/svc-b\s+container error\s+feat\/x\s+↑0 ↓0/);
+    expect(output).toMatch(/svc-b\s+status error\s+feat\/x\s+↑0 ↓0/);
     // The focused (first) row explains its anomaly and lists the actions' absence while unloaded.
     expect(output).toContain('uncommitted changes');
     expect(output).toContain('Actions unavailable.');
@@ -237,6 +237,28 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('updated 0s ago · [R] refresh');
     expect(output).toContain('[E] ▸ Enter');
     expect(output).toContain('[e] ▸ Choose another EDT / create one');
+  });
+
+  it('lists an inconsistent service in Attention with its own glyph and text, and an unhealthy row with its reason', async () => {
+    const [first, second] = ACTIVE.services;
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: {
+        ...ACTIVE,
+        services: [
+          { ...first, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } }, status: { ok: true, value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' } } },
+          { ...second, status: { ok: true, value: { state: 'inconsistent', verified: true, container: 'down' } } },
+        ],
+      },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toMatch(/◐\s*svc-a\s+unhealthy/);
+    expect(output).toMatch(/⚠\s*svc-b\s+inconsistent/);
+    // The focused (first) row's reason line carries the probe reason.
+    expect(output).toContain('health check: HTTP 503');
+    expect(output).toMatch(/⚠\s*svc-b · health route answers but container is down/);
   });
 
   it('shows the focused row actions with their unavailable reasons, and the running progress', async () => {

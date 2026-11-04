@@ -17,7 +17,8 @@ export function createManifestSchema(
     .object({
       service: z.string().trim().min(1),
       container: z.string().trim().min(1).optional(),
-      // Optional; a non-blank http:// or https:// URL, probed after a post-switch restart.
+      // Optional; a non-blank http:// or https:// URL — the steady-state status probe (AD-23,
+      // core/service-status), also used to verify a post-switch restart.
       healthUrl: z
         .string()
         .trim()

@@ -3,6 +3,7 @@
 // columns, and the top bar and footer must stay on screen.
 import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
+import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
 import { AppShell } from '../../app-shell.js';
 import { createAppStore, type AppStore } from '../../store/app-store.js';
 import { ZONES } from '../../zones/zones.js';
@@ -142,8 +143,10 @@ describe('size matrix: Logs with many selected services', () => {
       store.setState({
         logsEdtSelected: services.filter((s) => s.isMember).map((s) => s.path),
         logsOtherSelected: services.filter((s) => !s.isMember).map((s) => s.path),
+        // Health-first states on the badges: unhealthy / inconsistent panes and rows.
+        logsListedHealth: Object.fromEntries(services.map((s, i) => [s.path, i % 2 === 0 ? 'unhealthy' : 'inconsistent'])),
         logsPanes: Object.fromEntries(
-          services.map((s) => [
+          services.map((s, i) => [
             s.path,
             {
               repoPath: s.path,
@@ -152,8 +155,8 @@ describe('size matrix: Logs with many selected services', () => {
               streamError: { code: 'stream-failed', message: MULTILINE },
               noMoreHistory: false,
               scrollOffset: 0,
-              health: 'up',
-              restarting: true,
+              health: i % 2 === 0 ? 'unhealthy' : 'inconsistent',
+              restarting: i % 3 === 0,
             },
           ]),
         ),
@@ -166,6 +169,26 @@ describe('size matrix: Logs with many selected services', () => {
       }
       expect(frame[0]).toContain('tui-back');
       expect(frame.at(-1)?.trim()).not.toBe('');
+    });
+  }
+});
+
+describe('size matrix: Update zone with health-first states', () => {
+  for (const size of MATRIX_SIZES) {
+    it(`update list of unhealthy / inconsistent services at ${size.columns}x${size.rows} stays inside the terminal`, async () => {
+      const store = adversarialStore();
+      const services = store.getState().edtsBranches ?? [];
+      const updateServiceHealth: Record<string, ServiceStatusState> = Object.fromEntries(
+        services.map((s, i) => [s.path, i % 2 === 0 ? 'unhealthy' : 'inconsistent']),
+      );
+      store.setState({ updateStatus: 'idle', updateResults: [], updateServiceHealth });
+      store.getState().setActiveZone('update');
+      const frame = frameLines(await renderToString(createElement(AppShell, { useStore: store, onQuit: () => {} }), size));
+      expect(frame.length).toBeLessThanOrEqual(size.rows);
+      for (const line of frame) {
+        expect(Array.from(line).length, line).toBeLessThanOrEqual(size.columns);
+      }
+      expect(frame[0]).toContain('tui-back');
     });
   }
 });

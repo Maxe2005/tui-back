@@ -18,7 +18,8 @@ import { STATUS_BADGES } from '../../shared/components/status-badge.js';
 import {
   aheadBehindLabel,
   branchLabel,
-  containerLabel,
+  statusLabel,
+  attentionBadge,
   disableWhileRunning,
   formatRegistrySummary,
   formatUpdatedAgo,
@@ -55,7 +56,7 @@ const COLUMN_HEADERS = ['SERVICE', 'STATUS', 'BRANCH', 'SYNC'] as const;
 const COLUMN_MAX_WIDTH = [28, 15, 28, 12] as const;
 
 function serviceCells(service: DashboardService): [string, string, string, string] {
-  return [service.service, containerLabel(service.container).text, branchLabel(service), aheadBehindLabel(service.divergence)];
+  return [service.service, statusLabel(service.status).text, branchLabel(service), aheadBehindLabel(service.divergence)];
 }
 
 // Each column is as wide as its longest cell (header included), capped, so rows line up.
@@ -88,7 +89,7 @@ function ServiceTableHeader({ widths }: { widths: readonly number[] }) {
 }
 
 function ServiceRow({ service, focused, widths }: { service: DashboardService; focused: boolean; widths: readonly number[] }) {
-  const container = containerLabel(service.container);
+  const status = statusLabel(service.status);
   const marker = issueMarker(service);
   const cells = serviceCells(service);
   const color = focused ? colors.accent : colors.text;
@@ -96,7 +97,7 @@ function ServiceRow({ service, focused, widths }: { service: DashboardService; f
     <Box>
       <Text wrap="truncate-end" color={focused ? STATUS_BADGES.selection.color : colors['text-dim']}>{focused ? STATUS_BADGES.selection.glyph : ' '}</Text>
       <Text wrap="truncate-end" color={colors.warning}>{marker}</Text>
-      <StatusBadge state={container.badge} />
+      <StatusBadge state={status.badge} />
       <Box marginLeft={spacing['glyph-gap']} flexShrink={1}>
         {cells.slice(0, COLUMN_HEADERS.length).map((cell, column) => (
           <Cell key={COLUMN_HEADERS[column]} width={widths[column]!} color={column === 3 ? (focused ? colors.accent : colors['text-dim']) : color}>{cell}</Cell>
@@ -226,7 +227,7 @@ export function DashboardBody({
                 cursorIndex={attentionIndex ?? 0}
                 renderItem={(item, index) => (
                   <Box key={`${item.path}:${item.reason}`}>
-                    <StatusBadge state={index === attentionIndex ? 'selection' : item.reason === 'protected-branch' ? 'failed' : 'awaiting'} />
+                    <StatusBadge state={index === attentionIndex ? 'selection' : attentionBadge(item.reason)} />
                     <Box marginLeft={spacing['glyph-gap']} flexShrink={1}>
                       <TruncatedText color={index === attentionIndex ? colors.accent : colors.text}>{formatAttentionLine(item)}</TruncatedText>
                     </Box>

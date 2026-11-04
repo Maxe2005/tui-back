@@ -71,6 +71,13 @@ describe('healthBadgeState / formatHealthLabel', () => {
   it('a restarting service names the request and the re-verification, never the bare state', () => {
     expect(formatHealthLabel('restarting')).toBe('restart requested — re-verifying');
   });
+
+  it('gives the health-first states their own badge and text (AD-23)', () => {
+    expect(healthBadgeState('unhealthy')).toBe('unhealthy');
+    expect(healthBadgeState('inconsistent')).toBe('inconsistent');
+    expect(formatHealthLabel('unhealthy')).toBe('unhealthy');
+    expect(formatHealthLabel('inconsistent')).toBe('inconsistent');
+  });
 });
 
 describe('isRestartingDisplay', () => {

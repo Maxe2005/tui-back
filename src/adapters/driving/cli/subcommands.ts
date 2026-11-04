@@ -190,7 +190,8 @@ export function buildSubcommands(deps: {
     {
       name: 'dashboard',
       usage: 'tui-back dashboard',
-      // The Dashboard's snapshot (active EDT services, registry health), read-only.
+      // The Dashboard's snapshot (active EDT services with their health-first status, registry
+      // health), read-only.
       run: async (args) =>
         args.length === 0
           ? buildDashboardSnapshot({
@@ -198,6 +199,7 @@ export function buildSubcommands(deps: {
               manifest: deps.manifest,
               git: deps.git,
               docker: deps.docker,
+              ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
               edtRegistry: deps.edtRegistry,
               state: deps.state,
             })

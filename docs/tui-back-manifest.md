@@ -21,13 +21,13 @@ Le chargement/parsing est fait par
 # Obligatoire
 service: <chaîne non vide>
 
-# Optionnel — absent = service sans conteneur (pas de redémarrage simple, de santé ni de logs)
+# Optionnel — absent = service sans conteneur (pas de redémarrage simple ni de logs ; statut via healthUrl seulement)
 container: <chaîne non vide>
 
 # Optionnel
 migrationCommand: <chaîne non vide>   # omettre la clé si aucune commande
 
-# Optionnel — URL http(s) sondée (GET) après un redémarrage consécutif à un switch d'EDT
+# Optionnel — URL http(s) sondée (GET) pour le statut affiché du service (et après un redémarrage)
 healthUrl: <http:// ou https:// URL>
 
 # Optionnel — recette de « clean restart » (commandes shell exécutées dans l'ordre)
@@ -61,8 +61,9 @@ modules:
 - **Type** : `string`
 - **Validation** : `trim().min(1)` — mêmes règles que `service`.
 - **Comportement si absent** : le service n'a pas de runtime Docker (pas de
-  redémarrage simple, de santé ni de flux de logs). Il reste un membre valide
-  d'un EDT. Omettre la clé : `null` ou une chaîne vide sont rejetés.
+  redémarrage simple ni de flux de logs). Il reste un membre valide d'un EDT.
+  Son statut vaut `no-container`, sauf s'il déclare un `healthUrl` : il reçoit
+  alors un vrai statut `up` / `down` (voir `healthUrl`). Omettre la clé : `null` ou une chaîne vide sont rejetés.
 - **Rôle** : nom du conteneur Docker associé au service (généralement le
   premier service déclaré dans `docker-compose.yml`).
 
@@ -133,14 +134,41 @@ modules:
 - **Validation** : chaîne rognée, non vide, commençant par `http://` ou
   `https://` ; toute autre valeur (vide, blanche, sans schéma, `ftp://`…)
   provoque un échec `manifest-validation-failed` nommant `healthUrl`.
-- **Comportement si absent** : `undefined` — aucune sonde n'est émise ; après
-  un redémarrage post-switch, un conteneur démarré est rapporté
-  `up-unverified` (démarré, non vérifié) au lieu de `functional`.
-- **Rôle** : après le redémarrage optionnel d'un EDT switch (`switch.restartMode`
-  ≠ `none`), tui-back interroge cette URL par un `GET` (délai maximal de 5 s par requête)
-  via `HealthProbePort`, une fois par seconde, jusqu'à 30 s au total ; les
-  redirections ne sont pas suivies (un 3xx n'est pas un 2xx). Une réponse 2xx avec conteneur `up` donne `functional` ;
-  un délai dépassé ou un statut non-2xx donne `unhealthy`.
+- **Comportement si absent** : `undefined` — aucune sonde n'est émise. Le
+  statut affiché est l'état brut du conteneur, et un `up` reste **non vérifié**
+  (`verified: false`, visible seulement dans les données et le JSON de la CLI) ;
+  après un redémarrage post-switch, un conteneur démarré est rapporté
+  `up-unverified` au lieu de `functional`.
+- **Rôle** : c'est la **sonde de statut au quotidien**. Toute vue qui affiche
+  l'état d'un service (Dashboard, panneaux et badges de Logs, liste de l'onglet
+  Update, CLI `tui-back dashboard`) le calcule par une seule règle
+  (`src/core/service-status`) : la `healthUrl` est sondée d'abord (`GET`, délai
+  maximal de 2 s, redirections non suivies : un 3xx n'est pas un 2xx), puis le
+  résultat est combiné avec l'état du conteneur :
+
+  | Sonde `healthUrl`        | Conteneur                 | Statut                                              |
+  |--------------------------|---------------------------|-----------------------------------------------------|
+  | 2xx                      | `up` ou pas de conteneur  | `up` (vérifié)                                      |
+  | 2xx                      | `down` ou `restarting`    | `inconsistent` (élément d'Attention du Dashboard)   |
+  | 2xx                      | erreur Docker             | `up` (vérifié), l'erreur conteneur est conservée — jamais `inconsistent` |
+  | non-2xx ou délai dépassé | `up`                      | `unhealthy` (raison de la sonde conservée)          |
+  | non-2xx ou délai dépassé | `down` / `restarting`     | `down` / `restarting`                               |
+  | non-2xx ou délai dépassé | pas de conteneur          | `down`                                              |
+  | non-2xx ou délai dépassé | erreur Docker             | erreur (celle de Docker, raison de la sonde en détail) |
+  | pas de `healthUrl`       | `up` / `down` / `restarting` | même état ; `up` non vérifié                     |
+  | pas de `healthUrl`       | pas de conteneur          | `no-container`                                      |
+
+  Un **service sans conteneur** qui déclare `healthUrl` obtient donc un vrai
+  statut `up` / `down`. Les sondages de Logs et d'Update ne lancent jamais une
+  nouvelle sonde pour un dépôt dont la précédente est encore en cours, et
+  gardent le dernier état connu en cas d'échec.
+
+  Après le redémarrage optionnel d'un EDT switch (`switch.restartMode` ≠
+  `none`), la même règle décide chaque tentative de vérification (sonde de 5 s
+  au plus, une fois par seconde, jusqu'à 30 s au total) : `up` vérifié donne
+  `functional`, `up` non vérifié `up-unverified`, `down` s'arrête aussitôt ;
+  `restarting`, `inconsistent` et `unhealthy` continuent jusqu'au délai, puis
+  un `unhealthy` persistant est rapporté `unhealthy`.
 - **Exemple** : `healthUrl: http://localhost:3000/health`
 
 ### `protectedBranches` (optionnel)
@@ -376,6 +404,36 @@ sur le redémarrage simple du conteneur —, `sharedBranch` explicite ici mais p
 être omis pour hériter de `"development"`. `protectedBranches` omis : seule
 `master` est protégée.)
 
+## CLI `dashboard` — JSON
+
+`tui-back dashboard` écrit l'enveloppe standard (`{ ok, data }` / `{ ok, error }`). Chaque
+service de `data.services` porte un champ **`status`** (anciennement `container`), le statut
+calculé à partir de `healthUrl` et du conteneur selon le tableau ci-dessus :
+
+```json
+"status": {
+  "ok": true,
+  "value": {
+    "state": "unhealthy",
+    "verified": true,
+    "container": "up",
+    "probeReason": "HTTP 503"
+  }
+}
+```
+
+- `state` : `up | unhealthy | inconsistent | restarting | down | no-container`.
+- `verified` : `true` quand l'état a été décidé par une sonde `healthUrl` ; un `up` sans
+  `healthUrl` vaut `false`.
+- `container` : état brut du conteneur (`up | down | restarting`), `no-container` si aucun
+  conteneur n'est déclaré, `null` quand Docker a échoué.
+- `containerError` (optionnel) : `{ code, message }` de Docker quand la sonde a tout de même
+  décidé de l'état (2xx malgré une erreur Docker).
+- `probeReason` (optionnel) : pourquoi la sonde n'a pas répondu 2xx.
+- Quand le statut ne peut pas être calculé (manifeste illisible, ou Docker en erreur sans sonde
+  2xx), `status` vaut `{ "ok": false, "error": { "code", "message" } }`. Quand Docker et la
+  sonde ont tous deux échoué, `error.details.probeReason` porte la raison de la sonde.
+
 ## Erreurs de chargement possibles
 
 Le loader (`loadManifest`) peut renvoyer les codes d'erreur suivants :
@@ -398,6 +456,7 @@ du fichier sur la branche cible. Il apparaît alors modifié par rapport à cett
 
 - Schéma Zod : `src/adapters/driven/manifest/schema.ts`
 - Type `Manifest` : `src/core/ports/manifest.ts`
+- Statut des services (`healthUrl` + conteneur) : `src/core/service-status/index.ts`
 - Loader : `src/adapters/driven/manifest/index.ts`
 - Clean restart (recette `restartCommands`) : `src/core/scripts/group-update.ts` (`runRestartStep`),
   `src/core/scripts/service-restart.ts`, `src/core/ports/restart.ts`,
