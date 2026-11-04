@@ -41,11 +41,12 @@ describe('ScrollableOutput', () => {
   it('scrolled + wrap: the window ends `offset` lines from the tail, sized by wrapped row cost', async () => {
     const long = lines(500, (i) => `${i}-${'a'.repeat(70)}`);
     const frame = frameLines(await renderToString(output({ lines: long, offset: 10, wrap: true }), { columns: 40, rows: 10 }));
-    expect(frame.length).toBeLessThanOrEqual(10);
-    const text = frame.join('\n');
-    expect(text).toContain('489-');
-    expect(text).not.toContain('490-');
-    expect(text).toContain('486-');
+    // Each 74-char line wraps to 2 rows at width 40, so 10 rows hold lines 485..489.
+    expect(frame).toHaveLength(10);
+    expect(frame[0]).toBe(`485-${'a'.repeat(36)}`);
+    expect(frame.at(-2)).toBe(`489-${'a'.repeat(36)}`);
+    expect(frame.at(-1)).toBe('a'.repeat(34));
+    expect(frame.join('\n')).not.toContain('490-');
   });
 
   it('renders an oversized line clipped rather than a blank viewport', async () => {
