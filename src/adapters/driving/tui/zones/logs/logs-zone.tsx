@@ -13,7 +13,7 @@ import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js'
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { formatHint } from '../../shared/components/hints.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
-import { StatusBadge } from '../../shared/components/status-badge.js';
+import { STATUS_BADGES, StatusBadge } from '../../shared/components/status-badge.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-store.js';
@@ -919,14 +919,15 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                     maxVisibleRows={WITHOUT_CONTAINER_MAX_ROWS}
                     renderItem={(service) => {
                       // A container-less service declaring a `healthUrl` still gets its real
-                      // up/down status (AD-23); the others read as no container.
+                      // up/down status (AD-23), labelled in its badge's tone; the others read as
+                      // a dim no container.
                       const health = logsListedHealth[service.path] ?? 'no-container';
                       return (
                         <Box key={service.path} flexDirection="row">
                           <Text color={colors['text-dim']} wrap="truncate-end"> {service.service}</Text>
                           <Box marginLeft={1}>
                             <Box flexShrink={0}><StatusBadge state={healthBadgeState(health)} /></Box>
-                            <Text color={colors['text-dim']} wrap="truncate-end"> {formatHealthLabel(health)}</Text>
+                            <Text color={health === 'no-container' ? colors['text-dim'] : STATUS_BADGES[healthBadgeState(health)].color} wrap="truncate-end"> {formatHealthLabel(health)}</Text>
                           </Box>
                         </Box>
                       );
