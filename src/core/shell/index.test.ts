@@ -70,6 +70,35 @@ describe('createShellSession', () => {
     });
   });
 
+  it.each(['repo', './repo', '~/repo'])('rejects the relative repo path %j', (repoPath) => {
+    const { port } = fakeShell();
+    expect(createShellSession({ shell: port, docker: fakeDocker() }, { kind: 'service', repoPath })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-repo-path' },
+    });
+  });
+
+  it.each(['-it', ' --rm', '-'])('rejects the flag-like container name %j', (name) => {
+    const { port } = fakeShell();
+    expect(createShellSession({ shell: port, docker: fakeDocker() }, { kind: 'container', container: name })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-container' },
+    });
+  });
+
+  it('trims the container name before using it', async () => {
+    const { port, runs } = fakeShell();
+    const docker = fakeDocker();
+    const shell = session({ kind: 'container', container: '  api  ' }, { port, docker });
+
+    const pending = shell.run('ls', () => undefined);
+    await flush();
+    expect(docker.getContainerHealth).toHaveBeenCalledWith('api');
+    expect(runs[0]!.target).toEqual({ kind: 'container', container: 'api' });
+    runs[0]!.finish({ status: 'exited', exitCode: 0 });
+    await pending;
+  });
+
   it('starts a service session in its repo path and a container session with no cwd', () => {
     const { port } = fakeShell();
     expect(session(service, { port }).cwd()).toBe('/repo');
@@ -140,6 +169,28 @@ describe('ShellSession.run', () => {
 
     expect(await pending).toEqual(ok({ status: 'failed', error: { code: 'shell-unavailable', message: 'no sh' } }));
     expect(shell.cwd()).toBe('/repo');
+  });
+
+  it('resets a vanished cwd to the repo path and reports cwd-missing, so the next run works', async () => {
+    const { port, runs } = fakeShell();
+    const shell = session(service, { port });
+
+    const cd = shell.run('cd sub', () => undefined);
+    await flush();
+    runs[0]!.finish({ status: 'exited', exitCode: 0, cwd: '/repo/sub' });
+    await cd;
+
+    const lost = shell.run('ls', () => undefined);
+    await flush();
+    runs[1]!.finish({ status: 'failed', error: { code: 'cwd-missing', message: 'Working directory /repo/sub no longer exists' } });
+    expect(await lost).toMatchObject({ ok: false, error: { code: 'cwd-missing' } });
+    expect(shell.cwd()).toBe('/repo');
+
+    const next = shell.run('ls', () => undefined);
+    await flush();
+    expect(runs[2]!.cwd).toBe('/repo');
+    runs[2]!.finish({ status: 'exited', exitCode: 0 });
+    expect(await next).toEqual(ok({ status: 'exited', exitCode: 0 }));
   });
 
   it('rejects a second run while one is active', async () => {
@@ -251,6 +302,23 @@ describe('ShellSession.run on a container', () => {
     runs[0]!.finish({ status: 'exited', exitCode: 0, cwd: '/app' });
     await pending;
     expect(shell.cwd()).toBe('/app');
+  });
+
+  it('resets a vanished container cwd to undefined on cwd-missing', async () => {
+    const { port, runs } = fakeShell();
+    const shell = session(container, { port });
+
+    const cd = shell.run('cd /gone', () => undefined);
+    await flush();
+    runs[0]!.finish({ status: 'exited', exitCode: 0, cwd: '/gone' });
+    await cd;
+
+    const lost = shell.run('ls', () => undefined);
+    await flush();
+    expect(runs[1]!.cwd).toBe('/gone');
+    runs[1]!.finish({ status: 'failed', error: { code: 'cwd-missing', message: 'gone' } });
+    expect(await lost).toMatchObject({ ok: false, error: { code: 'cwd-missing' } });
+    expect(shell.cwd()).toBeUndefined();
   });
 
   it.each<HealthState>(['down', 'restarting'])('refuses with container-not-running when health is %s', async (state) => {

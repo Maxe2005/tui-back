@@ -1,7 +1,7 @@
 import { err, ok, type Result } from '../result.js';
 import type { DockerPort } from '../ports/docker.js';
 import type { ShellLine, ShellRunHandle, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../ports/shell-session.js';
-import { createLineBuffer, type LineBufferSnapshot } from './line-buffer.js';
+import { createLineBuffer, DEFAULT_MAX_LINES, type LineBufferSnapshot } from './line-buffer.js';
 import { detectTtyCommand } from './tty-guard.js';
 
 // core/shell: one terminal session on a service (its repo dir) or its container (AD-22). The
@@ -36,34 +36,32 @@ export interface ShellSessionOptions {
   maxLines?: number;
 }
 
-const DEFAULT_MAX_LINES = 5000;
-
 export function createShellSession(
   deps: ShellSessionDeps,
   target: ShellTarget,
   options: ShellSessionOptions = {},
 ): Result<ShellSession> {
-  if (target.kind === 'service' && target.repoPath.trim() === '') {
-    return err('invalid-repo-path', 'A service shell needs a non-empty repo path');
+  const validated = validateTarget(target);
+  if (!validated.ok) {
+    return validated;
   }
-  if (target.kind === 'container' && target.container.trim() === '') {
-    return err('invalid-container', 'A container shell needs a non-empty container name');
-  }
+  const shellTarget = validated.data;
+  const initialCwd = (): string | undefined => (shellTarget.kind === 'service' ? shellTarget.repoPath : undefined);
 
   const buffer = createLineBuffer(options.maxLines ?? DEFAULT_MAX_LINES);
-  let currentCwd: string | undefined = target.kind === 'service' ? target.repoPath : undefined;
+  let currentCwd: string | undefined = initialCwd();
   let running = false;
   let cancelRequested = false;
   let handle: ShellRunHandle | undefined;
 
   const execute = async (command: string, onLine: (line: ShellLine) => void): Promise<Result<ShellRunResult>> => {
-    if (target.kind === 'container') {
-      const health = await deps.docker.getContainerHealth(target.container);
+    if (shellTarget.kind === 'container') {
+      const health = await deps.docker.getContainerHealth(shellTarget.container);
       if (!health.ok) {
         return health;
       }
       if (health.data !== 'up') {
-        return err('container-not-running', `Container ${target.container} is not running (${health.data})`);
+        return err('container-not-running', `Container ${shellTarget.container} is not running (${health.data})`);
       }
     }
     if (cancelRequested) {
@@ -77,10 +75,16 @@ export function createShellSession(
         // A throwing consumer must not break the run.
       }
     };
-    handle = deps.shell.run(target, currentCwd, command, record);
+    handle = deps.shell.run(shellTarget, currentCwd, command, record);
     const outcome = await handle.done;
     if (outcome.status === 'exited' && outcome.cwd !== undefined && outcome.cwd !== '') {
       currentCwd = outcome.cwd;
+    }
+    if (outcome.status === 'failed' && outcome.error.code === 'cwd-missing') {
+      // The directory vanished (deleted, or the repo moved): fall back to the target's default
+      // so the next command can run.
+      currentCwd = initialCwd();
+      return err('cwd-missing', `${outcome.error.message}; back to ${currentCwd ?? "the container's workdir"}`);
     }
     return ok(outcome);
   };
@@ -124,4 +128,26 @@ export function createShellSession(
     isRunning: () => running,
     output: () => buffer.snapshot(),
   });
+}
+
+// A service shell needs an absolute repo path; a container name is trimmed and must not look
+// like a flag (it lands in `docker exec`'s argv before the command).
+function validateTarget(target: ShellTarget): Result<ShellTarget> {
+  if (target.kind === 'service') {
+    if (target.repoPath.trim() === '') {
+      return err('invalid-repo-path', 'A service shell needs a non-empty repo path');
+    }
+    if (!target.repoPath.startsWith('/')) {
+      return err('invalid-repo-path', `A service shell needs an absolute repo path, got ${target.repoPath}`);
+    }
+    return ok(target);
+  }
+  const container = target.container.trim();
+  if (container === '') {
+    return err('invalid-container', 'A container shell needs a non-empty container name');
+  }
+  if (container.startsWith('-')) {
+    return err('invalid-container', `Invalid container name ${container}`);
+  }
+  return ok({ kind: 'container', container });
 }
