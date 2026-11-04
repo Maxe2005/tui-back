@@ -93,6 +93,19 @@ export function TerminalView({
     [droppedCount, lines],
   );
 
+  // Scrolled back, the view stays on the same lines while output arrives: the offset (counted from
+  // the tail) grows by the lines appended since the last render. Pinned to the tail (0), it stays.
+  // Adjusted during render, so no frame shows the drifted window.
+  const appendedTotal = droppedCount + lines.length;
+  const [seenTotal, setSeenTotal] = useState(appendedTotal);
+  if (seenTotal !== appendedTotal) {
+    setSeenTotal(appendedTotal);
+    const grown = appendedTotal - seenTotal;
+    if (grown > 0 && offset > 0) {
+      setOffset(Math.min(offset + grown, Math.max(displayLines.length - 1, 0)));
+    }
+  }
+
   // The command the confirmation was about ended on its own: nothing left to confirm.
   useEffect(() => {
     if (!running) {

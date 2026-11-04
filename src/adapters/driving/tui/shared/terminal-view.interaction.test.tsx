@@ -248,6 +248,37 @@ describe('TerminalView interaction', () => {
     }
   });
 
+  it('keeps a scrolled-back view on the same lines while output arrives; the tail stays pinned', async () => {
+    const { store } = terminalStore();
+    await store.getState().openTerminal('/repo/api', 'service', 'api');
+    const line = (i: number) => ({ kind: 'stdout' as const, text: `line ${i}` });
+    store.setState({ terminalLines: Array.from({ length: 100 }, (_, i) => line(i)) });
+    const { instance, stdin, stdout } = mount(createElement(TerminalView, { useStore: store }));
+    try {
+      await instance.waitUntilRenderFlush();
+      // Pinned to the tail: new lines show up, no scrolled-back indicator.
+      store.setState({ terminalLines: [...store.getState().terminalLines, line(100)] });
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('line 100');
+      expect(stdout.output).not.toMatch(/↑ \d+ back/);
+
+      await press(instance, stdin, KEYS.tab);
+      for (let i = 0; i < 3; i += 1) {
+        await press(instance, stdin, KEYS.up);
+      }
+      expect(stdout.output).toContain('↑ 3 back');
+      const before = stdout.output.length;
+      store.setState({ terminalLines: [...store.getState().terminalLines, ...[101, 102, 103, 104, 105].map(line)] });
+      await instance.waitUntilRenderFlush();
+      const after = stdout.output.slice(before);
+      expect(after).toContain('↑ 8 back');
+      expect(after).not.toContain('line 105');
+      expect(after).toContain('line 97');
+    } finally {
+      instance.unmount();
+    }
+  });
+
   it('opens with an error line and a disabled prompt when no shell port is wired', async () => {
     const store = createAppStore();
     await store.getState().openTerminal('/repo/api', 'service', 'api');
