@@ -9,6 +9,8 @@ import { SHARED_TYPES_MODULE_IDS } from '../../../../../core/edt/resolve-tab-vis
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { CheckboxListItem, ModalDialog, Spinner, StateLine, TextInputLine } from '../../shared/components/index.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
+import { MenuList } from '../../shared/components/menu-list.js';
+import { ServiceActionsRow } from '../../shared/components/service-actions-row.js';
 import { ClampedParagraph, TruncatedText } from '../../shared/components/truncated-text.js';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
@@ -17,12 +19,17 @@ import { colors, spacing } from '../../shared/theme/theme.js';
 import { SharedTypesHistory, type HistoryUiState } from './shared-types-history.js';
 import {
   OPTION_ROWS,
+  PUBLISH_FAILED_CHOICES,
   STEP_LABELS,
+  clampChoiceCursor,
+  historyDisabledReason,
   initialFormState,
+  publishDoneChoices,
   reduceForm,
-  resolvePublishBlockedKey,
-  resolvePublishDoneKey,
+  resolvePublishDoneChoice,
+  resolvePublishFailedChoice,
   resolveQuitDecision,
+  sharedTypesActions,
   selectedRepoPaths,
   shouldConfirmQuit,
   shouldStartPublish,
@@ -39,12 +46,14 @@ export const SHARED_TYPES_QUIT_BODY = 'A version propagation is in progress. Qui
 export const SHARED_TYPES_PUBLISH_QUIT_BODY = 'A version publish is in progress. Quit anyway?';
 export const SHARED_TYPES_NO_MEMBERS = 'No service of the active EDT consumes the shared dependency — nothing to propagate.';
 export const SHARED_TYPES_PUBLISH_TITLE = 'PUBLISH';
-export const SHARED_TYPES_CHAIN_HINT = 'C chain into propagation with this version, Esc stop';
 
 // Rows the form/run views use around their windowed consumer list: title, version row, two
-// section headers, the option rows, the issue lines, the run notice and hint.
-const FORM_CHROME_ROWS = 4 + OPTION_ROWS.length + 4;
+// section headers, the option rows, the issue lines, the run notice and hint; the form view also
+// carries the action bar and its one-line reasons (the run view never shows them).
+const FORM_CHROME_ROWS = 4 + OPTION_ROWS.length + 4 + 2;
 const RUN_CHROME_ROWS = 6;
+// The warning H leaves under the bar when History cannot open.
+const HISTORY_NOTICE_ROWS = 2;
 const MAX_ISSUE_ROWS = 3;
 const MAX_CLAMPED_LINES = 4;
 
@@ -52,16 +61,8 @@ export function isHistoryKey(input: string): boolean {
   return input === 'h' || input === 'H';
 }
 
-// Why the History view cannot open: it reads the one shared-types-source repo of the active EDT.
-export function historyDisabledReason(sourcesStatus: string, sourceError: string | undefined, sourceCount: number): string {
-  if (sourcesStatus === 'error' && sourceError !== undefined) {
-    return `History is unavailable: ${sourceError}`;
-  }
-  if (sourceCount === 0) {
-    return 'History is unavailable: the shared-types source repo is not part of the active EDT.';
-  }
-  return 'History is unavailable: the source repo is still loading.';
-}
+// Moved to the zone logic (the action bar reads it too); re-exported for existing importers.
+export { historyDisabledReason };
 
 export function formatSharedTypesDisabledMessage(carryingServices: string[]): string {
   const list = carryingServices.join(', ');
@@ -120,6 +121,19 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyUi, setHistoryUi] = useState<HistoryUiState>({ editing: true, searching: false });
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
+  // The post-publish choice screen's cursor: local, back on the first choice whenever a new
+  // publish result lands (done → done with another version too).
+  // Reset while rendering (not in an effect) so no frame or key ever sees the old cursor.
+  const [choiceCursor, setChoiceCursor] = useState(0);
+  const [choiceCursorFor, setChoiceCursorFor] = useState(publish);
+  if (choiceCursorFor !== publish) {
+    setChoiceCursorFor(publish);
+    setChoiceCursor(0);
+  }
+  // One predicate for what renders and what owns the keys: a done/failed publish shows its choice
+  // screen whatever the source state (a reload error or an EDT switch never hides it).
+  const choiceScreen = publish.status === 'done' || publish.status === 'blocked';
+  const doneChoices = publishDoneChoices(publish.version);
 
   useEffect(() => {
     void loadConsumers();
@@ -142,8 +156,8 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     setForm((previous) => ({ ...previous, unchecked: new Set(), row: 0, editing: false }));
     setResultRow(0);
   }, [repoPathsKey, activeEdt]);
-  const onVersionField = run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0 && form.row === 0 && form.editing;
-  const onVersionRow = run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0 && form.row === 0;
+  const onVersionField = !choiceScreen && run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0 && form.row === 0 && form.editing;
+  const onVersionRow = !choiceScreen && run.status === 'idle' && consumersStatus === 'ready' && consumers.length > 0 && form.row === 0;
 
   // The version field types freely (letters included), and a quit confirmation owns the keys.
   useEffect(() => {
@@ -212,23 +226,39 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       }
       return;
     }
-    if (publish.status === 'blocked' && !form.editing) {
-      const decision = resolvePublishBlockedKey(input, key);
-      if (decision === 'relaunch') {
-        void retryPublish();
-      } else if (decision === 'back') {
-        resetPublish();
+    if (publish.status === 'blocked') {
+      const step = resolvePublishFailedChoice(input, key, choiceCursor);
+      if (step.type === 'move') {
+        setChoiceCursor(step.cursor);
+      } else if (step.type === 'choose') {
+        if (step.choice === 'relaunch') {
+          void retryPublish();
+        } else {
+          resetPublish();
+        }
       }
       return;
     }
-    if (publish.status === 'done' && publish.version !== null && !form.editing) {
-      const decision = resolvePublishDoneKey(input, key);
-      if (decision === 'chain') {
+    if (publish.status === 'done') {
+      const step = resolvePublishDoneChoice(input, key, choiceCursor, doneChoices);
+      if (step.type === 'move') {
+        setChoiceCursor(step.cursor);
+      } else if (step.type === 'choose') {
         const version = publish.version;
         resetPublish();
-        setForm((previous) => ({ ...previous, version: { value: version, cursor: version.length }, row: 0, editing: false }));
-      } else if (decision === 'stop') {
-        resetPublish();
+        if (step.choice === 'propagate') {
+          // Ready to propagate: the version pre-filled and the cursor on the first consumer row,
+          // so the next Enter runs.
+          const row = consumers.length > 0 ? 1 : 0;
+          setForm((previous) => ({
+            ...previous,
+            version: version === null ? previous.version : { value: version, cursor: version.length },
+            row,
+            editing: false,
+          }));
+        } else if (step.choice === 'close') {
+          setForm(initialFormState(settingsOptions));
+        }
       }
       return;
     }
@@ -297,8 +327,9 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
       ) : (
         <>
           {renderPublish()}
-          {renderHistoryHint()}
-          {renderBody()}
+          {renderActionBar()}
+          {/* The post-publish choice screen stands alone: "Back to the form" brings the form back. */}
+          {choiceScreen ? null : renderBody()}
         </>
       )}
       <ModalDialog title={SHARED_TYPES_QUIT_TITLE} open={quitConfirm}>
@@ -308,17 +339,64 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
     </Box>
   );
 
-  function renderHistoryHint() {
-    if (run.status !== 'idle' || publish.status !== 'idle' || sourcesStatus === 'loading') {
+  // The form view's labelled commands: each with its key, greyed with its reason when
+  // unavailable; the one-line bar clips on a narrow pane, so the reasons are spelled out below.
+  function renderActionBar() {
+    if (run.status !== 'idle' || publish.status !== 'idle') {
       return null;
     }
-    if (historyNotice !== null) {
-      return <ClampedParagraph color={colors.warning} maxLines={2}>{historyNotice}</ClampedParagraph>;
+    const actions = sharedTypesActions({
+      form,
+      repoPaths,
+      sourcesStatus,
+      sourceError: sourcesError?.message,
+      sourceCount: sources.length,
+      consumersStatus,
+      publishStatus: publish.status,
+      runStatus: run.status,
+    });
+    const why = actions.flatMap((action) => (action.availability.available ? [] : [`${action.key}: ${action.availability.reason}`])).join(' · ');
+    return (
+      <Box flexDirection="column">
+        <ServiceActionsRow actions={actions} />
+        {/* One line: a clamped paragraph would trade the whole line for a "+N lines" marker. */}
+        {why === '' ? null : <TruncatedText color={colors['text-dim']}>{why}</TruncatedText>}
+        {historyNotice !== null ? <ClampedParagraph color={colors.warning} maxLines={HISTORY_NOTICE_ROWS}>{historyNotice}</ClampedParagraph> : null}
+      </Box>
+    );
+  }
+
+  // The choice list sits right under the one result line, the output and notice below it: a
+  // short terminal clips those first, never the highlighted choice.
+  function renderChoiceScreen() {
+    if (publish.status === 'blocked') {
+      return (
+        <Box flexDirection="column">
+          <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_PUBLISH_TITLE}</Text>
+          <ClampedParagraph color={colors.error} maxLines={2}>
+            {publish.error !== null ? `Publish failed [${publish.error.code}]: ${publish.error.message}` : 'Publish failed.'}
+          </ClampedParagraph>
+          <MenuList items={PUBLISH_FAILED_CHOICES} cursor={clampChoiceCursor(choiceCursor, PUBLISH_FAILED_CHOICES.length)} />
+          {publish.output ? <TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText> : null}
+          {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
+        </Box>
+      );
     }
-    return historyAvailable ? <Text color={colors['text-dim']} wrap="truncate-end">H version history</Text> : null;
+    return (
+      <Box flexDirection="column">
+        <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_PUBLISH_TITLE}</Text>
+        <TruncatedText color={colors.success}>{publish.version !== null ? `Published ${publish.version}` : 'Published'}</TruncatedText>
+        <MenuList items={doneChoices} cursor={clampChoiceCursor(choiceCursor, doneChoices.length)} />
+        {publish.output ? <TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText> : null}
+        {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
+      </Box>
+    );
   }
 
   function renderPublish() {
+    if (choiceScreen) {
+      return renderChoiceScreen();
+    }
     if (sourcesStatus === 'loading') {
       return <StateLine kind="loading" subject="source repo" />;
     }
@@ -328,7 +406,6 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
           <ClampedParagraph color={colors.error} maxLines={MAX_CLAMPED_LINES}>
             {sourcesError !== null ? `[${sourcesError.code}] ${sourcesError.message}` : 'Source repo unavailable.'}
           </ClampedParagraph>
-          <Text color={colors['text-dim']} wrap="truncate-end">R reload</Text>
         </Box>
       );
     }
@@ -353,31 +430,9 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
         </Box>
       );
     }
-    if (publish.status === 'blocked' && publish.error !== null) {
-      return (
-        <Box flexDirection="column">
-          <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_PUBLISH_TITLE}</Text>
-          <ClampedParagraph color={colors.error} maxLines={MAX_CLAMPED_LINES}>{`Publish failed [${publish.error.code}]: ${publish.error.message}`}</ClampedParagraph>
-          {publish.output ? <TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText> : null}
-          {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
-          <Text color={colors['text-dim']} wrap="truncate-end">R relaunch the whole command, Esc back</Text>
-        </Box>
-      );
-    }
-    if (publish.status === 'done' && publish.version !== null) {
-      return (
-        <Box flexDirection="column">
-          <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_PUBLISH_TITLE}</Text>
-          <TruncatedText color={colors.success}>{`Published ${publish.version}`}</TruncatedText>
-          {publish.output ? <TruncatedText color={colors['text-dim']}>{publish.output}</TruncatedText> : null}
-          {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
-          <Text color={colors['text-dim']} wrap="truncate-end">{SHARED_TYPES_CHAIN_HINT}</Text>
-        </Box>
-      );
-    }
     return (
       <Box flexDirection="column">
-        <Text color={colors['text-dim']} wrap="truncate-end">{`${SHARED_TYPES_PUBLISH_TITLE}: ${source.service} (P publish)`}</Text>
+        <Text color={colors['text-dim']} wrap="truncate-end">{`${SHARED_TYPES_PUBLISH_TITLE}: ${source.service}`}</Text>
         {publish.notice ? <ClampedParagraph color={colors.warning} maxLines={2}>{publish.notice}</ClampedParagraph> : null}
       </Box>
     );
@@ -431,7 +486,7 @@ function SharedTypesPanel({ useStore }: { useStore: AppStore }) {
         <Text color={colors['text-dim']}>Services</Text>
         <BoundedList
           items={consumers}
-          chromeRows={FORM_CHROME_ROWS}
+          chromeRows={FORM_CHROME_ROWS + (historyNotice !== null ? HISTORY_NOTICE_ROWS : 0)}
           cursorIndex={form.row >= 1 && form.row <= consumers.length ? form.row - 1 : undefined}
           renderItem={(consumer, index) => (
             <Box key={consumer.repoPath}>

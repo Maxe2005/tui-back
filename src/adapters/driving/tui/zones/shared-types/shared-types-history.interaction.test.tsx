@@ -66,7 +66,7 @@ describe('SharedTypesZone history', () => {
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      expect(lastFrame(stdout.output)).toContain('H version history');
+      expect(lastFrame(stdout.output)).toContain('[H] history');
       await press(instance, stdin, 'h');
       expect(lastFrame(stdout.output)).toContain('HISTORY by branch');
       expect(store.getState().zoneInputCaptured).toBe(true);
