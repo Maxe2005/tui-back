@@ -112,7 +112,7 @@ The tool only acts on a repo that carries a manifest; the manifest declares that
 
 #### FR-29: Container-less managed services (added 2026-10-01, Sprint Change Proposal)
 
-A managed repo's manifest may omit its container: the service is still fully managed (EDT membership, branches, group update, migrations, clean-restart recipe) but has no Docker runtime.
+A managed repo's manifest may omit its container: the service is still fully managed (EDT membership, branches, group update, migrations, clean-restart recipe) but has no Docker runtime. A container-less service that declares `healthUrl` is reported up or down from its health route (FR-42, added 2026-11-04).
 
 **Consequences (testable):**
 - A manifest without `container` validates and the repo registers like any other.
@@ -390,6 +390,14 @@ Open in IDE, restart, clean restart, service terminal and container terminal are
 #### FR-41: Shared Types action discoverability (added 2026-11-04, Sprint Change Proposal)
 
 In the Shared Types tab every action is shown as a labelled command with its key and, when unavailable, its reason. After a successful publish the next steps (propagate this version, back to the form, close) are presented as an explicit choice, not a hint line.
+
+#### FR-42: Health-first service status (added 2026-11-04, Sprint Change Proposal 2)
+
+Every view that shows a service's state (Dashboard, Logs, Update, CLI `dashboard`) derives it from one rule: when the manifest declares `healthUrl`, its answer is checked first and combined with the container state; otherwise the container state alone is used. The closed set of states is up, unhealthy, inconsistent, restarting, down, no-container (plus an explicit probe-error state). `inconsistent` (the health route answers while the container is down or restarting) is surfaced as an attention item. A container-less service declaring `healthUrl` gets a real up/down state.
+
+#### FR-43: Heal — restart the services that are not up (added 2026-11-04, Sprint Change Proposal 2)
+
+From the Dashboard (and the `heal` CLI), a developer restarts in one action every active-EDT service whose FR-42 status is down or unhealthy and that declares a container, after a confirmation listing targets and skipped services with reasons, in simple or clean mode; each restarted service is then verified and the run reports per-service final states.
 
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 

@@ -262,3 +262,9 @@ graph LR
 - **Prevents:** `child_process` leaking into `core/` or the TUI; unbounded terminal output; a terminal hanging on a TTY-only command.
 - **Rule:** `core/ports/shell-session.ts` with a driven adapter in `adapters/driven/shell-session/`. Line-oriented: each command runs in the service directory (`sh -c`) or via `docker exec` (no TTY) for the container; cwd persists across commands in the service shell; output streams as stdout/stderr-tagged lines; `cancel()` terminates the process group; retained output is a bounded ring buffer. `core/shell` use-cases return `Result`. Not a PTY; a PTY adapter could replace the driven adapter later without touching core.
 - **AD-21 extension:** the service action registry also lists `terminal-service` and `terminal-container` (availability: `no container`, `container not running`).
+
+### AD-23 — Service status resolution (added 2026-11-04, SCP 2)
+
+- **Binds:** FR-42, FR-43, FR-29, Stories 9.7, 9.8, 9.9
+- **Prevents:** each view combining health probe and container state its own way; a service shown `up` while it does not answer; a Docker outage marking every service inconsistent.
+- **Rule:** `core/service-status/resolveServiceStatus(repoPath)` is the only producer of a service's displayed state. Order: manifest `healthUrl` probe first (`HealthProbePort`), then container (`DockerPort.getContainerHealth`). Closed set: `up | unhealthy | inconsistent | restarting | down | no-container`, plus `Probed` error. The combination table lives in the resolver and nowhere else. `healthUrl` stays the only probe kind; a new kind (command, TCP) is added inside the resolver, not in consumers. Returns `Result`, never rejects.
