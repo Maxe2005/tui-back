@@ -14,6 +14,7 @@ import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { ResetScreen } from './shared/reset-screen.js';
 import { RealignDialog } from './shared/realign-dialog.js';
+import { TerminalView } from './shared/terminal-view.js';
 import { SettingsScreen } from './shared/settings-screen.js';
 import { useFooterContext } from './shared/hooks/use-footer-context.js';
 import { resolveFocusStep } from './shared/keys/focus-navigation.js';
@@ -208,6 +209,10 @@ export function AppShell({
   // `:realign` overlay (also `A` on the Dashboard): same open flag + onClose pattern.
   const realignScreenOpen = useStore((state) => state.realignScreenOpen);
   const closeRealignScreen = useStore((state) => state.closeRealignScreen);
+  // The Terminal overlay (Ctrl+T / Ctrl+X on the Dashboard). It owns every key while open — `q`,
+  // `:`, `?` and the zone mnemonics land in its prompt — and fullscreen hides the zone below.
+  const terminalOpen = useStore((state) => state.terminalOpen);
+  const terminalFullscreen = useStore((state) => state.terminalFullscreen);
   // Manifest-gated Routes/shared-types tab visibility — loaded on mount and reloaded on
   // registry-screen close / active-EDT membership change (see the effect below and
   // app-store.ts's createEdt/switchEdt/modifyEdt).
@@ -303,10 +308,16 @@ export function AppShell({
       return;
     }
 
+    // The open Terminal is the sole consumer of every key (its own `?` opens help from the output
+    // focus); no resize, help, zone switch, command bar or quit fires behind it.
+    if (state.terminalOpen) {
+      return;
+    }
+
     // Ctrl+W resize-mode. Entering and dispatching within it both sit under the same overlay
     // exclusion as the zone-switch block below; entering additionally requires the active zone
     // to declare a boundary (shouldEnterResizeMode), and the Logs fullscreen preview has none.
-    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
+    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen && !terminalOpen) {
       if (state.resizeMode !== null) {
         const boundaryStep = resolveFocusStep(input, key, 'tab');
         if (boundaryStep !== null) {
@@ -340,7 +351,7 @@ export function AppShell({
     // must land as a literal character (or, for settings, simply not open help on top of it),
     // never also pop the keybinding-help modal on top of the overlay. Mirrors how the registry
     // screen's own Esc-close below is gated on registryScreenOpen.
-    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
+    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen && !terminalOpen) {
       resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
     }
 
@@ -354,6 +365,7 @@ export function AppShell({
       !settingsScreenOpen &&
       !resetScreenOpen &&
       !realignScreenOpen &&
+      !terminalOpen &&
       state.resizeMode === null
     ) {
       // The reachable-zone set (every zone minus whichever gated tab is currently 'omitted')
@@ -421,12 +433,16 @@ export function AppShell({
         <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} busy={{ ...(updateRunning ? { update: { incidents: updateIncidents } } : {}), ...(sharedTypesTabBusy >= 0 ? { 'shared-types': { incidents: sharedTypesTabBusy } } : {}) }} />
         <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
           <BoundsProvider columns={columns} rows={zoneRows}>
-            <ZoneScreen useStore={useStore} />
+            {/* Hidden, never unmounted, behind the fullscreen Terminal: its state survives. */}
+            <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden" display={terminalOpen && terminalFullscreen ? 'none' : 'flex'}>
+              <ZoneScreen useStore={useStore} />
+            </Box>
             <KeybindingHelp useStore={useStore} />
             {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
             {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
             {resetScreenOpen && <ResetScreen useStore={useStore} onClose={closeResetScreen} />}
             {realignScreenOpen && <RealignDialog useStore={useStore} onClose={closeRealignScreen} />}
+            {terminalOpen && <TerminalView useStore={useStore} />}
             {resetNotice !== null && <TruncatedText color={colors.warning}>{resetNotice}</TruncatedText>}
           </BoundsProvider>
         </Box>
