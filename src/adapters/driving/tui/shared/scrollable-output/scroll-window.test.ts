@@ -39,6 +39,16 @@ describe('sliceVisibleWindow — I/O matrix', () => {
     expect(sliceVisibleWindow(lines, 0, 3, rowCost(10, true))).toEqual(['x'.repeat(5000)]);
   });
 
+  it('a negative offset is treated as pinned to the tail, never reading past the end', () => {
+    const calls: (number | undefined)[] = [];
+    const window = sliceVisibleWindow([1, 2, 3, 4, 5], -3, 2, (line) => {
+      calls.push(line);
+      return 1;
+    });
+    expect(window).toEqual([4, 5]);
+    expect(calls).not.toContain(undefined);
+  });
+
   it('empty input or a zero budget yields no lines', () => {
     expect(sliceVisibleWindow([], 0, 5)).toEqual([]);
     expect(sliceVisibleWindow(['a'], 0, 0)).toEqual([]);

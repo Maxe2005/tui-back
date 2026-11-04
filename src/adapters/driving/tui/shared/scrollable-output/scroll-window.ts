@@ -1,12 +1,10 @@
-// tui/shared/scrollable-output: the pure, Ink-free scroll/wrap/window math behind every scrollable
-// line-output region (Logs panes, the Logs fullscreen preview, the Update report, the Terminal
-// view). Offsets count lines back from the live tail; windows are sized by terminal-row cost so a
-// region stays filled edge-to-edge in both truncate and wrap mode (AD-19: bounded in both axes).
+// tui/shared/scrollable-output: pure scroll/wrap/window math for any scrollable line-output
+// region. Offsets count lines back from the live tail (0 == pinned to the tail); windows are
+// sized by terminal-row cost so a region stays filled in both truncate and wrap mode.
 import wrapAnsi from 'wrap-ansi';
 
-// Ctrl+Up/Ctrl+Down (or plain Up/Down in fullscreen) scroll a region. `offset` counts lines back
-// from the live tail (0 == pinned to the tail); scrolling up increases it, capped at
-// `lineCount - 1` (the oldest buffered line) — never negative, never past the top.
+// Scrolling up moves away from the tail; the offset is clamped to [0, lineCount - 1] so it never
+// scrolls past the oldest line.
 export function adjustScrollOffset(current: number, direction: 'up' | 'down', lineCount: number): number {
   if (lineCount === 0) {
     return 0;
@@ -15,19 +13,17 @@ export function adjustScrollOffset(current: number, direction: 'up' | 'down', li
   return Math.min(Math.max(next, 0), lineCount - 1);
 }
 
-// The trigger for fetching more history: true once the offset can't go further up without more
-// lines to scroll into. A genuinely empty region (lineCount === 0) counts as "at the oldest line"
-// too — it is a live tail's *normal* starting state, so otherwise scrolling up could never trigger
-// a quiet source's first fetch.
+// The trigger for loading older lines. An empty region counts as "at the oldest line": a live
+// tail usually starts empty (e.g. Logs' `--since now`), and scrolling up must still be able to
+// request its first history.
 export function isAtOldestLine(offset: number, lineCount: number): boolean {
   return lineCount === 0 || offset >= lineCount - 1;
 }
 
-type ScrollKey = { ctrl?: boolean; upArrow?: boolean; downArrow?: boolean };
+export type ScrollKey = { ctrl?: boolean; upArrow?: boolean; downArrow?: boolean };
 
-// Requires ctrl in a grid view — Up/Down there is already claimed by moving focus between panes,
-// so a bare arrow has to keep meaning "change focused pane" and Ctrl+Up/Down disambiguates
-// "scroll the focused pane instead".
+// For a region that shares its view with other focusable regions (e.g. a pane grid), where bare
+// Up/Down already move focus: only Ctrl+Up/Down scroll.
 export function resolvePaneScrollDirection(key: ScrollKey): 'up' | 'down' | null {
   if (!key.ctrl) {
     return null;
@@ -41,8 +37,8 @@ export function resolvePaneScrollDirection(key: ScrollKey): 'up' | 'down' | null
   return null;
 }
 
-// Fullscreen has no sub-focus grid to disambiguate from (only one region), so plain Up/Down
-// scroll it; ctrl is accepted too so Ctrl+Up/Down muscle memory still works.
+// For a region that owns the arrows (fullscreen): plain Up/Down scroll; ctrl is accepted too so
+// Ctrl+Up/Down muscle memory still works.
 export function resolveFullscreenScrollDirection(key: ScrollKey): 'up' | 'down' | null {
   if (key.upArrow) {
     return 'up';
@@ -53,8 +49,7 @@ export function resolveFullscreenScrollDirection(key: ScrollKey): 'up' | 'down' 
   return null;
 }
 
-// Per-region wrap/truncate state, keyed by any string id (a repo path, a terminal target, …) — a
-// region absent from the map defaults to truncate (`truncate-end`).
+// Per-region wrap state keyed by any string id; an absent key (or a null id) means truncate.
 export const DEFAULT_WRAP = false;
 
 export function isWrapped(wrapByKey: Readonly<Record<string, boolean>>, key: string | null): boolean {
@@ -72,20 +67,14 @@ export function toggleAllWrapFlags(wrapByKey: Readonly<Record<string, boolean>>,
   return keys.reduce((next, key) => toggleWrapFlag(next, key), wrapByKey as Record<string, boolean>);
 }
 
-// The scrolled-into-view window a region actually renders: as many lines as fit within
-// `rowBudget` terminal rows, ending `offset` lines back from the tail. `getRowCount` reports how
-// many terminal rows a given line actually occupies once rendered — 1 for every line by default
-// (a plain count-based window), but the caller passes a wrap-aware one (see computeLineRowCount)
-// so a wrapped multi-row line "spends" more of the budget than a truncated single-row one.
-//
-// Sizing the window by row cost (not line count) keeps the region filled edge-to-edge in both
-// truncate and wrap mode, on every toggle: a fixed line count overflows under wrap and leaves a
-// blank gap after switching back to truncate.
+// The lines that fit in `rowBudget` terminal rows, ending `offset` lines back from the tail.
+// Sized by row cost (`getRowCount`, 1 per line by default), not line count: a fixed count would
+// overflow under wrap and leave a blank gap after switching back to truncate.
 export function sliceVisibleWindow<T>(lines: readonly T[], offset: number, rowBudget: number, getRowCount: (line: T) => number = () => 1): T[] {
   if (lines.length === 0 || rowBudget <= 0) {
     return [];
   }
-  const end = Math.max(lines.length - offset, 0);
+  const end = Math.min(Math.max(lines.length - offset, 0), lines.length);
   let start = end;
   let usedRows = 0;
   while (start > 0) {
@@ -96,22 +85,17 @@ export function sliceVisibleWindow<T>(lines: readonly T[], offset: number, rowBu
     usedRows += rows;
     start -= 1;
   }
-  // A single line whose own row cost alone exceeds the whole budget (e.g. a very long line under
-  // wrap in a short region) must still render something rather than leaving the region fully
-  // blank — it simply overflows and gets clipped by the region's own `overflow="hidden"`.
+  // A line costing more than the whole budget still renders (clipped by the region's
+  // `overflow="hidden"`) rather than leaving the region blank.
   if (start === end && end > 0) {
     start = end - 1;
   }
   return lines.slice(start, end);
 }
 
-// How many terminal rows a single formatted line will actually render as. Truncated lines
-// (wrap === false) always cost exactly 1 row (Ink's `truncate-end` never wraps).
-//
-// Wrapped lines delegate to `wrap-ansi` with the exact options Ink's own Text uses for
-// `wrap="wrap"` (ink/build/wrap-text.js): ANSI escapes occupy zero columns (docker output is
-// colourized by default) and word-wrap can't split mid-word, so `ceil(length / width)` would
-// misestimate and leave a blank gap at the bottom of wrapped regions. This matches exactly.
+// Terminal rows a formatted line occupies. Truncated lines always cost 1. Wrapped lines use
+// `wrap-ansi` with the exact options Ink's `wrap="wrap"` uses: ANSI escapes take zero columns and
+// word-wrap never splits mid-word, so `ceil(length / width)` would misestimate.
 export function computeLineRowCount(text: string, width: number, wrap: boolean): number {
   if (!wrap) {
     return 1;
