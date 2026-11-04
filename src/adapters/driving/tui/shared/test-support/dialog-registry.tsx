@@ -1,7 +1,8 @@
 // tui/shared/test-support: every dialog the TUI can show, each with an adversarial fixture.
 // The size matrix renders them all; the registry-coverage test fails when a source file that
 // renders a ModalDialog is missing here. `embedded` dialogs are opened by their zone's own local
-// state, so the matrix reaches them through the owning zone instead.
+// state, so the matrix reaches them through the owning zone instead. `overlay` entries are
+// app-level overlays that are not a ModalDialog (the Terminal view) but get the same matrix.
 import { createElement, type ReactElement } from 'react';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
@@ -34,6 +35,7 @@ import { CommandBar } from '../command-bar.js';
 import { RepoRegistryScreen } from '../repo-registry-screen.js';
 import { SettingsScreen } from '../settings-screen.js';
 import { RealignDialog } from '../realign-dialog.js';
+import { TerminalView } from '../terminal-view.js';
 
 export const LONG_TEXT = 'x'.repeat(5000);
 export const MULTILINE_ERROR = `first line of a failure\n${'\u001b[31mred\u001b[0m '.repeat(40)}\nthird line ${LONG_TEXT}`;
@@ -68,7 +70,7 @@ export function failedRows(count = 300) {
 
 // `file` is the source file whose ModalDialog this entry covers, relative to the tui directory.
 export type DialogEntry =
-  | { id: string; file: string; render: (rows: number) => ReactElement }
+  | { id: string; file: string; render: (rows: number) => ReactElement; overlay?: true }
   | { id: string; file: string; embedded: 'update' | 'routes' | 'shared-types' };
 
 const edt = adversarialEdt();
@@ -275,6 +277,10 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'shared/realign-run', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
   { id: 'shared/realign-run-failed', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
   { id: 'shared/realign-error', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
+  { id: 'shared/terminal-idle', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore() }) },
+  { id: 'shared/terminal-running', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
+  { id: 'shared/terminal-fullscreen', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
+  { id: 'shared/terminal-confirm-close', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, confirming: true }), initial: { confirming: true } }) },
   { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
   { id: 'update/zone', file: 'zones/update/update-zone.tsx', embedded: 'update' },
   { id: 'routes/zone', file: 'zones/routes/routes-zone.tsx', embedded: 'routes' },
@@ -284,6 +290,25 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
 function helpStore() {
   const s = store();
   s.setState({ helpOpen: true } as never);
+  return s;
+}
+
+// A terminal on an adversarial target: a huge label and cwd, `lines` LONG_TEXT output lines
+// (stdout/stderr/echo/status mixed) with a dropped count, and a notice (none while confirming).
+function terminalStore(options: { running?: boolean; lines?: number; fullscreen?: boolean; confirming?: boolean } = {}) {
+  const s = store();
+  const kinds = ['stdout', 'stderr', 'command', 'status'] as const;
+  s.setState({
+    terminalOpen: true,
+    terminalTarget: { kind: 'container', repoPath: `/repo/${'p'.repeat(300)}`, label: 'c'.repeat(500) },
+    terminalLines: Array.from({ length: options.lines ?? 0 }, (_, i) => ({ kind: kinds[i % kinds.length]!, text: `${i} ${LONG_TEXT}` })),
+    terminalDroppedCount: options.lines === undefined ? 0 : 12_345,
+    terminalCwd: `/very/long/cwd/${'d'.repeat(400)}`,
+    terminalRunning: options.running === true,
+    terminalReady: true,
+    terminalFullscreen: options.fullscreen === true,
+    terminalNotice: options.confirming === true ? null : MULTILINE_ERROR,
+  } as never);
   return s;
 }
 

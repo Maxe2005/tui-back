@@ -70,6 +70,8 @@ const EXPECTED = [
   ['Ctrl+O (Dashboard)', 'Dashboard: open the focused service repo in your editor'],
   ['Ctrl+R (Dashboard)', 'Dashboard: restart the focused service (R stays refresh)'],
   ['Ctrl+L (Dashboard)', 'Dashboard: clean-restart the focused service through its recipe'],
+  ['Ctrl+T (Dashboard)', 'Dashboard: open a terminal in the focused service repo'],
+  ['Ctrl+X (Dashboard)', "Dashboard: open a terminal inside the focused service's running container"],
   ['W (Logs)', 'Logs: toggle line wrap on every open pane (bare w stays on the focused pane)'],
   ['i (Logs)', 'Logs: toggle the focused pane between following and ignoring the global filter'],
   ['R (Logs)', "Logs: restart the focused pane's service"],

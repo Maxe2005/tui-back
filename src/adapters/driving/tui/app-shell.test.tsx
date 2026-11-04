@@ -658,6 +658,22 @@ it('shouldQuit returns true for q', () => {
         applyRealignPreset: () => {},
         cycleRealignRestartMode: () => {},
         runRealign: async () => {},
+        terminalOpen: false,
+        terminalTarget: null,
+        terminalLines: [],
+        terminalDroppedCount: 0,
+        terminalCwd: null,
+        terminalRunning: false,
+        terminalReady: false,
+        terminalFullscreen: false,
+        terminalNotice: null,
+        terminalHistory: [],
+        openTerminal: async () => {},
+        runTerminalCommand: () => ({ accepted: true, done: Promise.resolve() }),
+        cancelTerminalCommand: () => {},
+        toggleTerminalFullscreen: () => {},
+        setTerminalNotice: () => {},
+        closeTerminal: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

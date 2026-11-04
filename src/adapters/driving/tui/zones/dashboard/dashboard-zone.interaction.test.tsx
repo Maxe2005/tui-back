@@ -61,7 +61,13 @@ function seedServices(available = true) {
     dashboardServicesStatus: 'ready',
     dashboardServices: { status: 'active', edt: { ulid: 'e', topic: 't', serviceCount: 2 }, services: [serviceRow('a'), serviceRow('b')], others: [] },
     dashboardServiceActions: {
-      '/r/a': [action('open-in-ide', 'Ctrl+O'), action('restart-simple', 'Ctrl+R'), action('restart-clean', 'Ctrl+L')],
+      '/r/a': [
+        action('open-in-ide', 'Ctrl+O'),
+        action('restart-simple', 'Ctrl+R'),
+        action('restart-clean', 'Ctrl+L'),
+        action('terminal-service', 'Ctrl+T'),
+        action('terminal-container', 'Ctrl+X'),
+      ],
       '/r/b': [action('open-in-ide', 'Ctrl+O'), action('restart-simple', 'Ctrl+R'), action('restart-clean', 'Ctrl+L')],
     },
     runDashboardServiceAction,
@@ -214,6 +220,39 @@ describe('DashboardZone interaction', () => {
       const calls = loadDashboard.mock.calls.length;
       await press(instance, stdin, 'R');
       expect(loadDashboard).toHaveBeenCalledTimes(calls + 1);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('opens the focused row terminals on Ctrl+T and Ctrl+X, inert once the terminal owns the keys', async () => {
+    const { store, runDashboardServiceAction } = seedServices();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '\x14');
+      expect(runDashboardServiceAction).toHaveBeenLastCalledWith('/r/a', 'terminal-service');
+      await press(instance, stdin, '\x18');
+      expect(runDashboardServiceAction).toHaveBeenLastCalledWith('/r/a', 'terminal-container');
+      store.setState({ terminalOpen: true });
+      await press(instance, stdin, '\x14');
+      await press(instance, stdin, '\x12');
+      expect(runDashboardServiceAction).toHaveBeenCalledTimes(2);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('falls back to the service terminal on Ctrl+T while the action list is unloaded, never the container one', async () => {
+    const { store, runDashboardServiceAction } = seedServices();
+    store.setState({ dashboardServiceActions: {} });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '\x18');
+      expect(runDashboardServiceAction).not.toHaveBeenCalled();
+      await press(instance, stdin, '\x14');
+      expect(runDashboardServiceAction.mock.calls).toEqual([['/r/a', 'terminal-service']]);
     } finally {
       instance.unmount();
     }

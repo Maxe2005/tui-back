@@ -138,6 +138,57 @@ describe('dashboard slice', () => {
     expect(getContainerHealth).toHaveBeenCalledWith('api');
   });
 
+  describe('terminal actions', () => {
+    function terminalStore(health: 'up' | 'down') {
+      const shell = { run: vi.fn() };
+      const store = createAppStore({
+        ...fakeDeps(),
+        manifest: { load: vi.fn(async () => ok({ service: 'a', container: 'api', sharedBranch: 'development', modules: {} })) },
+        docker: { getContainerHealth: vi.fn(async () => ok(health)) } as unknown as DockerPort,
+        container: { restart: vi.fn(async () => ok(undefined)) },
+        restart: { run: vi.fn(async () => ok({ output: '' })) },
+        editor: { launch: vi.fn(() => ok(undefined)) },
+        lock: { acquire: vi.fn(), peek: vi.fn(async () => ok({ locked: false })) },
+        shell,
+      } as unknown as AppStoreDeps);
+      return store;
+    }
+
+    it('opens the service terminal on the row, named after its service', async () => {
+      const store = terminalStore('up');
+      store.setState({ dashboardServices: { services: [{ service: 'svc-a', path: '/r/a' }] } as never });
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-service');
+      expect(store.getState()).toMatchObject({
+        terminalOpen: true,
+        terminalReady: true,
+        terminalTarget: { kind: 'service', repoPath: '/r/a', label: 'svc-a' },
+      });
+      // Opening a terminal is not a running row action.
+      expect(store.getState().dashboardActionState['/r/a']?.running ?? null).toBeNull();
+    });
+
+    it('opens the container terminal on the manifest container when the registry lists it available', async () => {
+      const store = terminalStore('up');
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-container');
+      expect(store.getState().terminalTarget).toEqual({ kind: 'container', repoPath: '/r/a', label: 'api' });
+    });
+
+    it('labels an unlisted row after its repo directory, or the whole path when that is empty', async () => {
+      const store = terminalStore('up');
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-service');
+      expect(store.getState().terminalTarget?.label).toBe('a');
+      store.getState().closeTerminal();
+      await store.getState().runDashboardServiceAction('/', 'terminal-service');
+      expect(store.getState().terminalTarget?.label).toBe('/');
+    });
+
+    it('opens nothing when the fresh availability says the container is not running', async () => {
+      const store = terminalStore('down');
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-container');
+      expect(store.getState().terminalOpen).toBe(false);
+    });
+  });
+
   it('degrades to an error state when the ports are unwired', async () => {
     const store = createAppStore();
     await store.getState().loadDashboard();

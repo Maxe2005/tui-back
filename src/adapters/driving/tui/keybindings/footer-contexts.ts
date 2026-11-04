@@ -329,6 +329,22 @@ export const FOOTER_CONTEXTS = {
     label: 'Realign selection (none checked)',
     hints: [MOVE, ['Space', 'toggle'], ['p', 'preset'], ['←/→', 'restart'], CANCEL],
   },
+  'terminal-prompt': {
+    label: 'Terminal prompt',
+    hints: [['Enter', 'run'], [KEY_UP_DOWN, 'history'], ['Ctrl+C', 'clear'], ['Tab', 'output'], ['Ctrl+F', 'fullscreen'], CLOSE],
+  },
+  'terminal-running': {
+    label: 'Terminal, command running',
+    hints: [['Ctrl+C', 'cancel'], ['Tab', 'output'], ['Ctrl+F', 'fullscreen'], ['Esc', 'close (confirms)']],
+  },
+  'terminal-output': {
+    label: 'Terminal output',
+    hints: [[KEY_UP_DOWN, 'scroll'], ['PgUp/PgDn', 'page'], ['Tab', 'prompt'], ['Ctrl+F', 'fullscreen'], ['?', 'help'], CLOSE],
+  },
+  'terminal-confirm-close': {
+    label: 'Terminal close confirmation',
+    hints: [['Enter', 'cancel the command and close'], ['Esc', 'keep it running']],
+  },
   'settings-general': {
     label: 'Settings General tab',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'edit'], TAB_SWITCH, CLOSE],
@@ -363,9 +379,9 @@ export type FooterContextId = keyof typeof FOOTER_CONTEXTS;
 
 // Who may register a footer context. Overlays sit above the zone they cover, so they win over a
 // zone that registers or re-registers while one is open.
-export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'realign' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
+export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'realign' | 'terminal' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
 
-export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset', 'realign'];
+export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset', 'realign', 'terminal'];
 
 export type FooterContextEntry = { owner: FooterOwner; id: FooterContextId };
 

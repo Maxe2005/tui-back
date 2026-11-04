@@ -21,6 +21,7 @@ import type { RestartPort } from '../../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';
 import type { RouteScannerPort } from '../../../../core/ports/route-scanner.js';
 import type { SavedRequestPort } from '../../../../core/ports/saved-request.js';
+import type { ShellSessionPort } from '../../../../core/ports/shell-session.js';
 import type { SettingsPort } from '../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../core/ports/state.js';
 import { createNavigationSlice, type NavigationSlice } from './slices/navigation-slice.js';
@@ -35,6 +36,7 @@ import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
 import { createDashboardSlice, type DashboardSlice } from './slices/dashboard-slice.js';
 import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types-slice.js';
 import { createRealignSlice, type RealignSlice } from './slices/realign-slice.js';
+import { createTerminalSlice, type TerminalSlice } from './slices/terminal-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
 export type { ActivateEdtRequest, CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
@@ -49,6 +51,7 @@ export type { ResetPreview } from './slices/reset-slice.js';
 export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types-slice.js';
 export type { DashboardSectionStatus } from './slices/dashboard-slice.js';
 export type { RealignCandidates, RealignDraft, RealignLiveRow, RealignLiveStatus, RealignRun } from './slices/realign-slice.js';
+export type { TerminalKind, TerminalLine, TerminalLineKind, TerminalTarget } from './slices/terminal-slice.js';
 export type { RoutesStatus } from './slices/routes-slice.js';
 export type { RouteResponse, RoutesPaneFocus, RoutesPaneTab } from './slices/routes-slice.js';
 
@@ -100,6 +103,10 @@ export type AppStoreDeps = {
   // The saved-request library touchpoint — the same global.db store the CLI's request-*
   // subcommands run against. Save/load/delete degrade to an explicit error when missing.
   savedRequests?: SavedRequestPort;
+  // The Terminal overlay's command-execution touchpoint (AD-22), behind the one shell session
+  // the terminal slice owns. Optional like the rest; without it the terminal opens on an error
+  // line with its prompt disabled.
+  shell?: ShellSessionPort;
   // The shared-types zone's wiring: the registry/package port the manifest module provides, the
   // consuming module's id, and the parser of its manifest parameters (core cannot import the
   // module's schema). Optional like the rest; the zone degrades to an explicit error without it.
@@ -112,7 +119,7 @@ export type AppStoreDeps = {
   };
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & CommandHistorySlice & ResetSlice & RoutesSlice & SharedTypesSlice & DashboardSlice & RealignSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & CommandHistorySlice & ResetSlice & RoutesSlice & SharedTypesSlice & DashboardSlice & RealignSlice & TerminalSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -128,6 +135,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createSharedTypesSlice(deps)(...args),
     ...createDashboardSlice(deps)(...args),
     ...createRealignSlice(deps)(...args),
+    ...createTerminalSlice(deps)(...args),
   }));
 }
 

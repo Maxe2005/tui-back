@@ -867,3 +867,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-2-registry-entries-for-service-and-container-terminals.md`
   summary: app-shell.interaction.test.tsx "AppShell reset screen (:reset) > opens only through the reset command, and Esc closes it with zero writes" fails on the epic-9 branch.
   evidence: Fails 3/3 on story 9.2 and at the baseline 198de464 (output lacks 'RESET TOOL DATA'); not caused by story 9.2.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-4-terminal-view-in-the-tui.md`
+  summary: Cancelling a container command while `core/shell` is still awaiting the container health check has no effect until that unbounded `getContainerHealth` call settles.
+  evidence: `src/core/shell/index.ts` `execute` awaits `deps.docker.getContainerHealth` before honouring `cancelRequested`, with no timeout (Story 9.1 contract); the Terminal view shows "running" meanwhile.
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-4-terminal-view-in-the-tui.md`
+  summary: No test covers the composition root `src/bin/tui.ts` wiring the shell port and closing the terminal on exit.
+  evidence: every slice/view test injects its own fake `shell`; removing `shell: createShellSessionPort()` from `src/bin/tui.ts` would leave the real app's terminal disabled with the suite green.

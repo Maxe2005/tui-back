@@ -222,6 +222,16 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'Dashboard: clean-restart the focused service through its recipe',
     footer: { key: 'Ctrl+L', verb: 'clean restart', zones: ['dashboard'], when: 'service-focused' },
   },
+  {
+    keys: 'Ctrl+T (Dashboard)',
+    description: 'Dashboard: open a terminal in the focused service repo',
+    footer: { key: 'Ctrl+T', verb: 'terminal', zones: ['dashboard'], when: 'service-focused' },
+  },
+  {
+    keys: 'Ctrl+X (Dashboard)',
+    description: "Dashboard: open a terminal inside the focused service's running container",
+    footer: { key: 'Ctrl+X', verb: 'container terminal', zones: ['dashboard'], when: 'service-focused' },
+  },
   // Scoped to the Logs zone's pane grid.
   {
     keys: 'W (Logs)',
