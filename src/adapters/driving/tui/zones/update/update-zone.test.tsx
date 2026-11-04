@@ -54,6 +54,7 @@ import {
 } from './update-zone.js';
 import {
   deriveUpdateServiceStatus,
+  updateStatusText,
   formatLiveServiceDetail,
   formatServiceOutcomeDetail,
   isServiceTargetedByRun,
@@ -665,6 +666,16 @@ describe('UpdateZone rendering', () => {
 });
 
 describe('deriveUpdateServiceStatus', () => {
+  it('passes the health-first states through, with their own text', () => {
+    expect(deriveUpdateServiceStatus('unhealthy', undefined, false)).toBe('unhealthy');
+    expect(deriveUpdateServiceStatus('inconsistent', undefined, false)).toBe('inconsistent');
+    expect(deriveUpdateServiceStatus('unhealthy', undefined, true)).toBe('updating');
+    expect(updateStatusText('unhealthy')).toBe('unhealthy');
+    expect(updateStatusText('inconsistent')).toBe('inconsistent');
+    expect(updateStatusText('no-container')).toBe('no container');
+    expect(updateStatusText('up')).toBeNull();
+  });
+
   it('a service paused on an incident is awaiting, outranking updating', () => {
     expect(deriveUpdateServiceStatus('up', undefined, true, false, 'merging', true)).toBe('awaiting');
     expect(deriveUpdateServiceStatus('down', 'failed', false, false, undefined, true)).toBe('awaiting');

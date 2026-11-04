@@ -819,6 +819,45 @@ describe('update slice: service health polling', () => {
     expect(() => store.getState().startUpdateHealthPolling(['/repo/a'])).not.toThrow();
     expect(store.getState().updateServiceHealth).toEqual({});
   });
+
+  function manifestWithHealth(): ManifestPort {
+    return {
+      load: vi.fn(async (repoPath: string) =>
+        ok({ service: `svc-${repoPath.split('/').pop()}`, container: `ctr-${repoPath.split('/').pop()}`, healthUrl: 'http://svc/health', sharedBranch: 'development', modules: {} }),
+      ),
+    };
+  }
+
+  it('resolves health-first: a running container whose route fails reads unhealthy', async () => {
+    const probe = vi.fn(async () => ok({ healthy: false, reason: 'timeout' }));
+    const store = createAppStore(fakeDeps({ docker: fakeDocker(vi.fn(async () => ok('up' as const))), manifest: manifestWithHealth(), healthProbe: { probe } }));
+
+    store.getState().startUpdateHealthPolling(['/repo/a']);
+    await flushPolls();
+
+    expect(probe).toHaveBeenCalledWith('http://svc/health', expect.any(Number));
+    expect(store.getState().updateServiceHealth['/repo/a']).toBe('unhealthy');
+    store.getState().stopUpdateHealthPolling();
+  });
+
+  it('skips a tick while the previous probe for that repo is still awaiting', async () => {
+    vi.useFakeTimers();
+    try {
+      const probe = vi.fn(() => new Promise<never>(() => {}));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(vi.fn(async () => ok('up' as const))), manifest: manifestWithHealth(), healthProbe: { probe } }));
+      store.setState({ updateServiceHealth: { '/repo/a': 'up' } });
+
+      store.getState().startUpdateHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(UPDATE_HEALTH_POLL_INTERVAL_MS * 3);
+
+      expect(probe).toHaveBeenCalledTimes(1);
+      expect(store.getState().updateServiceHealth['/repo/a']).toBe('up');
+      store.getState().stopUpdateHealthPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // The pre-run configuration screen's store state — opening pre-scoped to the trigger,
