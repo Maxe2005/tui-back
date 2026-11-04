@@ -5,12 +5,11 @@ import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { formatHint } from '../../shared/components/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
-import { useElementSize } from '../../shared/hooks/use-element-size.js';
+import { ScrollableOutput } from '../../shared/components/scrollable-output.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { LogsPaneData } from '../../store/app-store.js';
 import {
-  computeLineRowCount,
   formatHealthLabel,
   formatLogFilterSpec,
   formatLogLine,
@@ -19,7 +18,6 @@ import {
   isRestartingDisplay,
   resolveEffectiveLines,
   restartHintVerb,
-  sliceVisibleWindow,
   type LogFilterSpec,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
@@ -50,13 +48,7 @@ export function LogsPaneView({
   ownFilter: LogFilterSpec | null;
   restartMode?: RestartMode;
 }) {
-  const [contentRef, measuredSize] = useElementSize();
-  const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
-  const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
   const lines = resolveEffectiveLines(pane, visibility, globalFilter, engaged, ownFilter);
-  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
-    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
-  );
   // A pane whose buffered lines the stdout/stderr toggles or filters hide entirely must read
   // differently from "no lines have arrived yet" — otherwise a user who toggled off both streams,
   // or set an aggressive filter, is misleadingly told the stream itself is empty.
@@ -108,22 +100,24 @@ export function LogsPaneView({
         <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
       ) : null}
       {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
-      <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
-        {windowLines.length === 0 && !pane?.streamError ? (
-          noContainer ? (
+      <ScrollableOutput
+        lines={lines}
+        offset={pane?.scrollOffset ?? 0}
+        wrap={wrapLines}
+        fallbackRows={visibleLines}
+        fallbackWidth={contentWidth}
+        format={(line) => formatLogLine(line, visibility.showTimestamps)}
+        color={(line) => (line.stream === 'stderr' ? colors.error : colors.text)}
+        placeholder={
+          pane?.streamError ? null : noContainer ? (
             <StateLine kind="empty" subject="logs" text="No container — no logs" />
           ) : allLinesHiddenByFilters ? (
             <StateLine kind="empty" subject="lines" text="All lines hidden by filters" />
           ) : (
             <StateLine kind="loading" verb="Waiting for" subject="logs" />
           )
-        ) : null}
-        {windowLines.map((line, index) => (
-          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>
-            {formatLogLine(line, visibility.showTimestamps)}
-          </Text>
-        ))}
-      </Box>
+        }
+      />
     </Box>
   );
 }

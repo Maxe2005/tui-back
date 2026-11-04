@@ -16,7 +16,7 @@ import type { SharedTypesStage } from '../../../../../core/shared-types/smart-up
 import type { HealthState } from '../../../../../core/ports/docker.js';
 import type { FooterContextId } from '../../keybindings/index.js';
 import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
-import { computeLineRowCount, sliceVisibleWindow } from '../logs/logs-zone.logic.js';
+import { computeLineRowCount, sliceVisibleWindow } from '../../shared/scrollable-output/index.js';
 
 // The Update zone's own closed per-service status set: a raw HealthState passthrough, plus
 // 'updating' (a run currently targets this service), 'migrating' (the run's live phase for this

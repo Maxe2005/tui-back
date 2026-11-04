@@ -853,3 +853,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-6-shared-types-ux-action-bar-and-post-publish-choice-screen.md`
   summary: `app-shell.interaction.test.tsx > AppShell reset screen (:reset) > opens only through the reset command, and Esc closes it with zero writes` fails (`RESET TOOL DATA` not in output).
   evidence: Fails at baseline 72dc5611 with the story changes stashed (1 failed / 5 passed in that file), so it predates story 9.6.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-3-shared-scrollable-output-and-fullscreen-primitive.md`
+  summary: A stored scroll offset larger than the current visible line count (e.g. stream toggle or filter applied while scrolled up) yields an empty window and a misleading "Waiting for logs" placeholder; offset is only clamped at keypress time.
+  evidence: `sliceVisibleWindow` computes `end = max(lines.length - offset, 0)` and returns [] when offset >= length; behaviour pre-dates story 9.3 (moved verbatim from logs-zone.logic.ts) and fixing it would change Logs frames, which 9.3 forbids. Terminal view (9.4) will hit the same path when its buffer is cleared.
