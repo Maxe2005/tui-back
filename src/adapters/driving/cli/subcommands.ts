@@ -20,6 +20,8 @@ import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
 import { buildDashboardSnapshot } from '../../../core/dashboard/snapshot.js';
 import { REALIGN_SCOPES, realignServices, type RealignScope } from '../../../core/realign/index.js';
+import { planHeal, runHeal } from '../../../core/heal/index.js';
+import type { RestartMode } from '../../../core/service-actions/index.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
 import type { DockerPort } from '../../../core/ports/docker.js';
 import type { EditorPort } from '../../../core/ports/editor.js';
@@ -90,6 +92,12 @@ const REALIGN_USAGE =
   ' (--scope defaults to the realign.defaultScope setting, edt out of the box: the drifted active-EDT members;' +
   ' --service adds a service to the scope; --restart defaults to the realign.restartMode setting, none out of the box;' +
   ' exit 1 when a service fails or a restarted service ends failed, down or unhealthy)';
+const HEAL_USAGE =
+  'tui-back heal [--restart simple|clean]' +
+  ' (restarts every active-EDT service that is down or unhealthy and declares a container, then verifies it;' +
+  ' --restart defaults to the dashboard.restartMode setting, simple out of the box;' +
+  ' exit 1 when a restarted service ends failed, down or unhealthy)';
+const HEAL_RESTART_MODES: readonly RestartMode[] = ['simple', 'clean'];
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
 const REGISTRY_VALIDATE_USAGE = 'tui-back registry validate';
@@ -331,6 +339,11 @@ export function buildSubcommands(deps: {
       name: 'realign',
       usage: REALIGN_USAGE,
       run: async (args) => runRealign(deps, args),
+    },
+    {
+      name: 'heal',
+      usage: HEAL_USAGE,
+      run: async (args) => runHealCommand(deps, args),
     },
     {
       name: 'registry',
@@ -1146,6 +1159,104 @@ async function runRealign(
     return err('realign-restart-needs-attention', 'The realign succeeded, but the restart failed or a restarted service ended failed, down or unhealthy', data);
   }
   return ok(data);
+}
+
+// `heal`: the flag is validated before anything is read or restarted. No confirmation prompt —
+// the CLI caller asked for it. The data lists the targets, the skipped services with their
+// reason and one restart row per target.
+async function runHealCommand(
+  deps: {
+    manifest: ManifestPort;
+    lock: LockPort;
+    state: StatePort;
+    edtRegistry: EdtRegistryPort;
+    settings: SettingsPort;
+    container: ContainerPort;
+    restart: RestartPort;
+    docker: DockerPort;
+    editor?: EditorPort;
+    healthProbe?: HealthProbePort;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  let restartFlag: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1]?.trim();
+    if (flag !== '--restart') {
+      return err('invalid-argument', `Unknown heal option: "${flag}". Usage: ${HEAL_USAGE}`);
+    }
+    if (value === undefined || value === '' || value.startsWith('--')) {
+      return err('invalid-argument', `Missing value for --restart. Usage: ${HEAL_USAGE}`);
+    }
+    if (restartFlag !== undefined) {
+      return err('invalid-argument', `--restart may only be given once. Usage: ${HEAL_USAGE}`);
+    }
+    restartFlag = value;
+    i += 1;
+  }
+  if (restartFlag !== undefined && !(HEAL_RESTART_MODES as readonly string[]).includes(restartFlag)) {
+    return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected simple or clean. Usage: ${HEAL_USAGE}`);
+  }
+  if (deps.healthProbe === undefined) {
+    return err('restart-unavailable', 'Heal needs the health-probe port, which is not wired — nothing was restarted');
+  }
+
+  // A load failure or warning goes to stderr and the built-in defaults apply.
+  const loaded = await deps.settings.load();
+  if (!loaded.ok) {
+    console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+  } else if (loaded.data.warning !== null) {
+    console.error(`tui-back: ${loaded.data.warning}`);
+  }
+  const settings = loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
+  const mode = (restartFlag ?? settings.dashboard.restartMode) as RestartMode;
+
+  const plan = await planHeal({
+    state: deps.state,
+    edtRegistry: deps.edtRegistry,
+    manifest: deps.manifest,
+    docker: deps.docker,
+    healthProbe: deps.healthProbe,
+  });
+  if (!plan.ok) {
+    return plan;
+  }
+  const report = await runHeal({
+    plan: plan.data,
+    mode,
+    concurrency: settings.update.concurrency,
+    lock: deps.lock,
+    serviceActions: createServiceActions({
+      manifest: deps.manifest,
+      container: deps.container,
+      restart: deps.restart,
+      // Never used by restart/verify, but the registry's deps are complete.
+      editor: deps.editor ?? { launch: () => err('editor-launch-failed', 'No editor is wired in the CLI') },
+      lock: deps.lock,
+      docker: deps.docker,
+      healthProbe: deps.healthProbe,
+    }),
+  });
+  if (!report.ok) {
+    return report;
+  }
+
+  const { edt, rows, summary, message } = report.data;
+  const data = {
+    edt,
+    mode: report.data.mode,
+    targets: plan.data.rows.filter((row) => row.phase === 'pending').map((row) => row.service),
+    skipped: plan.data.rows.filter((row) => row.phase === 'skipped').map((row) => ({ service: row.service, reason: row.skipReason })),
+    restart: rows
+      .filter((row) => row.phase !== 'skipped')
+      .map((row) => ({ service: row.service, state: row.phase, ...(row.detail !== undefined ? { detail: row.detail } : {}) })),
+    summary,
+    ...(message !== undefined ? { message } : {}),
+  };
+  return restartNeedsAttention(summary)
+    ? err('heal-needs-attention', 'A restarted service ended failed, down or unhealthy', data)
+    : ok(data);
 }
 
 // Hand-rolled flag parsing for `edt modify`: the wrapper owns flag syntax (unknown options,
