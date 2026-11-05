@@ -284,7 +284,12 @@ describe('service actions openInIde', () => {
 });
 
 describe('service actions verifyService', () => {
-  function verifySetup(manifest: Partial<Manifest>, healthSeq: ('up' | 'down' | 'restarting' | 'unavailable')[], probeSeq: { healthy: boolean; reason?: string }[] = []) {
+  function verifySetup(
+    manifest: Partial<Manifest>,
+    healthSeq: ('up' | 'down' | 'restarting' | 'unavailable')[],
+    probeSeq: { healthy: boolean; reason?: string }[] = [],
+    extra: { isHealthCheckEnabled?: (m: Manifest) => boolean; noProbe?: boolean } = {},
+  ) {
     let t = 0;
     const clock = { now: () => t, sleep: vi.fn(async (ms: number) => { t += ms; }) };
     let h = 0;
@@ -304,7 +309,8 @@ describe('service actions verifyService', () => {
       editor: base.editor,
       lock: base.lock,
       docker: docker as never,
-      healthProbe,
+      ...(extra.noProbe === true ? {} : { healthProbe }),
+      ...(extra.isHealthCheckEnabled === undefined ? {} : { isHealthCheckEnabled: extra.isHealthCheckEnabled }),
       clock,
     });
     return { actions, docker, healthProbe, clock };
@@ -394,6 +400,22 @@ describe('service actions verifyService', () => {
     const { actions } = verifySetup({ container: 'api' }, ['restarting', 'restarting', 'unavailable']);
     const result = await actions.verifyService('/r');
     expect(!result.ok && result.error.code).toBe('docker-unavailable');
+  });
+
+  it('never probes a service whose health check is disabled: a started container is up-unverified (story 9.11)', async () => {
+    const off = { isHealthCheckEnabled: (m: Manifest) => m.service !== 'api' };
+    const { actions, healthProbe } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['up'], [{ healthy: false, reason: 'HTTP 503' }], off);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'up-unverified' } });
+    expect(healthProbe.probe).not.toHaveBeenCalled();
+  });
+
+  it('a disabled health check needs no wired probe: no verification-unavailable (story 9.11)', async () => {
+    const off = { isHealthCheckEnabled: () => false, noProbe: true };
+    const { actions } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['up'], [], off);
+    expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'up-unverified' } });
+    const enabledNoProbe = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['up'], [], { noProbe: true });
+    const result = await enabledNoProbe.actions.verifyService('/r');
+    expect(!result.ok && result.error.code).toBe('verification-unavailable');
   });
 
   it('rejects a blank repoPath', async () => {

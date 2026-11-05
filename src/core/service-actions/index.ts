@@ -14,7 +14,7 @@ import type { RestartPort } from '../ports/restart.js';
 import { err, ok, type Result } from '../result.js';
 import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update.js';
 import { serviceRestartLockKey } from '../scripts/service-restart.js';
-import { DEFAULT_PROBE_REASON, combineStatus, hasContainer, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
+import { DEFAULT_PROBE_REASON, combineStatus, hasContainer, isProbeEnabled, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
 
 export type RestartMode = 'simple' | 'clean';
 
@@ -63,6 +63,9 @@ export interface ServiceActionsDeps {
   // container terminal's availability; without it that entry reads `container state unknown`.
   docker?: DockerPort;
   healthProbe?: HealthProbePort;
+  // The local per-service health-check toggle, read at call time — the same dependency the
+  // status resolver takes (`ServiceStatusDeps.isHealthCheckEnabled`). Absent = enabled.
+  isHealthCheckEnabled?: (manifest: Manifest) => boolean;
   // Test seams for the verification poll: defaults are the wall clock and a real timer.
   clock?: { now(): number; sleep(ms: number): Promise<void> };
 }
@@ -286,7 +289,10 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
       if (!hasContainer(loaded.data) || containerName === undefined) {
         return err('no-container', `Repo ${repoPath} declares no container — nothing to verify`);
       }
-      if (healthUrl !== undefined && healthProbe === undefined) {
+      // A health check turned off locally verifies on the container alone, exactly as the status
+      // resolver does: the route is never probed and no probe needs to be wired.
+      const probeEnabled = isProbeEnabled(deps, loaded.data);
+      if (probeEnabled && healthUrl !== undefined && healthProbe === undefined) {
         return err('verification-unavailable', 'No health probe is wired — cannot verify the declared healthUrl');
       }
       const deadline = clock.now() + VERIFY_TIMEOUT_MS;
@@ -297,7 +303,7 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
         // Each attempt is decided by the AD-23 table: the same rule every status view uses.
         const remaining = Math.max(1, deadline - clock.now());
         const [probe, container] = await Promise.all([
-          healthUrl === undefined || healthProbe === undefined
+          !probeEnabled || healthUrl === undefined || healthProbe === undefined
             ? Promise.resolve<ProbeReading>({ kind: 'none' })
             : readProbe({ healthProbe }, loaded.data, Math.min(HEALTH_PROBE_TIMEOUT_MS, remaining)),
           readContainer({ docker }, loaded.data),
