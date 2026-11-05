@@ -1501,6 +1501,7 @@ describe('AppShell settings screen (:settings)', () => {
       await press(instance, stdin, KEYS.up);
       await press(instance, stdin, KEYS.space);
       expect(store.getState().settings.services.healthCheckDisabled).toEqual([]);
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ services: { healthCheckDisabled: [] } }));
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

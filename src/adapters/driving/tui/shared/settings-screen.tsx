@@ -781,10 +781,11 @@ export function SettingsScreen({
       if (step.type === 'move') {
         setServicesCursor(step.cursor);
       } else if (step.type === 'toggle') {
-        // Checked = enabled, so the stored list holds the unchecked ones; persisted at once.
-        void updateSettings({
-          services: { healthCheckDisabled: toggleHiddenHint(settings.services.healthCheckDisabled, step.service) },
-        });
+        // Checked = enabled, so the stored list holds the unchecked ones; persisted at once. Read
+        // from the live store, not this render's snapshot: two quick presses before a re-render
+        // must each toggle on top of the previous one.
+        const disabled = useStore.getState().settings.services.healthCheckDisabled;
+        void updateSettings({ services: { healthCheckDisabled: toggleHiddenHint(disabled, step.service) } });
       }
       return;
     }
