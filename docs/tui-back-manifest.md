@@ -351,6 +351,23 @@ update:
 - Le TUI initialise l'écran de configuration pré-run avec ces valeurs ; les changements faits dans l'écran ne sont jamais réécrits dans `settings.yaml`. `mergeSource: edt-pending` ouvre la source de merge sur « From EDT » (aucun EDT choisi) uniquement dans l'écran EDT.
 - La CLI (`tui-back update`) utilise `runMigrations` et `cleanRestart` de `settings.yaml` ; **elle ignore `mergeSource`** (utiliser `--from-edt <topic>`). Les flags explicites l'emportent : `--migrations` / `--no-migrations` et `--clean-restart` / `--no-clean-restart` (un flag et sa négation ensemble : `invalid-argument`). Si `settings.yaml` est illisible ou invalide, un avertissement est écrit sur stderr et les défauts intégrés s'appliquent.
 
+### Mode de redémarrage du heal (`dashboard.restartMode`)
+
+```yaml
+dashboard:
+  restartMode: simple   # simple | clean — défaut : simple
+```
+
+- Mode utilisé par le heal (action Dashboard et `tui-back heal`) quand `--restart` est absent.
+  `clean` lance la recette `restartCommands` du manifeste et retombe sur un redémarrage simple
+  quand aucune recette n'est déclarée.
+- Éditable dans `:settings`, onglet **EDTs**, groupe « Heal restart mode » (Gauche/Droite/Espace
+  basculent entre `simple` et `clean`). Jamais réécrit par un run.
+- Groupe optionnel. Une **valeur** inconnue de `restartMode` retombe silencieusement sur `simple`,
+  sans toucher au reste du fichier. Une **clé** inconnue sous `dashboard:` invalide en revanche
+  tout le fichier, comme pour tout autre groupe : tous les défauts s'appliquent, avec un
+  avertissement.
+
 ## Exemple complet — service `api-gateway` avec `route-explorer`
 
 ```yaml
@@ -442,6 +459,60 @@ calculé à partir de `healthUrl` et du conteneur selon le tableau ci-dessus :
 - Quand le statut ne peut pas être calculé (manifeste illisible, ou Docker en erreur sans sonde
   2xx), `status` vaut `{ "ok": false, "error": { "code", "message" } }`. Quand Docker et la
   sonde ont tous deux échoué, `error.details.probeReason` porte la raison de la sonde.
+
+## CLI `heal` — JSON
+
+`tui-back heal [--restart simple|clean]` redémarre, puis vérifie, chaque service de l'EDT actif
+dont le statut (tableau ci-dessus, le même que `tui-back dashboard`) est `down` ou `unhealthy` et
+qui déclare un `container`. Aucune confirmation n'est demandée. `--restart` retombe sur
+`dashboard.restartMode` ; les services sont traités `update.concurrency` à la fois. Un service
+listé dans `services.healthCheckDisabled` n'est jamais sondé, ni au calcul des cibles ni à la
+vérification après redémarrage : il n'est donc jamais ciblé comme `unhealthy`. L'enveloppe
+est l'enveloppe standard :
+
+```json
+{
+  "ok": true,
+  "data": {
+    "edt": { "ulid": "01J…", "topic": "feature-x" },
+    "mode": "simple",
+    "targets": ["orders-api"],
+    "skipped": [
+      { "service": "api-gateway", "reason": "up" },
+      { "service": "shared-types", "reason": "no container" }
+    ],
+    "restart": [{ "service": "orders-api", "state": "functional" }],
+    "summary": { "functional": 1, "up-unverified": 0, "unhealthy": 0, "restarting": 0, "down": 0, "failed": 0, "skipped": 2 }
+  }
+}
+```
+
+- `targets` : les services redémarrés, dans l'ordre des membres de l'EDT.
+- `skipped[].reason` : `up` (déjà fonctionnel), `already restarting` (conteneur en cours de
+  redémarrage), `inconsistent` (route 2xx mais conteneur arrêté), `no container` (aucun
+  conteneur déclaré, y compris un service `down` décidé par sa seule `healthUrl`),
+  `status unknown` (statut impossible à calculer : manifeste illisible, Docker et la sonde en
+  échec, ou `repoPath` vide dans le registre des EDT).
+- `skipped[].detail` (optionnel) : la cause d'un `status unknown` (message d'erreur du calcul du
+  statut).
+- `restart[]` : une ligne par cible (les lignes non vertes d'abord), avec `state` parmi
+  `functional | up-unverified | unhealthy | restarting | down | failed` et un `detail`
+  optionnel (raison de l'état, message d'échec, ou notice « pas de recette clean »).
+- Verrous : avant chaque redémarrage, le verrou de redémarrage du service, celui de la mise à
+  jour de groupe et celui de mise à jour/switch de l'EDT actif sont vérifiés. Un verrou tenu met
+  **cette ligne** en `failed` avec `detail` `<nom du verrou> in progress` (`service restart`,
+  `group update`, `EDT update/switch`) ; les autres cibles sont tout de même traitées.
+- Aucune cible : `ok`, `targets` et `restart` vides, et `message: "every service is up"`.
+- Code de sortie : `1` dès qu'une cible finit `failed`, `down` ou `unhealthy`, avec l'erreur
+  `heal-needs-attention` dont `error.details` porte les mêmes données complètes ; `0` sinon
+  (cibles `functional`, `up-unverified`, ou encore `restarting` à la fin de la vérification).
+- Autres erreurs (code de sortie `1`) :
+  - `invalid-argument` : valeur de `--restart` inconnue, option inconnue, valeur manquante ou
+    flag répété — rien n'est lu ni redémarré ;
+  - `restart-unavailable` : sonde de santé non câblée ;
+  - `no-active-edt` : aucun EDT actif, ou l'ulid actif est inconnu du registre des EDT ;
+  - erreurs de lecture de l'état ou du registre des EDT, renvoyées telles quelles ;
+  - `heal-plan-failed` / `heal-failed` : échec inattendu pendant le plan ou le run.
 
 ## Erreurs de chargement possibles
 

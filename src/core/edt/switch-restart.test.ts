@@ -7,6 +7,7 @@ import {
   orderRestartRows,
   restartAfterSwitch,
   restartNeedsAttention,
+  runRestartRows,
   type RestartRow,
   type SwitchRestartRepo,
 } from './switch-restart.js';
@@ -189,5 +190,110 @@ describe('report helpers', () => {
         { service: '/r/bad', repoPath: '/r/bad', hasContainer: false },
       ],
     });
+  });
+});
+
+describe('runRestartRows', () => {
+  const pendingRows: RestartRow[] = [
+    { service: 'api', repoPath: '/r/api', phase: 'pending' },
+    { service: 'web', repoPath: '/r/web', phase: 'pending' },
+    { service: 'lib', repoPath: '/r/lib', phase: 'skipped', skipReason: 'up' },
+  ];
+
+  it('restarts and verifies only the pending rows, keeping skipped rows and their reason', async () => {
+    const serviceActions = actions();
+    const report = await runRestartRows({ rows: pendingRows, mode: 'clean', concurrency: 2, serviceActions });
+    expect(report.ok).toBe(true);
+    if (!report.ok) return;
+    expect(report.data.mode).toBe('clean');
+    expect(report.data.rows.map((row) => [row.service, row.phase, row.skipReason])).toEqual([
+      ['api', 'functional', undefined],
+      ['web', 'functional', undefined],
+      ['lib', 'skipped', 'up'],
+    ]);
+    expect(serviceActions.restart).toHaveBeenCalledTimes(2);
+    expect(serviceActions.restart).toHaveBeenCalledWith('/r/api', 'clean');
+    expect(report.data.summary).toMatchObject({ functional: 2, skipped: 1 });
+  });
+
+  it('never mutates the rows it was given', async () => {
+    const rows = pendingRows.map((row) => ({ ...row }));
+    await runRestartRows({ rows, mode: 'simple', concurrency: 1, serviceActions: actions() });
+    expect(rows).toEqual(pendingRows);
+  });
+
+  it('fails a row whose beforeRestart returns a reason, without restarting it', async () => {
+    const serviceActions = actions();
+    const seen: [string, string][] = [];
+    const report = await runRestartRows({
+      rows: pendingRows,
+      mode: 'simple',
+      concurrency: 1,
+      serviceActions,
+      onPhase: (row) => seen.push([row.service, row.phase]),
+      beforeRestart: async (row) => (row.service === 'api' ? 'group update in progress' : null),
+    });
+    expect(report.ok && report.data.rows[0]).toMatchObject({ service: 'api', phase: 'failed', detail: 'group update in progress' });
+    expect(report.ok && report.data.summary).toMatchObject({ failed: 1, functional: 1, skipped: 1 });
+    expect(serviceActions.restart).toHaveBeenCalledTimes(1);
+    expect(serviceActions.restart).toHaveBeenCalledWith('/r/web', 'simple');
+    expect(seen.filter(([service]) => service === 'api')).toEqual([['api', 'pending'], ['api', 'failed']]);
+  });
+
+  it('fails the row when beforeRestart throws, never rejecting', async () => {
+    const report = await runRestartRows({
+      rows: [pendingRows[0] as RestartRow],
+      mode: 'simple',
+      concurrency: 1,
+      serviceActions: actions(),
+      beforeRestart: async () => {
+        throw new Error('peek exploded');
+      },
+    });
+    expect(report.ok && report.data.rows[0]).toMatchObject({ phase: 'failed', detail: 'peek exploded' });
+  });
+
+  it('rejects a mode other than simple or clean without touching anything', async () => {
+    const serviceActions = actions();
+    for (const mode of ['none', 'bogus'] as never[]) {
+      const report = await runRestartRows({ rows: pendingRows, mode, concurrency: 1, serviceActions });
+      expect(!report.ok && report.error.code).toBe('invalid-argument');
+    }
+    expect(serviceActions.restart).not.toHaveBeenCalled();
+  });
+
+  it('runs sequentially at concurrency 1 and streams pending → restarting → verifying → final per target', async () => {
+    const seen: [string, string][] = [];
+    let inFlight = 0;
+    let peak = 0;
+    const serviceActions = actions({
+      restart: async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((done) => setTimeout(done, 2));
+        inFlight -= 1;
+        return ok({});
+      },
+      verify: async () => ok({ state: 'down' as ServiceFinalState, detail: 'container is not running' }),
+    });
+    const report = await runRestartRows({
+      rows: pendingRows.slice(0, 2),
+      mode: 'simple',
+      concurrency: 1,
+      serviceActions,
+      onPhase: (row) => seen.push([row.service, row.phase]),
+    });
+    expect(peak).toBe(1);
+    expect(seen).toEqual([
+      ['api', 'pending'],
+      ['web', 'pending'],
+      ['api', 'restarting'],
+      ['api', 'verifying'],
+      ['api', 'down'],
+      ['web', 'restarting'],
+      ['web', 'verifying'],
+      ['web', 'down'],
+    ]);
+    expect(report.ok && restartNeedsAttention(report.data.summary)).toBe(true);
   });
 });

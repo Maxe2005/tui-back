@@ -891,3 +891,6 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-11-per-service-health-check-toggle.md`
   summary: The health check toggle is keyed by manifest `service` name, so two registered repos declaring the same service name (duplicate checkouts) share one checkbox state.
   evidence: Raised by the 9.11 blind and edge-case reviews. Service names are assumed unique across the registry elsewhere too; no duplicate detection exists.
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-8-heal-use-case-and-cli.md`
+  summary: Heal restarts targets from a status snapshot taken at plan time; once Story 9.9 puts a confirm overlay between `planHeal` and `runHeal`, a service that recovered meanwhile is still restarted — consider re-resolving the status in `runHeal`'s `beforeRestart` and skipping recovered rows.
+  evidence: `runHeal` (src/core/heal/index.ts) only peeks locks before each restart and never re-reads the status; the plan/run split exists precisely so a consumer can wait on the user between the two.

@@ -372,7 +372,7 @@ describe('HIDEABLE_ACTION_TYPES', () => {
 });
 
 describe('SETTINGS_GROUPS', () => {
-  it('lists exactly the six EDTs-tab settings groups, in this order', () => {
+  it('lists exactly the seven EDTs-tab settings groups, in this order', () => {
     expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual([
       'hint-visibility',
       'action-types',
@@ -380,6 +380,7 @@ describe('SETTINGS_GROUPS', () => {
       'switch-restart',
       'realign-scope',
       'realign-restart',
+      'heal-restart',
     ]);
     expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual([
       'Hint visibility',
@@ -388,6 +389,7 @@ describe('SETTINGS_GROUPS', () => {
       'Post-switch restart',
       'Realign default scope',
       'Post-realign restart',
+      'Heal restart mode',
     ]);
   });
 });
@@ -566,6 +568,15 @@ describe('SettingsScreen', () => {
     store.setState({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'edt' as const, restartMode: 'simple' as const } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="realign-restart" />);
     expect(output).toContain('Restart services after a realign: Simple restart');
+  });
+
+  it('renders the live heal restart mode with its annotation', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, dashboard: { restartMode: 'clean' as const } } });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="heal-restart" />);
+    expect(output).toContain('Restart mode for a heal: Clean restart');
+    expect(output).toContain('Dashboard heal');
+    expect(output).toContain('heal --restart');
   });
 
   it('opens the EDTs tab on its group list, not a checkbox list', async () => {
@@ -757,6 +768,7 @@ describe('settingsFooterContext', () => {
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'switch-restart' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'realign-scope' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'realign-restart' })).toBe('settings-toggle');
+    expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'heal-restart' })).toBe('settings-toggle');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'buffer-size' })).toBe('settings-adjust');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'clear-history' })).toBe('settings-run');
   });
