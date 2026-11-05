@@ -2,6 +2,7 @@
 // driven settings adapter implements. Unlike other ports' load(), a corrupt or invalid
 // settings.yaml must never block the `:settings` screen: `load()` is `ok` with every default
 // and a field-naming `warning`; only a genuine I/O error is an `err`.
+import type { Manifest } from './manifest.js';
 import type { Result } from '../result.js';
 
 export const UPDATE_MERGE_SOURCES = ['shared', 'edt-pending'] as const;
@@ -153,6 +154,13 @@ export const DEFAULT_SETTINGS: Settings = {
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' },
   services: { healthCheckDisabled: [] },
 };
+
+// The per-service health-check toggle as the status resolver and verifyService consume it
+// (`isHealthCheckEnabled`). `getSettings` is called on every check, so a caller handing a live
+// getter (the TUI store) sees a :settings change at the next resolution.
+export function healthCheckEnabledFrom(getSettings: () => Settings | null): (manifest: Manifest) => boolean {
+  return (manifest) => !(getSettings()?.services.healthCheckDisabled.includes(manifest.service) ?? false);
+}
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/
 // schema.ts, which rejects out-of-range values from a hand-edited settings.yaml) and the

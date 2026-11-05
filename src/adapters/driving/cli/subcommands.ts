@@ -25,7 +25,7 @@ import type { DockerPort } from '../../../core/ports/docker.js';
 import type { EditorPort } from '../../../core/ports/editor.js';
 import type { HealthProbePort } from '../../../core/ports/health-probe.js';
 import type { GitPort } from '../../../core/ports/git.js';
-import type { Manifest, ManifestPort } from '../../../core/ports/manifest.js';
+import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { ManifestCarryPort } from '../../../core/ports/manifest-carry.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RestartPort } from '../../../core/ports/restart.js';
@@ -34,7 +34,7 @@ import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { SavedRequestPort } from '../../../core/ports/saved-request.js';
-import { DEFAULT_SETTINGS, SWITCH_RESTART_MODES, type Settings, type SettingsPort, type SwitchRestartMode } from '../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS, SWITCH_RESTART_MODES, healthCheckEnabledFrom, type Settings, type SettingsPort, type SwitchRestartMode } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
@@ -192,19 +192,22 @@ export function buildSubcommands(deps: {
       usage: 'tui-back dashboard',
       // The Dashboard's snapshot (active EDT services with their health-first status, registry
       // health), read-only.
-      run: async (args) =>
-        args.length === 0
-          ? buildDashboardSnapshot({
-              registry: deps.registry,
-              manifest: deps.manifest,
-              git: deps.git,
-              docker: deps.docker,
-              ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
-              isHealthCheckEnabled: healthCheckToggle(await loadSettingsOrDefaults(deps.settings)),
-              edtRegistry: deps.edtRegistry,
-              state: deps.state,
-            })
-          : err('invalid-argument', 'Usage: tui-back dashboard'),
+      run: async (args) => {
+        if (args.length !== 0) {
+          return err('invalid-argument', 'Usage: tui-back dashboard');
+        }
+        const settings = await loadSettingsOrDefaults(deps.settings);
+        return buildDashboardSnapshot({
+          registry: deps.registry,
+          manifest: deps.manifest,
+          git: deps.git,
+          docker: deps.docker,
+          ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
+          isHealthCheckEnabled: healthCheckEnabledFrom(() => settings),
+          edtRegistry: deps.edtRegistry,
+          state: deps.state,
+        });
+      },
     },
     {
       name: 'edt',
@@ -978,7 +981,7 @@ async function runEdtSwitch(
     lock: deps.lock,
     docker: deps.docker,
     healthProbe: deps.healthProbe,
-    isHealthCheckEnabled: healthCheckToggle(restartSettings),
+    isHealthCheckEnabled: healthCheckEnabledFrom(() => restartSettings),
   });
   const report = await restartAfterSwitch({
     results: switched.data.results,
@@ -1091,9 +1094,10 @@ async function runRealign(
 
   let restart: Parameters<typeof realignServices>[0]['restart'];
   if (restartMode !== 'none') {
+    const realignSettings = await settings();
     restart = {
       mode: restartMode,
-      concurrency: (await settings()).update.concurrency,
+      concurrency: realignSettings.update.concurrency,
       serviceActions: createServiceActions({
         manifest: deps.manifest,
         container: deps.container,
@@ -1103,7 +1107,7 @@ async function runRealign(
         lock: deps.lock,
         docker: deps.docker,
         healthProbe: deps.healthProbe,
-        isHealthCheckEnabled: healthCheckToggle(await settings()),
+        isHealthCheckEnabled: healthCheckEnabledFrom(() => realignSettings),
       }),
     };
   }
@@ -1515,10 +1519,4 @@ async function loadSettingsOrDefaults(port: SettingsPort): Promise<Settings> {
     console.error(`tui-back: ${loaded.data.warning}`);
   }
   return loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
-}
-
-// The per-service health-check toggle the status resolver and verifyService read, over the
-// settings this command loaded.
-function healthCheckToggle(settings: Settings): (manifest: Manifest) => boolean {
-  return (manifest) => !settings.services.healthCheckDisabled.includes(manifest.service);
 }

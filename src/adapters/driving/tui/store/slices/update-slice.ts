@@ -1,6 +1,7 @@
 // tui/store/slices: the Update zone's group-update run state. Calls the same
 // core/scripts/group-update.ts use-case the CLI's `tui-back update` wraps, in-process (AD-2,
 // never by shelling out to the CLI).
+import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
 import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
 import {
@@ -385,7 +386,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             docker: deps.docker,
             ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
             // Read at every poll, so a :settings toggle applies at the next tick.
-            isHealthCheckEnabled: (manifest) => !get().settings.services.healthCheckDisabled.includes(manifest.service),
+            isHealthCheckEnabled: healthCheckEnabledFrom(() => get().settings),
           },
           repoPath,
         );

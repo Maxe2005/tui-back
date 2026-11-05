@@ -4,7 +4,7 @@
 import type { StateCreator } from 'zustand';
 import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../../../../../core/dashboard/drift.js';
 import type { RestartRow } from '../../../../../core/edt/switch-restart.js';
-import { REALIGN_SCOPES, cycleSwitchRestartMode, type RealignScope, type SwitchRestartMode } from '../../../../../core/ports/settings.js';
+import { REALIGN_SCOPES, cycleSwitchRestartMode, healthCheckEnabledFrom, type RealignScope, type SwitchRestartMode } from '../../../../../core/ports/settings.js';
 import { realignServices, type RealignOutcome, type RealignRow } from '../../../../../core/realign/index.js';
 import type { Result } from '../../../../../core/result.js';
 import { createServiceActions, type ServiceActions } from '../../../../../core/service-actions/index.js';
@@ -117,7 +117,7 @@ export function createRealignSlice(deps?: AppStoreDeps): StateCreator<AppState, 
           healthProbe: deps.healthProbe,
           // Late-bound: the registry is built before the store exists, and the toggle is read
           // live at each verification so a :settings change applies without a restart.
-          isHealthCheckEnabled: (manifest) => !(getState?.().settings.services.healthCheckDisabled.includes(manifest.service) ?? false),
+          isHealthCheckEnabled: healthCheckEnabledFrom(() => getState?.().settings ?? null),
         })
       : null;
   let getState: (() => AppState) | null = null;

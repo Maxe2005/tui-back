@@ -3,6 +3,7 @@
 // buffer itself lives in core/logs' LogsManager (one per store, in memory only); `logsPanes`
 // is a mirror kept in sync via `onUpdate` so React re-renders, never a second source of truth.
 // Also owns the persisted filter-history lists.
+import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
 import type { StateCreator } from 'zustand';
 import { createLogsManager, type LogsManager } from '../../../../../core/logs/index.js';
 import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
@@ -234,7 +235,7 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       ? {
           docker: deps.docker,
           ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
-          isHealthCheckEnabled: (manifest: Manifest) => !get().settings.services.healthCheckDisabled.includes(manifest.service),
+          isHealthCheckEnabled: healthCheckEnabledFrom(() => get().settings),
         }
       : null;
     // Shared by loadOlderLogsPane and subscribeLogsPane's startWithHistory fetch — both "fetch
