@@ -1,5 +1,5 @@
-// tui/store/slices: how the registry's action ids map onto behaviour — which restart mode an id
-// runs and which terminal it opens. One map for every consumer (Dashboard, Logs), so an id is
+// tui/store/slices: how the service-action registry's ids map onto behaviour — which restart
+// mode an id runs and which terminal it opens. Every consumer reads these maps, so an id is
 // never interpreted two ways.
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { TerminalKind } from './terminal-slice.js';
@@ -9,7 +9,7 @@ export const RESTART_MODES: Readonly<Record<string, RestartMode>> = {
   'restart-clean': 'clean',
 };
 
-// The registry's terminal entries open the Terminal overlay on the row's target.
+// The registry's terminal entries open the Terminal overlay on the service's repo or container.
 export const TERMINAL_KINDS: Readonly<Record<string, TerminalKind>> = {
   'terminal-service': 'service',
   'terminal-container': 'container',

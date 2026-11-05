@@ -244,7 +244,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'R (Logs)',
-    description: "Logs: restart the focused pane's service in the logs.restartMode mode (a clean restart without a recipe runs a simple one); an unavailable restart shows its reason on the pane",
+    description: "Logs: restart the focused pane's service (mode from settings: logs.restartMode)",
   },
   {
     keys: 'O (Logs)',
@@ -253,6 +253,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   {
     keys: 'a (Logs)',
     description: "Logs: open the focused pane's service actions menu (open in IDE, restart, clean restart, terminals), with each unavailable action's reason",
+    footer: { key: 'a', verb: 'pane actions', zones: ['logs'] },
   },
   {
     keys: 'm / a / p (Update)',
