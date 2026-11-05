@@ -19,7 +19,9 @@ export const SWITCH_RESTART_RUN_MODES: readonly SwitchRestartRunMode[] = ['none'
 // `pending → restarting → verifying → final state`; `skipped` rows never leave their phase.
 export type RestartRowPhase = 'pending' | 'restarting' | 'verifying' | ServiceFinalState | 'skipped';
 
-export type RestartSkipReason = 'unchanged' | 'no container';
+// `unchanged` / `no container` come from switch and realign; heal adds the statuses it does not
+// restart (`up`, `already restarting`, `inconsistent`) and `status unknown` (resolver error).
+export type RestartSkipReason = 'unchanged' | 'no container' | 'up' | 'already restarting' | 'inconsistent' | 'status unknown';
 
 export interface RestartRow {
   service: string;
@@ -121,14 +123,6 @@ export async function restartAfterSwitch(params: RestartAfterSwitchParams): Prom
   if (mode === 'none') {
     return err('invalid-argument', 'restartAfterSwitch needs mode simple or clean — mode none means no restart phase');
   }
-  const emit = (row: RestartRow): void => {
-    try {
-      onPhase?.({ ...row });
-    } catch {
-      // A failing observer must not break the restart run.
-    }
-  };
-
   const changed = new Set(
     changedServices ?? results.filter((result) => isChangedSwitchOutcome(result.outcome)).map((result) => result.service),
   );
@@ -142,6 +136,44 @@ export async function restartAfterSwitch(params: RestartAfterSwitchParams): Prom
     }
     return row;
   });
+  return runRestartRows({ rows, mode, concurrency, serviceActions, ...(onPhase !== undefined ? { onPhase } : {}), failureCode: 'switch-restart-failed' });
+}
+
+export interface RunRestartRowsParams {
+  // Every row the report accounts for: `pending` rows are the targets, `skipped` rows (with their
+  // `skipReason`) are reported as-is and never touched.
+  rows: readonly RestartRow[];
+  mode: RestartMode;
+  // `update.concurrency`.
+  concurrency: number;
+  serviceActions: Pick<ServiceActions, 'restart' | 'verifyService'>;
+  // Called with the updated row on every transition, and once per row up front. A throwing
+  // callback never breaks the run.
+  onPhase?: (row: RestartRow) => void;
+  // Awaited right before a target restarts: a non-null string fails that row with it as the
+  // detail (a held lock, say) and the restart is never attempted. A throwing hook fails the row.
+  beforeRestart?: (row: RestartRow) => Promise<string | null>;
+  // The error code of the (unreachable) unexpected-rejection guard.
+  failureCode?: string;
+}
+
+// The target-list entry point behind every restart phase (switch, realign, heal): restarts each
+// `pending` row through `ServiceActions.restart` at `concurrency`, verifies it through
+// `verifyService`, and returns the ordered report. Never rejects.
+export async function runRestartRows(params: RunRestartRowsParams): Promise<Result<RestartReport>> {
+  const { mode, concurrency, serviceActions, onPhase, beforeRestart } = params;
+  if (mode !== 'simple' && mode !== 'clean') {
+    return err('invalid-argument', `Unknown restart mode "${String(mode)}" — expected simple or clean`);
+  }
+  const emit = (row: RestartRow): void => {
+    try {
+      onPhase?.({ ...row });
+    } catch {
+      // A failing observer must not break the restart run.
+    }
+  };
+
+  const rows: RestartRow[] = params.rows.map((row) => ({ ...row }));
   rows.forEach(emit);
 
   const targets = rows.map((row, index) => ({ row, index })).filter((entry) => entry.row.phase === 'pending');
@@ -164,6 +196,12 @@ export async function restartAfterSwitch(params: RestartAfterSwitchParams): Prom
       },
       async (target) => {
         const { index, row } = target;
+        if (beforeRestart !== undefined) {
+          const blocked = await beforeRestart({ ...row });
+          if (blocked !== null) {
+            return fail(index, blocked);
+          }
+        }
         set(index, { phase: 'restarting' });
         const restarted = await serviceActions.restart(row.repoPath, mode);
         if (!restarted.ok) {
@@ -182,7 +220,7 @@ export async function restartAfterSwitch(params: RestartAfterSwitchParams): Prom
     );
   } catch (error) {
     // runPool never rejects; guard anyway so the never-throw invariant holds.
-    return err('switch-restart-failed', error instanceof Error ? error.message : String(error));
+    return err(params.failureCode ?? 'restart-run-failed', error instanceof Error ? error.message : String(error));
   }
 
   const ordered = orderRestartRows(rows);
