@@ -254,6 +254,27 @@ describe('heal slice', () => {
     expect(store.getState()).toMatchObject({ healScreenOpen: false, healRun: null });
   });
 
+  it('lands in the error state and releases the targets when a dep throws mid-run', async () => {
+    const { deps } = fakeDeps({ a: 'down' });
+    const { store, loadDashboard } = storeWith(deps);
+    await store.getState().openHeal();
+    // The run's pool reports a throwing restart as a failed row; a throwing settings read is
+    // outside it and reaches the slice's catch.
+    let reads = 0;
+    const settings = Object.defineProperty({ ...DEFAULT_SETTINGS }, 'update', {
+      get: () => {
+        reads += 1;
+        throw new Error('settings unreadable');
+      },
+    });
+    store.setState({ settings });
+    await store.getState().startHeal();
+    expect(reads).toBe(1);
+    expect(store.getState().healRun).toMatchObject({ status: 'error', error: 'settings unreadable' });
+    expect(store.getState().serviceRestartInFlight).toEqual({});
+    expect(loadDashboard).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses the run when a restart started while the overlay was open', async () => {
     const { deps, containerRestart } = fakeDeps({ a: 'down' });
     const { store } = storeWith(deps);

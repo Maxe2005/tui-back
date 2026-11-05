@@ -161,14 +161,15 @@ export function createHealSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
           set({ healRun: { ...run, status: 'error', error: HEAL_BUSY_MESSAGE } });
           return;
         }
-        // Claimed before the first await so a second start cannot pass the guards above.
-        set({ healRun: { ...run, status: 'running' } });
+        // Claimed in one update, before the first await, so a second start cannot pass the guards
+        // above and no restart can slip in between the run and its in-flight marks.
         const inFlightPaths = plan.rows.filter((row) => row.phase === 'pending').map((row) => row.repoPath);
         set({
+          healRun: { ...run, status: 'running' },
           serviceRestartInFlight: { ...get().serviceRestartInFlight, ...Object.fromEntries(inFlightPaths.map((path) => [path, 'restart' as const])) },
         });
         const live = new Map<string, RestartRow>();
-        let report: Result<HealReport>;
+        let report: Result<HealReport> = { ok: false, error: { code: 'heal-failed', message: 'The heal ended without a report' } };
         try {
           report = await runHeal({
             plan,
@@ -187,19 +188,21 @@ export function createHealSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
           });
         } catch (error) {
           report = { ok: false, error: { code: 'heal-failed', message: errorMessage(error) } };
+        } finally {
+          // Whatever happened above, the targets are released and the run settles.
+          const remaining = { ...get().serviceRestartInFlight };
+          for (const path of inFlightPaths) {
+            delete remaining[path];
+          }
+          const current = get().healRun ?? run;
+          set({
+            serviceRestartInFlight: remaining,
+            healRun: report.ok
+              ? { ...current, status: 'done', rows: report.data.rows, report: report.data, error: null }
+              : { ...current, status: 'error', error: report.error.message },
+          });
+          void get().loadDashboard({ queueIfBusy: true });
         }
-        const remaining = { ...get().serviceRestartInFlight };
-        for (const path of inFlightPaths) {
-          delete remaining[path];
-        }
-        set({ serviceRestartInFlight: remaining });
-        const current = get().healRun ?? run;
-        if (report.ok) {
-          set({ healRun: { ...current, status: 'done', rows: report.data.rows, report: report.data, error: null } });
-        } else {
-          set({ healRun: { ...current, status: 'error', error: report.error.message } });
-        }
-        void get().loadDashboard({ queueIfBusy: true });
       },
       closeHeal: () => {
         // Mid-run the overlay only hides: the run finishes in the background (runHeal has no
