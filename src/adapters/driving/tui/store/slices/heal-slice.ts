@@ -17,6 +17,15 @@ export const HEAL_NOTICE_TIMEOUT_MS = 5000;
 export const HEAL_BUSY_MESSAGE = 'A service restart is already in progress — wait for it to finish before healing.';
 export const HEAL_UNWIRED_MESSAGE = 'Heal needs the container, restart, Docker and health-probe ports, which are not wired — nothing was restarted.';
 
+// Heal always restarts, so it offers no `none`; the overlay steps through these in order.
+export const HEAL_MODES: readonly RestartMode[] = ['simple', 'clean'];
+
+// The mode `direction` steps away from `current`, wrapping at both ends.
+export function stepHealMode(current: RestartMode, direction: 1 | -1): RestartMode {
+  const index = Math.max(0, HEAL_MODES.indexOf(current));
+  return HEAL_MODES[(index + direction + HEAL_MODES.length) % HEAL_MODES.length]!;
+}
+
 export type HealRunStatus = 'planning' | 'confirm' | 'running' | 'done' | 'error';
 
 export type HealRun = {
@@ -37,7 +46,7 @@ export type HealSlice = {
   healRun: HealRun | null;
   healNotice: HealNotice | null;
   openHeal: () => Promise<void>;
-  toggleHealMode: () => void;
+  toggleHealMode: (direction: 1 | -1) => void;
   startHeal: () => Promise<void>;
   closeHeal: () => void;
 };
@@ -140,12 +149,12 @@ export function createHealSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
           healRun: { status: 'confirm', plan: plan.data, mode, rows: orderHealPlanRows(plan.data.rows), report: null, error: null },
         });
       },
-      toggleHealMode: () => {
+      toggleHealMode: (direction) => {
         const run = get().healRun;
         if (run?.status !== 'confirm') {
           return;
         }
-        set({ healRun: { ...run, mode: run.mode === 'simple' ? 'clean' : 'simple' } });
+        set({ healRun: { ...run, mode: stepHealMode(run.mode, direction) } });
       },
       startHeal: async () => {
         const run = get().healRun;

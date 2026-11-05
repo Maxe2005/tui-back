@@ -44,9 +44,9 @@ describe('heal dialog logic', () => {
   });
 
   it('maps the confirm keys: mode toggle, run, cancel', () => {
-    expect(resolveHealKey('', { leftArrow: true }, 'confirm')).toEqual({ type: 'toggle-mode' });
-    expect(resolveHealKey('', { rightArrow: true }, 'confirm')).toEqual({ type: 'toggle-mode' });
-    expect(resolveHealKey(' ', {}, 'confirm')).toEqual({ type: 'toggle-mode' });
+    expect(resolveHealKey('', { leftArrow: true }, 'confirm')).toEqual({ type: 'toggle-mode', direction: -1 });
+    expect(resolveHealKey('', { rightArrow: true }, 'confirm')).toEqual({ type: 'toggle-mode', direction: 1 });
+    expect(resolveHealKey(' ', {}, 'confirm')).toEqual({ type: 'toggle-mode', direction: 1 });
     expect(resolveHealKey('', { return: true }, 'confirm')).toEqual({ type: 'confirm' });
     expect(resolveHealKey('', { escape: true }, 'confirm')).toEqual({ type: 'close' });
     expect(resolveHealKey('q', {}, 'confirm')).toEqual({ type: 'ignore' });

@@ -82,7 +82,7 @@ export function HealDialog({
         onClose();
         return;
       case 'toggle-mode':
-        state.toggleHealMode();
+        state.toggleHealMode(action.direction);
         return;
       case 'confirm':
         void state.startHeal();

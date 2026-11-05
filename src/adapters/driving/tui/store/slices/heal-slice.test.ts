@@ -14,7 +14,7 @@ import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../core/ports/s
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { err, ok } from '../../../../../core/result.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
-import { HEAL_BUSY_MESSAGE, HEAL_NOTICE_TIMEOUT_MS, HEAL_UNWIRED_MESSAGE, orderHealPlanRows } from './heal-slice.js';
+import { HEAL_BUSY_MESSAGE, HEAL_NOTICE_TIMEOUT_MS, HEAL_UNWIRED_MESSAGE, orderHealPlanRows, stepHealMode } from './heal-slice.js';
 
 // Every service declares a container and a healthUrl; `health` is the container state, and the
 // route answers 2xx only while the container is up. A restart brings the container up.
@@ -165,14 +165,16 @@ describe('heal slice', () => {
     expect(deps.state.readActiveEdt).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles the mode between simple and clean without writing the settings', async () => {
+  it('steps the mode through HEAL_MODES both ways, wrapping, without writing the settings', async () => {
     const { deps, settings } = fakeDeps({ a: 'down' });
     const { store } = storeWith(deps);
     await store.getState().openHeal();
-    store.getState().toggleHealMode();
+    store.getState().toggleHealMode(1);
     expect(store.getState().healRun?.mode).toBe('clean');
-    store.getState().toggleHealMode();
+    store.getState().toggleHealMode(1);
     expect(store.getState().healRun?.mode).toBe('simple');
+    store.getState().toggleHealMode(-1);
+    expect(store.getState().healRun?.mode).toBe('clean');
     expect(store.getState().settings.dashboard.restartMode).toBe('simple');
     expect(settings.save).not.toHaveBeenCalled();
   });
@@ -321,5 +323,14 @@ describe('orderHealPlanRows', () => {
   it('puts the targets first, keeping member order in each group', () => {
     const row = (service: string, phase: RestartRow['phase']): RestartRow => ({ service, repoPath: `/r/${service}`, phase });
     expect(orderHealPlanRows([row('a', 'skipped'), row('b', 'pending'), row('c', 'skipped'), row('d', 'pending')]).map((r) => r.service)).toEqual(['b', 'd', 'a', 'c']);
+  });
+});
+
+describe('stepHealMode', () => {
+  it('steps forward and back through HEAL_MODES, wrapping at both ends', () => {
+    expect(stepHealMode('simple', 1)).toBe('clean');
+    expect(stepHealMode('clean', 1)).toBe('simple');
+    expect(stepHealMode('simple', -1)).toBe('clean');
+    expect(stepHealMode('clean', -1)).toBe('simple');
   });
 });

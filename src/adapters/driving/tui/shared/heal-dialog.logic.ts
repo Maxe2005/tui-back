@@ -2,12 +2,10 @@
 // and the footer context. The component only feeds raw Ink keys here and dispatches the result to
 // the store's heal slice.
 import type { RestartRow } from '../../../../core/edt/switch-restart.js';
-import type { RestartMode } from '../../../../core/service-actions/index.js';
 import type { FooterContextId } from '../keybindings/index.js';
 import type { HealRun } from '../store/app-store.js';
 
-// Heal always restarts: the selector offers no `none`.
-export const HEAL_MODES: readonly RestartMode[] = ['simple', 'clean'];
+export { HEAL_MODES } from '../store/slices/heal-slice.js';
 
 export const HEAL_CONFIRM_CLOSE_TEXT = 'The heal is still running — Enter closes this view and lets it finish in the background, Esc keeps it open.';
 
@@ -37,7 +35,7 @@ export type HealKey = {
 export type HealAction =
   | { type: 'ignore' }
   | { type: 'close' }
-  | { type: 'toggle-mode' }
+  | { type: 'toggle-mode'; direction: 1 | -1 }
   | { type: 'confirm' }
   | { type: 'confirm-close' }
   | { type: 'keep-open' };
@@ -55,7 +53,10 @@ export function resolveHealKey(input: string, key: HealKey, view: HealView): Hea
       if (key.return === true) {
         return { type: 'confirm' };
       }
-      return key.leftArrow === true || key.rightArrow === true || input === ' ' ? { type: 'toggle-mode' } : { type: 'ignore' };
+      if (key.leftArrow === true) {
+        return { type: 'toggle-mode', direction: -1 };
+      }
+      return key.rightArrow === true || input === ' ' ? { type: 'toggle-mode', direction: 1 } : { type: 'ignore' };
     case 'running':
       // Nothing interrupts the run; Esc only asks whether to hide it.
       return key.escape === true ? { type: 'confirm-close' } : { type: 'ignore' };
