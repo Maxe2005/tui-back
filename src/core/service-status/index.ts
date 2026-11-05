@@ -44,7 +44,7 @@ export interface ServiceStatusDeps {
   docker: Pick<DockerPort, 'getContainerHealth'>;
   // Not wired = behaves as if no `healthUrl` were declared.
   healthProbe?: HealthProbePort;
-  // The local per-service health-check toggle (`services.healthCheckDisabled`), read at call time
+  // The local per-service health-check toggle (the :settings Services tab), read at call time
   // so a change applies at the next resolution. Not wired = every health check is enabled. This
   // resolver (and `verifyService`, through `isProbeEnabled`) is the only reader of the decision.
   isHealthCheckEnabled?: (manifest: Manifest) => boolean;

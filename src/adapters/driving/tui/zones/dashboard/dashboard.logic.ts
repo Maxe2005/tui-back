@@ -149,7 +149,7 @@ export function reasonLine(service: DashboardService): string | null {
 
 export const HEALTH_CHECK_OFF_NOTE = 'health check off';
 
-// A dim note for a row whose health check is turned off locally (`services.healthCheckDisabled`).
+// A dim note for a row whose health check is turned off locally (the :settings Services tab).
 // Deliberately kept out of `reasonParts`: a disabled check is a choice, not an issue, so it never
 // raises the issue marker.
 export function healthCheckNote(service: DashboardService): string | null {
