@@ -33,7 +33,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-11-04
+last_updated: 2026-11-05
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -78,6 +78,6 @@ development_status:
   9-7-health-first-service-status-resolution: review
   9-8-heal-use-case-and-cli: backlog
   9-9-dashboard-heal-action: backlog
-  9-10-text-filter-in-the-keybinding-help: backlog
+  9-10-text-filter-in-the-keybinding-help: review
   9-11-per-service-health-check-toggle: backlog
   epic-9-retrospective: optional
