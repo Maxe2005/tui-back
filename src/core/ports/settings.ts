@@ -99,6 +99,12 @@ export interface Settings {
     defaultScope: RealignScope;
     restartMode: SwitchRestartMode;
   };
+  // The heal's restart mode (Dashboard heal and CLI `heal`): pre-selects the heal confirm
+  // overlay's mode and is the CLI's default when `--restart` is absent. Never written back from
+  // a run; read when a heal starts. Default `simple`.
+  dashboard: {
+    restartMode: 'simple' | 'clean';
+  };
   logs: {
     bufferSize: number;
     // When true, subscribing to a service's logs immediately loads its most recent history
@@ -142,6 +148,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
   switch: { restartMode: 'none' },
   realign: { defaultScope: 'edt', restartMode: 'none' },
+  dashboard: { restartMode: 'simple' },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' },
 };
 

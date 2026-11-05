@@ -139,6 +139,14 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.realign),
+    // Same optional-with-default and per-field fallback: an unknown heal mode falls back to `simple`.
+    dashboard: z
+      .object({
+        restartMode: z.enum(['simple', 'clean']).catch(DEFAULT_SETTINGS.dashboard.restartMode).optional().default(DEFAULT_SETTINGS.dashboard.restartMode),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.dashboard),
     // An invalid `logs.bufferSize` does not just reset this `logs` block: the whole top-level
     // `.strict()` object fails validation as one unit, so *every* top-level key falls back to
     // DEFAULT_SETTINGS, like any other invalid field in this schema (index.test.ts's

@@ -17,6 +17,7 @@ export type SettingsUpdate = {
   update?: Partial<Settings['update']>;
   switch?: Partial<Settings['switch']>;
   realign?: Partial<Settings['realign']>;
+  dashboard?: Partial<Settings['dashboard']>;
   sharedTypes?: Partial<Settings['sharedTypes']>;
 };
 
@@ -79,6 +80,7 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
         sharedTypes: { ...current.sharedTypes, ...partial.sharedTypes },
         switch: { ...current.switch, ...partial.switch },
         realign: { ...current.realign, ...partial.realign },
+        dashboard: { ...current.dashboard, ...partial.dashboard },
       };
       // Optimistic: applies to the live store immediately, before persistence even starts —
       // no separate save step.
