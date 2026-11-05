@@ -1,6 +1,6 @@
 // tui/shared/settings-screen: pure-function tests for every key-handling decision
 // (renderToString's fake stdin never emits keys) plus render smoke coverage of every tab body.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
@@ -817,6 +817,24 @@ describe('Services settings tab', () => {
     expect(lines.find((line) => line.includes('lib — health check'))).toContain('[-]');
     expect(lines.find((line) => line.includes('lib — health check'))).toContain('(no healthUrl)');
     expect(lines.find((line) => line.includes('broken — health check'))).toContain('(manifest unavailable)');
+  });
+
+  it('loads the service list itself when opened before any zone listed it', async () => {
+    const store = createAppStore();
+    const loadEdtsBranches = vi.fn(async () => {});
+    store.setState({ edtsBranches: null, loadEdtsBranches });
+    await renderToString(<SettingsScreen useStore={store} initialTab="services" />);
+    expect(loadEdtsBranches).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reload a service list that is already there, nor on another tab', async () => {
+    const store = createAppStore();
+    const loadEdtsBranches = vi.fn(async () => {});
+    store.setState({ edtsBranches: [branch('api', 'http://api/health')], loadEdtsBranches });
+    await renderToString(<SettingsScreen useStore={store} initialTab="services" />);
+    store.setState({ edtsBranches: null });
+    await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
+    expect(loadEdtsBranches).not.toHaveBeenCalled();
   });
 
   it('shows a non-blocking message when no services are loaded', async () => {

@@ -3,7 +3,7 @@
 // to the live store and persists immediately via `updateSettings` (no save step, no dirty
 // state). The EDTs and Logs tabs open on a group list that Enter drills into, so Esc handling
 // lives here (`onClose`): only this component knows whether Esc steps back or closes.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
@@ -617,6 +617,7 @@ export function SettingsScreen({
   const clearCommandHistory = useStore((state) => state.clearCommandHistory);
   const edtsBranches = useStore((state) => state.edtsBranches);
   const edtsErrors = useStore((state) => state.edtsErrors);
+  const loadEdtsBranches = useStore((state) => state.loadEdtsBranches);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   // The General tab's row cursor + in-progress editor-command edit (null when browsing).
@@ -649,6 +650,13 @@ export function SettingsScreen({
   const servicesRows = buildServicesSettingsRows(edtsBranches, edtsErrors);
   const [servicesCursorRaw, setServicesCursor] = useState(0);
   const servicesCursor = Math.min(servicesCursorRaw, Math.max(0, servicesRows.length - 1));
+  // The Services tab owns its data: opened before any zone listed the services, it loads them
+  // once on arrival (the slice ignores a call while a load is already in flight).
+  useEffect(() => {
+    if (tab === 'services' && useStore.getState().edtsBranches === null) {
+      void loadEdtsBranches();
+    }
+  }, [tab, useStore, loadEdtsBranches]);
 
   // Drilled in on the EDTs tab's own group, or on any Logs tab group (single-field group,
   // "Clear history"'s row list, or its "clear a service's history" sub-list) — every other
