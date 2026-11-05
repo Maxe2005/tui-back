@@ -894,3 +894,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-8-heal-use-case-and-cli.md`
   summary: Heal restarts targets from a status snapshot taken at plan time; once Story 9.9 puts a confirm overlay between `planHeal` and `runHeal`, a service that recovered meanwhile is still restarted — consider re-resolving the status in `runHeal`'s `beforeRestart` and skipping recovered rows.
   evidence: `runHeal` (src/core/heal/index.ts) only peeks locks before each restart and never re-reads the status; the plan/run split exists precisely so a consumer can wait on the user between the two.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-9-dashboard-heal-action.md`
+  summary: The app-shell Ctrl+W resize-mode gate on `realignScreenOpen` has no test asserting `resizeMode` stays null while the realign overlay is open.
+  evidence: `app-shell.interaction.test.tsx` only tests Ctrl+W under the command bar overlay (≈L2248); removing `!realignScreenOpen` from the resize-mode condition in `app-shell.tsx` leaves every test green (found by the 9.9 verification-gap review, pre-existing).
