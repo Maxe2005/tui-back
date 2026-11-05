@@ -3140,3 +3140,57 @@ describe('AppShell realign overlay', () => {
     }
   });
 });
+
+describe('AppShell heal overlay', () => {
+  const rows = [
+    { service: 'svc-a', repoPath: '/repo/a', phase: 'pending' as const },
+    { service: 'svc-b', repoPath: '/repo/b', phase: 'skipped' as const, skipReason: 'up' as const },
+  ];
+
+  it('mounts while open, owns every key, and Esc closes it', async () => {
+    const store = createAppStore();
+    store.setState({
+      healScreenOpen: true,
+      healRun: { status: 'confirm', plan: { edt: { ulid: 'e1', topic: 'demo' }, rows }, mode: 'simple', rows, report: null, error: null },
+    });
+    const onQuit = vi.fn();
+    const stdout = new FakeTtyStdout();
+    const stdin = fakeInteractiveTtyStdin();
+    const instance = render(createElement(AppShell, { useStore: store, onQuit }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('HEAL');
+      const zoneBefore = store.getState().activeZone;
+      for (const key of ['e', 'u', ':', '?', 'q', KEYS.ctrlW]) {
+        await press(instance, stdin, key);
+      }
+      expect(store.getState().activeZone).toBe(zoneBefore);
+      expect(store.getState()).toMatchObject({ commandBarOpen: false, helpOpen: false, healScreenOpen: true, quitRequested: false, resizeMode: null });
+      expect(onQuit).not.toHaveBeenCalled();
+      await pressEscape(instance, stdin);
+      expect(store.getState()).toMatchObject({ healScreenOpen: false, healRun: null });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('renders the heal notice when no overlay opened', async () => {
+    const store = createAppStore();
+    store.setState({ healNotice: { message: 'every service is up', tone: 'success' } });
+    const { instance, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('every service is up');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});

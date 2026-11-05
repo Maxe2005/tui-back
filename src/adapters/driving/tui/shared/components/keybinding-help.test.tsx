@@ -102,6 +102,15 @@ describe('KeybindingHelp modal', () => {
     expect(output).toContain('Open the keybinding-help screen');
   });
 
+  it('lists the Dashboard heal key with its description', async () => {
+    const store = createAppStore();
+    store.getState().openHelp();
+    store.setState({ helpFilter: 'heal' });
+    const output = await renderToString(<KeybindingHelp useStore={store} />, { columns: 160, rows: 40 });
+    expect(output).toContain('[H (Dashboard)]');
+    expect(output).toContain('Dashboard: heal — restart services that are not up, after confirmation');
+  });
+
   it('renders only the visible slice of keybindings', async () => {
     const store = createAppStore();
     store.getState().openHelp();

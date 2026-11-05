@@ -203,6 +203,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     footer: { key: 'A', verb: 'realign', zones: ['dashboard'], when: 'drift' },
   },
   {
+    keys: 'H (Dashboard)',
+    description: 'Dashboard: heal — restart services that are not up, after confirmation',
+    footer: { key: 'H', verb: 'heal', zones: ['dashboard'], when: 'active-edt' },
+  },
+  {
     keys: 'E (Dashboard)',
     description: 'Dashboard: enter the active EDT in the EDTs zone (e opens the EDT quick-pick, or the create wizard when none exists)',
     footer: { key: 'E', verb: 'enter EDT', zones: ['dashboard'], when: 'active-edt' },

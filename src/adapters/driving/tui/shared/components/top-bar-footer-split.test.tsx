@@ -117,6 +117,14 @@ describe('footerHintsFor', () => {
     expect(footerHintsFor('edts')).not.toContain('[E] enter EDT');
   });
 
+  it('shows [H] heal on the Dashboard only with an active EDT, without colliding with other keys', () => {
+    expect(footerHintsFor('dashboard')).toContain('[H] heal');
+    expect(footerHintsFor('dashboard', { activeEdt: false })).not.toContain('[H] heal');
+    expect(footerHintsFor('edts')).not.toContain('[H] heal');
+    const keys = footerHintsFor('dashboard').map((hint) => hint.slice(1, hint.indexOf(']')));
+    expect(keys.filter((key) => key === 'H')).toHaveLength(1);
+  });
+
   it('useFooterItems follows the Dashboard snapshot', async () => {
     const store = createAppStore();
     const empty = await renderToString(<Footer zone="dashboard" useStore={store} />);

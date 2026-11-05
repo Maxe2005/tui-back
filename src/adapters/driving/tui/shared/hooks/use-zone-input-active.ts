@@ -1,5 +1,5 @@
 // tui/shared/hooks: the one predicate every zone's key handler is gated on. An open overlay
-// (command bar, registry/settings/reset screen, realign dialog, terminal, help panel) or Ctrl+W resize-mode is the sole
+// (command bar, registry/settings/reset screen, realign/heal dialog, terminal, help panel) or Ctrl+W resize-mode is the sole
 // consumer of keys — Ink dispatches each keypress to every mounted handler, so zones go inert.
 // A new overlay is registered here and nowhere else.
 import { useAppStore, type AppStore, type AppState } from '../../store/app-store.js';
@@ -7,7 +7,7 @@ import { useAppStore, type AppStore, type AppState } from '../../store/app-store
 export function isZoneInputActive(
   state: Pick<
     AppState,
-    'commandBarOpen' | 'registryScreenOpen' | 'settingsScreenOpen' | 'resetScreenOpen' | 'realignScreenOpen' | 'terminalOpen' | 'helpOpen' | 'resizeMode'
+    'commandBarOpen' | 'registryScreenOpen' | 'settingsScreenOpen' | 'resetScreenOpen' | 'realignScreenOpen' | 'healScreenOpen' | 'terminalOpen' | 'helpOpen' | 'resizeMode'
   >,
 ): boolean {
   return (
@@ -16,6 +16,7 @@ export function isZoneInputActive(
     !state.settingsScreenOpen &&
     !state.resetScreenOpen &&
     !state.realignScreenOpen &&
+    !state.healScreenOpen &&
     !state.terminalOpen &&
     !state.helpOpen &&
     state.resizeMode === null

@@ -37,6 +37,7 @@ import { RepoRegistryScreen } from '../repo-registry-screen.js';
 import { SettingsScreen } from '../settings-screen.js';
 import { RealignDialog } from '../realign-dialog.js';
 import { TerminalView } from '../terminal-view.js';
+import { HealDialog } from '../heal-dialog.js';
 
 export const LONG_TEXT = 'x'.repeat(5000);
 export const MULTILINE_ERROR = `first line of a failure\n${'\u001b[31mred\u001b[0m '.repeat(40)}\nthird line ${LONG_TEXT}`;
@@ -305,6 +306,15 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'shared/realign-run', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
   { id: 'shared/realign-run-failed', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
   { id: 'shared/realign-error', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
+  { id: 'shared/heal-confirm', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('confirm') }) },
+  { id: 'shared/heal-running', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('running') }) },
+  {
+    id: 'shared/heal-confirm-close',
+    file: 'shared/heal-dialog.tsx',
+    render: () => createElement(HealDialog, { useStore: healStore('running'), initial: { confirmingClose: true } }),
+  },
+  { id: 'shared/heal-done', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('done') }) },
+  { id: 'shared/heal-error', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('error') }) },
   { id: 'shared/terminal-idle', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore() }) },
   { id: 'shared/terminal-running', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
   { id: 'shared/terminal-fullscreen', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
@@ -402,5 +412,33 @@ function realignRunStore(error: string | null = null) {
 function realignErrorStore() {
   const s = store();
   s.setState({ realignScreenOpen: true, realignCandidates: { status: 'error', rows: [], error: MULTILINE_ERROR } } as never);
+  return s;
+}
+
+// 200 adversarial services: every other one a target, the rest skipped with a long detail; live
+// or final phases by status, a huge topic and a multi-line error.
+function healStore(status: 'confirm' | 'running' | 'done' | 'error') {
+  const s = store();
+  const planRows = services.map((svc, i) =>
+    i % 2 === 0
+      ? { service: svc.service, repoPath: svc.path, phase: 'pending' as const }
+      : { service: svc.service, repoPath: svc.path, phase: 'skipped' as const, skipReason: 'status unknown' as const, detail: MULTILINE_ERROR },
+  );
+  const phases = ['restarting', 'verifying', 'functional', 'unhealthy', 'down', 'failed'] as const;
+  const rows =
+    status === 'confirm' || status === 'error'
+      ? planRows
+      : planRows.map((row, i) => (row.phase === 'pending' ? { ...row, phase: phases[i % phases.length]!, detail: MULTILINE_ERROR } : row));
+  s.setState({
+    healScreenOpen: true,
+    healRun: {
+      status,
+      plan: { edt: { ulid: edt.ulid, topic: edt.topic }, rows: planRows },
+      mode: 'clean',
+      rows,
+      report: null,
+      error: status === 'error' ? MULTILINE_ERROR : null,
+    },
+  } as never);
   return s;
 }

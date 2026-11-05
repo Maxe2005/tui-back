@@ -154,6 +154,26 @@ describe('DashboardZone interaction', () => {
     }
   });
 
+  it('H opens the heal overlay, and is ignored while an overlay owns the keyboard', async () => {
+    const { store } = seedServices();
+    const openHeal = vi.fn(async () => {});
+    const openRealignScreen = vi.fn();
+    store.setState({ openHeal, openRealignScreen });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'H');
+      expect(openHeal).toHaveBeenCalledTimes(1);
+      expect(openRealignScreen).not.toHaveBeenCalled();
+      store.setState({ healScreenOpen: true });
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'H');
+      expect(openHeal).toHaveBeenCalledTimes(1);
+    } finally {
+      instance.unmount();
+    }
+  });
+
   it('offers [A] realign in the Attention header only when a line is a drift', async () => {
     const { store } = seedServices();
     const services = store.getState().dashboardServices!;
