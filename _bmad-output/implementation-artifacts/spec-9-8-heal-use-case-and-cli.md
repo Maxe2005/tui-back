@@ -2,7 +2,7 @@
 title: 'Heal Use-Case & CLI — Restart Services That Are Not Up'
 type: 'feature'
 created: '2026-11-05'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '2fa5781b2748fa9f05ffaafc553ec6fd3bb261ff'
 review_loop_iteration: 0
 context:
@@ -69,12 +69,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/core/edt/switch-restart.ts` (+ test) -- extract `runRestartRows` with an optional `beforeRestart(row) => Promise<string | null>` (non-null fails the row with that detail). Widen `RestartSkipReason` with `up | already restarting | inconsistent | status unknown`. Add new tests for `runRestartRows`; existing tests stay unchanged.
-- [ ] `src/core/heal/index.ts` (+ `index.test.ts`) -- `planHeal({state, edtRegistry, manifest, docker, healthProbe?})` returns `Result<HealPlan>`, where `HealPlan = {edt:{ulid,topic}, rows: RestartRow[]}` with targets `pending` and the rest `skipped` with their reason. `runHeal({plan, mode, concurrency, serviceActions, lock, onPhase?})` returns `Result<HealReport>`, where `HealReport = RestartReport & {edt, message?}` and `message` is `every service is up` when there are no targets. Unit-test every matrix row.
-- [ ] `src/core/ports/settings.ts`, `src/adapters/driven/settings/schema.ts` (+ tests) -- `dashboard: { restartMode: 'simple' | 'clean' }`, default `simple`.
-- [ ] `src/adapters/driving/tui/shared/settings-screen.tsx` (+ test) -- EDTs-tab group `heal-restart` ("Heal restart mode"): Left/Right/Space toggle, `settings-toggle` footer, a dim annotation naming the Dashboard heal and `heal --restart`.
-- [ ] `src/adapters/driving/cli/subcommands.ts` (+ `dispatch.test.ts`) -- `HEAL_USAGE` and the `heal` subcommand. Data: `{edt, mode, targets: string[], skipped: [{service, reason}], restart: [{service, state, detail?}], summary, message?}`. Return `err('heal-needs-attention', …, data)` when `restartNeedsAttention`. Return `err('restart-unavailable')` when `healthProbe` is not wired.
-- [ ] `docs/tui-back-manifest.md` -- in French: a "CLI `heal` — JSON" section (targets, skip reasons, states, exit code) and `dashboard.restartMode` in the settings section.
+- [x] `src/core/edt/switch-restart.ts` (+ test) -- extract `runRestartRows` with an optional `beforeRestart(row) => Promise<string | null>` (non-null fails the row with that detail). Widen `RestartSkipReason` with `up | already restarting | inconsistent | status unknown`. Add new tests for `runRestartRows`; existing tests stay unchanged.
+- [x] `src/core/heal/index.ts` (+ `index.test.ts`) -- `planHeal({state, edtRegistry, manifest, docker, healthProbe?})` returns `Result<HealPlan>`, where `HealPlan = {edt:{ulid,topic}, rows: RestartRow[]}` with targets `pending` and the rest `skipped` with their reason. `runHeal({plan, mode, concurrency, serviceActions, lock, onPhase?})` returns `Result<HealReport>`, where `HealReport = RestartReport & {edt, message?}` and `message` is `every service is up` when there are no targets. Unit-test every matrix row.
+- [x] `src/core/ports/settings.ts`, `src/adapters/driven/settings/schema.ts` (+ tests) -- `dashboard: { restartMode: 'simple' | 'clean' }`, default `simple`.
+- [x] `src/adapters/driving/tui/shared/settings-screen.tsx` (+ test) -- EDTs-tab group `heal-restart` ("Heal restart mode"): Left/Right/Space toggle, `settings-toggle` footer, a dim annotation naming the Dashboard heal and `heal --restart`.
+- [x] `src/adapters/driving/cli/subcommands.ts` (+ `dispatch.test.ts`) -- `HEAL_USAGE` and the `heal` subcommand. Data: `{edt, mode, targets: string[], skipped: [{service, reason}], restart: [{service, state, detail?}], summary, message?}`. Return `err('heal-needs-attention', …, data)` when `restartNeedsAttention`. Return `err('restart-unavailable')` when `healthProbe` is not wired.
+- [x] `docs/tui-back-manifest.md` -- in French: a "CLI `heal` — JSON" section (targets, skip reasons, states, exit code) and `dashboard.restartMode` in the settings section.
 
 **Acceptance Criteria:**
 - Given two `down` targets and `update.concurrency` 1, when heal runs, then they restart sequentially and `onPhase` streams `pending → restarting → verifying → final` per target.
@@ -93,3 +93,78 @@ context:
 **Commands:**
 - `npm test && npm run typecheck && npm run depcheck` -- expected: all green.
 - `git diff --stat epic-9-service-terminals-unified-service-actions -- src/core/edt/switch-restart.test.ts src/core/realign/index.test.ts` -- expected: switch-restart test has only additions; realign test untouched.
+
+## Suggested Review Order
+
+**Heal use-case (entry point)**
+
+- The plan: one resolver status per member, targets `pending`, the rest skipped with a reason.
+  [`index.ts:92`](../../src/core/heal/index.ts#L92)
+
+- Target rule in one exhaustive switch: only `down`/`unhealthy` with a container.
+  [`index.ts:67`](../../src/core/heal/index.ts#L67)
+
+- Blank path and resolver errors become `status unknown` with their cause as detail.
+  [`index.ts:120`](../../src/core/heal/index.ts#L120)
+
+- The run: shared pool, per-row lock peek failing only that row.
+  [`index.ts:145`](../../src/core/heal/index.ts#L145)
+
+- Lock names reported as `<name> in progress`; heal itself holds no group lock.
+  [`index.ts:148`](../../src/core/heal/index.ts#L148)
+
+**Shared restart machinery**
+
+- Pool extracted as a target-list entry point; switch and realign delegate unchanged.
+  [`switch-restart.ts:163`](../../src/core/edt/switch-restart.ts#L163)
+
+- The `beforeRestart` hook, the only new behaviour in the shared pool.
+  [`switch-restart.ts:199`](../../src/core/edt/switch-restart.ts#L199)
+
+- Skip vocabulary widened for heal's reasons.
+  [`switch-restart.ts:24`](../../src/core/edt/switch-restart.ts#L24)
+
+- `restartAfterSwitch` now only builds its rows and hands them over.
+  [`switch-restart.ts:118`](../../src/core/edt/switch-restart.ts#L118)
+
+**CLI `heal`**
+
+- Flag parsing before any read, settings fallback, probe-wiring guard.
+  [`subcommands.ts:1167`](../../src/adapters/driving/cli/subcommands.ts#L1167)
+
+- Exit 1 exactly when `restartNeedsAttention`, full data in the error details.
+  [`subcommands.ts:1260`](../../src/adapters/driving/cli/subcommands.ts#L1260)
+
+- Usage text and registration after `realign`.
+  [`subcommands.ts:95`](../../src/adapters/driving/cli/subcommands.ts#L95)
+
+**Setting `dashboard.restartMode`**
+
+- Port type and default `simple`.
+  [`settings.ts:105`](../../src/core/ports/settings.ts#L105)
+
+- Optional group, per-field silent fallback on an unknown value.
+  [`schema.ts:143`](../../src/adapters/driven/settings/schema.ts#L143)
+
+- Store merge for partial updates.
+  [`settings-slice.ts:83`](../../src/adapters/driving/tui/store/slices/settings-slice.ts#L83)
+
+- EDTs-tab "Heal restart mode" toggle, next to switch/realign restart modes.
+  [`settings-screen.tsx:970`](../../src/adapters/driving/tui/shared/settings-screen.tsx#L970)
+
+**Docs & tests**
+
+- CLI `heal` JSON: targets, skip reasons, exit code, errors.
+  [`tui-back-manifest.md:459`](../../docs/tui-back-manifest.md#L459)
+
+- `dashboard.restartMode` settings subsection.
+  [`tui-back-manifest.md:354`](../../docs/tui-back-manifest.md#L354)
+
+- Core matrix tests for planning and running.
+  [`index.test.ts:94`](../../src/core/heal/index.test.ts#L94)
+
+- New `runRestartRows` tests (existing switch tests untouched).
+  [`switch-restart.test.ts:196`](../../src/core/edt/switch-restart.test.ts#L196)
+
+- CLI heal block: modes, locks, concurrency wiring, settings fallback, bad flags.
+  [`dispatch.test.ts:1201`](../../src/adapters/driving/cli/dispatch.test.ts#L1201)

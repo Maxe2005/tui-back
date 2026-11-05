@@ -884,3 +884,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-10-text-filter-in-the-keybinding-help.md`
   summary: The `?` help adds section heading lines on top of its `visibleLines` row window, so the dialog height still varies while scrolling or filtering (minHeight is only a floor).
   evidence: `withSectionHeadings(visible)` in keybinding-help.tsx runs after `resolveHelpWindow(rows, offset, visibleLines)`; behaviour predates story 9.10, raised by the 9.10 edge-case and blind reviews.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-8-heal-use-case-and-cli.md`
+  summary: Heal restarts targets from a status snapshot taken at plan time; once Story 9.9 puts a confirm overlay between `planHeal` and `runHeal`, a service that recovered meanwhile is still restarted — consider re-resolving the status in `runHeal`'s `beforeRestart` and skipping recovered rows.
+  evidence: `runHeal` (src/core/heal/index.ts) only peeks locks before each restart and never re-reads the status; the plan/run split exists precisely so a consumer can wait on the user between the two.
