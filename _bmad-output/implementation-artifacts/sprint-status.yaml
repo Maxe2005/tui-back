@@ -79,5 +79,5 @@ development_status:
   9-8-heal-use-case-and-cli: backlog
   9-9-dashboard-heal-action: backlog
   9-10-text-filter-in-the-keybinding-help: review
-  9-11-per-service-health-check-toggle: backlog
+  9-11-per-service-health-check-toggle: review
   epic-9-retrospective: optional
