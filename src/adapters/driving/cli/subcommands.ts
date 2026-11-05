@@ -34,7 +34,7 @@ import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { SavedRequestPort } from '../../../core/ports/saved-request.js';
-import { DEFAULT_SETTINGS, SWITCH_RESTART_MODES, type Settings, type SettingsPort, type SwitchRestartMode } from '../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS, SWITCH_RESTART_MODES, healthCheckEnabledFrom, type Settings, type SettingsPort, type SwitchRestartMode } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
@@ -192,18 +192,22 @@ export function buildSubcommands(deps: {
       usage: 'tui-back dashboard',
       // The Dashboard's snapshot (active EDT services with their health-first status, registry
       // health), read-only.
-      run: async (args) =>
-        args.length === 0
-          ? buildDashboardSnapshot({
-              registry: deps.registry,
-              manifest: deps.manifest,
-              git: deps.git,
-              docker: deps.docker,
-              ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
-              edtRegistry: deps.edtRegistry,
-              state: deps.state,
-            })
-          : err('invalid-argument', 'Usage: tui-back dashboard'),
+      run: async (args) => {
+        if (args.length !== 0) {
+          return err('invalid-argument', 'Usage: tui-back dashboard');
+        }
+        const settings = await loadSettingsOrDefaults(deps.settings);
+        return buildDashboardSnapshot({
+          registry: deps.registry,
+          manifest: deps.manifest,
+          git: deps.git,
+          docker: deps.docker,
+          ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
+          isHealthCheckEnabled: healthCheckEnabledFrom(() => settings),
+          edtRegistry: deps.edtRegistry,
+          state: deps.state,
+        });
+      },
     },
     {
       name: 'edt',
@@ -924,14 +928,11 @@ async function runEdtSwitch(
     return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected none, simple or clean. Usage: ${EDT_SWITCH_USAGE}`);
   }
   let restartMode = restartFlag as SwitchRestartMode | undefined;
+  // Loaded at most once: for the absent flag here, then for the restart phase below.
+  let loadedSettings: Settings | undefined;
   if (restartMode === undefined) {
-    const loaded = await deps.settings.load();
-    if (!loaded.ok) {
-      console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
-    } else if (loaded.data.warning !== null) {
-      console.error(`tui-back: ${loaded.data.warning}`);
-    }
-    restartMode = (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).switch.restartMode;
+    loadedSettings = await loadSettingsOrDefaults(deps.settings);
+    restartMode = loadedSettings.switch.restartMode;
   }
   if (restartMode !== 'none' && (deps.docker === undefined || deps.healthProbe === undefined)) {
     return err('restart-unavailable', 'Post-switch restart needs the Docker and health-probe ports, which are not wired — nothing was switched');
@@ -969,8 +970,8 @@ async function runEdtSwitch(
   if (!repos.ok) {
     return repos;
   }
-  const loadedSettings = await deps.settings.load();
-  const concurrency = (loadedSettings.ok ? loadedSettings.data.settings : DEFAULT_SETTINGS).update.concurrency;
+  const restartSettings = loadedSettings ?? (await loadSettingsOrDefaults(deps.settings));
+  const concurrency = restartSettings.update.concurrency;
   const serviceActions = createServiceActions({
     manifest: deps.manifest,
     container: deps.container,
@@ -980,6 +981,7 @@ async function runEdtSwitch(
     lock: deps.lock,
     docker: deps.docker,
     healthProbe: deps.healthProbe,
+    isHealthCheckEnabled: healthCheckEnabledFrom(() => restartSettings),
   });
   const report = await restartAfterSwitch({
     results: switched.data.results,
@@ -1092,9 +1094,10 @@ async function runRealign(
 
   let restart: Parameters<typeof realignServices>[0]['restart'];
   if (restartMode !== 'none') {
+    const realignSettings = await settings();
     restart = {
       mode: restartMode,
-      concurrency: (await settings()).update.concurrency,
+      concurrency: realignSettings.update.concurrency,
       serviceActions: createServiceActions({
         manifest: deps.manifest,
         container: deps.container,
@@ -1104,6 +1107,7 @@ async function runRealign(
         lock: deps.lock,
         docker: deps.docker,
         healthProbe: deps.healthProbe,
+        isHealthCheckEnabled: healthCheckEnabledFrom(() => realignSettings),
       }),
     };
   }
@@ -1503,4 +1507,16 @@ export function assertUniqueSubcommandNames(subcommands: Subcommand[]): void {
     }
     seen.add(subcommand.name);
   }
+}
+
+// Loads settings.yaml for a command; a load failure or a corrupt-file warning goes to stderr
+// (separate from the stdout JSON envelope) and the built-in defaults apply.
+async function loadSettingsOrDefaults(port: SettingsPort): Promise<Settings> {
+  const loaded = await port.load();
+  if (!loaded.ok) {
+    console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+  } else if (loaded.data.warning !== null) {
+    console.error(`tui-back: ${loaded.data.warning}`);
+  }
+  return loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
 }

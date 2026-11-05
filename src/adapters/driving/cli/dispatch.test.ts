@@ -370,6 +370,50 @@ describe('subcommand registry guards', () => {
     });
   });
 
+  it('dashboard reads the health check toggle from settings: JSON carries healthCheck "disabled"', async () => {
+    const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
+    const subcommands = buildTestSubcommands({
+      edtRegistry: {
+        ...fakeEdtRegistry(),
+        list: async () =>
+          ok([{ ulid: 'e1', topic: 'topic-a', createdAt: '2026-01-01T00:00:00Z', status: 'active' as const, members: [{ service: 'svc-a', repoPath: '/r/a', branch: 'main' }] }]),
+      },
+      state: { ...fakeState(), readActiveEdt: async () => ok('e1') },
+      manifest: { load: async () => ok({ service: 'svc-a', container: 'ctr-a', healthUrl: 'http://a/h', sharedBranch: 'development', modules: {} }) },
+      git: fakeGitPort({ currentBranch: async () => ok('main') }),
+      docker: { getContainerHealth: async () => ok('up' as const) } as unknown as DockerPort,
+      healthProbe: { probe },
+      settings: {
+        load: async () => ok({ settings: { ...DEFAULT_SETTINGS, services: { healthCheckDisabled: ['svc-a'] } }, warning: null }),
+        save: async () => ok(undefined),
+      },
+    });
+    const dashboard = subcommands.find((subcommand) => subcommand.name === 'dashboard');
+    if (!dashboard) throw new Error('expected dashboard subcommand');
+
+    const result = await dashboard.run([]);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { services: [{ service: 'svc-a', status: { ok: true, value: { state: 'up', verified: false, container: 'up', healthCheck: 'disabled' } } }] },
+    });
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('dashboard falls back to default settings with a stderr warning when settings cannot be read', async () => {
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const subcommands = buildTestSubcommands({
+        settings: { load: async () => err('settings-read-error', 'settings.yaml unreadable'), save: async () => ok(undefined) },
+      });
+      const dashboard = subcommands.find((subcommand) => subcommand.name === 'dashboard');
+      if (!dashboard) throw new Error('expected dashboard subcommand');
+      expect((await dashboard.run([])).ok).toBe(true);
+      expect(stderr).toHaveBeenCalledWith(expect.stringContaining('could not read settings, using defaults: settings.yaml unreadable'));
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it('list-routes rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
     const subcommands = buildTestSubcommands();
     const listRoutesCmd = subcommands.find((subcommand) => subcommand.name === 'list-routes');
@@ -813,7 +857,7 @@ describe('subcommand registry guards', () => {
       members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
     };
 
-    function restartSetup(opts: { healthy?: boolean; mode?: 'none' | 'simple' | 'clean'; withHealthUrl?: boolean } = {}) {
+    function restartSetup(opts: { healthy?: boolean; mode?: 'none' | 'simple' | 'clean'; withHealthUrl?: boolean; healthCheckDisabled?: string[] } = {}) {
       const writeActiveEdt = vi.fn(async () => ok(undefined));
       const containerRestart = vi.fn(async () => ok(undefined));
       const probe = vi.fn(async () => ok({ healthy: opts.healthy ?? true, status: opts.healthy === false ? 503 : 200, ...(opts.healthy === false ? { reason: 'HTTP 503' } : {}) }));
@@ -840,7 +884,11 @@ describe('subcommand registry guards', () => {
         state: { ...fakeState(), writeActiveEdt },
         container: { restart: containerRestart },
         settings: {
-          load: async () => ok({ settings: { ...DEFAULT_SETTINGS, switch: { restartMode: opts.mode ?? 'none' } }, warning: null }),
+          load: async () =>
+            ok({
+              settings: { ...DEFAULT_SETTINGS, switch: { restartMode: opts.mode ?? 'none' }, services: { healthCheckDisabled: opts.healthCheckDisabled ?? [] } },
+              warning: null,
+            }),
           save: async () => ok(undefined),
         },
         docker: {
@@ -880,6 +928,17 @@ describe('subcommand registry guards', () => {
       expect(probe).toHaveBeenCalledWith('http://localhost:1/health', expect.any(Number));
       expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
         expect.arrayContaining([{ service: 'svc-a', mode: 'simple', state: 'functional' }]),
+      );
+    });
+
+    it('--restart never probes a service whose health check is disabled in settings', async () => {
+      const { edt, containerRestart, probe } = restartSetup({ healthy: false, healthCheckDisabled: ['svc-a'] });
+      const result = await edt.run(['switch', '--to', 'demo', '--restart', 'simple']);
+      expect(result.ok).toBe(true);
+      expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+      expect(probe).not.toHaveBeenCalled();
+      expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
+        expect.arrayContaining([{ service: 'svc-a', mode: 'simple', state: 'up-unverified' }]),
       );
     });
 
@@ -937,6 +996,7 @@ describe('subcommand registry guards', () => {
     ) {
       const checkout = vi.fn(opts.checkout ?? (async () => ok(undefined)));
       const acquire = vi.fn(async () => ok({ release: async () => ok(undefined) }));
+      const probe = vi.fn(async () => ok({ healthy: opts.healthy ?? true, status: 200 }));
       const containerRestart = vi.fn(async () => ok(undefined));
       const logAction = vi.fn(async () => ok(undefined));
       const subcommands = buildTestSubcommands({
@@ -974,12 +1034,12 @@ describe('subcommand registry guards', () => {
                 getContainerHealth: async () => ok('up' as const),
                 restartContainer: async () => ok(undefined),
               },
-              healthProbe: { probe: async () => ok({ healthy: opts.healthy ?? true, status: 200 }) },
+              healthProbe: { probe },
             }),
       });
       const realign = subcommands.find((subcommand) => subcommand.name === 'realign');
       if (!realign) throw new Error('expected realign subcommand');
-      return { realign, checkout, acquire, containerRestart, logAction, subcommands };
+      return { realign, checkout, acquire, containerRestart, logAction, probe, subcommands };
     }
 
     it.each([
@@ -1116,6 +1176,20 @@ describe('subcommand registry guards', () => {
       expect(containerRestart).toHaveBeenCalledWith('ctr-a');
       expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
         expect.arrayContaining([expect.objectContaining({ service: 'svc-a', mode: 'clean', state: 'functional' })]),
+      );
+    });
+
+    it('a restart never probes a service whose health check is disabled in settings', async () => {
+      const settings: SettingsPort = {
+        load: async () => ok({ settings: { ...DEFAULT_SETTINGS, services: { healthCheckDisabled: ['svc-a'] } }, warning: null }),
+        save: async () => ok(undefined),
+      };
+      const { realign, containerRestart, probe } = realignSetup({ settings, healthy: false });
+      const result = await realign.run(['--restart', 'simple']);
+      expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+      expect(probe).not.toHaveBeenCalled();
+      expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
+        expect.arrayContaining([expect.objectContaining({ service: 'svc-a', mode: 'simple', state: 'up-unverified' })]),
       );
     });
 

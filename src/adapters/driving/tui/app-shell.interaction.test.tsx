@@ -1373,7 +1373,7 @@ describe('AppShell command-entry bar (:)', () => {
     // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const } },
+      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1440,7 +1440,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: false, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
 
       await press(instance, stdin, ' ');
@@ -1451,18 +1451,57 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
-  it('Shift+Tab on the General tab goes back to the st tab (wrapping), then Update, then Logs', async () => {
+  it('Shift+Tab on the General tab goes back to the Services tab (wrapping), then st, then Update, then Logs', async () => {
     const store = createAppStore(fakeDeps());
     store.getState().openSettingsScreen();
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.shiftTab);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('healthUrl is never probed');
+      await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Run npm i');
       await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Update concurrency');
       await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Buffer size');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space on the Services tab unchecks a service health check and persists it at once', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.setState({
+      edtsBranches: [
+        { service: 'api', path: '/repos/api', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [], healthUrl: 'http://api/health' },
+        { service: 'lib', path: '/repos/lib', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+      ],
+    });
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.shiftTab); // General -> Services (wrapping)
+
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual(['api']);
+      expect(settingsPort.save).toHaveBeenCalledWith(expect.objectContaining({ services: { healthCheckDisabled: ['api'] } }));
+
+      // A row without healthUrl is disabled: Space does nothing.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual(['api']);
+
+      await press(instance, stdin, KEYS.up);
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual([]);
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ services: { healthCheckDisabled: [] } }));
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1597,7 +1636,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 9, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {
       instance.unmount();
@@ -1666,7 +1705,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
 
       // A typed digit is a quick preset (digit x 100), still while on the bufferSize row.
@@ -1711,6 +1750,7 @@ describe('AppShell settings screen (:settings)', () => {
           filterHistoryDedup: true,
           restartMode: 'simple' as const,
         },
+        services: { healthCheckDisabled: [] },
       });
 
       await press(instance, stdin, KEYS.space);
@@ -1887,7 +1927,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {
       instance.unmount();
@@ -1920,7 +1960,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {
       instance.unmount();

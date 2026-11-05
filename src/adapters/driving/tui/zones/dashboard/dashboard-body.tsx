@@ -34,6 +34,7 @@ import {
   resolveEdtSection,
   EDT_SECTION_ROWS,
   NO_EDT_MESSAGE,
+  healthCheckNote,
   type AttentionItem,
 } from './dashboard.logic.js';
 
@@ -111,13 +112,23 @@ function ServiceDetail({ service, useStore }: { service: DashboardService; useSt
   const actions = useStore((state) => state.dashboardServiceActions[service.path]);
   const actionState = useStore((state) => state.dashboardActionState[service.path]);
   const reason = reasonLine(service);
+  // A locally disabled health check is a dim note, never an issue: it replaces "No issue." or
+  // follows the real issues.
+  const note = healthCheckNote(service);
   const running = actionState?.running ?? null;
   const shown = disableWhileRunning(actions ?? [], running !== null);
   const why = shown.flatMap((action) => (action.availability.available ? [] : [`${action.key}: ${action.availability.reason}`])).join(' · ');
   return (
     <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
       <TruncatedText color={colors['text-dim']}>{service.service}</TruncatedText>
-      {reason === null ? <DimAnnotation text="No issue." /> : <TruncatedText color={colors.warning}>{reason}</TruncatedText>}
+      {reason === null ? (
+        <DimAnnotation text={note ?? 'No issue.'} />
+      ) : (
+        <>
+          <TruncatedText color={colors.warning}>{reason}</TruncatedText>
+          {note === null ? null : <DimAnnotation text={note} />}
+        </>
+      )}
       {actions === undefined ? (
         <DimAnnotation text="Actions unavailable." />
       ) : (

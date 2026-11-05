@@ -435,6 +435,10 @@ calculé à partir de `healthUrl` et du conteneur selon le tableau ci-dessus :
 - `containerError` (optionnel) : `{ code, message }` de Docker quand la sonde a tout de même
   décidé de l'état (2xx malgré une erreur Docker).
 - `probeReason` (optionnel) : pourquoi la sonde n'a pas répondu 2xx.
+- `healthCheck` (optionnel) : `"disabled"` quand le manifeste déclare `healthUrl` mais que la
+  sonde est désactivée localement pour ce service (`services.healthCheckDisabled` dans
+  `settings.yaml`, `:settings` → onglet Services). L'état est alors calculé comme sans
+  `healthUrl` (`verified: false`) et la route n'est jamais sondée. Absent sinon.
 - Quand le statut ne peut pas être calculé (manifeste illisible, ou Docker en erreur sans sonde
   2xx), `status` vaut `{ "ok": false, "error": { "code", "message" } }`. Quand Docker et la
   sonde ont tous deux échoué, `error.details.probeReason` porte la raison de la sonde.

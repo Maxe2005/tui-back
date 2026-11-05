@@ -1,9 +1,9 @@
 // tui/shared/settings-screen: the `:settings` overlay — a tab-organized modal (General / EDTs /
-// Command Palette / Logs) reachable only through the `settings` command. Every change applies
+// Command Palette / Logs / Update / st / Services) reachable only through the `settings` command. Every change applies
 // to the live store and persists immediately via `updateSettings` (no save step, no dirty
 // state). The EDTs and Logs tabs open on a group list that Enter drills into, so Esc handling
 // lives here (`onClose`): only this component knows whether Esc steps back or closes.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
@@ -44,10 +44,12 @@ import {
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
 import { BoundedList } from './components/bounded-list.js';
+import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../core/edt/list.js';
 
-export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update' | 'shared-types';
+export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update' | 'shared-types' | 'services';
 
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types'];
+// Services stays last: a new tab is appended, never inserted, so muscle memory for the others holds.
+export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types', 'services'];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   general: 'General',
@@ -56,7 +58,55 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   logs: 'Logs',
   update: 'Update',
   'shared-types': 'st',
+  services: 'Services',
 };
+
+// Services tab: one "health check" checkbox per registered service (checked = enabled), listed
+// from the already-loaded EDT branch rows plus the manifests that failed to load. A service with
+// no `healthUrl`, or whose manifest is unreadable, is listed but cannot be toggled.
+export type ServicesSettingsRow = {
+  key: string;
+  service: string;
+  // null = toggleable; otherwise the dim reason shown next to the disabled row.
+  disabledReason: string | null;
+};
+
+export const SERVICES_NO_HEALTH_URL_REASON = 'no healthUrl';
+export const SERVICES_MANIFEST_UNAVAILABLE_REASON = 'manifest unavailable';
+
+export function buildServicesSettingsRows(
+  branches: readonly Pick<ServiceBranchDivergence, 'service' | 'path' | 'healthUrl'>[] | null,
+  errors: readonly BranchDivergenceEntryError[],
+): ServicesSettingsRow[] {
+  const listed: ServicesSettingsRow[] = (branches ?? []).map((row) => ({
+    key: row.path,
+    service: row.service,
+    disabledReason: row.healthUrl !== undefined && row.healthUrl.trim() !== '' ? null : SERVICES_NO_HEALTH_URL_REASON,
+  }));
+  const unreadable: ServicesSettingsRow[] = errors.map((entry) => ({
+    key: entry.path,
+    // No manifest means no service name: the repo directory stands in for it.
+    service: entry.path.split('/').filter((part) => part !== '').pop() ?? entry.path,
+    disabledReason: SERVICES_MANIFEST_UNAVAILABLE_REASON,
+  }));
+  return [...listed, ...unreadable];
+}
+
+export type ServicesSettingsStep = { type: 'move'; cursor: number } | { type: 'toggle'; service: string } | { type: 'ignore' };
+
+// Up/Down move over every row (disabled ones included, so their reason can be read); Space
+// toggles only a toggleable row.
+export function resolveServicesSettingsKey(input: string, key: TextEditKey, cursor: number, rows: readonly ServicesSettingsRow[]): ServicesSettingsStep {
+  const moved = nextCursorForKey(key, cursor, rows.length);
+  if (moved !== null) {
+    return { type: 'move', cursor: moved };
+  }
+  const row = rows[cursor];
+  if (input === ' ' && row !== undefined && row.disabledReason === null) {
+    return { type: 'toggle', service: row.service };
+  }
+  return { type: 'ignore' };
+}
 
 // st tab: a flat Up/Down list of the shared-types zone's option defaults (Space toggles the
 // checkboxes) followed by the History view's two numeric bounds (+/- step them, always clamped to
@@ -500,6 +550,8 @@ export function settingsFooterContext(
       return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
     case 'shared-types':
       return 'settings-shared-types';
+    case 'services':
+      return 'settings-services';
     case 'logs':
       return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
   }
@@ -564,6 +616,8 @@ export function SettingsScreen({
   const clearServiceFilterHistory = useStore((state) => state.clearServiceFilterHistory);
   const clearCommandHistory = useStore((state) => state.clearCommandHistory);
   const edtsBranches = useStore((state) => state.edtsBranches);
+  const edtsErrors = useStore((state) => state.edtsErrors);
+  const loadEdtsBranches = useStore((state) => state.loadEdtsBranches);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   // The General tab's row cursor + in-progress editor-command edit (null when browsing).
@@ -592,6 +646,17 @@ export function SettingsScreen({
   // The Command Palette tab's group list (same shape as the Logs tab's).
   const [paletteGroup, setPaletteGroup] = useState<PaletteSettingsGroupId | null>(initialPaletteGroup);
   const [paletteGroupCursor, setPaletteGroupCursor] = useState(0);
+  // The Services tab's flat row list (clamped: a reload can shrink it under the cursor).
+  const servicesRows = buildServicesSettingsRows(edtsBranches, edtsErrors);
+  const [servicesCursorRaw, setServicesCursor] = useState(0);
+  const servicesCursor = Math.min(servicesCursorRaw, Math.max(0, servicesRows.length - 1));
+  // The Services tab owns its data: opened before any zone listed the services, it loads them
+  // once on arrival (the slice ignores a call while a load is already in flight).
+  useEffect(() => {
+    if (tab === 'services' && useStore.getState().edtsBranches === null) {
+      void loadEdtsBranches();
+    }
+  }, [tab, useStore, loadEdtsBranches]);
 
   // Drilled in on the EDTs tab's own group, or on any Logs tab group (single-field group,
   // "Clear history"'s row list, or its "clear a service's history" sub-list) — every other
@@ -707,6 +772,20 @@ export function SettingsScreen({
         void updateSettings({ sharedTypes: { [step.id]: step.value } });
       } else if (step.type === 'toggle') {
         void updateSettings({ sharedTypes: { [step.id]: !settings.sharedTypes[step.id] } });
+      }
+      return;
+    }
+
+    if (tab === 'services') {
+      const step = resolveServicesSettingsKey(input, key, servicesCursor, servicesRows);
+      if (step.type === 'move') {
+        setServicesCursor(step.cursor);
+      } else if (step.type === 'toggle') {
+        // Checked = enabled, so the stored list holds the unchecked ones; persisted at once. Read
+        // from the live store, not this render's snapshot: two quick presses before a re-render
+        // must each toggle on top of the previous one.
+        const disabled = useStore.getState().settings.services.healthCheckDisabled;
+        void updateSettings({ services: { healthCheckDisabled: toggleHiddenHint(disabled, step.service) } });
       }
       return;
     }
@@ -1030,6 +1109,33 @@ export function SettingsScreen({
               const focused = SHARED_TYPES_SETTINGS_ROWS[sharedTypesCursor];
               return focused?.kind === 'number' ? <DimAnnotation text={focused.hint} /> : null;
             })()}
+          </Box>
+        ) : null}
+
+        {tab === 'services' ? (
+          <Box flexDirection="column">
+            {servicesRows.length === 0 ? <StateLine kind="empty" subject="manifest services loaded" /> : null}
+            <BoundedList
+              items={servicesRows}
+              chromeRows={SETTINGS_LIST_CHROME_ROWS}
+              cursorIndex={servicesCursor}
+              renderItem={(row, index) => {
+                const highlighted = index === servicesCursor;
+                return (
+                  <Box key={row.key} flexDirection="row">
+                    <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                    <CheckboxListItem
+                      label={`${row.service} — health check`}
+                      selected={highlighted}
+                      state={settings.services.healthCheckDisabled.includes(row.service) ? 'unchecked' : 'checked'}
+                      disabled={row.disabledReason !== null}
+                      {...(row.disabledReason === null ? {} : { disabledReason: row.disabledReason })}
+                    />
+                  </Box>
+                );
+              }}
+            />
+            <DimAnnotation text="Unchecked: the service's healthUrl is never probed on this machine; its state comes from the container alone." />
           </Box>
         ) : null}
 

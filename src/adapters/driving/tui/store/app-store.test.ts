@@ -1179,7 +1179,7 @@ describe("app store", () => {
               general: { quitShortcutEnabled: true, editorCommand: '' },
               commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
               edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-              update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+              update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
             },
             warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
           }),
@@ -1194,7 +1194,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
       expect(store.getState().settingsWarning).toContain("using defaults");
     });
@@ -1244,7 +1244,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     });
 
@@ -1254,6 +1254,13 @@ describe("app store", () => {
       expect(store.getState().settings.sharedTypes).toEqual({ install: true, cleanRestart: true, commit: true, historyDepth: 20, maxCommitsScanned: 1000 });
     });
 
+    it("updateSettings() merges services.healthCheckDisabled, keeping the other groups", async () => {
+      const store = createAppStore();
+      await store.getState().updateSettings({ services: { healthCheckDisabled: ["api"] } });
+      expect(store.getState().settings.services).toEqual({ healthCheckDisabled: ["api"] });
+      expect(store.getState().settings.logs).toEqual(DEFAULT_SETTINGS.logs);
+    });
+
     it("updateSettings() shallow-merges only the provided sub-object, leaving the other untouched", async () => {
       const store = createAppStore(fakeDeps());
       store.setState({
@@ -1261,7 +1268,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
       });
 
@@ -1271,7 +1278,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     });
 
@@ -1282,7 +1289,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
       });
 
@@ -1292,7 +1299,7 @@ describe("app store", () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     });
 
@@ -1398,7 +1405,7 @@ describe("app store", () => {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
           edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+          update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
         warning: null,
       });
@@ -2729,7 +2736,7 @@ describe("logs slice: filter history", () => {
 
   it("commitFilterHistoryEntry with filterHistoryDedup moves a repeat to the front without duplicating it", () => {
     const store = createAppStore(fakeDeps());
-    store.setState((current) => ({ settings: { ...current.settings, logs: { ...current.settings.logs, filterHistoryDedup: true, restartMode: 'simple' as const } } }));
+    store.setState((current) => ({ settings: { ...current.settings, logs: { ...current.settings.logs, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] } } }));
 
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "a");
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "b");

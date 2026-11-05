@@ -144,6 +144,24 @@ describe('listEdtBranchesDivergence', () => {
     });
   });
 
+  it('copies the manifest healthUrl onto the row when declared, and omits it otherwise', async () => {
+    const result = await listEdtBranchesDivergence({
+      registry: fakeRegistry(['/repo/a', '/repo/b']),
+      manifest: fakeManifest({
+        load: vi.fn(async (path: string) => ok({ ...manifestFor(path), ...(path === '/repo/a' ? { healthUrl: 'http://a/health' } : {}) })),
+      }),
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    expect(result.ok && result.data.services.map((row) => [row.service, row.healthUrl])).toEqual([
+      ['svc-a', 'http://a/health'],
+      ['svc-b', undefined],
+    ]);
+    expect(result.ok && 'healthUrl' in (result.data.services[1] ?? {})).toBe(false);
+  });
+
   it('shows an explicit "no upstream" state, not a numeric value, when none is configured', async () => {
     const registry = fakeRegistry(['/repo/a']);
     const git = fakeGit({
