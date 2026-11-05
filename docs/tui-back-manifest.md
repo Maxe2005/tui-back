@@ -363,8 +363,10 @@ dashboard:
   quand aucune recette n'est déclarée.
 - Éditable dans `:settings`, onglet **EDTs**, groupe « Heal restart mode » (Gauche/Droite/Espace
   basculent entre `simple` et `clean`). Jamais réécrit par un run.
-- Groupe optionnel ; une valeur inconnue retombe seule sur `simple` (avec un avertissement), sans
-  invalider le reste du fichier.
+- Groupe optionnel. Une **valeur** inconnue de `restartMode` retombe silencieusement sur `simple`,
+  sans toucher au reste du fichier. Une **clé** inconnue sous `dashboard:` invalide en revanche
+  tout le fichier, comme pour tout autre groupe : tous les défauts s'appliquent, avec un
+  avertissement.
 
 ## Exemple complet — service `api-gateway` avec `route-explorer`
 
@@ -483,8 +485,10 @@ est l'enveloppe standard :
 - `skipped[].reason` : `up` (déjà fonctionnel), `already restarting` (conteneur en cours de
   redémarrage), `inconsistent` (route 2xx mais conteneur arrêté), `no container` (aucun
   conteneur déclaré, y compris un service `down` décidé par sa seule `healthUrl`),
-  `status unknown` (statut impossible à calculer : manifeste illisible, ou Docker et la sonde en
-  échec).
+  `status unknown` (statut impossible à calculer : manifeste illisible, Docker et la sonde en
+  échec, ou `repoPath` vide dans le registre des EDT).
+- `skipped[].detail` (optionnel) : la cause d'un `status unknown` (message d'erreur du calcul du
+  statut).
 - `restart[]` : une ligne par cible (les lignes non vertes d'abord), avec `state` parmi
   `functional | up-unverified | unhealthy | restarting | down | failed` et un `detail`
   optionnel (raison de l'état, message d'échec, ou notice « pas de recette clean »).
@@ -493,11 +497,16 @@ est l'enveloppe standard :
   **cette ligne** en `failed` avec `detail` `<nom du verrou> in progress` (`service restart`,
   `group update`, `EDT update/switch`) ; les autres cibles sont tout de même traitées.
 - Aucune cible : `ok`, `targets` et `restart` vides, et `message: "every service is up"`.
-- Code de sortie : `0` quand chaque cible finit `functional` ou `up-unverified` ; `1` sinon,
-  avec l'erreur `heal-needs-attention` dont `error.details` porte les mêmes données complètes.
-  Autres erreurs (code de sortie `1`) : `no-active-edt` (aucun EDT actif), `invalid-argument`
-  (valeur de `--restart` inconnue, option inconnue, valeur manquante ou flag répété — rien n'est
-  redémarré), `restart-unavailable` (sonde de santé non câblée).
+- Code de sortie : `1` dès qu'une cible finit `failed`, `down` ou `unhealthy`, avec l'erreur
+  `heal-needs-attention` dont `error.details` porte les mêmes données complètes ; `0` sinon
+  (cibles `functional`, `up-unverified`, ou encore `restarting` à la fin de la vérification).
+- Autres erreurs (code de sortie `1`) :
+  - `invalid-argument` : valeur de `--restart` inconnue, option inconnue, valeur manquante ou
+    flag répété — rien n'est lu ni redémarré ;
+  - `restart-unavailable` : sonde de santé non câblée ;
+  - `no-active-edt` : aucun EDT actif, ou l'ulid actif est inconnu du registre des EDT ;
+  - erreurs de lecture de l'état ou du registre des EDT, renvoyées telles quelles ;
+  - `heal-plan-failed` / `heal-failed` : échec inattendu pendant le plan ou le run.
 
 ## Erreurs de chargement possibles
 
