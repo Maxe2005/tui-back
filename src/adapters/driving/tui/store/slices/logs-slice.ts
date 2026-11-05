@@ -9,9 +9,18 @@ import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import type { Manifest } from '../../../../../core/ports/manifest.js';
 import { hasContainer, hasHealthUrl, resolveManifestStatus, type ServiceStatusState } from '../../../../../core/service-status/index.js';
-import { createServiceActions, openInIde, type ServiceActions } from '../../../../../core/service-actions/index.js';
+import {
+  createServiceActions,
+  NO_CLEAN_RECIPE_NOTICE,
+  openInIde,
+  restartBlockingLocks,
+  type RestartMode,
+  type ServiceAction,
+  type ServiceActions,
+} from '../../../../../core/service-actions/index.js';
 import { err, type Result } from '../../../../../core/result.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
+import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS, RESTART_MODES, TERMINAL_KINDS } from './service-action-ids.js';
 import { createPersistedHistoryStore, pushHistoryEntry } from '../../shared/input-history/index.js';
 import { createInFlightGuard } from '../../shared/poll/in-flight-guard.js';
 import {
@@ -78,6 +87,11 @@ export const LOGS_HEALTH_POLL_INTERVAL_MS = 5000;
 // update-slice.ts), not one timer per pane. Same 5s by convention, not by coupling.
 export const LOGS_LISTED_HEALTH_POLL_INTERVAL_MS = 5000;
 
+export type LogsPaneShortcut = 'restart' | 'ide';
+
+// The pane notice when the registry could not be listed right before running an action.
+export const LOGS_ACTIONS_UNAVAILABLE_NOTICE = 'the service actions could not be loaded — try again';
+
 export type LogsSlice = {
   // repoPaths currently checked in the EDT-members list / the other-services list — any
   // manifest service can be streamed, not only active-EDT members.
@@ -140,11 +154,22 @@ export type LogsSlice = {
   // transition calls (never core/logs directly from a component).
   subscribeLogsPane: (repoPath: string, service: string) => Promise<void>;
   unsubscribeLogsPane: (repoPath: string) => void;
-  // Developer-triggered restart for one pane's service (R on a sub-focused grid
-  // pane or a fullscreen pane). A call while that pane is already restarting is a no-op —
+  // Restarts one pane's service through the registry, in `mode` (default: the
+  // `logs.restartMode` setting). A call while that pane is already restarting is a no-op —
   // never a second concurrent `docker restart`. After the call resolves, health is re-polled
   // immediately; a failure surfaces inline on the pane while the badge keeps last-known.
-  restartLogsPane: (repoPath: string) => Promise<void>;
+  // Availability is not checked here: `R` and the actions menu go through runLogsPane*.
+  restartLogsPane: (repoPath: string, mode?: RestartMode) => Promise<void>;
+  // The registry's actions for one pane's service (the `a` menu's rows), or null when they
+  // could not be listed (restart ports unwired, list error). Never rejects.
+  listLogsPaneActions: (repoPath: string) => Promise<ServiceAction[] | null>;
+  // Runs one registry action on a pane's service: the list is re-read right before running and
+  // fails closed — a now-disabled action does not run and its reason becomes the pane notice.
+  runLogsPaneAction: (repoPath: string, actionId: string, service: string) => Promise<void>;
+  // `R` / `O` on a pane, resolved through the same registry: `restart` maps `logs.restartMode`
+  // to its entry (a clean restart disabled only for `no clean recipe` falls back to the simple
+  // one, with NO_CLEAN_RECIPE_NOTICE), `ide` to open-in-IDE.
+  runLogsPaneShortcut: (repoPath: string, shortcut: LogsPaneShortcut, service: string) => Promise<void>;
   // Opens the pane's service repo in the configured editor (O on a grid pane or fullscreen) —
   // works for container-less services too. A failure surfaces as a one-line pane notice.
   openLogsPaneInIde: (repoPath: string) => void;
@@ -445,6 +470,91 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       }
     }
 
+    function patchPaneNotice(repoPath: string, notice: string | null): void {
+      set((state) => {
+        const current = state.logsPanes[repoPath];
+        return current ? { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, notice } } } : {};
+      });
+    }
+
+    function settingsRestartMode(): RestartMode {
+      return get().settings.logs.restartMode === 'clean' ? 'clean' : 'simple';
+    }
+
+    async function listPaneActions(repoPath: string): Promise<ServiceAction[] | null> {
+      if (serviceActions === null) {
+        return null;
+      }
+      const listed = await serviceActions
+        .list(repoPath, { blockingLocks: restartBlockingLocks(get().activeEdt) })
+        .catch((): Result<ServiceAction[]> => err('internal-error', 'Listing the service actions failed.'));
+      return listed.ok ? listed.data : null;
+    }
+
+    // Runs one freshly-listed registry entry: a disabled one only shows its reason on the pane.
+    async function runEntry(repoPath: string, entry: ServiceAction, service: string, restartNotice?: string): Promise<void> {
+      if (!entry.availability.available) {
+        patchPaneNotice(repoPath, entry.availability.reason);
+        return;
+      }
+      if (entry.id === OPEN_IN_IDE_ACTION_ID) {
+        get().openLogsPaneInIde(repoPath);
+        return;
+      }
+      const terminalKind = TERMINAL_KINDS[entry.id];
+      if (terminalKind !== undefined) {
+        await get().openTerminal(repoPath, terminalKind, service);
+        return;
+      }
+      const mode = RESTART_MODES[entry.id];
+      if (mode !== undefined) {
+        await restartPane(repoPath, mode, restartNotice);
+      }
+    }
+
+    // `fallbackNotice` is shown after a successful restart that stood in for another one (the
+    // `R` clean→simple fallback); the restart's own notice wins when it has one.
+    async function restartPane(repoPath: string, mode: RestartMode, fallbackNotice?: string): Promise<void> {
+      if (!logsManager) {
+        return;
+      }
+      const pane = get().logsPanes[repoPath];
+      if (!pane) {
+        return;
+      }
+      // A call while that pane is already restarting is a no-op — never a second concurrent
+      // restart. A container-less pane has nothing to restart.
+      if (pane.restarting || pane.noContainer === true || pane.health === 'no-container') {
+        return;
+      }
+      const patchPane = (patch: Partial<LogsPaneData>) =>
+        set((state) => {
+          const current = state.logsPanes[repoPath];
+          return current ? { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, ...patch } } } : {};
+        });
+      patchPane({ restarting: true, notice: null, streamError: null });
+      const restarted: Result<{ notice?: string }> = serviceActions
+        ? await serviceActions
+            .restart(repoPath, mode)
+            .catch((): Result<{ notice?: string }> => err('internal-error', 'The restart failed unexpectedly.'))
+        : err('restart-unavailable', 'No restart ports are wired — cannot restart the service.');
+      if (!restarted.ok) {
+        // Failure surfaces inline on the pane; the badge keeps last-known health, except a
+        // manifest that turned out to declare no container.
+        patchPane({
+          restarting: false,
+          notice: null,
+          ...(restarted.error.code === 'no-container' ? { noContainer: true, health: 'no-container' as const } : {}),
+          streamError: { code: restarted.error.code, message: restarted.error.message },
+        });
+        return;
+      }
+      patchPane({ restarting: false, streamError: null, notice: restarted.data.notice ?? fallbackNotice ?? null });
+      // After the restart call resolves, health is re-polled immediately so the badge
+      // reflects the new state.
+      await pollPaneHealth(repoPath);
+    }
+
     return {
       logsEdtSelected: [],
       logsOtherSelected: [],
@@ -673,44 +783,60 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         }
       },
 
-      restartLogsPane: async (repoPath) => {
-        if (!logsManager) {
+      restartLogsPane: (repoPath, mode) => restartPane(repoPath, mode ?? settingsRestartMode()),
+
+      listLogsPaneActions: (repoPath) => listPaneActions(repoPath),
+
+      runLogsPaneAction: async (repoPath, actionId, service) => {
+        if (serviceActions === null) {
+          // Unwired restart ports: only open-in-IDE can still run, through the editor port.
+          if (actionId === OPEN_IN_IDE_ACTION_ID) {
+            get().openLogsPaneInIde(repoPath);
+          } else {
+            patchPaneNotice(repoPath, LOGS_ACTIONS_UNAVAILABLE_NOTICE);
+          }
           return;
         }
-        const pane = get().logsPanes[repoPath];
-        if (!pane) {
+        // Never trust the menu's cached availability: re-read it right before running.
+        const fresh = await listPaneActions(repoPath);
+        if (fresh === null) {
+          patchPaneNotice(repoPath, LOGS_ACTIONS_UNAVAILABLE_NOTICE);
           return;
         }
-        // A call while that pane is already restarting is a no-op — never a second concurrent
-        // restart. A container-less pane has nothing to restart.
-        if (pane.restarting || pane.noContainer === true || pane.health === 'no-container') {
+        const entry = fresh.find((action) => action.id === actionId);
+        if (entry === undefined) {
           return;
         }
-        const patchPane = (patch: Partial<LogsPaneData>) =>
-          set((state) => {
-            const current = state.logsPanes[repoPath];
-            return current ? { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, ...patch } } } : {};
-          });
-        patchPane({ restarting: true, notice: null, streamError: null });
-        const mode = get().settings.logs.restartMode === 'clean' ? 'clean' : 'simple';
-        const restarted: Result<{ notice?: string }> = serviceActions
-          ? await serviceActions.restart(repoPath, mode)
-          : err('restart-unavailable', 'No restart ports are wired — cannot restart the service.');
-        if (!restarted.ok) {
-          // Failure surfaces inline on the pane; the badge keeps last-known health, except a
-          // manifest that turned out to declare no container.
-          patchPane({
-            restarting: false,
-            notice: null,
-            ...(restarted.error.code === 'no-container' ? { noContainer: true, health: 'no-container' as const } : {}),
-            streamError: { code: restarted.error.code, message: restarted.error.message },
-          });
+        await runEntry(repoPath, entry, service);
+      },
+
+      runLogsPaneShortcut: async (repoPath, shortcut, service) => {
+        if (serviceActions === null) {
+          // Unwired restart ports: `O` still opens through the editor port, `R` reports why it
+          // cannot restart (restartPane's own unwired path).
+          if (shortcut === 'ide') {
+            get().openLogsPaneInIde(repoPath);
+          } else {
+            await restartPane(repoPath, settingsRestartMode());
+          }
           return;
         }
-        patchPane({ restarting: false, streamError: null, notice: restarted.data.notice ?? null });
-        // After the restart call resolves, health is re-polled immediately so the badge
-        // reflects the new state.
-        await pollPaneHealth(repoPath);
+        const fresh = await listPaneActions(repoPath);
+        if (fresh === null) {
+          patchPaneNotice(repoPath, LOGS_ACTIONS_UNAVAILABLE_NOTICE);
+          return;
+        }
+        const wanted = shortcut === 'ide' ? OPEN_IN_IDE_ACTION_ID : RESTART_ACTION_IDS[settingsRestartMode()];
+        let entry = fresh.find((action) => action.id === wanted);
+        let fallbackNotice: string | undefined;
+        if (entry !== undefined && !entry.availability.available && entry.availability.reason === 'no clean recipe') {
+          entry = fresh.find((action) => action.id === RESTART_ACTION_IDS.simple);
+          fallbackNotice = NO_CLEAN_RECIPE_NOTICE;
+        }
+        if (entry === undefined) {
+          return;
+        }
+        await runEntry(repoPath, entry, service, fallbackNotice);
       },
 
       openLogsPaneInIde: (repoPath) => {
