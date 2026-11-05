@@ -66,6 +66,7 @@ const EXPECTED = [
   ['Enter (Dashboard)', 'Dashboard: open the focused service in the Logs zone'],
   ['a (Dashboard)', "Dashboard: step through the Attention lines, moving the cursor to the line's service"],
   ['A (Dashboard)', 'Dashboard: open the realign dialog over the drifted services (also `:realign`)'],
+  ['H (Dashboard)', 'Heal: restart services that are not up'],
   ['E (Dashboard)', 'Dashboard: enter the active EDT in the EDTs zone (e opens the EDT quick-pick, or the create wizard when none exists)'],
   ['Ctrl+O (Dashboard)', 'Dashboard: open the focused service repo in your editor'],
   ['Ctrl+R (Dashboard)', 'Dashboard: restart the focused service (R stays refresh)'],

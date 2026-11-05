@@ -345,6 +345,16 @@ export const FOOTER_CONTEXTS = {
     label: 'Realign selection (none checked)',
     hints: [MOVE, ['Space', 'toggle'], ['p', 'preset'], ['←/→', 'restart'], CANCEL],
   },
+  'heal-confirm': {
+    label: 'Heal confirmation',
+    hints: [['←/→/Space', 'mode'], ['Enter', 'heal'], CANCEL],
+  },
+  'heal-busy': { label: 'Heal, restart running', hints: [['Esc', 'close (the run continues)']] },
+  'heal-confirm-close': {
+    label: 'Heal close confirmation',
+    hints: [['Enter', 'close, the run continues'], ['Esc', 'keep watching']],
+  },
+  'heal-close': { label: 'Heal result', hints: [['Enter/Esc', 'close']] },
   'terminal-prompt': {
     label: 'Terminal prompt',
     hints: [['Enter', 'run'], [KEY_UP_DOWN, 'history'], ['Ctrl+C', 'clear'], ['Tab', 'output'], ['Ctrl+F', 'fullscreen'], CLOSE],
@@ -399,9 +409,9 @@ export type FooterContextId = keyof typeof FOOTER_CONTEXTS;
 
 // Who may register a footer context. Overlays sit above the zone they cover, so they win over a
 // zone that registers or re-registers while one is open.
-export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'realign' | 'terminal' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
+export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'realign' | 'heal' | 'terminal' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
 
-export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset', 'realign', 'terminal'];
+export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset', 'realign', 'heal', 'terminal'];
 
 export type FooterContextEntry = { owner: FooterOwner; id: FooterContextId };
 
