@@ -81,6 +81,11 @@ export function healSkipReason(status: Result<ServiceStatus>): RestartSkipReason
     case 'down':
     case 'unhealthy':
       return container === 'no-container' ? 'no container' : null;
+    default: {
+      // A new ServiceStatusState must be classified here: this fails to compile until it is.
+      const unclassified: never = state;
+      return unclassified;
+    }
   }
 }
 
@@ -111,7 +116,12 @@ export async function planHeal(params: PlanHealParams): Promise<Result<HealPlan>
   }
 }
 
+// A `status unknown` row carries the cause (resolver error or thrown message) as its detail.
 async function planRow(deps: Parameters<typeof resolveServiceStatus>[0], member: EdtMember): Promise<RestartRow> {
+  // resolve('') is the process cwd: a blank repoPath is never resolved nor probed.
+  if (member.repoPath.trim() === '') {
+    return { service: member.service, repoPath: member.repoPath, phase: 'skipped', skipReason: 'status unknown', detail: 'blank repoPath in the EDT registry' };
+  }
   const repoPath = resolve(member.repoPath);
   let status: Result<ServiceStatus>;
   try {
@@ -120,9 +130,16 @@ async function planRow(deps: Parameters<typeof resolveServiceStatus>[0], member:
     status = err('status-unavailable', messageOf(cause));
   }
   const skipReason = healSkipReason(status);
-  return skipReason === null
-    ? { service: member.service, repoPath, phase: 'pending' }
-    : { service: member.service, repoPath, phase: 'skipped', skipReason };
+  if (skipReason === null) {
+    return { service: member.service, repoPath, phase: 'pending' };
+  }
+  return {
+    service: member.service,
+    repoPath,
+    phase: 'skipped',
+    skipReason,
+    ...(!status.ok ? { detail: status.error.message } : {}),
+  };
 }
 
 export async function runHeal(params: RunHealParams): Promise<Result<HealReport>> {

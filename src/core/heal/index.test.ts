@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { RestartRow } from '../edt/switch-restart.js';
+import { restartNeedsAttention, type RestartRow } from '../edt/switch-restart.js';
 import type { HealthState } from '../ports/docker.js';
 import type { EdtRegistryEntry } from '../ports/edt-registry.js';
 import type { Manifest } from '../ports/manifest.js';
@@ -118,6 +118,28 @@ describe('planHeal', () => {
       ['broken', 'skipped', 'status unknown'],
       ['blind', 'skipped', 'status unknown'],
     ]);
+    const detailOf = (service: string) => planned.rows.find((row) => row.service === service)?.detail;
+    expect(detailOf('broken')).toBe('bad manifest at /r/broken');
+    expect(detailOf('blind')).toBe('docker down');
+    expect(detailOf('healthy')).toBeUndefined();
+  });
+
+  it('skips a member with a blank repoPath as status unknown, never resolving nor probing it', async () => {
+    const deps = world([{ name: 'api', container: 'down' }]);
+    const entries = await deps.edtRegistry.list();
+    if (!entries.ok) throw new Error('unreachable');
+    const entry = entries.data[0] as EdtRegistryEntry;
+    deps.edtRegistry.list.mockResolvedValueOnce(ok([{ ...entry, members: [...entry.members, { service: 'ghost', repoPath: '  ', branch: 'feature-x' }] }]) as never);
+    const planned = await planHeal(deps);
+    expect(planned.ok && planned.data.rows[1]).toEqual({
+      service: 'ghost',
+      repoPath: '  ',
+      phase: 'skipped',
+      skipReason: 'status unknown',
+      detail: 'blank repoPath in the EDT registry',
+    });
+    expect(deps.manifest.load).toHaveBeenCalledTimes(1);
+    expect(deps.manifest.load).toHaveBeenCalledWith('/r/api');
   });
 
   it('is err no-active-edt when no EDT is active or the active ulid is unknown', async () => {
@@ -139,6 +161,7 @@ describe('planHeal', () => {
     deps.manifest.load.mockRejectedValueOnce(new Error('disk gone'));
     const planned = await planHeal(deps);
     expect(planned.ok && reasons(planned.data.rows)).toEqual([['api', 'skipped', 'status unknown']]);
+    expect(planned.ok && planned.data.rows[0]?.detail).toBe('disk gone');
   });
 });
 
@@ -258,6 +281,19 @@ describe('runHeal', () => {
       lock: freeLock(),
     });
     expect(report.ok && report.data.rows[0]).toMatchObject({ phase: state, detail: 'still bad' });
+  });
+
+  it('keeps a target that ends restarting as restarting, which does not need attention', async () => {
+    const planned = await plan([{ name: 'api', container: 'down' }]);
+    const report = await runHeal({
+      plan: planned,
+      mode: 'simple',
+      concurrency: 1,
+      serviceActions: actions({ verify: async () => ok({ state: 'restarting', detail: 'still restarting' }) }),
+      lock: freeLock(),
+    });
+    expect(report.ok && report.data.rows[0]).toMatchObject({ phase: 'restarting' });
+    expect(report.ok && restartNeedsAttention(report.data.summary)).toBe(false);
   });
 
   it('survives a throwing onPhase observer', async () => {
