@@ -758,6 +758,13 @@ it('shouldQuit returns true for q', () => {
         toggleTerminalFullscreen: () => {},
         setTerminalNotice: () => {},
         closeTerminal: () => {},
+        healScreenOpen: false,
+        healRun: null,
+        healNotice: null,
+        openHeal: async () => {},
+        toggleHealMode: () => {},
+        startHeal: async () => {},
+        closeHeal: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

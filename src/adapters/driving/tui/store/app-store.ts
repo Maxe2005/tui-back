@@ -37,6 +37,7 @@ import { createDashboardSlice, type DashboardSlice } from './slices/dashboard-sl
 import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types-slice.js';
 import { createRealignSlice, type RealignSlice } from './slices/realign-slice.js';
 import { createTerminalSlice, type TerminalSlice } from './slices/terminal-slice.js';
+import { createHealSlice, type HealSlice } from './slices/heal-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
 export type { ActivateEdtRequest, CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
@@ -51,6 +52,7 @@ export type { ResetPreview } from './slices/reset-slice.js';
 export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types-slice.js';
 export type { DashboardSectionStatus } from './slices/dashboard-slice.js';
 export type { RealignCandidates, RealignDraft, RealignLiveRow, RealignLiveStatus, RealignRun } from './slices/realign-slice.js';
+export type { HealNotice, HealRun, HealRunStatus } from './slices/heal-slice.js';
 export type { TerminalKind, TerminalLine, TerminalLineKind, TerminalTarget } from './slices/terminal-slice.js';
 export type { RoutesStatus } from './slices/routes-slice.js';
 export type { RouteResponse, RoutesPaneFocus, RoutesPaneTab } from './slices/routes-slice.js';
@@ -119,7 +121,7 @@ export type AppStoreDeps = {
   };
 };
 
-export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & CommandHistorySlice & ResetSlice & RoutesSlice & SharedTypesSlice & DashboardSlice & RealignSlice & TerminalSlice;
+export type AppState = NavigationSlice & EdtSlice & RegistrySlice & SettingsSlice & UpdateSlice & LogsSlice & CommandHistorySlice & ResetSlice & RoutesSlice & SharedTypesSlice & DashboardSlice & RealignSlice & TerminalSlice & HealSlice;
 
 export function createAppStore(deps?: AppStoreDeps) {
   return create<AppState>()((...args) => ({
@@ -136,6 +138,7 @@ export function createAppStore(deps?: AppStoreDeps) {
     ...createDashboardSlice(deps)(...args),
     ...createRealignSlice(deps)(...args),
     ...createTerminalSlice(deps)(...args),
+    ...createHealSlice(deps)(...args),
   }));
 }
 
