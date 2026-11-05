@@ -77,6 +77,8 @@ export interface BuildDashboardSnapshotParams {
   docker: DockerPort;
   // Not wired = statuses are container-only, as if no healthUrl were declared.
   healthProbe?: HealthProbePort;
+  // The local per-service health-check toggle, forwarded to the status resolver as-is.
+  isHealthCheckEnabled?: (manifest: Manifest) => boolean;
   edtRegistry: EdtRegistryPort;
   state: StatePort;
 }
@@ -168,7 +170,7 @@ async function readService(
   edts: EdtRegistryEntry[],
   activeUlid: string,
 ): Promise<DashboardService> {
-  const { manifest, git, docker, healthProbe } = params;
+  const { manifest, git, docker, healthProbe, isHealthCheckEnabled } = params;
   const path = resolve(member.repoPath);
 
   const loaded = await manifest.load(path);
@@ -177,7 +179,11 @@ async function readService(
     : { ok: false, error: { code: loaded.error.code, message: loaded.error.message } };
 
   const [status, divergence, workingTree] = await Promise.all([
-    readStatus({ docker, ...(healthProbe === undefined ? {} : { healthProbe }) }, loaded.ok ? loaded.data : null, loaded.ok ? null : loaded.error),
+    readStatus(
+      { docker, ...(healthProbe === undefined ? {} : { healthProbe }), ...(isHealthCheckEnabled === undefined ? {} : { isHealthCheckEnabled }) },
+      loaded.ok ? loaded.data : null,
+      loaded.ok ? null : loaded.error,
+    ),
     readServiceDivergence(git, member.service, path, true, loaded.ok ? loaded.data.sharedBranch : '', loaded.ok ? (loaded.data.protectedBranches ?? []) : []),
     readWorkingTree(git, path),
   ]);
@@ -212,7 +218,7 @@ async function readService(
 }
 
 async function readStatus(
-  ports: { docker: DockerPort; healthProbe?: HealthProbePort },
+  ports: { docker: DockerPort; healthProbe?: HealthProbePort; isHealthCheckEnabled?: (manifest: Manifest) => boolean },
   manifest: Manifest | null,
   manifestError: { code: string; message: string } | null,
 ): Promise<DashboardService['status']> {

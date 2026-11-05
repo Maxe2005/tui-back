@@ -1,6 +1,7 @@
 // tui/store/slices: EDT domain state — registry entries, per-service branch/divergence,
 // EDT use-cases (in-process), branch-picker capabilities, and per-EDT action log.
 // Combined with other slices into the one Zustand store.
+import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
 import type { StateCreator } from 'zustand';
 import {
   createEdt as createEdtUseCase,
@@ -235,9 +236,13 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
           lock: deps.lock,
           docker: deps.docker,
           healthProbe: deps.healthProbe,
+          // Late-bound: the registry is built before the store exists, and the toggle is read
+          // live at each verification so a :settings change applies without a restart.
+          isHealthCheckEnabled: healthCheckEnabledFrom(() => getState?.().settings ?? null),
         })
       : null;
-  return (set, get) => ({
+  let getState: (() => AppState) | null = null;
+  const createState: StateCreator<AppState, [], [], EdtSlice> = (set, get) => ({
     activeEdt: null,
     setActiveEdt: (edt) => set({ activeEdt: edt }),
     edtsBranches: null,
@@ -643,4 +648,8 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
     },
   });
+  return (set, get, api) => {
+    getState = get;
+    return createState(set, get, api);
+  };
 }

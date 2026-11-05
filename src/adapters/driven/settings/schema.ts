@@ -178,5 +178,15 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.logs),
+    // Optional-with-default: a settings.yaml written before this group existed has no
+    // `services:`. A non-array value fails the whole file back to defaults with the usual
+    // field-naming warning (`services.healthCheckDisabled`); unknown service names are kept.
+    services: z
+      .object({
+        healthCheckDisabled: z.array(z.string()).optional().default(DEFAULT_SETTINGS.services.healthCheckDisabled),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.services),
   })
   .strict();

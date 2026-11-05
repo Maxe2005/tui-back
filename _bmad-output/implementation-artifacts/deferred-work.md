@@ -885,6 +885,12 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: The `?` help adds section heading lines on top of its `visibleLines` row window, so the dialog height still varies while scrolling or filtering (minHeight is only a floor).
   evidence: `withSectionHeadings(visible)` in keybinding-help.tsx runs after `resolveHelpWindow(rows, offset, visibleLines)`; behaviour predates story 9.10, raised by the 9.10 edge-case and blind reviews.
 
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-11-per-service-health-check-toggle.md`
+  summary: A `services.healthCheckDisabled` entry for a service that is unregistered, renamed or no longer declares `healthUrl` cannot be cleared from the Services tab (the row is absent or shown `[-]` and ignores Space); only hand-editing `settings.yaml` removes it.
+  evidence: Raised by the 9.11 blind and edge-case reviews. The spec keeps unknown names and lists such rows disabled, so behaviour matches intent; if the `healthUrl` comes back, the probe silently stays off until the entry is removed.
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-11-per-service-health-check-toggle.md`
+  summary: The health check toggle is keyed by manifest `service` name, so two registered repos declaring the same service name (duplicate checkouts) share one checkbox state.
+  evidence: Raised by the 9.11 blind and edge-case reviews. Service names are assumed unique across the registry elsewhere too; no duplicate detection exists.
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-8-heal-use-case-and-cli.md`
   summary: Heal restarts targets from a status snapshot taken at plan time; once Story 9.9 puts a confirm overlay between `planHeal` and `runHeal`, a service that recovered meanwhile is still restarted — consider re-resolving the status in `runHeal`'s `beforeRestart` and skipping recovered rows.
   evidence: `runHeal` (src/core/heal/index.ts) only peeks locks before each restart and never re-reads the status; the plan/run split exists precisely so a consumer can wait on the user between the two.

@@ -1,6 +1,7 @@
 // tui/store/slices: the Dashboard's state — the services and registry-health sections, each with
 // its own load status so they fill independently, plus the time of the last completed load.
 // Builders run in-process over injected ports; unwired, a section degrades to an error state.
+import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
 import { basename } from 'node:path';
 import type { StateCreator } from 'zustand';
 import { err, type Result } from '../../../../../core/result.js';
@@ -253,7 +254,11 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
           dashboardRegistryStatus: 'loading',
         });
         // A builder that throws degrades its own section; the other one is untouched.
-        const services = buildDashboardServices(deps).then(
+        // The live per-service health-check toggle, read at every refresh.
+        const services = buildDashboardServices({
+          ...deps,
+          isHealthCheckEnabled: healthCheckEnabledFrom(() => get().settings),
+        }).then(
           (result) =>
             set((state) => ({
               dashboardServicesStatus: result.ok ? 'ready' : 'error',

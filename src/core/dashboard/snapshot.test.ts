@@ -199,6 +199,29 @@ describe('buildDashboardSnapshot', () => {
     expect(setup.docker.getContainerHealth).not.toHaveBeenCalled();
   });
 
+  it('never probes a service whose health check is disabled and marks it', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x'], ['/r/b', 'feat/x']])],
+      manifests: {
+        '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }),
+        '/r/b': manifestFor('/r/b', { healthUrl: 'http://b/h' }),
+      },
+    });
+    const probe = vi.fn(async () => ok({ healthy: false, reason: 'HTTP 503' }));
+    const isHealthCheckEnabled = (manifest: Manifest) => manifest.service !== 'svc-a';
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe }, isHealthCheckEnabled });
+    expect(result.ok && result.data.services[0]?.status).toEqual({
+      ok: true,
+      value: { state: 'up', verified: false, container: 'up', healthCheck: 'disabled' },
+    });
+    expect(result.ok && result.data.services[1]?.status).toEqual({
+      ok: true,
+      value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' },
+    });
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(probe).toHaveBeenCalledWith('http://b/h', expect.any(Number));
+  });
+
   it('ignores healthUrl when no probe is wired', async () => {
     const snapshot = await data({ manifests: { '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }) } });
     expect(snapshot.services[0]?.status).toEqual({ ok: true, value: { state: 'up', verified: false, container: 'up' } });
