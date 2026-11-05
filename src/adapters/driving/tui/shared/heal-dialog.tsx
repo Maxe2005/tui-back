@@ -10,7 +10,6 @@ import { useFooterContext } from './hooks/use-footer-context.js';
 import { useBounds } from './bounds/bounds-context.js';
 import { ModalDialog } from './components/modal-dialog.js';
 import { RestartModeSelector } from './components/restart-mode-selector.js';
-import { StateLine } from './components/state-line.js';
 import { ClampedParagraph } from './components/truncated-text.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
@@ -72,7 +71,11 @@ export function HealDialog({
 
   useInput((input, key) => {
     const state = useStore.getState();
-    const action = resolveHealKey(input, key, healView(state.healRun, confirmingRef.current));
+    const current = healView(state.healRun, confirmingRef.current);
+    if (current === null) {
+      return;
+    }
+    const action = resolveHealKey(input, key, current);
     switch (action.type) {
       case 'close':
         setConfirmingClose(false);
@@ -95,12 +98,13 @@ export function HealDialog({
     }
   });
 
-  useFooterContext('heal', healFooterContext(view), useStore);
+  useFooterContext('heal', view === null ? null : healFooterContext(view), useStore);
 
+  if (run === null || view === null) {
+    return null;
+  }
   let body;
-  if (run === null || view === 'planning') {
-    body = <StateLine kind="loading" subject="service statuses" />;
-  } else if (view === 'error') {
+  if (view === 'error') {
     body = (
       <Box flexDirection="column">
         <Text color={colors.text} wrap="truncate-end">Heal not run.</Text>

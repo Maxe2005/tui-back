@@ -11,11 +11,13 @@ export const HEAL_MODES: readonly RestartMode[] = ['simple', 'clean'];
 
 export const HEAL_CONFIRM_CLOSE_TEXT = 'The heal is still running — Enter closes this view and lets it finish in the background, Esc keeps it open.';
 
-export type HealView = 'planning' | 'confirm' | 'running' | 'confirm-close' | 'done' | 'error';
+export type HealView = 'confirm' | 'running' | 'confirm-close' | 'done' | 'error';
 
-export function healView(run: HealRun | null, confirmingClose: boolean): HealView {
+// The overlay only opens once the plan resolved, so a run it shows is never `planning`; null
+// means there is nothing to show.
+export function healView(run: HealRun | null, confirmingClose: boolean): HealView | null {
   if (run === null || run.status === 'planning') {
-    return 'planning';
+    return null;
   }
   if (run.status === 'running') {
     return confirmingClose ? 'confirm-close' : 'running';
@@ -65,8 +67,6 @@ export function resolveHealKey(input: string, key: HealKey, view: HealView): Hea
     case 'done':
     case 'error':
       return key.escape === true || key.return === true ? { type: 'close' } : { type: 'ignore' };
-    case 'planning':
-      return key.escape === true ? { type: 'close' } : { type: 'ignore' };
   }
 }
 
@@ -81,8 +81,6 @@ export function healFooterContext(view: HealView): FooterContextId {
     case 'done':
     case 'error':
       return 'heal-close';
-    case 'planning':
-      return 'dismiss';
   }
 }
 

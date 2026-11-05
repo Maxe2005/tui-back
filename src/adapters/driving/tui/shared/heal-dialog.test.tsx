@@ -34,8 +34,8 @@ function storeWith(run: HealRun) {
 
 describe('heal dialog logic', () => {
   it('picks the view from the run and the confirm-close sub-state', () => {
-    expect(healView(null, false)).toBe('planning');
-    expect(healView(healRun({ status: 'planning' }), false)).toBe('planning');
+    expect(healView(null, false)).toBeNull();
+    expect(healView(healRun({ status: 'planning' }), false)).toBeNull();
     expect(healView(healRun(), true)).toBe('confirm');
     expect(healView(healRun({ status: 'running' }), false)).toBe('running');
     expect(healView(healRun({ status: 'running' }), true)).toBe('confirm-close');
