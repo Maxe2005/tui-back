@@ -330,7 +330,7 @@ describe('AppShell with the Terminal open', () => {
     }
   });
 
-  it('opens help from the output focus; keys go to help only, and Esc returns to the Terminal as it was', async () => {
+  it('opens help from the output focus; typed keys filter the help only, and Esc returns to the Terminal as it was', async () => {
     const store = createAppStore();
     const runTerminalCommand = vi.fn((_command: string) => ({ accepted: true, done: Promise.resolve() }));
     store.setState({
@@ -349,10 +349,15 @@ describe('AppShell with the Terminal open', () => {
       expect(store.getState().helpOpen).toBe(true);
       expect(footerIdOf(store)).toBe('help');
 
+      // Typed letters filter the help and never reach the Terminal prompt.
       await press(instance, stdin, 'z');
       await press(instance, stdin, KEYS.enter);
       expect(runTerminalCommand).not.toHaveBeenCalled();
+      expect(store.getState().helpFilter).toBe('z');
 
+      // The first Esc clears the filter, the second closes the help.
+      await pressEscape(instance, stdin);
+      expect(store.getState()).toMatchObject({ helpOpen: true, helpFilter: '' });
       await pressEscape(instance, stdin);
       expect(store.getState().helpOpen).toBe(false);
       expect(store.getState().terminalOpen).toBe(true);

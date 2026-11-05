@@ -50,8 +50,13 @@ export type NavigationSlice = {
   // no-op while resizeMode is null.
   cycleResizeTargetBoundary: (direction?: FocusNavDirection) => void;
   helpOpen: boolean;
+  // The `?` help's type-to-filter text. Lives here (not in KeybindingHelp) so the app-shell's
+  // single help dispatch can decide whether `?`/Esc edit it or close the help. Opening and
+  // closing the help both reset it: the help always reopens unfiltered.
+  helpFilter: string;
   openHelp: () => void;
   closeHelp: () => void;
+  setHelpFilter: (text: string) => void;
   runInProgress: boolean;
   setRunInProgress: (value: boolean) => void;
   // Per-gated-zone tab visibility (Routes/shared-types). Defaults to 'enabled' for both before
@@ -207,8 +212,10 @@ export function createNavigationSlice(deps?: AppStoreDeps): StateCreator<AppStat
         };
       }),
     helpOpen: false,
-    openHelp: () => set({ helpOpen: true }),
-    closeHelp: () => set({ helpOpen: false }),
+    helpFilter: '',
+    openHelp: () => set({ helpOpen: true, helpFilter: '' }),
+    closeHelp: () => set({ helpOpen: false, helpFilter: '' }),
+    setHelpFilter: (text) => set({ helpFilter: text }),
     runInProgress: false,
     setRunInProgress: (value: boolean) => set({ runInProgress: value }),
     tabVisibility: DEFAULT_TAB_VISIBILITY,

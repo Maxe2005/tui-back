@@ -880,3 +880,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-7-health-first-service-status-resolution.md`
   summary: The same `healthUrl` can be probed by up to three independent pollers per 5 s interval (Logs pane, Logs listed row, Update list) with no shared cache or dedupe.
   evidence: Flagged by blind-hunter in the 9.7 review. Each poller existed before 9.7 with its own container read; 9.7 routes each through the resolver, so steady health-route traffic now scales with the number of open views. Acceptable for local dev services; a shared short-TTL status cache would remove it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-9-10-text-filter-in-the-keybinding-help.md`
+  summary: The `?` help adds section heading lines on top of its `visibleLines` row window, so the dialog height still varies while scrolling or filtering (minHeight is only a floor).
+  evidence: `withSectionHeadings(visible)` in keybinding-help.tsx runs after `resolveHelpWindow(rows, offset, visibleLines)`; behaviour predates story 9.10, raised by the 9.10 edge-case and blind reviews.

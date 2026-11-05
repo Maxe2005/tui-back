@@ -11,6 +11,7 @@ export { ModalDialog } from './modal-dialog.js';
 export type { ModalDialogProps } from './modal-dialog.js';
 export {
   KeybindingHelp,
+  filterKeybindings,
   clampHelpOffset,
   resolveHelpScroll,
   resolveHelpWindow,

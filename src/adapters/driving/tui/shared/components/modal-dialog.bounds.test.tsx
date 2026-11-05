@@ -106,3 +106,67 @@ describe('ModalDialog scrolling', () => {
     }
   });
 });
+
+describe('ModalDialog pageKeys and stale overflow', () => {
+  function mountDialog(tree: ReturnType<typeof createElement>) {
+    const stdout = new FakeTtyStdout();
+    stdout.columns = 60;
+    stdout.rows = 14;
+    const stdin = fakeInteractiveTtyStdin();
+    const instance = render(tree, {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    const flush = async () => {
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+    };
+    const write = async (chunk: string) => {
+      (stdin as unknown as { write: (c: string) => void }).write(chunk);
+      await flush();
+    };
+    return { stdout, instance, flush, write };
+  }
+
+  const rows = (prefix: string, count: number) =>
+    Array.from({ length: count }, (_, i) => createElement(Text, { key: i }, `${prefix}-${i}`));
+  const tree = (props: Record<string, unknown>, ...body: ReturnType<typeof createElement>[]) =>
+    createElement(BoundsProvider, { columns: 60, rows: 14, children: null }, createElement(ModalDialog, { title: 'DLG', ...props }, ...body));
+
+  it('ignores PgUp/PgDn and shows no scroll hint when pageKeys is false', async () => {
+    const { stdout, instance, flush, write } = mountDialog(tree({ pageKeys: false }, ...rows('r', 50)));
+    const last = () => stdout.output.slice(stdout.output.lastIndexOf('DLG'));
+    try {
+      await flush();
+      expect(last()).toContain('r-0');
+      expect(last()).not.toContain('PgUp/PgDn scroll');
+      await write(KEYS.pageDown);
+      expect(last()).toContain('r-0');
+      expect(last()).not.toContain('PgUp/PgDn scroll');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('reopening with content that fits shows no scroll hint', async () => {
+    const { stdout, instance, flush } = mountDialog(tree({ open: true }, ...rows('big', 50)));
+    const last = () => stdout.output.slice(stdout.output.lastIndexOf('DLG'));
+    try {
+      await flush();
+      expect(last()).toContain('PgUp/PgDn scroll');
+      instance.rerender(tree({ open: false }, ...rows('big', 50)));
+      await flush();
+      instance.rerender(tree({ open: true }, ...rows('small', 2)));
+      await flush();
+      expect(last()).toContain('small-1');
+      expect(last()).not.toContain('PgUp/PgDn scroll');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});

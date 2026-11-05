@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { useInput } from '../hooks/use-input.js';
-import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useBounds } from '../bounds/bounds-context.js';
 import { useElementSize } from '../hooks/use-element-size.js';
 import { colors, spacing } from '../theme/theme.js';
@@ -13,6 +13,9 @@ export type ModalDialogProps = {
   maxHeight?: number;
   // Pinned below the body, never clipped by it.
   footer?: ReactNode;
+  // false: the dialog neither takes PgUp/PgDn nor shows its PgUp/PgDn scroll hint, for a body
+  // that pages its own content with those keys (the `?` help). Defaults to true.
+  pageKeys?: boolean;
 };
 
 // The open dialogs in opening order; only the last one (the topmost) takes PgUp/PgDn.
@@ -41,14 +44,26 @@ function useIsTopmost(id: string, open: boolean): boolean {
 }
 
 export function ModalDialog(props: ModalDialogProps) {
-  const { title, open = true, children, maxHeight, footer } = props;
+  const { title, open = true, children, maxHeight, footer, pageKeys = true } = props;
   const bounds = useBounds();
   const [bodyRef, bodySize] = useElementSize();
   const [innerRef, innerSize] = useElementSize();
   const [offset, setOffset] = useState(0);
   const topmost = useIsTopmost(useId(), open);
   // Rows of body hidden below the visible window; the body scrolls with PgUp/PgDn.
-  const hidden = bodySize !== null && innerSize !== null ? Math.max(0, innerSize.height - bodySize.height) : 0;
+  // A body squeezed to 0 rows (the scroll hint took its last row) measures its content as 0 rows
+  // too, which would drop the hint, give the row back and loop forever. So while the previous
+  // frame showed the hint (lastHidden > 0), a 0-row body keeps that overflow. lastHidden is only
+  // written after commit and is cleared whenever the dialog closes, so a reopened dialog whose
+  // content fits never inherits a stale overflow.
+  const lastHidden = useRef(0);
+  let hidden = 0;
+  if (pageKeys && open && bodySize !== null && innerSize !== null) {
+    hidden = bodySize.height === 0 ? lastHidden.current : Math.max(0, innerSize.height - bodySize.height);
+  }
+  useLayoutEffect(() => {
+    lastHidden.current = open ? hidden : 0;
+  });
   const scroll = Math.min(offset, hidden);
   const page = Math.max(1, (bodySize?.height ?? 1) - 1);
   // A fresh scroll position whenever the dialog reopens or its content shrinks below the offset.
