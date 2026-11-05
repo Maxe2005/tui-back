@@ -3167,11 +3167,11 @@ describe('AppShell heal overlay', () => {
       await instance.waitUntilRenderFlush();
       expect(stdout.output).toContain('HEAL');
       const zoneBefore = store.getState().activeZone;
-      for (const key of ['e', 'u', ':', '?', 'q']) {
+      for (const key of ['e', 'u', ':', '?', 'q', KEYS.ctrlW]) {
         await press(instance, stdin, key);
       }
       expect(store.getState().activeZone).toBe(zoneBefore);
-      expect(store.getState()).toMatchObject({ commandBarOpen: false, helpOpen: false, healScreenOpen: true, quitRequested: false });
+      expect(store.getState()).toMatchObject({ commandBarOpen: false, helpOpen: false, healScreenOpen: true, quitRequested: false, resizeMode: null });
       expect(onQuit).not.toHaveBeenCalled();
       await pressEscape(instance, stdin);
       expect(store.getState()).toMatchObject({ healScreenOpen: false, healRun: null });
