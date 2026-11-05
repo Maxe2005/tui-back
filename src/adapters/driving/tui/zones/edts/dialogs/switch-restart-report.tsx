@@ -44,8 +44,11 @@ export function SwitchRestartReport({
   state,
   chromeRows = 0,
   maxVisibleRows,
+  heading,
 }: {
   state: NonNullable<AppState['switchRestart']>;
+  // Replaces the header line, for a list shown before any restart ran (the Heal confirm view).
+  heading?: string;
   // Rows the dialog spends around the list (border, title, summary lines) — the list gets the rest.
   chromeRows?: number;
   // Instead of chromeRows: the list's own row budget, when the dialog shares its height with
@@ -58,7 +61,7 @@ export function SwitchRestartReport({
   return (
     <Box flexDirection="column">
       <Text color={colors.text} wrap="truncate-end">
-        {running ? `Restarting services (${state.mode})…` : `Restart ${state.mode} finished: ${describeRestartSummary(rows)}`}
+        {heading ?? (running ? `Restarting services (${state.mode})…` : `Restart ${state.mode} finished: ${describeRestartSummary(rows)}`)}
       </Text>
       {state.error !== null ? <DimAnnotation text={state.error} /> : null}
       <BoundedList

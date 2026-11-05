@@ -2,6 +2,7 @@
 // driven settings adapter implements. Unlike other ports' load(), a corrupt or invalid
 // settings.yaml must never block the `:settings` screen: `load()` is `ok` with every default
 // and a field-naming `warning`; only a genuine I/O error is an `err`.
+import type { Manifest } from './manifest.js';
 import type { Result } from '../result.js';
 
 export const UPDATE_MERGE_SOURCES = ['shared', 'edt-pending'] as const;
@@ -99,6 +100,12 @@ export interface Settings {
     defaultScope: RealignScope;
     restartMode: SwitchRestartMode;
   };
+  // The heal's restart mode (Dashboard heal and CLI `heal`): pre-selects the heal confirm
+  // overlay's mode and is the CLI's default when `--restart` is absent. Never written back from
+  // a run; read when a heal starts. Default `simple`.
+  dashboard: {
+    restartMode: 'simple' | 'clean';
+  };
   logs: {
     bufferSize: number;
     // When true, subscribing to a service's logs immediately loads its most recent history
@@ -124,6 +131,14 @@ export interface Settings {
     // declared). Read on every `R`, so a change applies live. Default `simple`.
     restartMode: 'simple' | 'clean';
   };
+  // Per-service local preferences, keyed by the manifest `service` name.
+  services: {
+    // Services whose `healthUrl` health check is turned off on this machine: the status
+    // resolver (core/service-status) resolves them as if no `healthUrl` were declared and never
+    // probes them. Unknown names are kept and ignored. Toggled from the :settings Services tab;
+    // read at every resolution, so a change applies at the next poll/refresh.
+    healthCheckDisabled: string[];
+  };
 }
 
 // Single source of truth for every default value — reused by the driven adapter's zod schema
@@ -142,8 +157,17 @@ export const DEFAULT_SETTINGS: Settings = {
   sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
   switch: { restartMode: 'none' },
   realign: { defaultScope: 'edt', restartMode: 'none' },
+  dashboard: { restartMode: 'simple' },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' },
+  services: { healthCheckDisabled: [] },
 };
+
+// The per-service health-check toggle as the status resolver and verifyService consume it
+// (`isHealthCheckEnabled`). `getSettings` is called on every check, so a caller handing a live
+// getter (the TUI store) sees a :settings change at the next resolution.
+export function healthCheckEnabledFrom(getSettings: () => Settings | null): (manifest: Manifest) => boolean {
+  return (manifest) => !(getSettings()?.services.healthCheckDisabled.includes(manifest.service) ?? false);
+}
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/
 // schema.ts, which rejects out-of-range values from a hand-edited settings.yaml) and the

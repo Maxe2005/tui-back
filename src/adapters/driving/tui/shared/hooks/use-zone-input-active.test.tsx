@@ -36,6 +36,8 @@ const OVERLAYS: Array<[string, Partial<AppState>]> = [
   ['settings screen', { settingsScreenOpen: true }],
   ['reset screen', { resetScreenOpen: true }],
   ['realign dialog', { realignScreenOpen: true }],
+  ['heal dialog', { healScreenOpen: true }],
+  ['terminal', { terminalOpen: true }],
   ['help panel', { helpOpen: true }],
   ['resize mode', { resizeMode: { zone: 'update', targetBoundary: 0 } as AppState['resizeMode'] }],
 ];

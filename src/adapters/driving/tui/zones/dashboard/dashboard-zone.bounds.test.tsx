@@ -10,12 +10,25 @@ import { BANNER_LINES } from './launch-banner.js';
 
 const LONG = 'x'.repeat(300);
 
+// Anomalous rows cycle through the health-first states, with an unbounded probe reason and
+// container error, so the unhealthy / inconsistent rendering is covered across the matrix.
+function statusFor(i: number) {
+  switch (i % 3) {
+    case 0:
+      return { ok: true as const, value: { state: 'unhealthy' as const, verified: true, container: 'up' as const, probeReason: `HTTP 503 ${LONG}` } };
+    case 1:
+      return { ok: true as const, value: { state: 'inconsistent' as const, verified: true, container: 'restarting' as const } };
+    default:
+      return { ok: true as const, value: { state: 'up' as const, verified: true, container: null, containerError: { code: 'docker-unavailable', message: LONG } } };
+  }
+}
+
 function row(i: number, overrides: Record<string, unknown> = {}) {
   return {
     service: `service-${i}-${LONG}`,
     path: `/r/service-${i}`,
     manifest: { ok: true as const, value: { sharedBranch: 'development', protectedBranches: [] } },
-    container: { ok: true as const, value: 'up' as const },
+    status: { ok: true as const, value: { state: 'up' as const, verified: false, container: 'up' as const } },
     branch: `feature/${LONG}`,
     divergence: { status: 'current' as const, ahead: 1, behind: 3 },
     workingTree: { ok: true as const, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
@@ -42,7 +55,7 @@ function storeFor(state: State): AppStore {
     expectedBranch: `develop-${LONG}`,
     drift: 'drifted' as const,
   }));
-  const services = Array.from({ length: 30 }, (_, i) => (state === 'anomalies' ? row(i) : calm(i)));
+  const services = Array.from({ length: 30 }, (_, i) => (state === 'anomalies' ? row(i, { status: statusFor(i) }) : calm(i)));
   store.setState({
     registryEmpty: false,
     checkRegistryEmpty: async () => {},

@@ -52,6 +52,8 @@ FR-38 (added 2026-10-15, Sprint Change Proposal): Branch drift detection and rea
 FR-39 (added 2026-11-04, Sprint Change Proposal): Open a line-oriented command terminal on a service (repo directory) or its container from the Dashboard/Logs: run commands, read output, scroll, cancel, full screen. No interactive TTY programs.
 FR-40 (added 2026-11-04): All per-service actions are available from the Dashboard and the Logs tab from the same registry, with the same availability rules.
 FR-41 (added 2026-11-04): Shared Types shows every action as a labelled command and presents post-publish next steps as an explicit choice screen.
+FR-42 (added 2026-11-04, SCP 2): Service status is health-first (manifest `healthUrl`, then container), with an explicit `inconsistent` state, across every view and the CLI.
+FR-43 (added 2026-11-04, SCP 2): Heal — restart every active-EDT service that is not up, from the Dashboard and the `heal` CLI.
 
 ### NonFunctional Requirements
 
@@ -171,6 +173,8 @@ FR-38: Epic 8 - Branch drift detection & realignment: Attention lines, `realign`
 FR-39: Epic 9 - Service/container terminal inside the tool: type commands, scroll, cancel, full screen (added 2026-11-04 — Stories 9.1–9.4)
 FR-40: Epic 9 - Every service action available from Dashboard and Logs through one registry (added 2026-11-04 — Stories 9.2, 9.5)
 FR-41: Epic 9 - Shared Types: labelled action bar and explicit post-publish choice screen (added 2026-11-04 — Story 9.6)
+FR-42: Epic 9 - Health-first service status (added 2026-11-04 — Story 9.7)
+FR-43: Epic 9 - Heal action on the Dashboard + CLI (added 2026-11-04 — Stories 9.8, 9.9)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
@@ -189,8 +193,8 @@ A developer lands on a Dashboard that answers "should I worry about anything?" a
 > Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`).
 
 A developer opens a terminal on a service or its container from the Dashboard or Logs, every service action is identical everywhere, and Shared Types makes its commands and post-publish choices obvious.
-**FRs covered:** FR-39, FR-40, FR-41; draws on FR-35
-**Implementation notes:** Order: 9.1 → 9.3 (parallelizable) → 9.2 → 9.4 → 9.5; 9.6 independent. Line-oriented shell (AD-22), no PTY.
+**FRs covered:** FR-39, FR-40, FR-41, FR-42, FR-43; draws on FR-35, FR-29, FR-37
+**Implementation notes:** Order: 9.1 → 9.3 (parallelizable) → 9.2 → 9.4 → 9.5; 9.6 independent. Line-oriented shell (AD-22), no PTY. Added by SCP 2026-11-04-2: 9.7 → 9.8 → 9.9, independent of 9.1–9.6 (AD-23).
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 A developer can launch the tool, see the full navigation shell (top bar, six zone-tabs, footer, resizable list/detail split, modal-dialog, `?` help screen), register managed repos via a manifest, and run any action identically via the TUI or as a standalone CLI script.
@@ -3649,7 +3653,7 @@ As a developer, I want a selection table to choose which repos to realign — wi
 
 ## Epic 9: Service Terminals & Unified Service Actions
 
-> Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`). Adds FR-39, FR-40, FR-41; extends AD-21, adds AD-22. Branch: `epic-9-service-terminals-unified-service-actions`.
+> Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`). Adds FR-39, FR-40, FR-41; extends AD-21, adds AD-22. Extended the same day (`sprint-change-proposal-2026-11-04-2.md`): FR-42, FR-43, AD-23, Stories 9.7–9.9. Extended again (`sprint-change-proposal-2026-11-04-3.md`): FR-44, FR-45, AD-23 extension, Stories 9.10–9.11. Branch: `epic-9-service-terminals-unified-service-actions`.
 
 A developer can open a terminal on a service or on its container from the Dashboard or Logs, every service action is the same everywhere, and the Shared Types tab makes its commands and post-publish choices obvious.
 
@@ -3743,4 +3747,112 @@ As a developer, I want the Shared Types commands and my next steps after a publi
 
 **Given** the existing use-cases and the `q` mid-run guard **Then** they are unchanged; only the zone and its logic change.
 
-**Implementation notes:** independent of 9.1–9.5. Optional unscheduled backlog 9.7: PTY adapter behind the AD-22 port.
+**Implementation notes:** independent of 9.1–9.5. Optional unscheduled backlog item (unnumbered): PTY adapter behind the AD-22 port.
+
+### Story 9.7: Health-First Service Status Resolution
+
+As a developer, I want a service's displayed state to reflect whether the service actually answers, not only whether its container runs, so that I spot a crashed or stuck service immediately.
+
+**Acceptance Criteria:**
+
+**Given** a manifest declaring `healthUrl` **When** the status is resolved **Then** the route is probed first (one `GET` through `HealthProbePort`, short timeout) and combined with the container state following AD-23's table: 2xx + container up → `up`; 2xx + container down/restarting → `inconsistent`; non-2xx/timeout + container up → `unhealthy`; non-2xx/timeout + container restarting/down → `restarting`/`down`.
+
+**Given** a container-less manifest declaring `healthUrl` **When** resolved **Then** the status is `up` or `down` from the probe alone (FR-29 extended).
+
+**Given** no `healthUrl` **When** resolved **Then** the status equals today's container state, `up` flagged as unverified; a container-less service stays `no-container`.
+
+**Given** the probe answers 2xx but Docker errors **When** resolved **Then** the status is `up` and the container error is carried separately, never `inconsistent`.
+
+**Given** the Dashboard snapshot, the Logs panes and list badges, the Update service list and the CLI `dashboard` **When** they read a service state **Then** they all go through the resolver; no consumer combines probe and container itself.
+
+**Given** periodic polls (Logs, Update) **When** a probe is slow **Then** a poll never overlaps the previous one for the same repo and never blocks rendering; the last-known state is kept on failure.
+
+**Given** the `unhealthy` and `inconsistent` states **When** rendered **Then** they have their own glyph + text from theme tokens; `inconsistent` appears in the Dashboard Attention block with its detail; the focused-row reason line shows the probe reason.
+
+**Given** the manifest doc and the `manifest-generator` skill **Then** both describe `healthUrl`'s widened role (steady-state status, not only post-restart verification).
+
+**Implementation notes:** `core/service-status/` (pure, ports injected, returns `Result`, never rejects). `verifyService` keeps its polling loop but uses the same per-attempt rule. Dashboard snapshot field `container` → `status` (+ raw container state); update the CLI `dashboard` envelope doc. AD-23.
+
+### Story 9.8: `heal` Use-Case & CLI — Restart Services That Are Not Up
+
+As a developer, I want one use-case that restarts every service that is not up and reports the result, so that the TUI and scripts share it.
+
+**Acceptance Criteria:**
+
+**Given** an active EDT **When** heal targets are computed **Then** members whose Story 9.7 status is `down` or `unhealthy` and that declare a container are targets; every other member is listed as skipped with its reason (`up`, `already restarting`, `inconsistent`, `no container`, `status unknown`).
+
+**Given** targets and a mode (`simple` | `clean`) **When** heal runs **Then** targets are restarted through `ServiceActions.restart` at `update.concurrency`, then verified through `verifyService`; the report rows and summary use the switch-restart vocabulary (shared machinery, not a copy); a held operation lock fails that row with the lock's name.
+
+**Given** no target **When** heal runs **Then** it succeeds with an empty run and says "every service is up".
+
+**Given** no active EDT **Then** it fails with an explicit error.
+
+**Given** the CLI **When** `tui-back heal [--restart simple|clean]` runs **Then** it emits the standard envelope (AD-3) with targets, skipped rows and the report; `--restart` defaults to `dashboard.restartMode`; exit 1 when a targeted service ends failed, down or unhealthy.
+
+**Implementation notes:** generalise `restartAfterSwitch`'s pool/report into a target-list entry point (switch/realign behaviour and tests unchanged). New setting `dashboard.restartMode` (`simple` | `clean`, default `simple`) in the settings port, schema and settings screen.
+
+**Prerequisites:** 9.7.
+
+### Story 9.9: Dashboard — Heal Action
+
+As a developer, I want to restart every service that is not up from the Dashboard in one action, so that I recover my workspace without restarting services one by one.
+
+**Acceptance Criteria:**
+
+**Given** the Dashboard with a loaded snapshot **When** the Heal key is pressed **Then** a confirm screen (overlay owning the keys, Story 7.11) lists targets and skipped services with reasons, the mode pre-selected from `dashboard.restartMode` and switchable; Enter starts, Esc cancels.
+
+**Given** no target **When** the key is pressed **Then** a notice says every service is up; no screen opens.
+
+**Given** a run **When** in progress **Then** each row shows `restarting → verifying → final state` live; the screen cannot be closed mid-run without confirmation; at the end the summary shows and the Dashboard refreshes.
+
+**Given** the proposed key `H` **When** it collides with a UX-DR36 canonical key or an existing Dashboard/shell binding **Then** HALT and ask.
+
+**Given** the footer and `?` help **Then** they list the key from the keybinding declarations; the screen is bounded (AD-19) and registered in the dialog registry.
+
+**Implementation notes:** reuse the realign dialog's restart-report rendering. The Dashboard's no-live-poll rule (Story 8.3) still holds outside the Heal screen.
+
+**Prerequisites:** 9.8.
+
+### Story 9.10: Text Filter in the Keybinding Help
+
+As a developer, I want to type a few letters in the `?` help and see only the matching keybindings, so that I find a key without scrolling the whole list.
+
+**Acceptance Criteria:**
+
+**Given** the help overlay open **When** a printable key is typed **Then** it is appended to a filter shown on a line under the title (`filter: <text>`, dim placeholder `type to filter` when empty); Backspace removes the last character.
+
+**Given** a non-empty filter **When** the list renders **Then** only the rows whose keys, description or section contain the filter (case-insensitive substring) are listed; a section heading shows only when at least one of its rows matches; the scroll offset resets to the top on every filter change.
+
+**Given** a filter matching nothing **Then** one dim line says `no keybinding matches "<text>"`; the overlay keeps its size.
+
+**Given** a non-empty filter **When** `?` is pressed **Then** it is typed into the filter; **When** Esc is pressed **Then** the filter is cleared and the help stays open. **Given** an empty filter **Then** `?` and Esc close the help as today.
+
+**Given** the arrows, Home/End and PgUp/PgDn **Then** they scroll the filtered list; the help reopens with an empty filter.
+
+**Given** any size **Then** the filter line and the filtered list respect bounded rendering (AD-19): a long filter is truncated, no unbounded `.map`; the help's own footer context lists the filter keys from the keybinding declarations.
+
+**Implementation notes:** a pure `filterKeybindings(rows, query)` next to `withSectionHeadings`, unit-tested. The `?`/Esc decision moves into `resolveHelpDispatch` (app-shell), which needs the filter state from the store or the help component. Applies wherever the help opens (zones, dialogs, terminal view output focus). Independent of other stories.
+
+### Story 9.11: Per-Service Health Check Toggle
+
+As a developer, I want to turn the `healthUrl` check off or on for chosen services, so that a slow or meaningless health route on my machine does not make a service look unhealthy or slow every poll down.
+
+**Acceptance Criteria:**
+
+**Given** the settings **Then** a new `services.healthCheckDisabled` list (manifest `service` names) exists, default empty; a missing, empty or corrupt value falls back to the default with the usual field-naming warning; unknown names are kept and ignored.
+
+**Given** a service whose name is in the list and whose manifest declares `healthUrl` **When** its status is resolved **Then** no probe is sent and the result equals the "no `healthUrl`" rows of AD-23 (container state, `up` unverified; container-less → `no-container`), marked `healthCheck: 'disabled'`.
+
+**Given** a service not in the list **Then** its resolution is unchanged (Story 9.7).
+
+**Given** a disabled service **When** it is restarted (switch/realign restart, Logs `R`, Dashboard restart, heal) **Then** `verifyService` does not probe either: a started container is reported `up-unverified`; heal (9.8) never targets it as `unhealthy`.
+
+**Given** the `:settings` screen **Then** a new **Services** tab lists every registered service, one checkbox per service ("health check"), checked = enabled; a service without `healthUrl` is listed disabled with the dim reason `no healthUrl`; a service whose manifest fails to load is listed disabled with `manifest unavailable`; toggling persists immediately and applies on the next resolution (next poll / refresh) without restart. The list is bounded (AD-19) and its keys come from the keybinding declarations.
+
+**Given** the Dashboard focused row of a disabled service **Then** the reason line shows a dim `health check off`; the CLI `dashboard` JSON carries `healthCheck: "disabled"` on that service's status.
+
+**Given** the resolver **Then** it is the only reader of the setting: no consumer (snapshot, slices, `verifyService`, CLI, heal) checks the list itself.
+
+**Implementation notes:** `ServiceStatusDeps` gets `isHealthCheckEnabled?: (manifest) => boolean` (absent = enabled), wired from the live settings so a change applies at the next call. Settings port, zod schema, defaults and `SETTINGS_TABS` (new `services` tab, last) updated with tests. `docs/tui-back-manifest.md` § `healthUrl` and the CLI `dashboard` envelope doc mention the toggle. AD-23 extension.
+
+**Prerequisites:** 9.7.

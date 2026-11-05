@@ -1,10 +1,16 @@
 // tui/shared/settings-screen: pure-function tests for every key-handling decision
 // (renderToString's fake stdin never emits keys) plus render smoke coverage of every tab body.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
 import { renderToString } from './components/render-to-string.js';
-import { SHARED_TYPES_SETTINGS_ROWS, resolveSharedTypesSettingsKey, settingsFooterContext } from './settings-screen.js';
+import {
+  SHARED_TYPES_SETTINGS_ROWS,
+  buildServicesSettingsRows,
+  resolveServicesSettingsKey,
+  resolveSharedTypesSettingsKey,
+  settingsFooterContext,
+} from './settings-screen.js';
 import {
   EDITOR_COMMAND_PLACEHOLDER_TEXT,
   FILTER_HISTORY_SIZE_STEP,
@@ -98,17 +104,19 @@ describe('resolveUpdateSettingsKey (Update tab)', () => {
 });
 
 describe('nextSettingsTab', () => {
-  it('cycles General -> EDTs -> Command Palette -> Logs -> Update -> st -> General going forward', () => {
+  it('cycles General -> EDTs -> Command Palette -> Logs -> Update -> st -> Services -> General going forward', () => {
     expect(nextSettingsTab('general', 1)).toBe('edts');
     expect(nextSettingsTab('edts', 1)).toBe('command-palette');
     expect(nextSettingsTab('command-palette', 1)).toBe('logs');
     expect(nextSettingsTab('logs', 1)).toBe('update');
     expect(nextSettingsTab('update', 1)).toBe('shared-types');
-    expect(nextSettingsTab('shared-types', 1)).toBe('general');
+    expect(nextSettingsTab('shared-types', 1)).toBe('services');
+    expect(nextSettingsTab('services', 1)).toBe('general');
   });
 
   it('cycles the same order in reverse going backward', () => {
-    expect(nextSettingsTab('general', -1)).toBe('shared-types');
+    expect(nextSettingsTab('general', -1)).toBe('services');
+    expect(nextSettingsTab('services', -1)).toBe('shared-types');
     expect(nextSettingsTab('shared-types', -1)).toBe('update');
     expect(nextSettingsTab('update', -1)).toBe('logs');
     expect(nextSettingsTab('logs', -1)).toBe('command-palette');
@@ -117,7 +125,7 @@ describe('nextSettingsTab', () => {
   });
 
   it('SETTINGS_TABS is declared in exactly that order', () => {
-    expect(SETTINGS_TABS).toEqual(['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types']);
+    expect(SETTINGS_TABS).toEqual(['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types', 'services']);
   });
 });
 
@@ -364,7 +372,7 @@ describe('HIDEABLE_ACTION_TYPES', () => {
 });
 
 describe('SETTINGS_GROUPS', () => {
-  it('lists exactly the six EDTs-tab settings groups, in this order', () => {
+  it('lists exactly the seven EDTs-tab settings groups, in this order', () => {
     expect(SETTINGS_GROUPS.map((group) => group.id)).toEqual([
       'hint-visibility',
       'action-types',
@@ -372,6 +380,7 @@ describe('SETTINGS_GROUPS', () => {
       'switch-restart',
       'realign-scope',
       'realign-restart',
+      'heal-restart',
     ]);
     expect(SETTINGS_GROUPS.map((group) => group.label)).toEqual([
       'Hint visibility',
@@ -380,6 +389,7 @@ describe('SETTINGS_GROUPS', () => {
       'Post-switch restart',
       'Realign default scope',
       'Post-realign restart',
+      'Heal restart mode',
     ]);
   });
 });
@@ -558,6 +568,15 @@ describe('SettingsScreen', () => {
     store.setState({ settings: { ...DEFAULT_SETTINGS, realign: { defaultScope: 'edt' as const, restartMode: 'simple' as const } } });
     const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="realign-restart" />);
     expect(output).toContain('Restart services after a realign: Simple restart');
+  });
+
+  it('renders the live heal restart mode with its annotation', async () => {
+    const store = createAppStore();
+    store.setState({ settings: { ...DEFAULT_SETTINGS, dashboard: { restartMode: 'clean' as const } } });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="heal-restart" />);
+    expect(output).toContain('Restart mode for a heal: Clean restart');
+    expect(output).toContain('Dashboard heal');
+    expect(output).toContain('heal --restart');
   });
 
   it('opens the EDTs tab on its group list, not a checkbox list', async () => {
@@ -749,8 +768,90 @@ describe('settingsFooterContext', () => {
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'switch-restart' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'realign-scope' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'realign-restart' })).toBe('settings-toggle');
+    expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'heal-restart' })).toBe('settings-toggle');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'buffer-size' })).toBe('settings-adjust');
     expect(settingsFooterContext('logs', { ...closed, logsGroup: 'clear-history' })).toBe('settings-run');
+  });
+});
+
+describe('Services settings tab', () => {
+  const branch = (service: string, healthUrl?: string) => ({
+    service,
+    path: `/repos/${service}`,
+    isMember: false,
+    branch: 'main',
+    ahead: 0,
+    behind: 0,
+    status: 'current' as const,
+    sharedBranch: 'development',
+    protectedBranches: [],
+    ...(healthUrl === undefined ? {} : { healthUrl }),
+  });
+
+  it('is the last tab, with its own footer context', () => {
+    expect(SETTINGS_TABS[SETTINGS_TABS.length - 1]).toBe('services');
+    expect(settingsFooterContext('services', { generalEditing: false, edtsGroup: null, logsGroup: null })).toBe('settings-services');
+  });
+
+  it('lists every service: toggleable with a healthUrl, disabled without one or with an unreadable manifest', () => {
+    const rows = buildServicesSettingsRows([branch('api', 'http://api/health'), branch('lib'), branch('blank', '  ')], [
+      { path: '/repos/broken', code: 'manifest-invalid', message: 'bad yaml' },
+    ]);
+    expect(rows).toEqual([
+      { key: '/repos/api', service: 'api', disabledReason: null },
+      { key: '/repos/lib', service: 'lib', disabledReason: 'no healthUrl' },
+      { key: '/repos/blank', service: 'blank', disabledReason: 'no healthUrl' },
+      { key: '/repos/broken', service: 'broken', disabledReason: 'manifest unavailable' },
+    ]);
+    expect(buildServicesSettingsRows(null, [])).toEqual([]);
+  });
+
+  it('moves over every row and toggles only a toggleable one with Space', () => {
+    const rows = buildServicesSettingsRows([branch('api', 'http://api/health'), branch('lib')], []);
+    expect(resolveServicesSettingsKey('', { downArrow: true }, 0, rows)).toEqual({ type: 'move', cursor: 1 });
+    expect(resolveServicesSettingsKey(' ', {}, 0, rows)).toEqual({ type: 'toggle', service: 'api' });
+    expect(resolveServicesSettingsKey(' ', {}, 1, rows)).toEqual({ type: 'ignore' });
+    expect(resolveServicesSettingsKey('x', {}, 0, rows)).toEqual({ type: 'ignore' });
+    expect(resolveServicesSettingsKey(' ', {}, 0, [])).toEqual({ type: 'ignore' });
+  });
+
+  it('renders checked = enabled, unchecked for a disabled check, and dim reasons for untoggleable rows', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [branch('api', 'http://api/health'), branch('auth', 'http://auth/health'), branch('lib')],
+      edtsErrors: [{ path: '/repos/broken', code: 'manifest-invalid', message: 'bad yaml' }],
+      settings: { ...DEFAULT_SETTINGS, services: { healthCheckDisabled: ['auth'] } },
+    });
+    const output = await renderToString(<SettingsScreen useStore={store} initialTab="services" />);
+    const lines = output.split('\n');
+    expect(lines.find((line) => line.includes('api — health check'))).toContain('[x]');
+    expect(lines.find((line) => line.includes('auth — health check'))).toContain('[ ]');
+    expect(lines.find((line) => line.includes('lib — health check'))).toContain('[-]');
+    expect(lines.find((line) => line.includes('lib — health check'))).toContain('(no healthUrl)');
+    expect(lines.find((line) => line.includes('broken — health check'))).toContain('(manifest unavailable)');
+  });
+
+  it('loads the service list itself when opened before any zone listed it', async () => {
+    const store = createAppStore();
+    const loadEdtsBranches = vi.fn(async () => {});
+    store.setState({ edtsBranches: null, loadEdtsBranches });
+    await renderToString(<SettingsScreen useStore={store} initialTab="services" />);
+    expect(loadEdtsBranches).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reload a service list that is already there, nor on another tab', async () => {
+    const store = createAppStore();
+    const loadEdtsBranches = vi.fn(async () => {});
+    store.setState({ edtsBranches: [branch('api', 'http://api/health')], loadEdtsBranches });
+    await renderToString(<SettingsScreen useStore={store} initialTab="services" />);
+    store.setState({ edtsBranches: null });
+    await renderToString(<SettingsScreen useStore={store} initialTab="general" />);
+    expect(loadEdtsBranches).not.toHaveBeenCalled();
+  });
+
+  it('shows a non-blocking message when no services are loaded', async () => {
+    const output = await renderToString(<SettingsScreen useStore={createAppStore()} initialTab="services" />);
+    expect(output).toContain('No manifest services loaded yet.');
   });
 });
 

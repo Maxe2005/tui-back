@@ -21,7 +21,11 @@ export type StatusBadgeState =
   | 'error'
   // A managed service with no Docker runtime (manifest omits `container`) — dim by design,
   // never the down/error treatment.
-  | 'no-container';
+  | 'no-container'
+  // Health-first states (AD-23): the container runs but the health route does not answer
+  // (`unhealthy`), or the route answers while the container is down/restarting (`inconsistent`).
+  | 'unhealthy'
+  | 'inconsistent';
 
 export const STATUS_BADGES = Object.freeze({
   up: { glyph: '●', color: colors.success },
@@ -45,6 +49,8 @@ export const STATUS_BADGES = Object.freeze({
   error: { glyph: '✖', color: colors.error },
   // Hollow like down but dimmed rather than red — "no runtime" is not "runtime down".
   'no-container': { glyph: '○', color: colors['text-dim'] },
+  unhealthy: { glyph: '◐', color: colors.warning },
+  inconsistent: { glyph: '⚠', color: colors.warning },
 } as const);
 
 export function StatusBadge({ state }: { state: StatusBadgeState }) {

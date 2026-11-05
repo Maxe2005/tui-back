@@ -37,6 +37,9 @@ export interface ServiceBranchDivergence {
   // Present whenever status !== 'current' and a git error was involved — kept as a
   // structured, one-action-away field (UX-DR17) rather than inlined into a message string.
   detail?: { code: string; message: string };
+  // The manifest's `healthUrl`, copied as declared (absent when none) — lets the :settings
+  // Services tab tell a toggleable health check from a service that has none.
+  healthUrl?: string;
 }
 
 export interface BranchDivergenceEntryError {
@@ -116,16 +119,16 @@ export async function listEdtBranchesDivergence(
     }
 
     const isMember = activeMemberPaths.has(path);
-    services.push(
-      await readServiceDivergence(
-        git,
-        loaded.data.service,
-        path,
-        isMember,
-        loaded.data.sharedBranch,
-        loaded.data.protectedBranches ?? [],
-      ),
+    const divergence = await readServiceDivergence(
+      git,
+      loaded.data.service,
+      path,
+      isMember,
+      loaded.data.sharedBranch,
+      loaded.data.protectedBranches ?? [],
     );
+    const { healthUrl } = loaded.data;
+    services.push(healthUrl === undefined ? divergence : { ...divergence, healthUrl });
   }
 
   return ok({ services, unreachable, errors });

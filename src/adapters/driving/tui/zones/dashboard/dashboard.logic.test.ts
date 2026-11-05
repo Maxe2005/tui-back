@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardOtherService, DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import { MIN_TERMINAL_ROWS, SHELL_CHROME_ROWS } from '../../shared/bounds/bounds.js';
 import { BANNER_LINES } from './launch-banner.js';
-import { edtKeyEffect, edtSectionActions, formatEdtAction, formatEdtLine, resolveEdtSection, actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, containerLabel, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, type AttentionItem, rowIndexForAttention } from './dashboard.logic.js';
+import { healthCheckNote, edtKeyEffect, edtSectionActions, formatEdtAction, formatEdtLine, resolveEdtSection, actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, statusLabel, attentionBadge, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, type AttentionItem, rowIndexForAttention } from './dashboard.logic.js';
 
 const FIELD_ERROR = { ok: false as const, error: { code: 'x', message: 'y' } };
 
@@ -35,9 +35,13 @@ describe('formatUpdatedAgo', () => {
 
 describe('field labels', () => {
   it('marks a failed container probe and keeps no-container distinct from down', () => {
-    expect(containerLabel(FIELD_ERROR)).toEqual({ text: 'container error', badge: 'error' });
-    expect(containerLabel({ ok: true, value: 'no-container' }).badge).toBe('no-container');
-    expect(containerLabel({ ok: true, value: 'down' }).badge).toBe('down');
+    expect(statusLabel(FIELD_ERROR)).toEqual({ text: 'status error', badge: 'error' });
+    expect(statusLabel({ ok: true, value: { state: 'no-container', verified: false, container: 'no-container' } }).badge).toBe('no-container');
+    expect(statusLabel({ ok: true, value: { state: 'down', verified: false, container: 'down' } }).badge).toBe('down');
+    expect(statusLabel({ ok: true, value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' } })).toEqual({ text: 'unhealthy', badge: 'unhealthy' });
+    expect(statusLabel({ ok: true, value: { state: 'inconsistent', verified: true, container: 'down' } })).toEqual({ text: 'inconsistent', badge: 'inconsistent' });
+    // A route-less up keeps the plain label: unverified lives in the data only.
+    expect(statusLabel({ ok: true, value: { state: 'up', verified: false, container: 'up' } })).toEqual({ text: 'up', badge: 'up' });
   });
   it('marks a failed working-tree probe and lists the active flags', () => {
     expect(workingTreeLabel(FIELD_ERROR)).toBe('git error');
@@ -66,7 +70,7 @@ function row(overrides: Partial<DashboardService> = {}): DashboardService {
     service: 'api',
     path: '/r/api',
     manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
-    container: { ok: true, value: 'up' },
+    status: { ok: true, value: { state: 'up', verified: false, container: 'up' } },
     branch: 'feat/x',
     divergence: { status: 'current', ahead: 1, behind: 2 },
     workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
@@ -77,6 +81,27 @@ function row(overrides: Partial<DashboardService> = {}): DashboardService {
     ...overrides,
   };
 }
+
+describe('health check off note', () => {
+  const off = row({ status: { ok: true, value: { state: 'up', verified: false, container: 'up', healthCheck: 'disabled' } } });
+  it('is a dim note, never an issue: no marker and no reason on its own', () => {
+    expect(healthCheckNote(off)).toBe('health check off');
+    expect(issueMarker(off)).toBe(' ');
+    expect(reasonLine(off)).toBeNull();
+  });
+  it('leaves real issues marked alongside it', () => {
+    const dirty = row({
+      status: { ok: true, value: { state: 'down', verified: false, container: 'down', healthCheck: 'disabled' } },
+      workingTree: { ok: true, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
+    });
+    expect(healthCheckNote(dirty)).toBe('health check off');
+    expect(issueMarker(dirty)).toBe('!');
+    expect(reasonLine(dirty)).toBe('uncommitted changes');
+  });
+  it('is absent for an enabled check', () => {
+    expect(healthCheckNote(row())).toBeNull();
+  });
+});
 
 describe('row anomalies', () => {
   it('prints no marker and no reason for a healthy row', () => {
@@ -101,7 +126,28 @@ describe('reasonParts details', () => {
       'offline: no route to host',
     );
     expect(reasonLine(row({ manifest: { ok: false, error: { code: 'manifest-invalid', message: 'bad yaml' } } }))).toBe('manifest error: bad yaml');
-    expect(reasonLine(row({ container: { ok: false, error: { code: 'd', message: 'docker down' } } }))).toBe('container error: docker down');
+    expect(reasonLine(row({ status: { ok: false, error: { code: 'd', message: 'docker down' } } }))).toBe('container error: docker down');
+    // Docker and the probe both failed: both reasons are shown.
+    expect(
+      reasonLine(row({ status: { ok: false, error: { code: 'd', message: 'docker down', details: { probeReason: 'HTTP 503' } } } })),
+    ).toBe('container error: docker down · health check: HTTP 503');
+    // A manifest failure is reported once, not again as a status error.
+    expect(
+      reasonLine(row({ manifest: { ok: false, error: { code: 'm', message: 'bad yaml' } }, status: { ok: false, error: { code: 'm', message: 'bad yaml' } } })),
+    ).toBe('manifest error: bad yaml');
+  });
+
+  it('shows the probe reason, the inconsistency and a Docker error carried next to a 2xx', () => {
+    expect(reasonLine(row({ status: { ok: true, value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' } } }))).toBe(
+      'health check: HTTP 503',
+    );
+    expect(reasonLine(row({ status: { ok: true, value: { state: 'inconsistent', verified: true, container: 'restarting' } } }))).toBe(
+      'health route answers but container is restarting',
+    );
+    const outage = row({
+      status: { ok: true, value: { state: 'up', verified: true, container: null, containerError: { code: 'docker-unavailable', message: 'no docker' } } },
+    });
+    expect(reasonLine(outage)).toBe('container error: no docker');
   });
 });
 
@@ -133,6 +179,16 @@ describe('action helpers', () => {
     expect(actionForKey(actions, 'r')?.id).toBe('restart-simple');
     expect(actionForKey(actions, 'x')).toBeUndefined();
   });
+  it('resolves the terminal keys to the registry terminal entries with no change to the matcher', () => {
+    const withTerminals = [
+      ...actions,
+      { id: 'terminal-service', label: 'Terminal', key: 'Ctrl+T', availability: { available: true as const } },
+      { id: 'terminal-container', label: 'Container terminal', key: 'Ctrl+X', availability: { available: true as const } },
+    ];
+    expect(actionForKey(withTerminals, 't')?.id).toBe('terminal-service');
+    expect(actionForKey(withTerminals, 'x')?.id).toBe('terminal-container');
+    expect(actionForKey(withTerminals, 'T')?.id).toBe('terminal-service');
+  });
 });
 
 function svc(over: Partial<DashboardService>): DashboardService {
@@ -140,7 +196,7 @@ function svc(over: Partial<DashboardService>): DashboardService {
     service: 's',
     path: '/s',
     manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
-    container: { ok: true, value: 'up' },
+    status: { ok: true, value: { state: 'up', verified: false, container: 'up' } },
     branch: 'feat/x',
     divergence: { status: 'current', ahead: 0, behind: 0 },
     workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
@@ -210,6 +266,23 @@ describe('buildAttentionItems', () => {
       'a · behind by 3',
     ]);
     expect(items.map((item) => item.focusable)).toEqual([true, true, true, false, true]);
+  });
+  it('ranks an inconsistent service right after protected branch, with its own glyph', () => {
+    const items = buildAttentionItems([
+      svc({ service: 'a', branch: 'main', drift: 'drifted' }),
+      svc({ service: 'b', status: { ok: true, value: { state: 'inconsistent', verified: true, container: 'down' } } }),
+      svc({ service: 'c', protectedBranch: true, branch: 'development' }),
+      svc({ service: 'd', status: { ok: true, value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' } } }),
+    ]);
+    expect(items.map(formatAttentionLine)).toEqual([
+      'c · on protected branch development',
+      'b · health route answers but container is down',
+      'a · on main, expected feat/x (EDT member)',
+    ]);
+    expect(items[1]?.reason).toBe('inconsistent');
+    expect(attentionBadge('inconsistent')).toBe('inconsistent');
+    expect(attentionBadge('protected-branch')).toBe('failed');
+    expect(attentionBadge('drift')).toBe('awaiting');
   });
   it('shows a detached HEAD as drift without an unknown-divergence line, and never an unknown drift', () => {
     const detached = svc({

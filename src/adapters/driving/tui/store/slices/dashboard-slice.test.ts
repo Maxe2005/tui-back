@@ -10,7 +10,7 @@ import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
 
-function fakeDeps(overrides: Partial<Record<'registry' | 'edtRegistry' | 'state', unknown>> = {}): AppStoreDeps {
+function fakeDeps(overrides: Partial<Record<'registry' | 'edtRegistry' | 'state' | 'manifest' | 'healthProbe', unknown>> = {}): AppStoreDeps {
   return {
     registry: { list: vi.fn(async () => ok(['/r/a'])), exists: vi.fn(async () => ok(true)) } as unknown as RegistryPort,
     manifest: { load: vi.fn(async () => ok({ service: 'a', sharedBranch: 'development', modules: {} })) } as unknown as ManifestPort,
@@ -40,6 +40,31 @@ describe('dashboard slice', () => {
     expect(state.dashboardServices?.status).toBe('no-active-edt');
     expect(state.dashboardRegistry?.repoCount).toBe(1);
     expect(state.dashboardUpdatedAt).not.toBeNull();
+  });
+
+  it('reads the live health-check toggle at each refresh: a disabled service is never probed', async () => {
+    const probe = vi.fn(async () => ok({ healthy: false, reason: 'HTTP 503' }));
+    const store = createAppStore(
+      fakeDeps({
+        manifest: { load: async () => ok({ service: 'a', container: 'a', healthUrl: 'http://a/h', sharedBranch: 'development', modules: {} }) },
+        healthProbe: { probe },
+        edtRegistry: {
+          list: async () => ok([{ ulid: 'e1', topic: 't', createdAt: '', status: 'active', members: [{ service: 'a', repoPath: '/r/a', branch: 'feat/x' }] }]),
+        },
+        state: { readActiveEdt: async () => ok('e1') },
+      }),
+    );
+    await store.getState().loadDashboard();
+    expect(store.getState().dashboardServices?.services[0]?.status).toMatchObject({ ok: true, value: { state: 'unhealthy' } });
+    expect(probe).toHaveBeenCalledTimes(1);
+
+    store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: ['a'] } } }));
+    await store.getState().loadDashboard();
+    expect(store.getState().dashboardServices?.services[0]?.status).toEqual({
+      ok: true,
+      value: { state: 'up', verified: false, container: 'up', healthCheck: 'disabled' },
+    });
+    expect(probe).toHaveBeenCalledTimes(1);
   });
 
   it('carries the drift of the members and of the other managed services', async () => {
@@ -112,6 +137,81 @@ describe('dashboard slice', () => {
     const unwired = createAppStore();
     await unwired.getState().loadDashboard();
     expect(unwired.getState().dashboardUpdatedAt).toBeNull();
+  });
+
+  it('wires the Docker port into the service-action registry, so the container terminal reads live health', async () => {
+    const getContainerHealth = vi.fn(async () => ok('down'));
+    const store = createAppStore({
+      ...fakeDeps(),
+      manifest: { load: vi.fn(async () => ok({ service: 'a', container: 'api', sharedBranch: 'development', modules: {} })) },
+      docker: { getContainerHealth } as unknown as DockerPort,
+      container: { restart: vi.fn(async () => ok(undefined)) },
+      restart: { run: vi.fn(async () => ok({ output: '' })) },
+      editor: { launch: vi.fn(() => ok(undefined)) },
+      lock: { acquire: vi.fn(), peek: vi.fn(async () => ok({ locked: false })) },
+    } as unknown as AppStoreDeps);
+    await store.getState().loadDashboardServiceActions('/r/a');
+    const actions = store.getState().dashboardServiceActions['/r/a'];
+    expect(actions?.map((a) => a.id)).toEqual(['open-in-ide', 'restart-simple', 'restart-clean', 'terminal-service', 'terminal-container']);
+    expect(actions?.map((a) => a.availability)).toEqual([
+      { available: true },
+      { available: true },
+      { available: false, reason: 'no clean recipe' },
+      { available: true },
+      { available: false, reason: 'container not running' },
+    ]);
+    expect(getContainerHealth).toHaveBeenCalledWith('api');
+  });
+
+  describe('terminal actions', () => {
+    function terminalStore(health: 'up' | 'down') {
+      const shell = { run: vi.fn() };
+      const store = createAppStore({
+        ...fakeDeps(),
+        manifest: { load: vi.fn(async () => ok({ service: 'a', container: 'api', sharedBranch: 'development', modules: {} })) },
+        docker: { getContainerHealth: vi.fn(async () => ok(health)) } as unknown as DockerPort,
+        container: { restart: vi.fn(async () => ok(undefined)) },
+        restart: { run: vi.fn(async () => ok({ output: '' })) },
+        editor: { launch: vi.fn(() => ok(undefined)) },
+        lock: { acquire: vi.fn(), peek: vi.fn(async () => ok({ locked: false })) },
+        shell,
+      } as unknown as AppStoreDeps);
+      return store;
+    }
+
+    it('opens the service terminal on the row, named after its service', async () => {
+      const store = terminalStore('up');
+      store.setState({ dashboardServices: { services: [{ service: 'svc-a', path: '/r/a' }] } as never });
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-service');
+      expect(store.getState()).toMatchObject({
+        terminalOpen: true,
+        terminalReady: true,
+        terminalTarget: { kind: 'service', repoPath: '/r/a', label: 'svc-a' },
+      });
+      // Opening a terminal is not a running row action.
+      expect(store.getState().dashboardActionState['/r/a']?.running ?? null).toBeNull();
+    });
+
+    it('opens the container terminal on the manifest container when the registry lists it available', async () => {
+      const store = terminalStore('up');
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-container');
+      expect(store.getState().terminalTarget).toEqual({ kind: 'container', repoPath: '/r/a', label: 'api' });
+    });
+
+    it('labels an unlisted row after its repo directory, or the whole path when that is empty', async () => {
+      const store = terminalStore('up');
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-service');
+      expect(store.getState().terminalTarget?.label).toBe('a');
+      store.getState().closeTerminal();
+      await store.getState().runDashboardServiceAction('/', 'terminal-service');
+      expect(store.getState().terminalTarget?.label).toBe('/');
+    });
+
+    it('opens nothing when the fresh availability says the container is not running', async () => {
+      const store = terminalStore('down');
+      await store.getState().runDashboardServiceAction('/r/a', 'terminal-container');
+      expect(store.getState().terminalOpen).toBe(false);
+    });
   });
 
   it('degrades to an error state when the ports are unwired', async () => {

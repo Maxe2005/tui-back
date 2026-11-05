@@ -14,6 +14,9 @@ import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { ResetScreen } from './shared/reset-screen.js';
 import { RealignDialog } from './shared/realign-dialog.js';
+import { HealDialog } from './shared/heal-dialog.js';
+import { TerminalView } from './shared/terminal-view.js';
+import { terminalWindowRows } from './shared/terminal-view.logic.js';
 import { SettingsScreen } from './shared/settings-screen.js';
 import { useFooterContext } from './shared/hooks/use-footer-context.js';
 import { resolveFocusStep } from './shared/keys/focus-navigation.js';
@@ -27,6 +30,9 @@ import { boundaryOrientation, hasResizableBoundary } from './zones/zone-layouts.
 // MIN_LIST_RATIO..MAX_LIST_RATIO (0.2..0.8) clamp range.
 export const RESIZE_STEP = 0.05;
 
+// The heal notice's colour per tone; the text itself always says what happened.
+const HEAL_NOTICE_COLORS = { success: colors.success, warning: colors.warning, error: colors.error } as const;
+
 // Ink delivers Ctrl+<letter> as the bare letter with `key.ctrl` set: a modified letter is a
 // zone binding (Ctrl+R restart...), never a global mnemonic.
 type ModifierKey = { ctrl?: boolean; meta?: boolean };
@@ -39,27 +45,61 @@ export function shouldOpenHelp(input: string): boolean {
   return input === '?';
 }
 
-export function shouldCloseHelp(
-  input: string,
-  key: { escape?: boolean },
-): boolean {
-  return input === '?' || key.escape === true;
+export type HelpKey = {
+  escape?: boolean;
+  ctrl?: boolean;
+  meta?: boolean;
+  return?: boolean;
+  backspace?: boolean;
+  delete?: boolean;
+};
+
+export type HelpKeyAction =
+  | { type: 'open' }
+  | { type: 'close' }
+  | { type: 'set-filter'; filter: string }
+  | { type: 'none' };
+
+// The single `?`/Esc decision. Closed help: only `?` opens it. Open help: it owns the type-to-
+// filter text, so Esc clears a non-empty filter before it closes, `?` closes only an empty filter
+// (otherwise it is a literal character), Backspace/Delete erase the last code point (Ink 7 may
+// deliver Backspace as `key.delete`), and other input without Ctrl/Meta is appended once its
+// control characters are stripped — so a lone Tab/Enter/Esc does nothing (Tab is not read as a key
+// flag, see the focus-navigation guard) while a paste keeps its printable part.
+export function resolveHelpKey(input: string, key: HelpKey, helpOpen: boolean, filter: string): HelpKeyAction {
+  if (!helpOpen) {
+    return shouldOpenHelp(input) ? { type: 'open' } : { type: 'none' };
+  }
+  if (key.escape === true) {
+    return filter.length > 0 ? { type: 'set-filter', filter: '' } : { type: 'close' };
+  }
+  if (hasModifier(key)) {
+    return { type: 'none' };
+  }
+  if (input === '?' && filter.length === 0) {
+    return { type: 'close' };
+  }
+  if (key.backspace === true || key.delete === true) {
+    return filter.length > 0 ? { type: 'set-filter', filter: Array.from(filter).slice(0, -1).join('') } : { type: 'none' };
+  }
+  const printable = input.replace(/[\u0000-\u001f\u007f]/g, '');
+  if (printable.length === 0 || key.return === true) {
+    return { type: 'none' };
+  }
+  return { type: 'set-filter', filter: filter + printable };
 }
 
 export function resolveHelpDispatch(
   input: string,
-  key: { escape?: boolean },
+  key: HelpKey,
   helpOpen: boolean,
-  openHelp: () => void,
-  closeHelp: () => void,
+  filter: string,
+  actions: { openHelp: () => void; closeHelp: () => void; setHelpFilter: (text: string) => void },
 ): void {
-  if (helpOpen) {
-    if (shouldCloseHelp(input, key)) {
-      closeHelp();
-    }
-  } else if (shouldOpenHelp(input)) {
-    openHelp();
-  }
+  const action = resolveHelpKey(input, key, helpOpen, filter);
+  if (action.type === 'open') actions.openHelp();
+  else if (action.type === 'close') actions.closeHelp();
+  else if (action.type === 'set-filter') actions.setHelpFilter(action.filter);
 }
 
 // `reachable` defaults to every zone. A mnemonic whose zone isn't in `reachable` (it's
@@ -182,6 +222,7 @@ export function AppShell({
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
   const closeHelp = useStore((state) => state.closeHelp);
+  const setHelpFilter = useStore((state) => state.setHelpFilter);
   // The registry screen's open/close flag lives in the store (not local AppShell state) so
   // both the `registry` command and Dashboard's empty-registry prompt can trigger it.
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
@@ -208,6 +249,15 @@ export function AppShell({
   // `:realign` overlay (also `A` on the Dashboard): same open flag + onClose pattern.
   const realignScreenOpen = useStore((state) => state.realignScreenOpen);
   const closeRealignScreen = useStore((state) => state.closeRealignScreen);
+  // The Heal overlay (`H` on the Dashboard): same open flag + onClose pattern. `healNotice` is the
+  // auto-dismissed line shown instead of the overlay (no target, a plan error, a busy restart).
+  const healScreenOpen = useStore((state) => state.healScreenOpen);
+  const closeHeal = useStore((state) => state.closeHeal);
+  const healNotice = useStore((state) => state.healNotice);
+  // The Terminal overlay (Ctrl+T / Ctrl+X on the Dashboard). It owns every key while open — `q`,
+  // `:`, `?` and the zone mnemonics land in its prompt — and fullscreen hides the zone below.
+  const terminalOpen = useStore((state) => state.terminalOpen);
+  const terminalFullscreen = useStore((state) => state.terminalFullscreen);
   // Manifest-gated Routes/shared-types tab visibility — loaded on mount and reloaded on
   // registry-screen close / active-EDT membership change (see the effect below and
   // app-store.ts's createEdt/switchEdt/modifyEdt).
@@ -288,10 +338,15 @@ export function AppShell({
     }
     const state = useStore.getState();
 
-    // An open help panel is the sole consumer of keys, so it can always be closed — even when a
-    // zone dialog captured input after it opened (the zones are inert behind it meanwhile).
+    // An open help panel is the sole consumer of keys (its type-to-filter text included), so it
+    // can always be closed — even when a zone dialog captured input after it opened (the zones
+    // are inert behind it meanwhile).
+    // Help opened by another handler during this very keypress (the Terminal's `?` on its output)
+    // is not rendered yet: that same `?` must not close it again.
     if (state.helpOpen) {
-      resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+      if (helpOpen) {
+        resolveHelpDispatch(input, key, state.helpOpen, state.helpFilter, { openHelp, closeHelp, setHelpFilter });
+      }
       return;
     }
 
@@ -303,10 +358,18 @@ export function AppShell({
       return;
     }
 
+    // The open Terminal is the sole consumer of every key (its own `?` opens help from the output
+    // focus); no resize, help, zone switch, command bar or quit fires behind it. This must stay
+    // after the helpOpen branch above: that ordering is what lets `?`/Esc close help opened over
+    // the Terminal. Every check below can therefore assume the Terminal is closed.
+    if (state.terminalOpen) {
+      return;
+    }
+
     // Ctrl+W resize-mode. Entering and dispatching within it both sit under the same overlay
     // exclusion as the zone-switch block below; entering additionally requires the active zone
     // to declare a boundary (shouldEnterResizeMode), and the Logs fullscreen preview has none.
-    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
+    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen && !healScreenOpen) {
       if (state.resizeMode !== null) {
         const boundaryStep = resolveFocusStep(input, key, 'tab');
         if (boundaryStep !== null) {
@@ -340,8 +403,8 @@ export function AppShell({
     // must land as a literal character (or, for settings, simply not open help on top of it),
     // never also pop the keybinding-help modal on top of the overlay. Mirrors how the registry
     // screen's own Esc-close below is gated on registryScreenOpen.
-    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
-      resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen && !healScreenOpen) {
+      resolveHelpDispatch(input, key, state.helpOpen, state.helpFilter, { openHelp, closeHelp, setHelpFilter });
     }
 
     // resizeMode gates this block too: while it's active, arrows resize the targeted boundary
@@ -354,6 +417,7 @@ export function AppShell({
       !settingsScreenOpen &&
       !resetScreenOpen &&
       !realignScreenOpen &&
+      !healScreenOpen &&
       state.resizeMode === null
     ) {
       // The reachable-zone set (every zone minus whichever gated tab is currently 'omitted')
@@ -407,6 +471,8 @@ export function AppShell({
   const regionRows = Math.max(1, rows - SHELL_FIXED_ROWS - footerRowsFor(footerItems, columns));
   const commandBarRows = Math.max(3, regionRows - 4);
   const zoneRows = commandBarOpen ? Math.max(1, regionRows - commandBarRows) : regionRows;
+  // The windowed Terminal takes its window below the zone, so the zone is told the rows left.
+  const zoneScreenRows = terminalOpen && !terminalFullscreen ? Math.max(1, zoneRows - terminalWindowRows(zoneRows)) : zoneRows;
   return (
     <InputGate disabled={tooSmall}>
       {tooSmall ? (
@@ -421,13 +487,21 @@ export function AppShell({
         <ZoneTabBar activeZone={activeZone} events={zoneEvents} tabVisibility={tabVisibility} busy={{ ...(updateRunning ? { update: { incidents: updateIncidents } } : {}), ...(sharedTypesTabBusy >= 0 ? { 'shared-types': { incidents: sharedTypesTabBusy } } : {}) }} />
         <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden">
           <BoundsProvider columns={columns} rows={zoneRows}>
-            <ZoneScreen useStore={useStore} />
+            {/* Hidden, never unmounted, behind the fullscreen Terminal: its state survives. */}
+            <Box flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden" display={terminalOpen && terminalFullscreen ? 'none' : 'flex'}>
+              <BoundsProvider columns={columns} rows={zoneScreenRows}>
+                <ZoneScreen useStore={useStore} />
+              </BoundsProvider>
+            </Box>
             <KeybindingHelp useStore={useStore} />
             {registryScreenOpen && <RepoRegistryScreen useStore={useStore} />}
             {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
             {resetScreenOpen && <ResetScreen useStore={useStore} onClose={closeResetScreen} />}
             {realignScreenOpen && <RealignDialog useStore={useStore} onClose={closeRealignScreen} />}
+            {healScreenOpen && <HealDialog useStore={useStore} onClose={closeHeal} />}
+            {terminalOpen && <TerminalView useStore={useStore} />}
             {resetNotice !== null && <TruncatedText color={colors.warning}>{resetNotice}</TruncatedText>}
+            {healNotice !== null && <TruncatedText color={HEAL_NOTICE_COLORS[healNotice.tone]}>{healNotice.message}</TruncatedText>}
           </BoundsProvider>
         </Box>
         {commandBarOpen && (

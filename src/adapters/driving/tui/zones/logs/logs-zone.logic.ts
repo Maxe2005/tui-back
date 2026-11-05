@@ -2,9 +2,9 @@
 // sub-focus navigation, scroll-offset math, stream-visibility toggles, the two-tier filter and
 // filter-history recall. Every keystroke behavior is a pure function, unit-tested directly; the
 // generic list navigation and EDT-membership partition are reused from edts-zone.logic.ts.
-import wrapAnsi from 'wrap-ansi';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { HealthState, LogLine } from '../../../../../core/ports/docker.js';
+import type { LogLine } from '../../../../../core/ports/docker.js';
+import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
 import type { Hint } from '../../shared/components/hints.js';
@@ -13,12 +13,12 @@ import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../
 import { spacing } from '../../shared/theme/theme.js';
 import type { HistoryBrowseState } from '../../shared/input-history/index.js';
 
-// HealthState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
-// `⣾`/info (StatusBadge's `in-progress`). A service with no Docker runtime is its own dim
-// state, never the down treatment. Glyph+color always paired, never color alone; accent is
-// never a health color. Shared by every place a health badge renders (list rows, grid panes,
-// fullscreen pane).
-export function healthBadgeState(health: HealthState | 'no-container'): StatusBadgeState {
+// ServiceStatusState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
+// `⣾`/info (StatusBadge's `in-progress`), `unhealthy` → `◐`/warning, `inconsistent` → `⚠`/warning.
+// A service with no Docker runtime is its own dim state, never the down treatment. Glyph+color
+// always paired, never color alone; accent is never a health color. Shared by every place a
+// health badge renders (list rows, grid panes, fullscreen pane).
+export function healthBadgeState(health: ServiceStatusState): StatusBadgeState {
   if (health === 'no-container') {
     return 'no-container';
   }
@@ -32,7 +32,7 @@ export function healthBadgeState(health: HealthState | 'no-container'): StatusBa
 // reads as words rather than a kebab-case code, and a restarting service, which names both
 // halves of what is happening (a restart was requested, the container is being re-verified)
 // instead of the bare state.
-export function formatHealthLabel(health: HealthState | 'no-container'): string {
+export function formatHealthLabel(health: ServiceStatusState): string {
   if (health === 'no-container') {
     return 'no container';
   }
@@ -45,7 +45,7 @@ export function formatHealthLabel(health: HealthState | 'no-container'): string 
 // True when a row or pane must read as restarting — either the slice's in-flight restart flag
 // or docker itself reporting the state. One predicate so list rows and pane headers agree.
 // A container-less row never restarts, so it never reads as restarting either.
-export function isRestartingDisplay(restarting: boolean, health: HealthState | 'no-container'): boolean {
+export function isRestartingDisplay(restarting: boolean, health: ServiceStatusState): boolean {
   if (health === 'no-container') {
     return false;
   }
@@ -169,6 +169,9 @@ export type LogsLayoutInput = {
   filterEditorOpen: boolean;
   historyGridOpen: boolean;
   filterHistoryGridMaxRows: number;
+  // The rows the `a` actions menu renders (0 or absent while closed) — a sibling below the
+  // block like the filter editor (never both open). See logsActionsMenuRows.
+  actionsMenuRows?: number;
 };
 
 export type LogsLayout = {
@@ -219,7 +222,8 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   // gridAvailableHeight. Handed out top-down (EDT list, then OTHER list, then the hints panel) so
   // a section shorter than its share leaves more room for the ones after it; each BoundedList
   // only consumes what its content needs.
-  const listsContentBudget = Math.max(gridAvailableHeight - LOGS_LIST_HEADER_ROWS - filterEditorReservedRows, 3);
+  const actionsMenuReservedRows = Math.max(0, input.actionsMenuRows ?? 0);
+  const listsContentBudget = Math.max(gridAvailableHeight - LOGS_LIST_HEADER_ROWS - Math.max(filterEditorReservedRows, actionsMenuReservedRows), 3);
   const edtListMaxVisibleRows = listsContentBudget;
   // An empty list still renders a 1-row placeholder ("No active EDT."/"No services in the active
   // EDT."/"No other managed services."), so it counts as 1 row, not the BoundedList's 0 —
@@ -284,24 +288,24 @@ export function reindexPaneSubFocus(currentIndex: number, newPaneCount: number):
   return Math.min(Math.max(currentIndex, 0), newPaneCount - 1);
 }
 
-// Ctrl+Up/Ctrl+Down scroll the sub-focused pane. `offset` counts lines back from the live tail
-// (0 == pinned to the tail); scrolling up increases it, capped at `lineCount - 1` (the oldest
-// buffered line) — never negative, never past the top.
-export function adjustScrollOffset(current: number, direction: 'up' | 'down', lineCount: number): number {
-  if (lineCount === 0) {
-    return 0;
-  }
-  const next = direction === 'up' ? current + 1 : current - 1;
-  return Math.min(Math.max(next, 0), lineCount - 1);
-}
-
-// The trigger for fetching more history: true once the offset can't go further up without more
-// lines to scroll into. A genuinely empty pane (lineCount === 0) counts as "at the oldest line"
-// too — it is the pane's *normal* starting state (the live tail starts empty, DockerPort's
-// `--since now`), so otherwise Ctrl+Up could never trigger a quiet service's first fetch.
-export function isAtOldestLine(offset: number, lineCount: number): boolean {
-  return lineCount === 0 || offset >= lineCount - 1;
-}
+// The scroll-offset math, scroll-key resolution, per-pane wrap flags and the row-cost-aware window
+// live in the shared scrollable-output primitive (tui/shared/scrollable-output) so the Terminal
+// view reuses them — re-exported under the Logs-facing names so callers read as before. A Logs
+// pane's offset counts lines back from the live tail; an empty pane (the live tail starts empty,
+// DockerPort's `--since now`) counts as "at the oldest line" so Ctrl+Up can trigger a quiet
+// service's first history fetch.
+export {
+  adjustScrollOffset,
+  computeLineRowCount,
+  isAtOldestLine,
+  resolveFullscreenScrollDirection,
+  resolvePaneScrollDirection,
+  sliceVisibleWindow,
+  DEFAULT_WRAP as DEFAULT_PANE_WRAP,
+  isWrapped as isPaneWrapped,
+  toggleWrapFlag as togglePaneWrapFlag,
+  toggleAllWrapFlags as toggleAllPanesWrapFlag,
+} from '../../shared/scrollable-output/index.js';
 
 // The scroll position is preserved after a scrollback reload only when visible content already
 // anchored the viewport. A pane that started genuinely empty pins to offset 0 instead, showing
@@ -313,36 +317,6 @@ export function resolvePostLoadScrollOffset(currentOffset: number, beforeCount: 
     return 0;
   }
   return currentOffset + Math.max(appended, newLineCount - beforeCount, 0);
-}
-
-type PaneScrollKey = { ctrl?: boolean; upArrow?: boolean; downArrow?: boolean };
-
-// Requires ctrl in the grid view — Up/Down there is already claimed by movePaneSubFocus (2D
-// movement between panes), so a bare arrow has to keep meaning "change focused pane" and
-// Ctrl+Up/Down disambiguates "scroll the focused pane instead".
-export function resolvePaneScrollDirection(key: PaneScrollKey): 'up' | 'down' | null {
-  if (!key.ctrl) {
-    return null;
-  }
-  if (key.upArrow) {
-    return 'up';
-  }
-  if (key.downArrow) {
-    return 'down';
-  }
-  return null;
-}
-
-// Fullscreen has no sub-focus grid to disambiguate from (only one pane), so plain Up/Down scroll
-// it; ctrl is accepted too so Ctrl+Up/Down muscle memory still works.
-export function resolveFullscreenScrollDirection(key: { ctrl?: boolean; upArrow?: boolean; downArrow?: boolean }): 'up' | 'down' | null {
-  if (key.upArrow) {
-    return 'up';
-  }
-  if (key.downArrow) {
-    return 'down';
-  }
-  return null;
 }
 
 // Ctrl+A toggles select-all/deselect-all for the EDT list. A `Ctrl+letter` combo arrives as a
@@ -413,15 +387,26 @@ export function toggleVisibilityFlag(flags: VisibilityFlags, toggle: VisibilityT
 
 export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true, showStdout: true, showStderr: true };
 
-// The footer context while an overlay owns the keyboard: the filter editor (its history grid is
-// its own sub-mode) sits above the fullscreen pane it may have been opened from.
-// A service without a container has no restart, so its fullscreen pane never advertises one.
+// Whether a fullscreen pane's footer advertises `R`: a pane known to be container-less does
+// not. Display only — whether `R` actually runs is the service-action registry's decision.
+export function isPaneRestartAdvertised(pane: { health?: string; noContainer?: boolean } | undefined): boolean {
+  return pane === undefined || (pane.health !== 'no-container' && pane.noContainer !== true);
+}
+
+// The footer context while an overlay owns the keyboard: the actions menu and the filter editor
+// (its history grid is its own sub-mode) sit above the fullscreen pane they may have been
+// opened from. A service without a container has no restart, so its fullscreen pane never
+// advertises one.
 export function logsFooterContext(
   filterEditorOpen: boolean,
   historyGridOpen: boolean,
   fullscreen: { open: boolean; restartable: boolean },
   restartMode: RestartMode = 'simple',
+  actionsMenuOpen = false,
 ): FooterContextId | null {
+  if (actionsMenuOpen) {
+    return 'logs-actions-menu';
+  }
   if (filterEditorOpen) {
     return historyGridOpen ? 'logs-filter-history' : 'logs-filter-edit';
   }
@@ -455,30 +440,12 @@ export function logsLegendHints(visibility: VisibilityFlags): Hint[] {
     ['w', 'wrap/truncate this pane'],
     ['W', 'wrap/truncate all'],
     ['R', 'restart focused pane'],
+    ['a', 'actions (focused pane)'],
     ['/', 'edit global filter'],
     ['f', "edit this pane's filter"],
     ['i', 'toggle global filter (pane)'],
     ['Esc', 'clear filter (cascade)'],
   ];
-}
-
-// Per-pane wrap/truncate state, keyed by repoPath — a pane absent from the map defaults to
-// truncate, matching the grid view's deliberate `truncate-end`.
-export const DEFAULT_PANE_WRAP = false;
-
-export function isPaneWrapped(wrapByPath: Readonly<Record<string, boolean>>, repoPath: string | null): boolean {
-  if (repoPath === null) {
-    return DEFAULT_PANE_WRAP;
-  }
-  return wrapByPath[repoPath] ?? DEFAULT_PANE_WRAP;
-}
-
-export function togglePaneWrapFlag(wrapByPath: Readonly<Record<string, boolean>>, repoPath: string): Record<string, boolean> {
-  return { ...wrapByPath, [repoPath]: !isPaneWrapped(wrapByPath, repoPath) };
-}
-
-export function toggleAllPanesWrapFlag(wrapByPath: Readonly<Record<string, boolean>>, repoPaths: readonly string[]): Record<string, boolean> {
-  return repoPaths.reduce((next, repoPath) => togglePaneWrapFlag(next, repoPath), wrapByPath as Record<string, boolean>);
 }
 
 export function filterVisibleLines(lines: readonly LogLine[], flags: VisibilityFlags): LogLine[] {
@@ -702,55 +669,6 @@ export function resolveFilterClearTarget(paneSubFocused: boolean, repoPath: stri
 
 export function formatLogLine(line: LogLine, showTimestamps: boolean): string {
   return showTimestamps ? `[${line.timestamp}] ${line.text}` : line.text;
-}
-
-// The scrolled-into-view window a pane actually renders: as many lines as fit within
-// `rowBudget` terminal rows, ending `offset` lines back from the tail. `getRowCount` reports
-// how many terminal rows a given line actually occupies once rendered — 1 for every line by
-// default (matching a plain count-based window), but the caller passes a wrap-aware one (see
-// computeLineRowCount) so a wrapped multi-row line "spends" more of the budget than a
-// truncated single-row one.
-//
-// Sizing the window by row cost (not line count) keeps the pane filled edge-to-edge in both
-// truncate and wrap mode, on every toggle: a fixed line count overflows the pane under wrap and
-// leaves a blank gap after switching back to truncate.
-export function sliceVisibleWindow<T>(lines: readonly T[], offset: number, rowBudget: number, getRowCount: (line: T) => number = () => 1): T[] {
-  if (lines.length === 0 || rowBudget <= 0) {
-    return [];
-  }
-  const end = Math.max(lines.length - offset, 0);
-  let start = end;
-  let usedRows = 0;
-  while (start > 0) {
-    const rows = getRowCount(lines[start - 1] as T);
-    if (usedRows + rows > rowBudget) {
-      break;
-    }
-    usedRows += rows;
-    start -= 1;
-  }
-  // A single line whose own row cost alone exceeds the whole budget (e.g. a very long line
-  // under wrap in a short pane) must still render something rather than leaving the pane
-  // fully blank — it simply overflows and gets clipped by the pane's own `overflow="hidden"`.
-  if (start === end && end > 0) {
-    start = end - 1;
-  }
-  return lines.slice(start, end);
-}
-
-// How many terminal rows a single formatted log line will actually render as. Truncated lines
-// (wrap === false) always cost exactly 1 row (Ink's `truncate-end` never wraps).
-//
-// Wrapped lines delegate to `wrap-ansi` with the exact options Ink's own Text uses for
-// `wrap="wrap"` (ink/build/wrap-text.js): ANSI escapes occupy zero columns (docker output is
-// colourized by default) and word-wrap can't split mid-word, so `ceil(length / width)` would
-// misestimate and leave a blank gap at the bottom of wrapped panes. This matches exactly.
-export function computeLineRowCount(text: string, width: number, wrap: boolean): number {
-  if (!wrap) {
-    return 1;
-  }
-  const safeWidth = Math.max(width, 1);
-  return wrapAnsi(text, safeWidth, { trim: false, hard: true }).split('\n').length;
 }
 
 // Any manifest service can be streamed, not only active-EDT members — a service row identity,

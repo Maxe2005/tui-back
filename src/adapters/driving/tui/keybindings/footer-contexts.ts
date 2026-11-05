@@ -136,7 +136,16 @@ export const FOOTER_CONTEXTS = {
     label: 'Branch picker, rename current',
     hints: [['Tab', 'switch mode'], ['Enter', 'rename'], CANCEL],
   },
-  help: { label: 'Keybinding help', hints: [[KEY_UP_DOWN, 'scroll'], ['Esc/?', 'close']] },
+  help: {
+    label: 'Keybinding help',
+    hints: [
+      [KEY_UP_DOWN, 'scroll'],
+      ['PgUp/PgDn', 'page'],
+      ['type', 'filter'],
+      ['Backspace', 'erase'],
+      ['Esc', 'clear/close'],
+    ],
+  },
   command: { label: 'Command entry', hints: [['Tab', 'complete'], ['Enter', 'run'], ['Esc', 'close']] },
   'logs-filter-edit': {
     label: 'Logs filter editor',
@@ -145,6 +154,10 @@ export const FOOTER_CONTEXTS = {
   'logs-filter-history': {
     label: 'Logs filter history',
     hints: [['↑/↓/←/→', 'browse history'], ['Enter', 'recall'], CLOSE],
+  },
+  'logs-actions-menu': {
+    label: 'Logs service actions menu',
+    hints: [MOVE, ['Enter', 'run'], CLOSE],
   },
   'logs-fullscreen-no-container': {
     label: 'Logs fullscreen pane (no container)',
@@ -158,6 +171,7 @@ export const FOOTER_CONTEXTS = {
       ['f', 'pane filter'],
       ['i', 'toggle global engagement'],
       ['O', 'open in IDE'],
+      ['a', 'actions'],
     ],
   },
   'logs-fullscreen': {
@@ -173,6 +187,7 @@ export const FOOTER_CONTEXTS = {
       ['f', 'pane filter'],
       ['i', 'toggle global engagement'],
       ['O', 'open in IDE'],
+      ['a', 'actions'],
     ],
   },
   'logs-fullscreen-clean': {
@@ -188,6 +203,7 @@ export const FOOTER_CONTEXTS = {
       ['f', 'pane filter'],
       ['i', 'toggle global engagement'],
       ['O', 'open in IDE'],
+      ['a', 'actions'],
     ],
   },
   'routes-filter': { label: 'Routes filter', hints: [['Enter', 'apply'], ['Esc', 'clear']] },
@@ -296,8 +312,8 @@ export const FOOTER_CONTEXTS = {
   'shared-types-version-row': { label: 'Shared types version row', hints: [['Enter', 'edit version'], MOVE, ['H', 'history']] },
   'shared-types-form': { label: 'Shared types form', hints: [MOVE, ['Space', 'toggle'], ['Enter', 'propagate'], ['H', 'history']] },
   'shared-types-results': { label: 'Shared types results', hints: [MOVE, ['R', 'retry failed'], ['Esc', 'new run']] },
-  'shared-types-publish-failed': { label: 'Shared types publish failed', hints: [['R', 'relaunch'], ['Esc', 'back']] },
-  'shared-types-publish-done': { label: 'Shared types publish done', hints: [['C', 'chain into propagation'], ['Esc', 'stop']] },
+  'shared-types-publish-failed': { label: 'Shared types publish failed', hints: [MOVE, ['Enter', 'select'], ['R', 'relaunch'], BACK] },
+  'shared-types-publish-done': { label: 'Shared types publish done', hints: [MOVE, ['Enter', 'select'], ['C', 'propagate'], CLOSE] },
   'shared-types-history-input': {
     label: 'Shared types history search',
     hints: [['Enter', 'search'], ['Tab', 'mode'], ['Esc', 'close']],
@@ -329,6 +345,32 @@ export const FOOTER_CONTEXTS = {
     label: 'Realign selection (none checked)',
     hints: [MOVE, ['Space', 'toggle'], ['p', 'preset'], ['←/→', 'restart'], CANCEL],
   },
+  'heal-confirm': {
+    label: 'Heal confirmation',
+    hints: [['←/→/Space', 'mode'], ['Enter', 'heal'], CANCEL],
+  },
+  'heal-busy': { label: 'Heal, restart running', hints: [['Esc', 'close (the run continues)']] },
+  'heal-confirm-close': {
+    label: 'Heal close confirmation',
+    hints: [['Enter', 'close, the run continues'], ['Esc', 'keep watching']],
+  },
+  'heal-close': { label: 'Heal result', hints: [['Enter/Esc', 'close']] },
+  'terminal-prompt': {
+    label: 'Terminal prompt',
+    hints: [['Enter', 'run'], [KEY_UP_DOWN, 'history'], ['Ctrl+C', 'clear'], ['Tab', 'output'], ['Ctrl+F', 'fullscreen'], CLOSE],
+  },
+  'terminal-running': {
+    label: 'Terminal, command running',
+    hints: [['Ctrl+C', 'cancel'], ['Tab', 'output'], ['Ctrl+F', 'fullscreen'], ['Esc', 'close (confirms)']],
+  },
+  'terminal-output': {
+    label: 'Terminal output',
+    hints: [[KEY_UP_DOWN, 'scroll'], ['PgUp/PgDn', 'page'], ['Tab', 'prompt'], ['Ctrl+F', 'fullscreen'], ['?', 'help'], CLOSE],
+  },
+  'terminal-confirm-close': {
+    label: 'Terminal close confirmation',
+    hints: [['Enter', 'cancel the command and close'], ['Esc', 'keep it running']],
+  },
   'settings-general': {
     label: 'Settings General tab',
     hints: [MOVE, ['Space', 'toggle'], ['Enter', 'edit'], TAB_SWITCH, CLOSE],
@@ -340,6 +382,10 @@ export const FOOTER_CONTEXTS = {
   'settings-shared-types': {
     label: 'Settings st tab',
     hints: [MOVE, ['Space', 'toggle'], TAB_SWITCH, CLOSE],
+  },
+  'settings-services': {
+    label: 'Settings Services tab',
+    hints: [MOVE, ['Space', 'toggle health check'], TAB_SWITCH, CLOSE],
   },
   'settings-groups': {
     label: 'Settings group list',
@@ -363,9 +409,9 @@ export type FooterContextId = keyof typeof FOOTER_CONTEXTS;
 
 // Who may register a footer context. Overlays sit above the zone they cover, so they win over a
 // zone that registers or re-registers while one is open.
-export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'realign' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
+export type FooterOwner = 'help' | 'command-bar' | 'registry' | 'settings' | 'reset' | 'realign' | 'heal' | 'terminal' | 'edts' | 'update' | 'logs' | 'routes' | 'shared-types';
 
-export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset', 'realign'];
+export const FOOTER_OVERLAY_OWNERS: readonly FooterOwner[] = ['help', 'command-bar', 'registry', 'settings', 'reset', 'realign', 'heal', 'terminal'];
 
 export type FooterContextEntry = { owner: FooterOwner; id: FooterContextId };
 

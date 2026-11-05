@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-visibility.js';
 import {
   AppShell,
-  shouldCloseHelp,
+  resolveHelpDispatch,
+  resolveHelpKey,
   shouldOpenHelp,
   shouldQuit,
   shouldSwitchZone,
@@ -26,12 +27,90 @@ describe('help-open decision helpers', () => {
     expect(shouldOpenHelp('j')).toBe(false);
     expect(shouldOpenHelp('')).toBe(false);
   });
+});
 
-  it('closes help on ? or Esc only', () => {
-    expect(shouldCloseHelp('?', {})).toBe(true);
-    expect(shouldCloseHelp('', { escape: true })).toBe(true);
-    expect(shouldCloseHelp('j', {})).toBe(false);
-    expect(shouldCloseHelp('', {})).toBe(false);
+describe('resolveHelpKey (help open owns the type-to-filter text)', () => {
+  it('opens on ? when closed and ignores every other key', () => {
+    expect(resolveHelpKey('?', {}, false, '')).toEqual({ type: 'open' });
+    expect(resolveHelpKey('j', {}, false, '')).toEqual({ type: 'none' });
+    expect(resolveHelpKey('', { escape: true }, false, '')).toEqual({ type: 'none' });
+  });
+
+  it('appends printable characters, keeping their case', () => {
+    expect(resolveHelpKey('r', {}, true, '')).toEqual({ type: 'set-filter', filter: 'r' });
+    expect(resolveHelpKey('E', {}, true, 'r')).toEqual({ type: 'set-filter', filter: 'rE' });
+  });
+
+  it('erases the last character on Backspace or Delete, and stays empty on an empty filter', () => {
+    expect(resolveHelpKey('', { backspace: true }, true, 'ab')).toEqual({ type: 'set-filter', filter: 'a' });
+    expect(resolveHelpKey('', { delete: true }, true, 'ab')).toEqual({ type: 'set-filter', filter: 'a' });
+    expect(resolveHelpKey('', { backspace: true }, true, '')).toEqual({ type: 'none' });
+  });
+
+  it('appends ? to a non-empty filter and closes on ? with an empty one', () => {
+    expect(resolveHelpKey('?', {}, true, 'a')).toEqual({ type: 'set-filter', filter: 'a?' });
+    expect(resolveHelpKey('?', {}, true, '')).toEqual({ type: 'close' });
+  });
+
+  it('clears a non-empty filter on Esc and closes on Esc with an empty one', () => {
+    expect(resolveHelpKey('', { escape: true }, true, 'abc')).toEqual({ type: 'set-filter', filter: '' });
+    expect(resolveHelpKey('', { escape: true }, true, '')).toEqual({ type: 'close' });
+  });
+
+  it('ignores Ctrl/Meta combos, Enter, Tab and empty input', () => {
+    expect(resolveHelpKey('w', { ctrl: true }, true, 'a')).toEqual({ type: 'none' });
+    expect(resolveHelpKey('w', { meta: true }, true, 'a')).toEqual({ type: 'none' });
+    expect(resolveHelpKey('\r', { return: true }, true, 'a')).toEqual({ type: 'none' });
+    expect(resolveHelpKey('\t', {}, true, 'a')).toEqual({ type: 'none' });
+    expect(resolveHelpKey('\r', {}, true, 'a')).toEqual({ type: 'none' });
+    expect(resolveHelpKey('\u001b', {}, true, 'a')).toEqual({ type: 'none' });
+    expect(resolveHelpKey('', {}, true, 'a')).toEqual({ type: 'none' });
+  });
+
+  it('erases a whole code point on Backspace, never half a surrogate pair', () => {
+    expect(resolveHelpKey('', { backspace: true }, true, 'a😀')).toEqual({ type: 'set-filter', filter: 'a' });
+    expect(resolveHelpKey('', { delete: true }, true, '😀')).toEqual({ type: 'set-filter', filter: '' });
+  });
+
+  it('keeps the printable part of a paste and drops its control characters', () => {
+    expect(resolveHelpKey('ab\tc\r\n', {}, true, 'x')).toEqual({ type: 'set-filter', filter: 'xabc' });
+    expect(resolveHelpKey('\u001bre\u007fst', {}, true, '')).toEqual({ type: 'set-filter', filter: 'rest' });
+    expect(resolveHelpKey('\t\r', {}, true, 'x')).toEqual({ type: 'none' });
+  });
+
+  it('ignores ? with Ctrl/Meta even on an empty filter', () => {
+    expect(resolveHelpKey('?', { ctrl: true }, true, '')).toEqual({ type: 'none' });
+    expect(resolveHelpKey('?', { meta: true }, true, '')).toEqual({ type: 'none' });
+  });
+
+  it('resolveHelpDispatch applies the decision through the store actions', () => {
+    const store = createAppStore();
+    const actions = store.getState();
+    const dispatch = (input: string, key: Parameters<typeof resolveHelpKey>[1] = {}) => {
+      const state = store.getState();
+      resolveHelpDispatch(input, key, state.helpOpen, state.helpFilter, actions);
+    };
+    dispatch('?');
+    expect(store.getState().helpOpen).toBe(true);
+    dispatch('x');
+    expect(store.getState().helpFilter).toBe('x');
+    dispatch('', { escape: true });
+    expect(store.getState()).toMatchObject({ helpOpen: true, helpFilter: '' });
+    dispatch('y');
+    dispatch('', { escape: true });
+    dispatch('', { escape: true });
+    expect(store.getState()).toMatchObject({ helpOpen: false, helpFilter: '' });
+  });
+
+  it('reopens with an empty filter after closing with one', () => {
+    const store = createAppStore();
+    store.getState().openHelp();
+    store.getState().setHelpFilter('x');
+    store.getState().closeHelp();
+    expect(store.getState().helpFilter).toBe('');
+    store.getState().setHelpFilter('x');
+    store.getState().openHelp();
+    expect(store.getState().helpFilter).toBe('');
   });
 });
 
@@ -367,6 +446,8 @@ it('shouldQuit returns true for q', () => {
         helpOpen: false,
         openHelp: () => {},
         closeHelp: () => {},
+        helpFilter: '',
+        setHelpFilter: () => {},
         runInProgress: false,
         setRunInProgress: () => {},
         edtsBranches: null,
@@ -391,7 +472,7 @@ it('shouldQuit returns true for q', () => {
         footerContexts: [],
         setFooterContext: () => {},
         // Settings
-        settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const } },
+        settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] } },
         settingsWarning: null,
         settingsScreenOpen: false,
         loadSettings: async () => {},
@@ -545,6 +626,9 @@ it('shouldQuit returns true for q', () => {
         unsubscribeLogsPane: () => {},
         restartLogsPane: async () => {},
         openLogsPaneInIde: () => {},
+        listLogsPaneActions: async () => null,
+        runLogsPaneAction: async () => {},
+        runLogsPaneShortcut: async () => {},
         loadOlderLogsPane: async () => {},
         clearLogsPane: () => {},
         setLogsPaneScrollOffset: () => {},
@@ -658,6 +742,29 @@ it('shouldQuit returns true for q', () => {
         applyRealignPreset: () => {},
         cycleRealignRestartMode: () => {},
         runRealign: async () => {},
+        terminalOpen: false,
+        terminalTarget: null,
+        terminalLines: [],
+        terminalDroppedCount: 0,
+        terminalCwd: null,
+        terminalRunning: false,
+        terminalReady: false,
+        terminalFullscreen: false,
+        terminalNotice: null,
+        terminalHistory: [],
+        openTerminal: async () => {},
+        runTerminalCommand: () => ({ accepted: true, done: Promise.resolve() }),
+        cancelTerminalCommand: () => {},
+        toggleTerminalFullscreen: () => {},
+        setTerminalNotice: () => {},
+        closeTerminal: () => {},
+        healScreenOpen: false,
+        healRun: null,
+        healNotice: null,
+        openHeal: async () => {},
+        toggleHealMode: () => {},
+        startHeal: async () => {},
+        closeHeal: () => {},
       };
       expect(shouldQuit('q', {}, minimalState)).toBe(true);
       expect(shouldQuit('q', {}, { ...minimalState, runInProgress: true })).toBe(false);

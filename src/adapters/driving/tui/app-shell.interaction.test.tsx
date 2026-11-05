@@ -21,6 +21,9 @@ import { AppShell } from './app-shell.js';
 import { createAppStore, type AppStoreDeps } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
 import { footerIdOf } from './shared/test-support/mount-for-test.js';
+import { filterKeybindings } from './shared/components/keybinding-help.js';
+import { KEYBINDINGS } from './keybindings/index.js';
+import { SETTINGS_GROUPS } from './shared/settings-screen.js';
 
 // Mirrors app-store.test.ts's fakeDeps/manifestFor: the mount-time/registry-close
 // `loadTabVisibility()` effect is AppShell's only production activation path, and a deps-less
@@ -1371,7 +1374,7 @@ describe('AppShell command-entry bar (:)', () => {
     // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const } },
+      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1438,7 +1441,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: false, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
 
       await press(instance, stdin, ' ');
@@ -1449,18 +1452,57 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
-  it('Shift+Tab on the General tab goes back to the st tab (wrapping), then Update, then Logs', async () => {
+  it('Shift+Tab on the General tab goes back to the Services tab (wrapping), then st, then Update, then Logs', async () => {
     const store = createAppStore(fakeDeps());
     store.getState().openSettingsScreen();
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.shiftTab);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('healthUrl is never probed');
+      await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Run npm i');
       await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Update concurrency');
       await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Buffer size');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space on the Services tab unchecks a service health check and persists it at once', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.setState({
+      edtsBranches: [
+        { service: 'api', path: '/repos/api', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [], healthUrl: 'http://api/health' },
+        { service: 'lib', path: '/repos/lib', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+      ],
+    });
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.shiftTab); // General -> Services (wrapping)
+
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual(['api']);
+      expect(settingsPort.save).toHaveBeenCalledWith(expect.objectContaining({ services: { healthCheckDisabled: ['api'] } }));
+
+      // A row without healthUrl is disabled: Space does nothing.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual(['api']);
+
+      await press(instance, stdin, KEYS.up);
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual([]);
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ services: { healthCheckDisabled: [] } }));
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1595,7 +1637,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 9, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {
       instance.unmount();
@@ -1664,7 +1706,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
 
       // A typed digit is a quick preset (digit x 100), still while on the bufferSize row.
@@ -1700,7 +1742,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
         logs: {
           bufferSize: DEFAULT_SETTINGS.logs.bufferSize,
           startWithHistory: true,
@@ -1709,6 +1751,7 @@ describe('AppShell settings screen (:settings)', () => {
           filterHistoryDedup: true,
           restartMode: 'simple' as const,
         },
+        services: { healthCheckDisabled: [] },
       });
 
       await press(instance, stdin, KEYS.space);
@@ -1786,6 +1829,40 @@ describe('AppShell settings screen (:settings)', () => {
       await press(instance, stdin, KEYS.left);
       expect(store.getState().settings.realign.restartMode).toBe('simple');
       expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ realign: { defaultScope: 'edt', restartMode: 'simple' } }));
+      expect(store.getState().settings.switch.restartMode).toBe('none');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Right/Left/Space on the EDTs tab "Heal restart mode" group flip dashboard.restartMode live and persist', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs (group list)
+      const healIndex = SETTINGS_GROUPS.findIndex((group) => group.id === 'heal-restart');
+      expect(healIndex).toBeGreaterThan(0);
+      for (let i = 0; i < healIndex; i += 1) {
+        await press(instance, stdin, KEYS.down); // -> "Heal restart mode"
+      }
+      await press(instance, stdin, KEYS.enter);
+
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().settings.dashboard.restartMode).toBe('clean');
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ dashboard: { restartMode: 'clean' } }));
+      await press(instance, stdin, KEYS.left);
+      expect(store.getState().settings.dashboard.restartMode).toBe('simple');
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.dashboard.restartMode).toBe('clean');
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ dashboard: { restartMode: 'clean' } }));
+      expect(store.getState().settings.realign.restartMode).toBe('none');
       expect(store.getState().settings.switch.restartMode).toBe('none');
     } finally {
       instance.unmount();
@@ -1885,7 +1962,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {
       instance.unmount();
@@ -1918,7 +1995,7 @@ describe('AppShell settings screen (:settings)', () => {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
         edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
-        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const },
+        update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {
       instance.unmount();
@@ -2794,6 +2871,154 @@ describe('AppShell footer contexts (real keypress)', () => {
     });
   });
 
+  it('typing in the open help filters it; ? and Esc edit a non-empty filter before closing', async () => {
+    await withShell(async ({ store, instance, stdin }) => {
+      await press(instance, stdin, '?');
+      await settle(instance);
+      await press(instance, stdin, 'r');
+      await press(instance, stdin, 'E');
+      expect(store.getState()).toMatchObject({ helpOpen: true, helpFilter: 'rE', activeZone: 'dashboard' });
+      await press(instance, stdin, KEYS.backspace);
+      expect(store.getState().helpFilter).toBe('r');
+      await press(instance, stdin, '?');
+      expect(store.getState()).toMatchObject({ helpOpen: true, helpFilter: 'r?' });
+      await pressEscape(instance, stdin);
+      expect(store.getState()).toMatchObject({ helpOpen: true, helpFilter: '' });
+      await press(instance, stdin, 'q');
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, '?');
+      expect(store.getState()).toMatchObject({ helpOpen: false, helpFilter: '' });
+      await settle(instance);
+      await press(instance, stdin, '?');
+      expect(store.getState()).toMatchObject({ helpOpen: true, helpFilter: '' });
+    });
+  });
+
+  // A wide, tall terminal so the whole help window renders unclipped and keys never wrap.
+  function mountLarge(store: ReturnType<typeof createAppStore>) {
+    const stdout = new FakeTtyStdout();
+    stdout.columns = 200;
+    stdout.rows = 60;
+    const stdin = fakeInteractiveTtyStdin();
+    const instance = render(createElement(AppShell, { useStore: store, onQuit: () => {} }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    const frame = () => stdout.output.slice(stdout.output.lastIndexOf('KEYBINDINGS'));
+    return { instance, stdin, frame };
+  }
+
+  it('End then Up scrolls the filtered list by exactly one row', async () => {
+    const store = createAppStore();
+    const { instance, stdin, frame } = mountLarge(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '?');
+      await settle(instance);
+      for (const char of 'logs') await press(instance, stdin, char);
+      await settle(instance);
+      const rows = filterKeybindings(KEYBINDINGS, 'logs');
+      expect(rows.length).toBeGreaterThan(11);
+      expect(rows.length).toBeLessThan(KEYBINDINGS.length);
+
+      await press(instance, stdin, KEYS.end);
+      await settle(instance);
+      expect(frame()).toContain(`[${rows.at(-1)!.keys}]`);
+      expect(frame()).toContain(`[${rows.at(-10)!.keys}]`);
+      expect(frame()).not.toContain(`[${rows.at(-11)!.keys}]`);
+
+      await press(instance, stdin, KEYS.up);
+      await settle(instance);
+      expect(frame()).toContain(`[${rows.at(-11)!.keys}]`);
+      expect(frame()).toContain(`[${rows.at(-2)!.keys}]`);
+      expect(frame()).not.toContain(`[${rows.at(-1)!.keys}]`);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a filter change scrolls the help back to its first match', async () => {
+    const store = createAppStore();
+    const { instance, stdin, frame } = mountLarge(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '?');
+      await settle(instance);
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, KEYS.down);
+      await settle(instance);
+      expect(frame()).not.toContain(`[${KEYBINDINGS[0]!.keys}]`);
+
+      await press(instance, stdin, 'z');
+      await settle(instance);
+      const matches = filterKeybindings(KEYBINDINGS, 'z');
+      expect(matches.length).toBeGreaterThan(10);
+      expect(frame()).toContain(`[${matches[0]!.keys}]`);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('q, : and a zone mnemonic typed in the open help only edit its filter', async () => {
+    const store = createAppStore();
+    const onQuit = vi.fn();
+    const stdout = new FakeTtyStdout();
+    const stdin = fakeInteractiveTtyStdin();
+    const instance = render(createElement(AppShell, { useStore: store, onQuit }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '?');
+      await settle(instance);
+      const zone = store.getState().activeZone;
+      await press(instance, stdin, 'q');
+      await press(instance, stdin, ':');
+      await press(instance, stdin, 'l');
+      await settle(instance);
+      expect(store.getState()).toMatchObject({
+        helpOpen: true,
+        helpFilter: 'q:l',
+        commandBarOpen: false,
+        quitRequested: false,
+        activeZone: zone,
+      });
+      expect(onQuit).not.toHaveBeenCalled();
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('the open help footer lists the filter keys', async () => {
+    const store = createAppStore();
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '?');
+      await settle(instance);
+      const frame = stdout.output.slice(stdout.output.lastIndexOf('KEYBINDINGS'));
+      expect(frame).toContain('type to filter');
+      expect(frame).toContain('[type] filter');
+      expect(frame).toContain('[Backspace] erase');
+      expect(frame).toContain('[PgUp/PgDn] page');
+      expect(frame).toContain('clear/close');
+      expect(frame).not.toContain('[?] close');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('the command bar registers its context while open and clears it on Esc', async () => {
     await withShell(async ({ store, instance, stdin }) => {
       await press(instance, stdin, ':');
@@ -2909,6 +3134,60 @@ describe('AppShell realign overlay', () => {
       expect(stdout.output).toContain('Realigning services…');
       await pressEscape(instance, stdin);
       expect(store.getState().realignScreenOpen).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('AppShell heal overlay', () => {
+  const rows = [
+    { service: 'svc-a', repoPath: '/repo/a', phase: 'pending' as const },
+    { service: 'svc-b', repoPath: '/repo/b', phase: 'skipped' as const, skipReason: 'up' as const },
+  ];
+
+  it('mounts while open, owns every key, and Esc closes it', async () => {
+    const store = createAppStore();
+    store.setState({
+      healScreenOpen: true,
+      healRun: { status: 'confirm', plan: { edt: { ulid: 'e1', topic: 'demo' }, rows }, mode: 'simple', rows, report: null, error: null },
+    });
+    const onQuit = vi.fn();
+    const stdout = new FakeTtyStdout();
+    const stdin = fakeInteractiveTtyStdin();
+    const instance = render(createElement(AppShell, { useStore: store, onQuit }), {
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      stdin,
+      interactive: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('HEAL');
+      const zoneBefore = store.getState().activeZone;
+      for (const key of ['e', 'u', ':', '?', 'q', KEYS.ctrlW]) {
+        await press(instance, stdin, key);
+      }
+      expect(store.getState().activeZone).toBe(zoneBefore);
+      expect(store.getState()).toMatchObject({ commandBarOpen: false, helpOpen: false, healScreenOpen: true, quitRequested: false, resizeMode: null });
+      expect(onQuit).not.toHaveBeenCalled();
+      await pressEscape(instance, stdin);
+      expect(store.getState()).toMatchObject({ healScreenOpen: false, healRun: null });
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('renders the heal notice when no overlay opened', async () => {
+    const store = createAppStore();
+    store.setState({ healNotice: { message: 'every service is up', tone: 'success' } });
+    const { instance, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('every service is up');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

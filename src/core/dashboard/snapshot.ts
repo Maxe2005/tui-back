@@ -1,16 +1,17 @@
 // core/dashboard/snapshot: buildDashboardSnapshot assembles everything the Dashboard shows —
-// the active EDT's services (container, branch, divergence, working tree, branch flags, drift),
+// the active EDT's services (health-first status, branch, divergence, working tree, branch flags, drift),
 // the other managed services' drift and a registry-health summary. Read-only; every probed
 // field fails on its own, never the snapshot.
 import { resolve } from 'node:path';
-import type { DockerPort, HealthState } from '../ports/docker.js';
+import type { DockerPort } from '../ports/docker.js';
+import type { HealthProbePort } from '../ports/health-probe.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
 import type { GitPort } from '../ports/git.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { ok, type Result } from '../result.js';
-import { getServiceHealth } from '../logs/use-cases.js';
+import { resolveManifestStatus, type ServiceStatus } from '../service-status/index.js';
 import { isProtectedBranch } from '../edt/shared-branches.js';
 import { readServiceDivergence, type BranchDivergenceStatus } from '../edt/list.js';
 import { driftOf, readOthers, type DashboardOtherService, type DriftState } from './drift.js';
@@ -18,6 +19,10 @@ import { driftOf, readOthers, type DashboardOtherService, type DriftState } from
 export type { DashboardOtherService, DriftState } from './drift.js';
 
 export type Probed<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } };
+
+export interface StatusErrorDetails {
+  probeReason?: string;
+}
 
 export interface DashboardWorkingTree {
   uncommitted: boolean;
@@ -36,7 +41,9 @@ export interface DashboardService {
   service: string;
   path: string;
   manifest: Probed<{ sharedBranch: string; protectedBranches: string[] }>;
-  container: Probed<HealthState | 'no-container'>;
+  // Health-first status (AD-23); the raw container state and probe reason ride along. When
+  // Docker fails and the probe fails too, the probe reason stays in `error.details`.
+  status: { ok: true; value: ServiceStatus } | { ok: false; error: { code: string; message: string; details?: StatusErrorDetails } };
   branch: string | null;
   divergence: DashboardDivergence;
   workingTree: Probed<DashboardWorkingTree>;
@@ -68,6 +75,10 @@ export interface BuildDashboardSnapshotParams {
   manifest: ManifestPort;
   git: GitPort;
   docker: DockerPort;
+  // Not wired = statuses are container-only, as if no healthUrl were declared.
+  healthProbe?: HealthProbePort;
+  // The local per-service health-check toggle, forwarded to the status resolver as-is.
+  isHealthCheckEnabled?: (manifest: Manifest) => boolean;
   edtRegistry: EdtRegistryPort;
   state: StatePort;
 }
@@ -159,7 +170,7 @@ async function readService(
   edts: EdtRegistryEntry[],
   activeUlid: string,
 ): Promise<DashboardService> {
-  const { manifest, git, docker } = params;
+  const { manifest, git, docker, healthProbe, isHealthCheckEnabled } = params;
   const path = resolve(member.repoPath);
 
   const loaded = await manifest.load(path);
@@ -167,8 +178,12 @@ async function readService(
     ? { ok: true, value: { sharedBranch: loaded.data.sharedBranch, protectedBranches: loaded.data.protectedBranches ?? [] } }
     : { ok: false, error: { code: loaded.error.code, message: loaded.error.message } };
 
-  const [container, divergence, workingTree] = await Promise.all([
-    readContainer(docker, loaded.ok ? loaded.data : null, loaded.ok ? null : loaded.error),
+  const [status, divergence, workingTree] = await Promise.all([
+    readStatus(
+      { docker, ...(healthProbe === undefined ? {} : { healthProbe }), ...(isHealthCheckEnabled === undefined ? {} : { isHealthCheckEnabled }) },
+      loaded.ok ? loaded.data : null,
+      loaded.ok ? null : loaded.error,
+    ),
     readServiceDivergence(git, member.service, path, true, loaded.ok ? loaded.data.sharedBranch : '', loaded.ok ? (loaded.data.protectedBranches ?? []) : []),
     readWorkingTree(git, path),
   ]);
@@ -177,7 +192,7 @@ async function readService(
     service: loaded.ok ? loaded.data.service : member.service,
     path,
     manifest: manifestState,
-    container,
+    status,
     branch: divergence.branch,
     divergence: {
       status: divergence.status,
@@ -202,20 +217,29 @@ async function readService(
   };
 }
 
-async function readContainer(
-  docker: DockerPort,
+async function readStatus(
+  ports: { docker: DockerPort; healthProbe?: HealthProbePort; isHealthCheckEnabled?: (manifest: Manifest) => boolean },
   manifest: Manifest | null,
   manifestError: { code: string; message: string } | null,
-): Promise<DashboardService['container']> {
+): Promise<DashboardService['status']> {
   if (manifest === null) {
     return { ok: false, error: { code: manifestError?.code ?? 'manifest-error', message: manifestError?.message ?? 'manifest unavailable' } };
   }
-  const container = manifest.container?.trim() ?? '';
-  if (container === '') {
-    return { ok: true, value: 'no-container' };
+  const status = await resolveManifestStatus(ports, manifest);
+  if (status.ok) {
+    return { ok: true, value: status.data };
   }
-  const health = await getServiceHealth({ docker, container });
-  return health.ok ? { ok: true, value: health.data } : { ok: false, error: { code: health.error.code, message: health.error.message } };
+  const details = statusErrorDetails(status.error.details);
+  return { ok: false, error: { code: status.error.code, message: status.error.message, ...(details === undefined ? {} : { details }) } };
+}
+
+// The resolver's error details are `unknown` on the Result envelope; keep only the probe reason.
+function statusErrorDetails(details: unknown): StatusErrorDetails | undefined {
+  if (typeof details !== 'object' || details === null || !('probeReason' in details)) {
+    return undefined;
+  }
+  const { probeReason } = details;
+  return typeof probeReason === 'string' ? { probeReason } : undefined;
 }
 
 async function readWorkingTree(git: GitPort, path: string): Promise<Probed<DashboardWorkingTree>> {

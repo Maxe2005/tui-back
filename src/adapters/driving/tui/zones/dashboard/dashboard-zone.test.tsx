@@ -170,7 +170,7 @@ describe('DashboardZone snapshot sections', () => {
         service: 'svc-a',
         path: '/r/a',
         manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
-        container: { ok: true, value: 'up' },
+        status: { ok: true, value: { state: 'up', verified: false, container: 'up' } },
         branch: 'feat/x',
         divergence: { status: 'current', ahead: 0, behind: 0 },
         workingTree: { ok: true, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
@@ -183,7 +183,7 @@ describe('DashboardZone snapshot sections', () => {
         service: 'svc-b',
         path: '/r/b',
         manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
-        container: { ok: false, error: { code: 'docker-error', message: 'boom' } },
+        status: { ok: false, error: { code: 'docker-error', message: 'boom' } },
         branch: 'feat/x',
         divergence: { status: 'current', ahead: 0, behind: 0 },
         workingTree: { ok: false, error: { code: 'git-error', message: 'boom' } },
@@ -229,7 +229,7 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('EDT topic-a · 2 services');
     expect(output).toMatch(/SERVICE\s+STATUS\s+BRANCH\s+SYNC/);
     expect(output).toMatch(/svc-a\s+up\s+feat\/x\s+↑0 ↓0/);
-    expect(output).toMatch(/svc-b\s+container error\s+feat\/x\s+↑0 ↓0/);
+    expect(output).toMatch(/svc-b\s+status error\s+feat\/x\s+↑0 ↓0/);
     // The focused (first) row explains its anomaly and lists the actions' absence while unloaded.
     expect(output).toContain('uncommitted changes');
     expect(output).toContain('Actions unavailable.');
@@ -237,6 +237,54 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toContain('updated 0s ago · [R] refresh');
     expect(output).toContain('[E] ▸ Enter');
     expect(output).toContain('[e] ▸ Choose another EDT / create one');
+  });
+
+  it('lists an inconsistent service in Attention with its own glyph and text, and an unhealthy row with its reason', async () => {
+    const [first, second] = ACTIVE.services;
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: {
+        ...ACTIVE,
+        services: [
+          { ...first, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } }, status: { ok: true, value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' } } },
+          { ...second, status: { ok: true, value: { state: 'inconsistent', verified: true, container: 'down' } } },
+        ],
+      },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toMatch(/◐\s*svc-a\s+unhealthy/);
+    expect(output).toMatch(/⚠\s*svc-b\s+inconsistent/);
+    // The focused (first) row's reason line carries the probe reason.
+    expect(output).toContain('health check: HTTP 503');
+    expect(output).toMatch(/⚠\s*svc-b · health route answers but container is down/);
+  });
+
+  it('shows a dim "health check off" instead of "No issue." for a disabled check, and after a real issue', async () => {
+    const [first, second] = ACTIVE.services;
+    const clean = { uncommitted: false, mergeInProgress: false, rebaseInProgress: false };
+    const off = { ok: true as const, value: { state: 'up' as const, verified: false, container: 'up' as const, healthCheck: 'disabled' as const } };
+    const quiet = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { ...ACTIVE, services: [{ ...first, workingTree: { ok: true, value: clean }, status: off }, second] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const quietOutput = await renderToString(<DashboardZone useStore={quiet} />);
+    expect(quietOutput).toContain('health check off');
+    expect(quietOutput).not.toContain('No issue.');
+    expect(quietOutput).not.toMatch(/!\s*svc-a/);
+
+    const dirty = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { ...ACTIVE, services: [{ ...first, workingTree: { ok: true, value: { ...clean, uncommitted: true } }, status: off }, second] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const dirtyOutput = await renderToString(<DashboardZone useStore={dirty} />);
+    expect(dirtyOutput).toContain('uncommitted changes');
+    expect(dirtyOutput).toContain('health check off');
   });
 
   it('shows the focused row actions with their unavailable reasons, and the running progress', async () => {
@@ -260,6 +308,32 @@ describe('DashboardZone snapshot sections', () => {
     const running = await renderToString(<DashboardZone useStore={store} />);
     expect(running).toContain('Clean restart — recipe step 2/3');
     expect(running).toContain('Ctrl+R: operation in progress');
+  });
+
+  it('shows the registry terminals after the restarts on the one actions line, the container terminal greyed with its reason', async () => {
+    const actions = [
+      { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: { available: true as const } },
+      { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: { available: true as const } },
+      { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: { available: true as const } },
+      { id: 'terminal-service', label: 'Terminal', key: 'Ctrl+T', availability: { available: true as const } },
+      { id: 'terminal-container', label: 'Container terminal', key: 'Ctrl+X', availability: { available: false as const, reason: 'container not running' } },
+    ];
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: ACTIVE,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+      dashboardServiceActions: { '/r/a': actions },
+    });
+    // Wide enough for the whole line: at 120 columns the row truncates (bounded rendering), as intended.
+    const output = await renderToString(<DashboardZone useStore={store} />, { columns: 240, rows: 40 });
+    const line = output.split('\n').find((row) => row.includes('[Ctrl+O] Open in IDE'));
+    expect(line).toBeDefined();
+    const order = ['[Ctrl+O] Open in IDE', '[Ctrl+R] Restart', '[Ctrl+L] Clean restart', '[Ctrl+T] Terminal', '[Ctrl+X] Container terminal (container not running)'].map(
+      (label) => line!.indexOf(label),
+    );
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
   it('lists attention lines with a count, and the registry hint with its counts', async () => {

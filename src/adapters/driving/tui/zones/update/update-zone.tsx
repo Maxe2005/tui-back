@@ -29,6 +29,7 @@ import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceMeta } from '../edts/edts-zone.logic.js';
 import {
   deriveUpdateServiceStatus,
+  updateStatusText,
   formatLastUpdateRecap,
   formatLiveServiceDetail,
   formatServiceUpdateContext,
@@ -894,14 +895,15 @@ export function UpdateZone({ useStore = useAppStore, initialRecap = true }: { us
     // repoPath) and the live phase, which refines the glyph to `migrating`.
     const isRestarting = serviceRestartInFlight[resolvePath(row.path)] !== undefined;
     const status = deriveUpdateServiceStatus(health, lastOutcome?.outcome, isTargeted, isRestarting, liveServicePhase[row.service], awaitingServices.has(row.service));
+    const statusText = updateStatusText(status);
     return (
       <Box key={row.path} flexDirection="row">
         <StatusBadge state={status} />
-        {status === 'no-container' ? (
-          <Box marginLeft={1}>
-            <Text color={colors['text-dim']}>no container</Text>
+        {statusText === null ? null : (
+          <Box marginLeft={1} flexShrink={0}>
+            <Text color={status === 'no-container' ? colors['text-dim'] : colors.warning} wrap="truncate-end">{statusText}</Text>
           </Box>
-        ) : null}
+        )}
         <Box marginLeft={1} flexGrow={1} minWidth={0}>
           <ListRow label={row.service} meta={formatServiceMeta(row)} selected={!recapActive && index === clampedServiceCursor} />
         </Box>

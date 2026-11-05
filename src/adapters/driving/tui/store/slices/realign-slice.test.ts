@@ -173,6 +173,29 @@ describe('realign slice', () => {
     expect(store.getState().serviceRestartInFlight).toEqual({});
   });
 
+  it('verifies a service whose health check is disabled without probing it', async () => {
+    const { deps } = fakeDeps();
+    const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
+    const store = createAppStore({
+      ...deps,
+      healthProbe: { probe },
+      manifest: {
+        load: async (repoPath: string) => {
+          const name = repoPath.split('/').pop();
+          return ok({ service: `svc-${name}`, ...(name === 'c' ? {} : { container: `ctr-${name}` }), healthUrl: 'http://x/h', sharedBranch: 'development', modules: {} });
+        },
+      },
+    });
+    store.setState({ settings: { ...DEFAULT_SETTINGS, services: { healthCheckDisabled: ['svc-a', 'svc-b'] } } });
+    await openLoaded(store);
+    store.getState().applyRealignPreset('edt');
+    store.getState().cycleRealignRestartMode(1);
+    await store.getState().runRealign();
+    const run = store.getState().realignRun;
+    expect(run?.restartRows.find((row) => row.service === 'svc-a')).toMatchObject({ phase: 'up-unverified' });
+    expect(probe).not.toHaveBeenCalled();
+  });
+
   it('shows the lock error as the run error and touches nothing', async () => {
     const { deps, checkout } = fakeDeps({
       lock: { acquire: vi.fn(async () => err('action-in-progress', 'busy')), peek: vi.fn(async () => ok({ locked: true })) },

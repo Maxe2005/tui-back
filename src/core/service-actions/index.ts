@@ -1,6 +1,8 @@
-// core/service-actions: the shared per-service action registry — open in IDE and simple/clean
-// restart, with availability computed once from the manifest and lock state so every consumer
-// (Logs, Dashboard, Update) lists and runs the same actions. Ports are injected.
+// core/service-actions: the shared per-service action registry — open in IDE, simple/clean
+// restart and the service/container terminals, with availability computed once from the
+// manifest, lock state and container health. It is the one registry: every consumer (Logs,
+// Dashboard, Update) renders whatever it lists, so a new entry needs no consumer change.
+// Ports are injected.
 import { withActionLock } from '../locking.js';
 import type { ContainerPort } from '../ports/container.js';
 import type { DockerPort } from '../ports/docker.js';
@@ -12,6 +14,7 @@ import type { RestartPort } from '../ports/restart.js';
 import { err, ok, type Result } from '../result.js';
 import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update.js';
 import { serviceRestartLockKey } from '../scripts/service-restart.js';
+import { DEFAULT_PROBE_REASON, combineStatus, hasContainer, isProbeEnabled, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
 
 export type RestartMode = 'simple' | 'clean';
 
@@ -35,6 +38,10 @@ export const VERIFY_POLL_INTERVAL_MS = 1000;
 export const VERIFY_TIMEOUT_MS = 30_000;
 // One health GET never waits longer than this, whatever time the overall budget has left.
 export const HEALTH_PROBE_TIMEOUT_MS = 5000;
+// The container-terminal check in `list()` gives Docker this long before reading
+// `container state unknown`: the Dashboard re-lists right before every action, so a hung daemon
+// must not stall Open in IDE or the restarts.
+export const TERMINAL_HEALTH_TIMEOUT_MS = 1500;
 
 // The closed set of per-service states a post-restart run ends on. `failed` is assigned by the
 // caller when the restart itself errored — verifyService never returns it.
@@ -52,9 +59,13 @@ export interface ServiceActionsDeps {
   restart: RestartPort;
   editor: EditorPort;
   lock: LockPort;
-  // Only `verifyService` needs these two; a consumer that never verifies may omit them.
+  // `verifyService` needs these two, and `list` reads container health through `docker` for the
+  // container terminal's availability; without it that entry reads `container state unknown`.
   docker?: DockerPort;
   healthProbe?: HealthProbePort;
+  // The local per-service health-check toggle, read at call time — the same dependency the
+  // status resolver takes (`ServiceStatusDeps.isHealthCheckEnabled`). Absent = enabled.
+  isHealthCheckEnabled?: (manifest: Manifest) => boolean;
   // Test seams for the verification poll: defaults are the wall clock and a real timer.
   clock?: { now(): number; sleep(ms: number): Promise<void> };
 }
@@ -110,6 +121,8 @@ export async function heldLockName(lock: LockPort, locks: readonly NamedLock[]):
 }
 
 export const NO_CLEAN_RECIPE_NOTICE = 'no clean-restart recipe — simple restart';
+// The reason `list()` gives a clean restart that has no recipe to run.
+export const NO_CLEAN_RECIPE_REASON = 'no clean recipe';
 
 // A blank repoPath would resolve to the process cwd and target the wrong directory.
 function rejectBlankRepoPath(repoPath: string): Result<never> | null {
@@ -121,10 +134,6 @@ const AVAILABLE: ServiceActionAvailability = { available: true };
 // Blank recipe entries are not a recipe: only runnable commands count.
 function recipeCommands(manifest: Manifest): string[] {
   return (manifest.restartCommands ?? []).filter((command) => command.trim() !== '');
-}
-
-function hasContainer(manifest: Manifest): boolean {
-  return manifest.container !== undefined && manifest.container.trim() !== '';
 }
 
 // The editor needs nothing else from the registry, so a consumer that only opens the IDE
@@ -141,12 +150,13 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
   const { manifest, container, restart, editor, lock } = deps;
   const clock = deps.clock ?? { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) };
 
+  // `loaded` is the manifest read once per `list()` call, shared by every availability rule.
   async function restartAvailability(
     repoPath: string,
+    loaded: Result<Manifest>,
     mode: RestartMode,
     blockingLocks: readonly NamedLock[],
   ): Promise<ServiceActionAvailability> {
-    const loaded = await manifest.load(repoPath);
     if (!loaded.ok) {
       return { available: false, reason: 'manifest unreadable' };
     }
@@ -162,9 +172,32 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
       return { available: false, reason: blocking };
     }
     if (mode === 'clean' && recipeCommands(loaded.data).length === 0) {
-      return { available: false, reason: 'no clean recipe' };
+      return { available: false, reason: NO_CLEAN_RECIPE_REASON };
     }
     return AVAILABLE;
+  }
+
+  // The container terminal needs a running container. Never fails: a Docker probe error (or no
+  // Docker port wired) reads `container state unknown` rather than claiming the container is down.
+  async function containerTerminalAvailability(loaded: Result<Manifest>): Promise<ServiceActionAvailability> {
+    if (!loaded.ok) {
+      return { available: false, reason: 'manifest unreadable' };
+    }
+    const containerName = loaded.data.container;
+    if (!hasContainer(loaded.data) || containerName === undefined) {
+      return { available: false, reason: 'no container' };
+    }
+    if (deps.docker === undefined) {
+      return { available: false, reason: 'container state unknown' };
+    }
+    const health = await Promise.race([
+      deps.docker.getContainerHealth(containerName).catch(() => null),
+      clock.sleep(TERMINAL_HEALTH_TIMEOUT_MS).then(() => null),
+    ]);
+    if (health === null || !health.ok) {
+      return { available: false, reason: 'container state unknown' };
+    }
+    return health.data === 'up' ? AVAILABLE : { available: false, reason: 'container not running' };
   }
 
   return {
@@ -174,12 +207,20 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
         return invalid;
       }
       const blockingLocks = options?.blockingLocks ?? [];
-      const simpleState = await restartAvailability(repoPath, 'simple', blockingLocks);
-      const cleanState = await restartAvailability(repoPath, 'clean', blockingLocks);
+      const loaded = await manifest.load(repoPath);
+      // Independent checks: the Docker probe runs alongside the lock peeks, not after them.
+      const [simpleState, cleanState, containerTerminalState] = await Promise.all([
+        restartAvailability(repoPath, loaded, 'simple', blockingLocks),
+        restartAvailability(repoPath, loaded, 'clean', blockingLocks),
+        containerTerminalAvailability(loaded),
+      ]);
       return ok([
         { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: AVAILABLE },
         { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: simpleState },
         { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: cleanState },
+        // The service terminal only needs the repo directory, which `list` already requires.
+        { id: 'terminal-service', label: 'Terminal', key: 'Ctrl+T', availability: AVAILABLE },
+        { id: 'terminal-container', label: 'Container terminal', key: 'Ctrl+X', availability: containerTerminalState },
       ]);
     },
 
@@ -250,46 +291,58 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
       if (!hasContainer(loaded.data) || containerName === undefined) {
         return err('no-container', `Repo ${repoPath} declares no container — nothing to verify`);
       }
-      if (healthUrl !== undefined && healthProbe === undefined) {
+      // A health check turned off locally verifies on the container alone, exactly as the status
+      // resolver does: the route is never probed and no probe needs to be wired.
+      const probeEnabled = isProbeEnabled(deps, loaded.data);
+      if (probeEnabled && healthUrl !== undefined && healthProbe === undefined) {
         return err('verification-unavailable', 'No health probe is wired — cannot verify the declared healthUrl');
       }
       const deadline = clock.now() + VERIFY_TIMEOUT_MS;
-      let lastDockerError: Result<never> | null = null;
-      let lastProbeReason: string | undefined;
-      let sawRestarting = false;
+      // Only the latest attempt's observation is reported at the timeout: an older one (a
+      // restarting read followed by Docker errors, say) would describe a state that is gone.
+      let latest: Result<ServiceStatus> | null = null;
       for (;;) {
-        const health = await docker.getContainerHealth(containerName);
-        if (!health.ok) {
-          lastDockerError = health;
-        } else if (health.data === 'down') {
-          return ok({ state: 'down', detail: 'container is not running' });
-        } else if (health.data === 'restarting') {
-          sawRestarting = true;
-          lastProbeReason = undefined;
-        } else {
-          sawRestarting = false;
-          if (healthUrl === undefined || healthProbe === undefined) {
-            return ok({ state: 'up-unverified' });
+        // Each attempt is decided by the AD-23 table: the same rule every status view uses.
+        const remaining = Math.max(1, deadline - clock.now());
+        const [probe, container] = await Promise.all([
+          !probeEnabled || healthUrl === undefined || healthProbe === undefined
+            ? Promise.resolve<ProbeReading>({ kind: 'none' })
+            : readProbe({ healthProbe }, loaded.data, Math.min(HEALTH_PROBE_TIMEOUT_MS, remaining)),
+          readContainer({ docker }, loaded.data),
+        ]);
+        latest = combineStatus(probe, container);
+        if (latest.ok) {
+          const { state, verified } = latest.data;
+          if (state === 'up') {
+            return ok({ state: verified ? 'functional' : 'up-unverified' });
           }
-          const remaining = Math.max(1, deadline - clock.now());
-          const probed = await healthProbe.probe(healthUrl, Math.min(HEALTH_PROBE_TIMEOUT_MS, remaining));
-          if (probed.ok && probed.data.healthy) {
-            return ok({ state: 'functional' });
+          if (state === 'down') {
+            // verifyService only runs on a declared container, so `down` is always the container.
+            return ok({ state: 'down', detail: 'container is not running' });
           }
-          lastProbeReason = probed.ok ? probed.data.reason : probed.error.message;
+          // restarting, inconsistent and unhealthy keep polling until the timeout.
         }
         if (clock.now() + VERIFY_POLL_INTERVAL_MS > deadline) {
           break;
         }
         await clock.sleep(VERIFY_POLL_INTERVAL_MS);
       }
-      if (sawRestarting) {
-        return ok({ state: 'restarting', detail: 'still restarting after the verification timeout' });
+      if (latest === null) {
+        return err('verification-timeout', `Could not verify ${repoPath} within the verification timeout`);
       }
-      if (lastProbeReason !== undefined) {
-        return ok({ state: 'unhealthy', detail: lastProbeReason });
+      if (!latest.ok) {
+        return latest;
       }
-      return lastDockerError ?? err('verification-timeout', `Could not verify ${repoPath} within the verification timeout`);
+      const observed = latest.data;
+      if (observed.state === 'inconsistent') {
+        // The health route answers but the container never came up: report the container's state.
+        const container = observed.container === 'restarting' ? 'restarting' : 'down';
+        return ok({ state: container, detail: `health route answers but container is ${container}` });
+      }
+      if (observed.state === 'unhealthy') {
+        return ok({ state: 'unhealthy', detail: observed.probeReason ?? DEFAULT_PROBE_REASON });
+      }
+      return ok({ state: 'restarting', detail: 'still restarting after the verification timeout' });
     },
   };
 }

@@ -28,6 +28,7 @@ import {
   isSelectAllKey,
   logsFooterContext,
   logsLegendHints,
+  isPaneRestartAdvertised,
   isWrapAllLogsKey,
   movePaneSubFocus,
   reindexPaneSubFocus,
@@ -70,6 +71,13 @@ describe('healthBadgeState / formatHealthLabel', () => {
 
   it('a restarting service names the request and the re-verification, never the bare state', () => {
     expect(formatHealthLabel('restarting')).toBe('restart requested — re-verifying');
+  });
+
+  it('gives the health-first states their own badge and text (AD-23)', () => {
+    expect(healthBadgeState('unhealthy')).toBe('unhealthy');
+    expect(healthBadgeState('inconsistent')).toBe('inconsistent');
+    expect(formatHealthLabel('unhealthy')).toBe('unhealthy');
+    expect(formatHealthLabel('inconsistent')).toBe('inconsistent');
   });
 });
 
@@ -880,5 +888,47 @@ describe('logsLegendHints', () => {
     const hints = logsLegendHints({ showTimestamps: true, showStdout: false, showStderr: true });
     expect(hints).toContainEqual(['t', 'timestamps on']);
     expect(hints).toContainEqual(['o', 'stdout off']);
+  });
+});
+
+describe('actions menu', () => {
+  const full = { open: true, restartable: true };
+
+  it('puts the actions menu context first, above the filter editor and the fullscreen pane', () => {
+    expect(logsFooterContext(false, false, { open: false, restartable: true }, 'simple', true)).toBe('logs-actions-menu');
+    expect(logsFooterContext(false, false, full, 'clean', true)).toBe('logs-actions-menu');
+    expect(FOOTER_CONTEXTS['logs-actions-menu'].hints.map(([key]) => key)).toEqual(['↑/↓', 'Enter', 'Esc']);
+  });
+
+  it('advertises `a` in every fullscreen context and in the legend', () => {
+    for (const id of ['logs-fullscreen', 'logs-fullscreen-clean', 'logs-fullscreen-no-container'] as const) {
+      expect(FOOTER_CONTEXTS[id].hints).toContainEqual(['a', 'actions']);
+    }
+    expect(logsLegendHints({ showTimestamps: true, showStdout: true, showStderr: true }).map(([key]) => key)).toContain('a');
+  });
+
+  it('isPaneRestartAdvertised hides R only for a pane known to be container-less', () => {
+    expect(isPaneRestartAdvertised(undefined)).toBe(true);
+    expect(isPaneRestartAdvertised({ health: 'up' })).toBe(true);
+    expect(isPaneRestartAdvertised({ health: 'no-container' })).toBe(false);
+    expect(isPaneRestartAdvertised({ health: 'up', noContainer: true })).toBe(false);
+  });
+
+  it("reserves the menu's rendered rows off the list column budget while it is open", () => {
+    const base = {
+      windowColumns: 120,
+      listRatio: 0.3,
+      windowRows: 40,
+      activePaneCount: 1,
+      edtServiceCount: 50,
+      otherServiceCount: 0,
+      filterEditorOpen: false,
+      historyGridOpen: false,
+      filterHistoryGridMaxRows: 8,
+    };
+    const closed = computeLogsLayout(base);
+    expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 12 }).edtListMaxVisibleRows).toBe(12);
+    expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 8 }).edtListMaxVisibleRows).toBe(8);
+    expect(computeLogsLayout({ ...base, actionsMenuRows: 0 }).edtListMaxVisibleRows).toBe(closed.edtListMaxVisibleRows);
   });
 });

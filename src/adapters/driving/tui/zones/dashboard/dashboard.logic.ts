@@ -24,13 +24,19 @@ export function formatUpdatedAgo(now: number, updatedAt: number): string {
   return minutes < 60 ? `updated ${minutes}m ago` : `updated ${Math.floor(minutes / 60)}h ago`;
 }
 
-export function containerLabel(container: DashboardService['container']): { text: string; badge: StatusBadgeState } {
-  if (!container.ok) {
-    return { text: 'container error', badge: 'error' };
+// The row's health-first status (AD-23). A no-healthUrl `up` keeps the plain `up` label: its
+// `verified: false` lives in the data only, flagging it would add noise to every route-less service.
+export function statusLabel(status: DashboardService['status']): { text: string; badge: StatusBadgeState } {
+  if (!status.ok) {
+    return { text: 'status error', badge: 'error' };
   }
-  switch (container.value) {
+  switch (status.value.state) {
     case 'up':
       return { text: 'up', badge: 'up' };
+    case 'unhealthy':
+      return { text: 'unhealthy', badge: 'unhealthy' };
+    case 'inconsistent':
+      return { text: 'inconsistent', badge: 'inconsistent' };
     case 'down':
       return { text: 'down', badge: 'down' };
     case 'restarting':
@@ -38,6 +44,34 @@ export function containerLabel(container: DashboardService['container']): { text
     case 'no-container':
       return { text: 'no container', badge: 'no-container' };
   }
+}
+
+export function inconsistentText(container: string | null): string {
+  return `health route answers but container is ${container ?? 'unknown'}`;
+}
+
+// The status part of a row's reason: the Docker failure, the inconsistency or the probe reason.
+function statusReasonParts(service: DashboardService): string[] {
+  const { status } = service;
+  if (!status.ok) {
+    // A manifest failure is already reported on its own; anything else is the container read.
+    if (!service.manifest.ok) {
+      return [];
+    }
+    const probeReason = status.error.details?.probeReason;
+    return [`container error: ${status.error.message}`, ...(probeReason === undefined ? [] : [`health check: ${probeReason}`])];
+  }
+  const parts: string[] = [];
+  if (status.value.state === 'inconsistent') {
+    parts.push(inconsistentText(status.value.container));
+  }
+  if (status.value.probeReason !== undefined) {
+    parts.push(`health check: ${status.value.probeReason}`);
+  }
+  if (status.value.containerError !== undefined) {
+    parts.push(`container error: ${status.value.containerError.message}`);
+  }
+  return parts;
 }
 
 export function manifestLabel(manifest: DashboardService['manifest']): string | null {
@@ -69,9 +103,7 @@ export function reasonParts(service: DashboardService): string[] {
   if (!service.manifest.ok) {
     parts.push(`manifest error: ${service.manifest.error.message}`);
   }
-  if (!service.container.ok) {
-    parts.push(`container error: ${service.container.error.message}`);
-  }
+  parts.push(...statusReasonParts(service));
   if (!service.workingTree.ok) {
     parts.push(`git error: ${service.workingTree.error.message}`);
   } else {
@@ -115,6 +147,15 @@ export function reasonLine(service: DashboardService): string | null {
   return parts.length === 0 ? null : parts.join(' · ');
 }
 
+export const HEALTH_CHECK_OFF_NOTE = 'health check off';
+
+// A dim note for a row whose health check is turned off locally (the :settings Services tab).
+// Deliberately kept out of `reasonParts`: a disabled check is a choice, not an issue, so it never
+// raises the issue marker.
+export function healthCheckNote(service: DashboardService): string | null {
+  return service.status.ok && service.status.value.healthCheck === 'disabled' ? HEALTH_CHECK_OFF_NOTE : null;
+}
+
 export const OPERATION_IN_PROGRESS = 'operation in progress';
 
 // While an action runs on a row, every action of that row is disabled with the same reason.
@@ -130,6 +171,7 @@ export function actionForKey(actions: readonly ServiceAction[], input: string): 
 
 export type AttentionReason =
   | 'protected-branch'
+  | 'inconsistent'
   | 'drift'
   | 'no-upstream'
   | 'unknown-offline'
@@ -146,9 +188,10 @@ export function driftText(branch: string | null, expectedBranch: string, member:
   return `on ${branch ?? 'detached HEAD'}, expected ${expectedBranch} (${member ? 'EDT member' : 'other service'})`;
 }
 
-// One item per (service, reason), severity-ordered: protected branch, drift (members, then
-// others), upstream trouble, working tree, behind, then branch shared with another EDT. A failed
-// probe is never an item; a detached HEAD shows as drift, not as unknown divergence.
+// One item per (service, reason), severity-ordered: protected branch, inconsistent status
+// (AD-23), drift (members, then others), upstream trouble, working tree, behind, then branch
+// shared with another EDT. A failed read is never an item; a detached HEAD shows as drift, not as
+// unknown divergence.
 export function buildAttentionItems(services: readonly DashboardService[], others: readonly DashboardOtherService[] = []): AttentionItem[] {
   const items: Array<AttentionItem & { rank: number }> = [];
   for (const s of services) {
@@ -158,34 +201,46 @@ export function buildAttentionItems(services: readonly DashboardService[], other
     if (s.protectedBranch) {
       push('protected-branch', 0, `on protected branch${s.branch === null ? '' : ` ${s.branch}`}`);
     }
+    if (s.status.ok && s.status.value.state === 'inconsistent') {
+      push('inconsistent', 1, inconsistentText(s.status.value.container));
+    }
     if (s.drift === 'drifted') {
-      push('drift', 1, driftText(s.branch, s.expectedBranch, true));
+      push('drift', 2, driftText(s.branch, s.expectedBranch, true));
     }
     if (s.divergence.status === 'no-upstream') {
-      push('no-upstream', 2, 'no upstream');
+      push('no-upstream', 3, 'no upstream');
     } else if (s.divergence.status === 'unknown-offline' && !detached) {
-      push('unknown-offline', 2, 'divergence unknown (offline)');
+      push('unknown-offline', 3, 'divergence unknown (offline)');
     }
     if (s.workingTree.ok) {
       const { uncommitted, mergeInProgress, rebaseInProgress } = s.workingTree.value;
-      if (uncommitted) push('uncommitted', 3, 'uncommitted changes');
-      if (mergeInProgress) push('merging', 3, 'merge in progress');
-      if (rebaseInProgress) push('rebasing', 3, 'rebase in progress');
+      if (uncommitted) push('uncommitted', 4, 'uncommitted changes');
+      if (mergeInProgress) push('merging', 4, 'merge in progress');
+      if (rebaseInProgress) push('rebasing', 4, 'rebase in progress');
     }
     if (s.divergence.behind !== null && s.divergence.behind > 0) {
-      push('behind', 4, `behind by ${s.divergence.behind}`);
+      push('behind', 5, `behind by ${s.divergence.behind}`);
     }
     if (s.usedByEdts.length > 0) {
-      push('used-by-edt', 5, `branch also used by EDT ${s.usedByEdts.join(', ')}`);
+      push('used-by-edt', 6, `branch also used by EDT ${s.usedByEdts.join(', ')}`);
     }
   }
   for (const o of others) {
     if (o.drift === 'drifted') {
-      items.push({ service: o.service, path: o.path, reason: 'drift', rank: 1, text: driftText(o.branch, o.expectedBranch, false), focusable: false });
+      items.push({ service: o.service, path: o.path, reason: 'drift', rank: 2, text: driftText(o.branch, o.expectedBranch, false), focusable: false });
     }
   }
   // Array.prototype.sort is stable, so services keep their listing order within a severity.
   return items.sort((a, b) => a.rank - b.rank).map(({ rank: _rank, ...item }) => item);
+}
+
+// The glyph an unfocused Attention line carries: inconsistent has its own, protected branch is
+// the failure tone, everything else awaits the developer.
+export function attentionBadge(reason: AttentionReason): StatusBadgeState {
+  if (reason === 'inconsistent') {
+    return 'inconsistent';
+  }
+  return reason === 'protected-branch' ? 'failed' : 'awaiting';
 }
 
 export function formatAttentionLine(item: AttentionItem): string {

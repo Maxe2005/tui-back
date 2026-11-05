@@ -88,7 +88,7 @@ describe('buildDashboardSnapshot', () => {
     expect(snapshot.services.map((s) => s.path)).toEqual(['/r/a', '/r/b']);
     expect(snapshot.services[0]).toMatchObject({
       service: 'svc-a',
-      container: { ok: true, value: 'up' },
+      status: { ok: true, value: { state: 'up', verified: false, container: 'up' } },
       branch: 'feat/x',
       divergence: { status: 'current', ahead: 1, behind: 2 },
       workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } },
@@ -113,7 +113,7 @@ describe('buildDashboardSnapshot', () => {
       manifests: { '/r/a': manifestFor('/r/a', { container }) },
     });
     const result = await setup.run();
-    expect(result.ok && result.data.services[0]?.container).toEqual({ ok: true, value: 'no-container' });
+    expect(result.ok && result.data.services[0]?.status).toEqual({ ok: true, value: { state: 'no-container', verified: false, container: 'no-container' } });
     expect(setup.docker.getContainerHealth).not.toHaveBeenCalled();
   });
 
@@ -132,9 +132,99 @@ describe('buildDashboardSnapshot', () => {
         getContainerHealth: async (name: string) => (name === 'ctr-a' ? err('docker-unavailable', 'no docker') : ok('down' as const)),
       },
     });
-    expect(snapshot.services[0]?.container).toEqual({ ok: false, error: { code: 'docker-unavailable', message: 'no docker' } });
+    expect(snapshot.services[0]?.status).toEqual({ ok: false, error: { code: 'docker-unavailable', message: 'no docker' } });
     expect(snapshot.services[0]?.branch).toBe('feat/x');
-    expect(snapshot.services[1]?.container).toEqual({ ok: true, value: 'down' });
+    expect(snapshot.services[1]?.status).toEqual({ ok: true, value: { state: 'down', verified: false, container: 'down' } });
+  });
+
+  it('resolves each row health-first through the wired probe', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x'], ['/r/b', 'feat/x']])],
+      manifests: {
+        '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }),
+        '/r/b': manifestFor('/r/b', { healthUrl: 'http://b/h' }),
+      },
+    });
+    const probe = vi.fn(async (url: string) => ok(url === 'http://a/h' ? { healthy: false, reason: 'HTTP 503' } : { healthy: true }));
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe } });
+    expect(result.ok && result.data.services[0]?.status).toEqual({
+      ok: true,
+      value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' },
+    });
+    expect(result.ok && result.data.services[1]?.status).toEqual({ ok: true, value: { state: 'up', verified: true, container: 'up' } });
+  });
+
+  it('keeps the probe reason in details when Docker and the probe both fail', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x']])],
+      manifests: { '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }) },
+      docker: { getContainerHealth: async () => err('docker-unavailable', 'no docker') },
+    });
+    const probe = vi.fn(async () => ok({ healthy: false, reason: 'HTTP 503' }));
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe } });
+    expect(result.ok && result.data.services[0]?.status).toEqual({
+      ok: false,
+      error: { code: 'docker-unavailable', message: 'no docker', details: { probeReason: 'HTTP 503' } },
+    });
+  });
+
+  it('carries the container error next to a 2xx probe, as up', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x']])],
+      manifests: { '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }) },
+      docker: { getContainerHealth: async () => err('docker-unavailable', 'no docker') },
+    });
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe: async () => ok({ healthy: true }) } });
+    expect(result.ok && result.data.services[0]?.status).toEqual({
+      ok: true,
+      value: { state: 'up', verified: true, container: null, containerError: { code: 'docker-unavailable', message: 'no docker' } },
+    });
+  });
+
+  it('gives a container-less service declaring healthUrl a real up/down, without Docker', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x'], ['/r/b', 'feat/x']])],
+      manifests: {
+        '/r/a': manifestFor('/r/a', { container: undefined, healthUrl: 'http://a/h' }),
+        '/r/b': manifestFor('/r/b', { container: undefined, healthUrl: 'http://b/h' }),
+      },
+    });
+    const probe = vi.fn(async (url: string) => ok(url === 'http://a/h' ? { healthy: true } : { healthy: false, reason: 'timeout' }));
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe } });
+    expect(result.ok && result.data.services[0]?.status).toEqual({ ok: true, value: { state: 'up', verified: true, container: 'no-container' } });
+    expect(result.ok && result.data.services[1]?.status).toEqual({
+      ok: true,
+      value: { state: 'down', verified: true, container: 'no-container', probeReason: 'timeout' },
+    });
+    expect(setup.docker.getContainerHealth).not.toHaveBeenCalled();
+  });
+
+  it('never probes a service whose health check is disabled and marks it', async () => {
+    const setup = build({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x'], ['/r/b', 'feat/x']])],
+      manifests: {
+        '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }),
+        '/r/b': manifestFor('/r/b', { healthUrl: 'http://b/h' }),
+      },
+    });
+    const probe = vi.fn(async () => ok({ healthy: false, reason: 'HTTP 503' }));
+    const isHealthCheckEnabled = (manifest: Manifest) => manifest.service !== 'svc-a';
+    const result = await buildDashboardSnapshot({ ...setup.deps, healthProbe: { probe }, isHealthCheckEnabled });
+    expect(result.ok && result.data.services[0]?.status).toEqual({
+      ok: true,
+      value: { state: 'up', verified: false, container: 'up', healthCheck: 'disabled' },
+    });
+    expect(result.ok && result.data.services[1]?.status).toEqual({
+      ok: true,
+      value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' },
+    });
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(probe).toHaveBeenCalledWith('http://b/h', expect.any(Number));
+  });
+
+  it('ignores healthUrl when no probe is wired', async () => {
+    const snapshot = await data({ manifests: { '/r/a': manifestFor('/r/a', { healthUrl: 'http://a/h' }) } });
+    expect(snapshot.services[0]?.status).toEqual({ ok: true, value: { state: 'up', verified: false, container: 'up' } });
   });
 
   it('classifies no-upstream and unknown-offline divergence', async () => {
@@ -178,7 +268,7 @@ describe('buildDashboardSnapshot', () => {
     expect(snapshot.services[0]).toMatchObject({
       service: 'svc-a',
       manifest: { ok: false, error: { code: 'manifest-invalid' } },
-      container: { ok: false, error: { code: 'manifest-invalid' } },
+      status: { ok: false, error: { code: 'manifest-invalid' } },
     });
     expect(snapshot.services[1]?.manifest.ok).toBe(true);
   });

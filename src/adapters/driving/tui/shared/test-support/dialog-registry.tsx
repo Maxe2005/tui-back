@@ -1,7 +1,8 @@
 // tui/shared/test-support: every dialog the TUI can show, each with an adversarial fixture.
 // The size matrix renders them all; the registry-coverage test fails when a source file that
 // renders a ModalDialog is missing here. `embedded` dialogs are opened by their zone's own local
-// state, so the matrix reaches them through the owning zone instead.
+// state, so the matrix reaches them through the owning zone instead. `overlay` entries are
+// app-level overlays that are not a ModalDialog (the Terminal view) but get the same matrix.
 import { createElement, type ReactElement } from 'react';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
@@ -30,10 +31,13 @@ import { UpdateServicePickDialog } from '../../zones/update/update-service-pick-
 import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-dialog.js';
 import { UpdateIncidentsDialog } from '../../zones/update/update-incidents-dialog.js';
 import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
+import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
 import { CommandBar } from '../command-bar.js';
 import { RepoRegistryScreen } from '../repo-registry-screen.js';
 import { SettingsScreen } from '../settings-screen.js';
 import { RealignDialog } from '../realign-dialog.js';
+import { TerminalView } from '../terminal-view.js';
+import { HealDialog } from '../heal-dialog.js';
 
 export const LONG_TEXT = 'x'.repeat(5000);
 export const MULTILINE_ERROR = `first line of a failure\n${'\u001b[31mred\u001b[0m '.repeat(40)}\nthird line ${LONG_TEXT}`;
@@ -68,7 +72,7 @@ export function failedRows(count = 300) {
 
 // `file` is the source file whose ModalDialog this entry covers, relative to the tui directory.
 export type DialogEntry =
-  | { id: string; file: string; render: (rows: number) => ReactElement }
+  | { id: string; file: string; render: (rows: number) => ReactElement; overlay?: true }
   | { id: string; file: string; embedded: 'update' | 'routes' | 'shared-types' };
 
 const edt = adversarialEdt();
@@ -267,6 +271,33 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
         gridAvailableHeight: Math.max(1, rows - 12),
       }),
   },
+  {
+    id: 'logs/actions-menu-loading',
+    file: 'zones/logs/logs-actions-menu.tsx',
+    render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null }), restartMode: 'simple' }),
+  },
+  {
+    id: 'logs/actions-menu',
+    file: 'zones/logs/logs-actions-menu.tsx',
+    render: () =>
+      createElement(LogsActionsMenu, {
+        menu: actionsMenu({
+          cursor: 4,
+          actions: ['open-in-ide', 'restart-simple', 'restart-clean', 'terminal-service', 'terminal-container'].map((id, i) => ({
+            id,
+            label: `${id}-${'l'.repeat(300)}`,
+            key: `Ctrl+${'K'.repeat(100)}`,
+            availability: i < 2 ? { available: true as const } : { available: false as const, reason: LONG_TEXT },
+          })),
+        }),
+        restartMode: 'simple',
+      }),
+  },
+  {
+    id: 'logs/actions-menu-error',
+    file: 'zones/logs/logs-actions-menu.tsx',
+    render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }), restartMode: 'simple' }),
+  },
   { id: 'shared/keybinding-help', file: 'shared/components/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
   { id: 'shared/command-bar', file: 'shared/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/repo-registry', file: 'shared/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
@@ -275,15 +306,51 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'shared/realign-run', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
   { id: 'shared/realign-run-failed', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
   { id: 'shared/realign-error', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
+  { id: 'shared/heal-confirm', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('confirm') }) },
+  { id: 'shared/heal-running', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('running') }) },
+  {
+    id: 'shared/heal-confirm-close',
+    file: 'shared/heal-dialog.tsx',
+    render: () => createElement(HealDialog, { useStore: healStore('running'), initial: { confirmingClose: true } }),
+  },
+  { id: 'shared/heal-done', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('done') }) },
+  { id: 'shared/heal-error', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('error') }) },
+  { id: 'shared/terminal-idle', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore() }) },
+  { id: 'shared/terminal-running', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
+  { id: 'shared/terminal-fullscreen', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
+  { id: 'shared/terminal-confirm-close', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, confirming: true }), initial: { confirming: true } }) },
   { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
   { id: 'update/zone', file: 'zones/update/update-zone.tsx', embedded: 'update' },
   { id: 'routes/zone', file: 'zones/routes/routes-zone.tsx', embedded: 'routes' },
   { id: 'shared-types/zone', file: 'zones/shared-types/shared-types-zone.tsx', embedded: 'shared-types' },
 ];
 
+function actionsMenu(overrides: Partial<LogsActionsMenuState>): LogsActionsMenuState {
+  return { repoPath: `/repos/${'p'.repeat(300)}`, service: 's'.repeat(500), cursor: 0, actions: null, error: null, ...overrides };
+}
+
 function helpStore() {
   const s = store();
   s.setState({ helpOpen: true } as never);
+  return s;
+}
+
+// A terminal on an adversarial target: a huge label and cwd, `lines` LONG_TEXT output lines
+// (stdout/stderr/echo/status mixed) with a dropped count, and a notice (none while confirming).
+function terminalStore(options: { running?: boolean; lines?: number; fullscreen?: boolean; confirming?: boolean } = {}) {
+  const s = store();
+  const kinds = ['stdout', 'stderr', 'command', 'status'] as const;
+  s.setState({
+    terminalOpen: true,
+    terminalTarget: { kind: 'container', repoPath: `/repo/${'p'.repeat(300)}`, label: 'c'.repeat(500) },
+    terminalLines: Array.from({ length: options.lines ?? 0 }, (_, i) => ({ kind: kinds[i % kinds.length]!, text: `${i} ${LONG_TEXT}` })),
+    terminalDroppedCount: options.lines === undefined ? 0 : 12_345,
+    terminalCwd: `/very/long/cwd/${'d'.repeat(400)}`,
+    terminalRunning: options.running === true,
+    terminalReady: true,
+    terminalFullscreen: options.fullscreen === true,
+    terminalNotice: options.confirming === true ? null : MULTILINE_ERROR,
+  } as never);
   return s;
 }
 
@@ -345,5 +412,33 @@ function realignRunStore(error: string | null = null) {
 function realignErrorStore() {
   const s = store();
   s.setState({ realignScreenOpen: true, realignCandidates: { status: 'error', rows: [], error: MULTILINE_ERROR } } as never);
+  return s;
+}
+
+// 200 adversarial services: every other one a target, the rest skipped with a long detail; live
+// or final phases by status, a huge topic and a multi-line error.
+function healStore(status: 'confirm' | 'running' | 'done' | 'error') {
+  const s = store();
+  const planRows = services.map((svc, i) =>
+    i % 2 === 0
+      ? { service: svc.service, repoPath: svc.path, phase: 'pending' as const }
+      : { service: svc.service, repoPath: svc.path, phase: 'skipped' as const, skipReason: 'status unknown' as const, detail: MULTILINE_ERROR },
+  );
+  const phases = ['restarting', 'verifying', 'functional', 'unhealthy', 'down', 'failed'] as const;
+  const rows =
+    status === 'confirm' || status === 'error'
+      ? planRows
+      : planRows.map((row, i) => (row.phase === 'pending' ? { ...row, phase: phases[i % phases.length]!, detail: MULTILINE_ERROR } : row));
+  s.setState({
+    healScreenOpen: true,
+    healRun: {
+      status,
+      plan: { edt: { ulid: edt.ulid, topic: edt.topic }, rows: planRows },
+      mode: 'clean',
+      rows,
+      report: null,
+      error: status === 'error' ? MULTILINE_ERROR : null,
+    },
+  } as never);
   return s;
 }

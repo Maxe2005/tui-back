@@ -1,7 +1,7 @@
 // tui/zones/dashboard: the fixed launch banner, then the registry prompt or the snapshot sections.
 // The snapshot loads on mount, on `R` and when the active EDT changes. Up/Down move the row cursor,
-// Ctrl+O/R/L run the focused row's actions, Enter opens it in Logs, `a` steps through Attention
-// lines, `A` opens the realign dialog, `E` enters the active EDT, `e` seeds the EDT quick-pick.
+// Ctrl+O/R/L/T/X run the focused row's actions, Enter opens it in Logs, `a` steps through Attention
+// lines, `A` opens the realign dialog, `H` opens the heal overlay, `E` enters the active EDT, `e` seeds the EDT quick-pick.
 // Overlays make the zone inert.
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
@@ -27,8 +27,9 @@ export const REGISTRY_CHECK_ERROR_MESSAGE = 'Failed to check the repo registry.'
 const NO_OTHERS: readonly DashboardOtherService[] = [];
 
 // Used only while the registry's action list is not loaded (unwired ports): the key still
-// reaches the store, which reports the missing port inline.
-const FALLBACK_ACTION_IDS: Record<string, string> = { o: 'open-in-ide', r: 'restart-simple', l: 'restart-clean' };
+// reaches the store, which reports the missing port inline (the terminal opens on an error line
+// when no shell port is wired). The container terminal needs a live health check, so no fallback.
+const FALLBACK_ACTION_IDS: Record<string, string> = { o: 'open-in-ide', r: 'restart-simple', l: 'restart-clean', t: 'terminal-service' };
 
 export function DashboardZone({
   useStore = useAppStore,
@@ -50,6 +51,7 @@ export function DashboardZone({
   const openEdtCreateDialog = useStore((state) => state.openEdtCreateDialog);
   const setActiveZone = useStore((state) => state.setActiveZone);
   const openRealignScreen = useStore((state) => state.openRealignScreen);
+  const openHeal = useStore((state) => state.openHeal);
   const [cursor, setCursor] = useState(0);
   const [attentionPick, setAttentionPick] = useState<number | null>(null);
   const zoneInputActive = useZoneInputActive(useStore);
@@ -141,6 +143,10 @@ export function DashboardZone({
       }
       if (input === 'A') {
         openRealignScreen();
+        return;
+      }
+      if (input === 'H') {
+        void openHeal();
         return;
       }
       if (input === 'a') {

@@ -18,7 +18,8 @@ import { STATUS_BADGES } from '../../shared/components/status-badge.js';
 import {
   aheadBehindLabel,
   branchLabel,
-  containerLabel,
+  statusLabel,
+  attentionBadge,
   disableWhileRunning,
   formatRegistrySummary,
   formatUpdatedAgo,
@@ -33,6 +34,7 @@ import {
   resolveEdtSection,
   EDT_SECTION_ROWS,
   NO_EDT_MESSAGE,
+  healthCheckNote,
   type AttentionItem,
 } from './dashboard.logic.js';
 
@@ -55,7 +57,7 @@ const COLUMN_HEADERS = ['SERVICE', 'STATUS', 'BRANCH', 'SYNC'] as const;
 const COLUMN_MAX_WIDTH = [28, 15, 28, 12] as const;
 
 function serviceCells(service: DashboardService): [string, string, string, string] {
-  return [service.service, containerLabel(service.container).text, branchLabel(service), aheadBehindLabel(service.divergence)];
+  return [service.service, statusLabel(service.status).text, branchLabel(service), aheadBehindLabel(service.divergence)];
 }
 
 // Each column is as wide as its longest cell (header included), capped, so rows line up.
@@ -88,7 +90,7 @@ function ServiceTableHeader({ widths }: { widths: readonly number[] }) {
 }
 
 function ServiceRow({ service, focused, widths }: { service: DashboardService; focused: boolean; widths: readonly number[] }) {
-  const container = containerLabel(service.container);
+  const status = statusLabel(service.status);
   const marker = issueMarker(service);
   const cells = serviceCells(service);
   const color = focused ? colors.accent : colors.text;
@@ -96,7 +98,7 @@ function ServiceRow({ service, focused, widths }: { service: DashboardService; f
     <Box>
       <Text wrap="truncate-end" color={focused ? STATUS_BADGES.selection.color : colors['text-dim']}>{focused ? STATUS_BADGES.selection.glyph : ' '}</Text>
       <Text wrap="truncate-end" color={colors.warning}>{marker}</Text>
-      <StatusBadge state={container.badge} />
+      <StatusBadge state={status.badge} />
       <Box marginLeft={spacing['glyph-gap']} flexShrink={1}>
         {cells.slice(0, COLUMN_HEADERS.length).map((cell, column) => (
           <Cell key={COLUMN_HEADERS[column]} width={widths[column]!} color={column === 3 ? (focused ? colors.accent : colors['text-dim']) : color}>{cell}</Cell>
@@ -110,19 +112,29 @@ function ServiceDetail({ service, useStore }: { service: DashboardService; useSt
   const actions = useStore((state) => state.dashboardServiceActions[service.path]);
   const actionState = useStore((state) => state.dashboardActionState[service.path]);
   const reason = reasonLine(service);
+  // A locally disabled health check is a dim note, never an issue: it replaces "No issue." or
+  // follows the real issues.
+  const note = healthCheckNote(service);
   const running = actionState?.running ?? null;
   const shown = disableWhileRunning(actions ?? [], running !== null);
   const why = shown.flatMap((action) => (action.availability.available ? [] : [`${action.key}: ${action.availability.reason}`])).join(' · ');
   return (
     <Box flexDirection="column" paddingX={spacing['pane-padding-x']}>
       <TruncatedText color={colors['text-dim']}>{service.service}</TruncatedText>
-      {reason === null ? <DimAnnotation text="No issue." /> : <TruncatedText color={colors.warning}>{reason}</TruncatedText>}
+      {reason === null ? (
+        <DimAnnotation text={note ?? 'No issue.'} />
+      ) : (
+        <>
+          <TruncatedText color={colors.warning}>{reason}</TruncatedText>
+          {note === null ? null : <DimAnnotation text={note} />}
+        </>
+      )}
       {actions === undefined ? (
         <DimAnnotation text="Actions unavailable." />
       ) : (
         <ServiceActionsRow actions={shown} />
       )}
-      {/* The one-line row clips on a narrow pane, so the reasons are also spelled out below it. */}
+      {/* The row wraps up to SERVICE_ACTIONS_MAX_LINES and can still cut a reason, so the reasons are also spelled out below it. */}
       {why === '' ? null : <ClampedParagraph color={colors['text-dim']} maxLines={2}>{why}</ClampedParagraph>}
       {running !== null ? (
         <TruncatedText color={colors.info}>{running.text}</TruncatedText>
@@ -226,7 +238,7 @@ export function DashboardBody({
                 cursorIndex={attentionIndex ?? 0}
                 renderItem={(item, index) => (
                   <Box key={`${item.path}:${item.reason}`}>
-                    <StatusBadge state={index === attentionIndex ? 'selection' : item.reason === 'protected-branch' ? 'failed' : 'awaiting'} />
+                    <StatusBadge state={index === attentionIndex ? 'selection' : attentionBadge(item.reason)} />
                     <Box marginLeft={spacing['glyph-gap']} flexShrink={1}>
                       <TruncatedText color={index === attentionIndex ? colors.accent : colors.text}>{formatAttentionLine(item)}</TruncatedText>
                     </Box>

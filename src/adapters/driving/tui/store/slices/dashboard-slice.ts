@@ -1,6 +1,8 @@
 // tui/store/slices: the Dashboard's state — the services and registry-health sections, each with
 // its own load status so they fill independently, plus the time of the last completed load.
 // Builders run in-process over injected ports; unwired, a section degrades to an error state.
+import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
+import { basename } from 'node:path';
 import type { StateCreator } from 'zustand';
 import { err, type Result } from '../../../../../core/result.js';
 import {
@@ -18,6 +20,7 @@ import {
   type DashboardServicesSection,
 } from '../../../../../core/dashboard/snapshot.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
+import { RESTART_MODES, TERMINAL_KINDS } from './service-action-ids.js';
 
 export type DashboardSectionStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -47,10 +50,6 @@ export type DashboardSlice = {
   clearPendingServiceFocus: () => void;
 };
 
-const RESTART_MODES: Record<string, RestartMode> = {
-  'restart-simple': 'simple',
-  'restart-clean': 'clean',
-};
 const RESTART_LABELS: Record<RestartMode, string> = {
   simple: 'Restart',
   clean: 'Clean restart',
@@ -87,6 +86,8 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
           restart: deps.restart,
           editor: deps.editor,
           lock: deps.lock,
+          // The container terminal's availability reads the container's live health.
+          docker: deps.docker,
         })
       : null;
   return (set, get) => {
@@ -144,6 +145,13 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
         patchActionState(repoPath, {
           result: opened.ok ? { ok: true, text: 'Opened in IDE' } : { ok: false, text: firstLine(opened.error.message) },
         });
+        return;
+      }
+      // The terminal entries' availability was already re-read by runDashboardServiceAction.
+      const terminalKind = TERMINAL_KINDS[actionId];
+      if (terminalKind !== undefined) {
+        const row = get().dashboardServices?.services.find((service) => service.path === repoPath);
+        await get().openTerminal(repoPath, terminalKind, row?.service ?? (basename(repoPath) || repoPath));
         return;
       }
       const mode = RESTART_MODES[actionId];
@@ -246,7 +254,11 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
           dashboardRegistryStatus: 'loading',
         });
         // A builder that throws degrades its own section; the other one is untouched.
-        const services = buildDashboardServices(deps).then(
+        // The live per-service health-check toggle, read at every refresh.
+        const services = buildDashboardServices({
+          ...deps,
+          isHealthCheckEnabled: healthCheckEnabledFrom(() => get().settings),
+        }).then(
           (result) =>
             set((state) => ({
               dashboardServicesStatus: result.ok ? 'ready' : 'error',

@@ -139,6 +139,14 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.realign),
+    // Same optional-with-default and per-field fallback: an unknown heal mode falls back to `simple`.
+    dashboard: z
+      .object({
+        restartMode: z.enum(['simple', 'clean']).catch(DEFAULT_SETTINGS.dashboard.restartMode).optional().default(DEFAULT_SETTINGS.dashboard.restartMode),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.dashboard),
     // An invalid `logs.bufferSize` does not just reset this `logs` block: the whole top-level
     // `.strict()` object fails validation as one unit, so *every* top-level key falls back to
     // DEFAULT_SETTINGS, like any other invalid field in this schema (index.test.ts's
@@ -170,5 +178,15 @@ export const settingsSchema: z.ZodType<Settings> = z
       .strict()
       .optional()
       .default(DEFAULT_SETTINGS.logs),
+    // Optional-with-default: a settings.yaml written before this group existed has no
+    // `services:`. A non-array value fails the whole file back to defaults with the usual
+    // field-naming warning (`services.healthCheckDisabled`); unknown service names are kept.
+    services: z
+      .object({
+        healthCheckDisabled: z.array(z.string()).optional().default(DEFAULT_SETTINGS.services.healthCheckDisabled),
+      })
+      .strict()
+      .optional()
+      .default(DEFAULT_SETTINGS.services),
   })
   .strict();

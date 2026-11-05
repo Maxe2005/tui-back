@@ -13,29 +13,31 @@ import type {
   UpdatePhase,
 } from '../../../../../core/scripts/group-update.js';
 import type { SharedTypesStage } from '../../../../../core/shared-types/smart-update.js';
-import type { HealthState } from '../../../../../core/ports/docker.js';
+import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
 import type { FooterContextId } from '../../keybindings/index.js';
 import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
-import { computeLineRowCount, sliceVisibleWindow } from '../logs/logs-zone.logic.js';
+import { computeLineRowCount, sliceVisibleWindow } from '../../shared/scrollable-output/index.js';
 
-// The Update zone's own closed per-service status set: a raw HealthState passthrough, plus
+// The Update zone's own closed per-service status set: the health-first ServiceStatusState
+// passthrough (AD-23, `unhealthy` and `inconsistent` included), plus
 // 'updating' (a run currently targets this service), 'migrating' (the run's live phase for this
 // service is the migrate step) and 'error' (derived from the last completed run's outcome, not
 // raw health — a container can report `up` immediately after a failed migration).
-// 'no-container' is the TUI-side state for a service whose manifest declares no Docker
-// runtime — dim, never the down treatment.
-export type UpdateServiceStatus = HealthState | 'updating' | 'migrating' | 'awaiting' | 'error' | 'no-container';
+// 'no-container' comes from ServiceStatusState: a manifest declaring neither a container nor a
+// probed `healthUrl` (a container-less service with one reads up/down) — dim, never the down
+// treatment.
+export type UpdateServiceStatus = ServiceStatusState | 'updating' | 'migrating' | 'awaiting' | 'error';
 
 // A service paused on a pending incident ('awaiting') outranks everything: it is
 // the one state that needs the developer, not the run.
 // Precedence: a run currently targeting this service wins ('updating', or 'migrating' during the
 // live migrate phase — outranking even a stale 'error' from a previous run); otherwise a
 // standalone clean restart in flight wins ('restarting'); otherwise a failed last outcome
-// outranks raw health (a container can report `up` right after a failed migration — the old
-// process is still running); otherwise a container-less service reads 'no-container';
-// otherwise raw health passes through unchanged.
+// outranks the resolved status (a container can report `up` right after a failed migration —
+// the old process is still running); otherwise the resolved status passes through unchanged,
+// 'no-container' included.
 export function deriveUpdateServiceStatus(
-  health: HealthState | 'no-container',
+  health: ServiceStatusState,
   lastOutcome: GroupUpdateRepoResult['outcome'] | undefined,
   isTargetedByRunningRun: boolean,
   isRestarting = false,
@@ -59,10 +61,22 @@ export function deriveUpdateServiceStatus(
   if (lastOutcome === 'failed') {
     return 'error';
   }
-  if (health === 'no-container') {
-    return 'no-container';
-  }
   return health;
+}
+
+// The words a list row prints next to its glyph, for the states whose glyph alone is ambiguous
+// (`unhealthy` shares `◐` with `awaiting`) or dim by design; null for every other state.
+export function updateStatusText(status: UpdateServiceStatus): string | null {
+  switch (status) {
+    case 'no-container':
+      return 'no container';
+    case 'unhealthy':
+      return 'unhealthy';
+    case 'inconsistent':
+      return 'inconsistent';
+    default:
+      return null;
+  }
 }
 
 // Whether the in-flight run actually targets this list row. The scope alone is not enough: a run
