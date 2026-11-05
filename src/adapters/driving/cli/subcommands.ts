@@ -25,7 +25,7 @@ import type { DockerPort } from '../../../core/ports/docker.js';
 import type { EditorPort } from '../../../core/ports/editor.js';
 import type { HealthProbePort } from '../../../core/ports/health-probe.js';
 import type { GitPort } from '../../../core/ports/git.js';
-import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { Manifest, ManifestPort } from '../../../core/ports/manifest.js';
 import type { ManifestCarryPort } from '../../../core/ports/manifest-carry.js';
 import type { MigrationPort } from '../../../core/ports/migration.js';
 import type { RestartPort } from '../../../core/ports/restart.js';
@@ -200,6 +200,7 @@ export function buildSubcommands(deps: {
               git: deps.git,
               docker: deps.docker,
               ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
+              isHealthCheckEnabled: healthCheckToggle(await loadSettingsOrDefaults(deps.settings)),
               edtRegistry: deps.edtRegistry,
               state: deps.state,
             })
@@ -924,14 +925,11 @@ async function runEdtSwitch(
     return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected none, simple or clean. Usage: ${EDT_SWITCH_USAGE}`);
   }
   let restartMode = restartFlag as SwitchRestartMode | undefined;
+  // Loaded at most once: for the absent flag here, then for the restart phase below.
+  let loadedSettings: Settings | undefined;
   if (restartMode === undefined) {
-    const loaded = await deps.settings.load();
-    if (!loaded.ok) {
-      console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
-    } else if (loaded.data.warning !== null) {
-      console.error(`tui-back: ${loaded.data.warning}`);
-    }
-    restartMode = (loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS).switch.restartMode;
+    loadedSettings = await loadSettingsOrDefaults(deps.settings);
+    restartMode = loadedSettings.switch.restartMode;
   }
   if (restartMode !== 'none' && (deps.docker === undefined || deps.healthProbe === undefined)) {
     return err('restart-unavailable', 'Post-switch restart needs the Docker and health-probe ports, which are not wired — nothing was switched');
@@ -969,8 +967,8 @@ async function runEdtSwitch(
   if (!repos.ok) {
     return repos;
   }
-  const loadedSettings = await deps.settings.load();
-  const concurrency = (loadedSettings.ok ? loadedSettings.data.settings : DEFAULT_SETTINGS).update.concurrency;
+  const restartSettings = loadedSettings ?? (await loadSettingsOrDefaults(deps.settings));
+  const concurrency = restartSettings.update.concurrency;
   const serviceActions = createServiceActions({
     manifest: deps.manifest,
     container: deps.container,
@@ -980,6 +978,7 @@ async function runEdtSwitch(
     lock: deps.lock,
     docker: deps.docker,
     healthProbe: deps.healthProbe,
+    isHealthCheckEnabled: healthCheckToggle(restartSettings),
   });
   const report = await restartAfterSwitch({
     results: switched.data.results,
@@ -1104,6 +1103,7 @@ async function runRealign(
         lock: deps.lock,
         docker: deps.docker,
         healthProbe: deps.healthProbe,
+        isHealthCheckEnabled: healthCheckToggle(await settings()),
       }),
     };
   }
@@ -1503,4 +1503,22 @@ export function assertUniqueSubcommandNames(subcommands: Subcommand[]): void {
     }
     seen.add(subcommand.name);
   }
+}
+
+// Loads settings.yaml for a command; a load failure or a corrupt-file warning goes to stderr
+// (separate from the stdout JSON envelope) and the built-in defaults apply.
+async function loadSettingsOrDefaults(port: SettingsPort): Promise<Settings> {
+  const loaded = await port.load();
+  if (!loaded.ok) {
+    console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+  } else if (loaded.data.warning !== null) {
+    console.error(`tui-back: ${loaded.data.warning}`);
+  }
+  return loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
+}
+
+// The per-service health-check toggle the status resolver and verifyService read, over the
+// settings this command loaded.
+function healthCheckToggle(settings: Settings): (manifest: Manifest) => boolean {
+  return (manifest) => !settings.services.healthCheckDisabled.includes(manifest.service);
 }
