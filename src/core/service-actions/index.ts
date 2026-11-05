@@ -118,6 +118,8 @@ export async function heldLockName(lock: LockPort, locks: readonly NamedLock[]):
 }
 
 export const NO_CLEAN_RECIPE_NOTICE = 'no clean-restart recipe — simple restart';
+// The reason `list()` gives a clean restart that has no recipe to run.
+export const NO_CLEAN_RECIPE_REASON = 'no clean recipe';
 
 // A blank repoPath would resolve to the process cwd and target the wrong directory.
 function rejectBlankRepoPath(repoPath: string): Result<never> | null {
@@ -167,7 +169,7 @@ export function createServiceActions(deps: ServiceActionsDeps): ServiceActions {
       return { available: false, reason: blocking };
     }
     if (mode === 'clean' && recipeCommands(loaded.data).length === 0) {
-      return { available: false, reason: 'no clean recipe' };
+      return { available: false, reason: NO_CLEAN_RECIPE_REASON };
     }
     return AVAILABLE;
   }
