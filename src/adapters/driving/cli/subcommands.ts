@@ -1247,7 +1247,9 @@ async function runHealCommand(
     edt,
     mode: report.data.mode,
     targets: plan.data.rows.filter((row) => row.phase === 'pending').map((row) => row.service),
-    skipped: plan.data.rows.filter((row) => row.phase === 'skipped').map((row) => ({ service: row.service, reason: row.skipReason })),
+    skipped: plan.data.rows
+      .filter((row) => row.phase === 'skipped')
+      .map((row) => ({ service: row.service, reason: row.skipReason, ...(row.detail !== undefined ? { detail: row.detail } : {}) })),
     restart: rows
       .filter((row) => row.phase !== 'skipped')
       .map((row) => ({ service: row.service, state: row.phase, ...(row.detail !== undefined ? { detail: row.detail } : {}) })),
