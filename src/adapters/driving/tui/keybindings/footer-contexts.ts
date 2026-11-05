@@ -366,6 +366,10 @@ export const FOOTER_CONTEXTS = {
     label: 'Settings st tab',
     hints: [MOVE, ['Space', 'toggle'], TAB_SWITCH, CLOSE],
   },
+  'settings-services': {
+    label: 'Settings Services tab',
+    hints: [MOVE, ['Space', 'toggle health check'], TAB_SWITCH, CLOSE],
+  },
   'settings-groups': {
     label: 'Settings group list',
     hints: [MOVE, ['Enter', 'open'], TAB_SWITCH, CLOSE],

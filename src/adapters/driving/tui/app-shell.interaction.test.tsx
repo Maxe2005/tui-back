@@ -1451,18 +1451,56 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
-  it('Shift+Tab on the General tab goes back to the st tab (wrapping), then Update, then Logs', async () => {
+  it('Shift+Tab on the General tab goes back to the Services tab (wrapping), then st, then Update, then Logs', async () => {
     const store = createAppStore(fakeDeps());
     store.getState().openSettingsScreen();
     const { instance, stdout, stdin } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.shiftTab);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('healthUrl is never probed');
+      await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Run npm i');
       await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Update concurrency');
       await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output.slice(stdout.output.lastIndexOf('tui-back'))).toContain('Buffer size');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Space on the Services tab unchecks a service health check and persists it at once (story 9.11)', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.setState({
+      edtsBranches: [
+        { service: 'api', path: '/repos/api', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [], healthUrl: 'http://api/health' },
+        { service: 'lib', path: '/repos/lib', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'development', protectedBranches: [] },
+      ],
+    });
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.shiftTab); // General -> Services (wrapping)
+
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual(['api']);
+      expect(settingsPort.save).toHaveBeenCalledWith(expect.objectContaining({ services: { healthCheckDisabled: ['api'] } }));
+
+      // A row without healthUrl is disabled: Space does nothing.
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual(['api']);
+
+      await press(instance, stdin, KEYS.up);
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.services.healthCheckDisabled).toEqual([]);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -1711,6 +1749,7 @@ describe('AppShell settings screen (:settings)', () => {
           filterHistoryDedup: true,
           restartMode: 'simple' as const,
         },
+        services: { healthCheckDisabled: [] },
       });
 
       await press(instance, stdin, KEYS.space);
