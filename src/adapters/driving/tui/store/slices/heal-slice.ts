@@ -5,12 +5,13 @@
 // notice instead of the overlay. Closing mid-run only hides the overlay: the run finishes and
 // keeps other restarts blocked through `serviceRestartInFlight` until it ends.
 import type { StateCreator } from 'zustand';
-import type { RestartRow } from '../../../../../core/edt/switch-restart.js';
+import { restartNeedsAttention, type RestartRow } from '../../../../../core/edt/switch-restart.js';
 import { HEAL_NOTHING_TO_DO_MESSAGE, planHeal, runHeal, type HealPlan, type HealReport } from '../../../../../core/heal/index.js';
 import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
 import type { Result } from '../../../../../core/result.js';
 import { createServiceActions, type RestartMode, type ServiceActions } from '../../../../../core/service-actions/index.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
+import { describeRestartSummary } from '../../zones/edts/dialogs/switch-restart-report.js';
 
 export const HEAL_NOTICE_TIMEOUT_MS = 5000;
 export const HEAL_BUSY_MESSAGE = 'A service restart is already in progress — wait for it to finish before healing.';
@@ -201,6 +202,17 @@ export function createHealSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
               ? { ...current, status: 'done', rows: report.data.rows, report: report.data, error: null }
               : { ...current, status: 'error', error: report.error.message },
           });
+          // Closed mid-run: the overlay is gone, so the outcome is surfaced as a notice.
+          if (!get().healScreenOpen) {
+            showNotice(
+              report.ok
+                ? {
+                    message: `Heal ${mode} finished: ${describeRestartSummary(report.data.rows)}`,
+                    tone: restartNeedsAttention(report.data.summary) ? 'warning' : 'success',
+                  }
+                : { message: report.error.message, tone: 'error' },
+            );
+          }
           void get().loadDashboard({ queueIfBusy: true });
         }
       },

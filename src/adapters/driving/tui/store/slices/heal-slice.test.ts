@@ -12,7 +12,7 @@ import type { ManifestPort } from '../../../../../core/ports/manifest.js';
 import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../core/ports/settings.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
-import { ok } from '../../../../../core/result.js';
+import { err, ok } from '../../../../../core/result.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
 import { HEAL_BUSY_MESSAGE, HEAL_NOTICE_TIMEOUT_MS, HEAL_UNWIRED_MESSAGE, orderHealPlanRows } from './heal-slice.js';
 
@@ -237,6 +237,37 @@ describe('heal slice', () => {
     expect(store.getState().healRun?.status).toBe('done');
     expect(store.getState().serviceRestartInFlight).toEqual({});
     expect(loadDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces the outcome of a heal closed mid-run as a notice', async () => {
+    let release: () => void = () => {};
+    const restartGate = new Promise<void>((done) => {
+      release = done;
+    });
+    const { deps, containerRestart } = fakeDeps({ a: 'down', b: 'down' }, { restartGate });
+    // b's restart fails: one failed row, so the run needs attention.
+    containerRestart.mockImplementation(async (container: string) => {
+      await restartGate;
+      return container === 'ctr-b' ? err('restart-failed', 'docker restart failed') : ok(undefined);
+    });
+    const { store, loadDashboard } = storeWith(deps);
+    await store.getState().openHeal();
+    const run = store.getState().startHeal();
+    store.getState().closeHeal();
+    release();
+    await run;
+    expect(store.getState().healRun?.report?.summary.failed).toBe(1);
+    expect(store.getState().healNotice).toEqual({ tone: 'warning', message: expect.stringMatching(/^Heal simple finished: .*1 failed/) });
+    expect(loadDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no outcome notice when the overlay stayed open', async () => {
+    const { deps } = fakeDeps({ a: 'down' });
+    const { store } = storeWith(deps);
+    await store.getState().openHeal();
+    await store.getState().startHeal();
+    expect(store.getState().healRun?.status).toBe('done');
+    expect(store.getState().healNotice).toBeNull();
   });
 
   it('lands in the error state when runHeal fails, and Esc then closes', async () => {
