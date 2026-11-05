@@ -142,7 +142,7 @@ describe('resolveServiceStatus (AD-23 matrix)', () => {
   });
 });
 
-describe('resolveServiceStatus — per-service health check toggle (story 9.11)', () => {
+describe('resolveServiceStatus — per-service health check toggle', () => {
   const disabled = (d: ServiceStatusDeps, names: string[] = ['api']): ServiceStatusDeps => ({
     ...d,
     isHealthCheckEnabled: (manifest) => !names.includes(manifest.service),

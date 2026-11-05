@@ -1471,7 +1471,7 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
-  it('Space on the Services tab unchecks a service health check and persists it at once (story 9.11)', async () => {
+  it('Space on the Services tab unchecks a service health check and persists it at once', async () => {
     const settingsPort: SettingsPort = {
       load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
       save: vi.fn(async () => ok(undefined)),

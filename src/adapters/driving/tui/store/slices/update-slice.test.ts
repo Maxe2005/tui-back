@@ -840,7 +840,7 @@ describe('update slice: service health polling', () => {
     store.getState().stopUpdateHealthPolling();
   });
 
-  it('never probes a service whose health check is disabled (story 9.11)', async () => {
+  it('never probes a service whose health check is disabled', async () => {
     const probe = vi.fn(async () => ok({ healthy: false, reason: 'timeout' }));
     const store = createAppStore(fakeDeps({ docker: fakeDocker(vi.fn(async () => ok('up' as const))), manifest: manifestWithHealth(), healthProbe: { probe } }));
     store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: ['svc-a'] } } }));

@@ -1254,7 +1254,7 @@ describe("app store", () => {
       expect(store.getState().settings.sharedTypes).toEqual({ install: true, cleanRestart: true, commit: true, historyDepth: 20, maxCommitsScanned: 1000 });
     });
 
-    it("updateSettings() merges services.healthCheckDisabled, keeping the other groups (story 9.11)", async () => {
+    it("updateSettings() merges services.healthCheckDisabled, keeping the other groups", async () => {
       const store = createAppStore();
       await store.getState().updateSettings({ services: { healthCheckDisabled: ["api"] } });
       expect(store.getState().settings.services).toEqual({ healthCheckDisabled: ["api"] });

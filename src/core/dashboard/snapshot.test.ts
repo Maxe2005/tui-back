@@ -199,7 +199,7 @@ describe('buildDashboardSnapshot', () => {
     expect(setup.docker.getContainerHealth).not.toHaveBeenCalled();
   });
 
-  it('never probes a service whose health check is disabled and marks it (story 9.11)', async () => {
+  it('never probes a service whose health check is disabled and marks it', async () => {
     const setup = build({
       edts: [edt('e1', 'topic-a', [['/r/a', 'feat/x'], ['/r/b', 'feat/x']])],
       manifests: {

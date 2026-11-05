@@ -82,7 +82,7 @@ function row(overrides: Partial<DashboardService> = {}): DashboardService {
   };
 }
 
-describe('health check off note (story 9.11)', () => {
+describe('health check off note', () => {
   const off = row({ status: { ok: true, value: { state: 'up', verified: false, container: 'up', healthCheck: 'disabled' } } });
   it('is a dim note, never an issue: no marker and no reason on its own', () => {
     expect(healthCheckNote(off)).toBe('health check off');

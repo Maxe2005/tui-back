@@ -33,7 +33,7 @@ describe('resolveCheckboxItemLayout', () => {
   });
 });
 
-describe('resolveCheckboxItemLayout — disabled (story 9.11)', () => {
+describe('resolveCheckboxItemLayout — disabled', () => {
   it('dims a disabled row and shows a [-] box whatever its state', () => {
     expect(resolveCheckboxItemLayout({ label: 'api', state: 'checked', disabled: true })).toEqual({
       boxGlyph: '[-]',

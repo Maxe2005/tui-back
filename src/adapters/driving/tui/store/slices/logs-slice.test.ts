@@ -520,7 +520,7 @@ describe('logs slice: health-first status', () => {
     }
   });
 
-  it('a listed row whose health check is disabled reads its container state without probing (story 9.11)', async () => {
+  it('a listed row whose health check is disabled reads its container state without probing', async () => {
     const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
     const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
     store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: ['a'] } } }));
@@ -531,7 +531,7 @@ describe('logs slice: health-first status', () => {
     store.getState().stopLogsListedHealthPolling();
   });
 
-  it('a disabled container-less pane reads no-container, and re-enabling probes it at the next poll (story 9.11)', async () => {
+  it('a disabled container-less pane reads no-container, and re-enabling probes it at the next poll', async () => {
     vi.useFakeTimers();
     try {
       const probe = vi.fn(async () => ok({ healthy: true }));

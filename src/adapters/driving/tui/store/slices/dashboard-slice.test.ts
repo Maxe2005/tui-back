@@ -42,7 +42,7 @@ describe('dashboard slice', () => {
     expect(state.dashboardUpdatedAt).not.toBeNull();
   });
 
-  it('reads the live health-check toggle at each refresh: a disabled service is never probed (story 9.11)', async () => {
+  it('reads the live health-check toggle at each refresh: a disabled service is never probed', async () => {
     const probe = vi.fn(async () => ok({ healthy: false, reason: 'HTTP 503' }));
     const store = createAppStore(
       fakeDeps({

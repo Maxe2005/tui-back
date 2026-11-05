@@ -370,7 +370,7 @@ describe('subcommand registry guards', () => {
     });
   });
 
-  it('dashboard reads the health check toggle from settings: JSON carries healthCheck "disabled" (story 9.11)', async () => {
+  it('dashboard reads the health check toggle from settings: JSON carries healthCheck "disabled"', async () => {
     const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
     const subcommands = buildTestSubcommands({
       edtRegistry: {
@@ -399,7 +399,7 @@ describe('subcommand registry guards', () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  it('dashboard falls back to default settings with a stderr warning when settings cannot be read (story 9.11)', async () => {
+  it('dashboard falls back to default settings with a stderr warning when settings cannot be read', async () => {
     const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const subcommands = buildTestSubcommands({
@@ -931,7 +931,7 @@ describe('subcommand registry guards', () => {
       );
     });
 
-    it('--restart never probes a service whose health check is disabled in settings (story 9.11)', async () => {
+    it('--restart never probes a service whose health check is disabled in settings', async () => {
       const { edt, containerRestart, probe } = restartSetup({ healthy: false, healthCheckDisabled: ['svc-a'] });
       const result = await edt.run(['switch', '--to', 'demo', '--restart', 'simple']);
       expect(result.ok).toBe(true);
@@ -1178,7 +1178,7 @@ describe('subcommand registry guards', () => {
       );
     });
 
-    it('a restart never probes a service whose health check is disabled in settings (story 9.11)', async () => {
+    it('a restart never probes a service whose health check is disabled in settings', async () => {
       const settings: SettingsPort = {
         load: async () => ok({ settings: { ...DEFAULT_SETTINGS, services: { healthCheckDisabled: ['svc-a'] } }, warning: null }),
         save: async () => ok(undefined),

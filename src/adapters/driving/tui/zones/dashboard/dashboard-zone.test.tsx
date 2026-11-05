@@ -261,7 +261,7 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toMatch(/⚠\s*svc-b · health route answers but container is down/);
   });
 
-  it('shows a dim "health check off" instead of "No issue." for a disabled check, and after a real issue (story 9.11)', async () => {
+  it('shows a dim "health check off" instead of "No issue." for a disabled check, and after a real issue', async () => {
     const [first, second] = ACTIVE.services;
     const clean = { uncommitted: false, mergeInProgress: false, rebaseInProgress: false };
     const off = { ok: true as const, value: { state: 'up' as const, verified: false, container: 'up' as const, healthCheck: 'disabled' as const } };

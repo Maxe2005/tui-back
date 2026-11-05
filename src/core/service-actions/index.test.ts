@@ -402,14 +402,14 @@ describe('service actions verifyService', () => {
     expect(!result.ok && result.error.code).toBe('docker-unavailable');
   });
 
-  it('never probes a service whose health check is disabled: a started container is up-unverified (story 9.11)', async () => {
+  it('never probes a service whose health check is disabled: a started container is up-unverified', async () => {
     const off = { isHealthCheckEnabled: (m: Manifest) => m.service !== 'api' };
     const { actions, healthProbe } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['up'], [{ healthy: false, reason: 'HTTP 503' }], off);
     expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'up-unverified' } });
     expect(healthProbe.probe).not.toHaveBeenCalled();
   });
 
-  it('a disabled health check needs no wired probe: no verification-unavailable (story 9.11)', async () => {
+  it('a disabled health check needs no wired probe: no verification-unavailable', async () => {
     const off = { isHealthCheckEnabled: () => false, noProbe: true };
     const { actions } = verifySetup({ container: 'api', healthUrl: 'http://x/h' }, ['up'], [], off);
     expect(await actions.verifyService('/r')).toEqual({ ok: true, data: { state: 'up-unverified' } });

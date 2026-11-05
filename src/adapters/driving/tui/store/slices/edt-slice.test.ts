@@ -454,7 +454,7 @@ describe('edt slice — post-switch restart (FR-37)', () => {
     expect(store.getState().serviceRestartInFlight).toEqual({});
   });
 
-  it('verifies a service whose health check is disabled without probing it (story 9.11)', async () => {
+  it('verifies a service whose health check is disabled without probing it', async () => {
     const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
     const { deps } = restartDeps({
       healthProbe: { probe },

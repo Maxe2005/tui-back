@@ -144,7 +144,7 @@ describe('listEdtBranchesDivergence', () => {
     });
   });
 
-  it('copies the manifest healthUrl onto the row when declared, and omits it otherwise (story 9.11)', async () => {
+  it('copies the manifest healthUrl onto the row when declared, and omits it otherwise', async () => {
     const result = await listEdtBranchesDivergence({
       registry: fakeRegistry(['/repo/a', '/repo/b']),
       manifest: fakeManifest({

@@ -762,7 +762,7 @@ describe('settingsFooterContext', () => {
   });
 });
 
-describe('Services settings tab (story 9.11)', () => {
+describe('Services settings tab', () => {
   const branch = (service: string, healthUrl?: string) => ({
     service,
     path: `/repos/${service}`,

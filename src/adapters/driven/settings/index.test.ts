@@ -315,7 +315,7 @@ describe('loadSettings', () => {
     expect(result.ok && result.data.settings.logs.bufferSize).toBe(750);
   });
 
-  it('defaults services.healthCheckDisabled to empty and keeps unknown names as-is (story 9.11)', async () => {
+  it('defaults services.healthCheckDisabled to empty and keeps unknown names as-is', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     await writeFile(file, 'logs:\n  bufferSize: 500\n');
@@ -328,7 +328,7 @@ describe('loadSettings', () => {
     expect(listed.ok && listed.data.warning).toBeNull();
   });
 
-  it('falls back to defaults with a field-naming warning when services.healthCheckDisabled is not a list (story 9.11)', async () => {
+  it('falls back to defaults with a field-naming warning when services.healthCheckDisabled is not a list', async () => {
     const root = await tempRoot();
     const file = join(root, 'settings.yaml');
     await writeFile(file, 'logs:\n  bufferSize: 750\nservices:\n  healthCheckDisabled: 3\n');
