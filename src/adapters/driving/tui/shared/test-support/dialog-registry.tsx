@@ -31,6 +31,7 @@ import { UpdateServicePickDialog } from '../../zones/update/update-service-pick-
 import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-dialog.js';
 import { UpdateIncidentsDialog } from '../../zones/update/update-incidents-dialog.js';
 import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
+import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
 import { CommandBar } from '../command-bar.js';
 import { RepoRegistryScreen } from '../repo-registry-screen.js';
 import { SettingsScreen } from '../settings-screen.js';
@@ -269,6 +270,32 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
         gridAvailableHeight: Math.max(1, rows - 12),
       }),
   },
+  {
+    id: 'logs/actions-menu-loading',
+    file: 'zones/logs/logs-actions-menu.tsx',
+    render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null }) }),
+  },
+  {
+    id: 'logs/actions-menu',
+    file: 'zones/logs/logs-actions-menu.tsx',
+    render: () =>
+      createElement(LogsActionsMenu, {
+        menu: actionsMenu({
+          cursor: 4,
+          actions: ['open-in-ide', 'restart-simple', 'restart-clean', 'terminal-service', 'terminal-container'].map((id, i) => ({
+            id,
+            label: `${id}-${'l'.repeat(300)}`,
+            key: `Ctrl+${'K'.repeat(100)}`,
+            availability: i === 0 ? { available: true as const } : { available: false as const, reason: LONG_TEXT },
+          })),
+        }),
+      }),
+  },
+  {
+    id: 'logs/actions-menu-error',
+    file: 'zones/logs/logs-actions-menu.tsx',
+    render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }) }),
+  },
   { id: 'shared/keybinding-help', file: 'shared/components/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
   { id: 'shared/command-bar', file: 'shared/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/repo-registry', file: 'shared/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
@@ -286,6 +313,10 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'routes/zone', file: 'zones/routes/routes-zone.tsx', embedded: 'routes' },
   { id: 'shared-types/zone', file: 'zones/shared-types/shared-types-zone.tsx', embedded: 'shared-types' },
 ];
+
+function actionsMenu(overrides: Partial<LogsActionsMenuState>): LogsActionsMenuState {
+  return { repoPath: `/repos/${'p'.repeat(300)}`, service: 's'.repeat(500), cursor: 0, actions: null, error: null, ...overrides };
+}
 
 function helpStore() {
   const s = store();
