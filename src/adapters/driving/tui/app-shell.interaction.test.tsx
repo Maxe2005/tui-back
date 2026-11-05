@@ -23,6 +23,7 @@ import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-supp
 import { footerIdOf } from './shared/test-support/mount-for-test.js';
 import { filterKeybindings } from './shared/components/keybinding-help.js';
 import { KEYBINDINGS } from './keybindings/index.js';
+import { SETTINGS_GROUPS } from './shared/settings-screen.js';
 
 // Mirrors app-store.test.ts's fakeDeps/manifestFor: the mount-time/registry-close
 // `loadTabVisibility()` effect is AppShell's only production activation path, and a deps-less
@@ -1806,7 +1807,9 @@ describe('AppShell settings screen (:settings)', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.tab); // General -> EDTs (group list)
-      for (let i = 0; i < 6; i += 1) {
+      const healIndex = SETTINGS_GROUPS.findIndex((group) => group.id === 'heal-restart');
+      expect(healIndex).toBeGreaterThan(0);
+      for (let i = 0; i < healIndex; i += 1) {
         await press(instance, stdin, KEYS.down); // -> "Heal restart mode"
       }
       await press(instance, stdin, KEYS.enter);
