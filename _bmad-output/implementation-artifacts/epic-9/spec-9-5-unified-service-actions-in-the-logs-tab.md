@@ -2,7 +2,7 @@
 title: 'Unified Service Actions in the Logs Tab'
 type: 'feature'
 created: '2026-11-05'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'aa26fbfba8d3f10336e12b2548084c4f5407dae7'
 review_loop_iteration: 0
 context:
@@ -63,14 +63,14 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src/adapters/driving/tui/store/slices/service-action-ids.ts` (+ dashboard-slice import) -- export `RESTART_MODES`, `TERMINAL_KINDS` -- one id→behaviour map for both consumers.
-- [ ] `src/adapters/driving/tui/store/slices/logs-slice.ts` (+ test) -- `listLogsPaneActions(repoPath)` → `ServiceAction[] | null`; `runLogsPaneAction(repoPath, actionId, service)` (fresh list, fail closed, disabled → pane notice reason, dispatch to IDE / `restartLogsPane(repoPath, mode)` / `openTerminal`); `runLogsPaneShortcut(repoPath, 'restart' | 'ide', service)` with the clean→simple fallback; `restartLogsPane` takes an optional mode -- registry-driven actions in one place.
-- [ ] `src/adapters/driving/tui/zones/logs/logs-actions-menu.tsx` (+ test) -- pure `toMenuItems(actions)` and the modal view (title `SERVICE ACTIONS`, service name, loading/error line) -- testable mapping.
-- [ ] `src/adapters/driving/tui/zones/logs/logs-zone.tsx` (+ interaction test) -- local menu state `{repoPath, service, cursor, actions|null, error}`; `a` opens it in grid and fullscreen; key routing via `resolveMenuKey`; `R`/`O` call `runLogsPaneShortcut`; remove the zone-side availability checks.
-- [ ] `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts`, `keybindings/footer-contexts.ts`, `keybindings/keybindings.ts` (+ tests) -- context `logs-actions-menu` (move/run/close); `a` in fullscreen contexts and the legend; `a (Logs)` help row.
-- [ ] `src/adapters/driving/tui/shared/test-support/dialog-registry.tsx` -- fixtures: loading, five rows with long `LONG_TEXT` reasons, error.
-- [ ] `EXPERIENCE.md` -- Logs row: `a` actions menu, `R`/`O` shortcuts through the registry.
-- [ ] Unit-test every I/O matrix row (slice tests for `R`/run paths, zone tests for the menu).
+- [x] `src/adapters/driving/tui/store/slices/service-action-ids.ts` (+ dashboard-slice import) -- export `RESTART_MODES`, `TERMINAL_KINDS` -- one id→behaviour map for both consumers.
+- [x] `src/adapters/driving/tui/store/slices/logs-slice.ts` (+ test) -- `listLogsPaneActions(repoPath)` → `ServiceAction[] | null`; `runLogsPaneAction(repoPath, actionId, service)` (fresh list, fail closed, disabled → pane notice reason, dispatch to IDE / `restartLogsPane(repoPath, mode)` / `openTerminal`); `runLogsPaneShortcut(repoPath, 'restart' | 'ide', service)` with the clean→simple fallback; `restartLogsPane` takes an optional mode -- registry-driven actions in one place.
+- [x] `src/adapters/driving/tui/zones/logs/logs-actions-menu.tsx` (+ test) -- pure `toMenuItems(actions)` and the modal view (title `SERVICE ACTIONS`, service name, loading/error line) -- testable mapping.
+- [x] `src/adapters/driving/tui/zones/logs/logs-zone.tsx` (+ interaction test) -- local menu state `{repoPath, service, cursor, actions|null, error}`; `a` opens it in grid and fullscreen; key routing via `resolveMenuKey`; `R`/`O` call `runLogsPaneShortcut`; remove the zone-side availability checks.
+- [x] `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts`, `keybindings/footer-contexts.ts`, `keybindings/keybindings.ts` (+ tests) -- context `logs-actions-menu` (move/run/close); `a` in fullscreen contexts and the legend; `a (Logs)` help row.
+- [x] `src/adapters/driving/tui/shared/test-support/dialog-registry.tsx` -- fixtures: loading, five rows with long `LONG_TEXT` reasons, error.
+- [x] `EXPERIENCE.md` -- Logs row: `a` actions menu, `R`/`O` shortcuts through the registry.
+- [x] Unit-test every I/O matrix row (slice tests for `R`/run paths, zone tests for the menu).
 
 **Acceptance Criteria:**
 - Given an open actions menu, when `q`, `:` or a zone mnemonic is typed, then nothing global fires.
@@ -99,3 +99,67 @@ if (entry && !entry.availability.available && entry.availability.reason === 'no 
 
 **Manual checks:**
 - `node src/bin/tui-back.mjs`: Logs, open a pane, `a` → menu; run Terminal, Restart; `R`/`O` in grid and fullscreen; a container-less pane.
+
+## Suggested Review Order
+
+**Registry-driven pane actions (entry point)**
+
+- The `R`/`O` shortcut: mode → registry entry, clean→simple fallback on the named reason.
+  [`logs-slice.ts:858`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L858)
+
+- Menu choice: fresh re-list, fail closed, disabled → named notice; IDE skips the re-list.
+  [`logs-slice.ts:841`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L841)
+
+- One dispatcher from a registry entry to IDE / restart / terminal.
+  [`logs-slice.ts:507`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L507)
+
+- Re-list helper: missing id or closed pane ends with a notice, never silently.
+  [`logs-slice.ts:532`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L532)
+
+- Slice-side restart guard keeps the Docker-`restarting` rule the zone used to own.
+  [`logs-slice.ts:561`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L561)
+
+- The no-recipe reason is a named core constant, not a string the slice guesses.
+  [`index.ts:122`](../../../src/core/service-actions/index.ts#L122)
+
+**Actions menu in the zone**
+
+- `a` opens the menu on the fullscreen pane / the sub-focused grid pane.
+  [`logs-zone.tsx:701`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L701)
+
+- Sequenced listing: a stale result from an earlier open is dropped.
+  [`logs-zone.tsx:403`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L403)
+
+- Menu keys via the shared `resolveMenuKey`; functional cursor updates.
+  [`logs-zone.tsx:470`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L470)
+
+- Registry entries → menu rows; Logs keys (`O`, `R`) as notes, reasons on disabled rows.
+  [`logs-actions-menu.tsx:50`](../../../src/adapters/driving/tui/zones/logs/logs-actions-menu.tsx#L50)
+
+- Reserved rows follow the rendered content, not a fixed height.
+  [`logs-actions-menu.tsx:34`](../../../src/adapters/driving/tui/zones/logs/logs-actions-menu.tsx#L34)
+
+**Shared ids & key declarations**
+
+- Id → behaviour maps shared by the Dashboard and Logs.
+  [`service-action-ids.ts:7`](../../../src/adapters/driving/tui/store/slices/service-action-ids.ts#L7)
+
+- Menu footer context, chosen ahead of the fullscreen/filter ones.
+  [`footer-contexts.ts:149`](../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L149)
+
+- `a (Logs)` help and footer row.
+  [`keybindings.ts:254`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L254)
+
+**Peripherals**
+
+- Slice tests: Docker-`restarting` pane is never restarted.
+  [`app-store.test.ts:2587`](../../../src/adapters/driving/tui/store/app-store.test.ts#L2587)
+
+- Stale-listing guard test.
+  [`logs-zone.interaction.test.tsx:1812`](../../../src/adapters/driving/tui/zones/logs/logs-zone.interaction.test.tsx#L1812)
+
+- Menu fixtures for the size matrix.
+  [`dialog-registry.tsx:275`](../../../src/adapters/driving/tui/shared/test-support/dialog-registry.tsx#L275)
+
+- UX doc: Logs row amended.
+  [`EXPERIENCE.md:30`](../../planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md#L30)
