@@ -2,7 +2,7 @@
 // manifest services) drive an auto-resizing grid of scrollable log panes, with a per-pane
 // fullscreen view and a two-tier text/regex/level filter. A single `useInput` dispatches every
 // keystroke to pure functions in logs-zone.logic.ts; overlays (filter editor, fullscreen) first.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
@@ -20,6 +20,14 @@ import { useAppStore, type AppStore, type LogsPaneData } from '../../store/app-s
 import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import { FullscreenPane } from './fullscreen-pane.js';
 import { LogFilterEditor } from './log-filter-editor.js';
+import {
+  LOGS_ACTIONS_MENU_CLOSE,
+  LOGS_ACTIONS_MENU_LIST_ERROR,
+  LogsActionsMenu,
+  toMenuItems,
+  type LogsActionsMenuState,
+} from './logs-actions-menu.js';
+import { resolveMenuKey } from '../../shared/components/menu-list.js';
 import { LogsGrid } from './logs-grid.js';
 import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import {
@@ -56,6 +64,7 @@ import {
   isClearAllLogsKey,
   isDefaultLogFilterSpec,
   isPaneEngagedInGlobalFilter,
+  isPaneRestartAdvertised,
   isPaneWrapped,
   isRestartingDisplay,
   isSelectAllKey,
@@ -122,8 +131,9 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const unsubscribeLogsPane = useStore((state) => state.unsubscribeLogsPane);
   const loadOlderLogsPane = useStore((state) => state.loadOlderLogsPane);
   const clearLogsPane = useStore((state) => state.clearLogsPane);
-  const restartLogsPane = useStore((state) => state.restartLogsPane);
-  const openLogsPaneInIde = useStore((state) => state.openLogsPaneInIde);
+  const listLogsPaneActions = useStore((state) => state.listLogsPaneActions);
+  const runLogsPaneAction = useStore((state) => state.runLogsPaneAction);
+  const runLogsPaneShortcut = useStore((state) => state.runLogsPaneShortcut);
   const restartMode = useStore((state) => state.settings.logs.restartMode);
   const setLogsPaneScrollOffset = useStore((state) => state.setLogsPaneScrollOffset);
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
@@ -194,6 +204,10 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // untouched draft). Separate from FilterEditorState since it only exists while the editor does.
   const [historyGridCursor, setHistoryGridCursor] = useState<GridCursor | null>(null);
   const [historyGridScroll, setHistoryGridScroll] = useState(0);
+  // The `a` actions menu of one pane — rows from the service-action registry, loaded on open.
+  const [actionsMenu, setActionsMenu] = useState<LogsActionsMenuState | null>(null);
+  // Bumped on every open so a late listing for an earlier menu is dropped.
+  const actionsMenuSeq = useRef(0);
 
   // `Enter` on a Dashboard row lands here: select that service's pane (when it has a container)
   // and put the list cursor on it. Dropped once the listing is loaded without it.
@@ -266,21 +280,26 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     setSubFocus((current) => reindexPaneSubFocus(current, activePanes.length));
   }, [activePanes.length]);
 
-  // The filter editor is a modal too — every dialogOpen consumer (zoneInputCaptured,
-  // logsPaneGridArrowsActive) treats it like fullscreen, since both capture every keystroke.
-  const dialogOpen = logsFullscreenTarget !== null || filterEditor !== null;
+  // The filter editor and the actions menu are modals too — every dialogOpen consumer
+  // (zoneInputCaptured, logsPaneGridArrowsActive) treats them like fullscreen, since all of them
+  // capture every keystroke.
+  const dialogOpen = logsFullscreenTarget !== null || filterEditor !== null || actionsMenu !== null;
   useEffect(() => {
     setZoneInputCaptured(dialogOpen);
   }, [dialogOpen, setZoneInputCaptured]);
   useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
   useFooterContext(
     'logs',
-    logsFooterContext(filterEditor !== null, historyGridCursor !== null, {
-      open: logsFullscreenTarget !== null,
-      restartable:
-        logsFullscreenTarget === null ||
-        (logsPanes[logsFullscreenTarget]?.health !== 'no-container' && logsPanes[logsFullscreenTarget]?.noContainer !== true),
-    }, restartMode),
+    logsFooterContext(
+      filterEditor !== null,
+      historyGridCursor !== null,
+      {
+        open: logsFullscreenTarget !== null,
+        restartable: logsFullscreenTarget === null || isPaneRestartAdvertised(logsPanes[logsFullscreenTarget]),
+      },
+      restartMode,
+      actionsMenu !== null,
+    ),
     useStore,
   );
 
@@ -319,6 +338,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     filterEditorOpen: filterEditor !== null,
     historyGridOpen: historyGridCursor !== null,
     filterHistoryGridMaxRows,
+    actionsMenuOpen: actionsMenu !== null,
   });
 
   function handlePaneScroll(repoPath: string, direction: 'up' | 'down'): void {
@@ -369,6 +389,28 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     setHistoryGridCursor(null);
   }
 
+  // Opens the `a` actions menu on one pane and lists the registry's actions for its service.
+  // A failed listing (or unwired restart ports) leaves one error line; Esc still closes.
+  function openActionsMenu(repoPath: string, service: string): void {
+    actionsMenuSeq.current += 1;
+    const seq = actionsMenuSeq.current;
+    setActionsMenu({ repoPath, service, cursor: 0, actions: null, error: null });
+    void listLogsPaneActions(repoPath)
+      .catch(() => null)
+      .then((actions) => {
+        if (actionsMenuSeq.current !== seq) {
+          return;
+        }
+        setActionsMenu((current) =>
+          current === null ? null : { ...current, actions, error: actions === null ? LOGS_ACTIONS_MENU_LIST_ERROR : null },
+        );
+      });
+  }
+  function closeActionsMenu(): void {
+    actionsMenuSeq.current += 1;
+    setActionsMenu(null);
+  }
+
   // The exact (scope, mode) history list backing the open editor — recomputed live off the
   // store's `filterHistory`, never cached locally, so a commit is immediately visible to the next
   // arrow-recall/grid open.
@@ -395,6 +437,22 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const zoneInputActive = useZoneInputActive(useStore);
   useInput(
     (input, key) => {
+      // The actions menu captures every keystroke while open: ↑/↓/Home/End move, Enter runs an
+      // enabled row (the slice re-reads its availability first), Esc closes.
+      if (actionsMenu !== null) {
+        const items = toMenuItems(actionsMenu.actions ?? []);
+        const step = resolveMenuKey(key, actionsMenu.cursor, items, LOGS_ACTIONS_MENU_CLOSE);
+        if (step.type === 'move') {
+          setActionsMenu({ ...actionsMenu, cursor: step.cursor });
+        } else if (step.type === 'choose') {
+          closeActionsMenu();
+          if (step.choice !== LOGS_ACTIONS_MENU_CLOSE) {
+            void runLogsPaneAction(actionsMenu.repoPath, step.choice, actionsMenu.service);
+          }
+        }
+        return;
+      }
+
       // The filter editor captures every keystroke while open, from the grid or fullscreen —
       // checked first. Tab toggles text/regex mode; Ctrl+Left/Right cycle the level restriction
       // (bare Left/Right belong to the text caret). Escape restores the scope's pre-open spec
@@ -599,23 +657,22 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           setPaneWrap((current) => togglePaneWrapFlag(current, logsFullscreenTarget));
           return;
         }
-        // Developer-triggered restart for this fullscreen pane's service — disabled while
-        // restarting (no-op here; the slice guards too). A container-less pane has no restart
-        // control at all. Uppercase `R` only: lowercase `r` is the
-        // global Routes-zone mnemonic (AppShell exact-matches it whenever zoneInputCaptured is
-        // false, and Ink forwards every keypress to all mounted useInput hooks), so accepting `r`
-        // here would both restart a container and switch zones on one keypress.
+        // `R` / `O` are shortcuts into the service-action registry (`R` per logs.restartMode,
+        // `O` open in IDE); the registry decides availability and a disabled one shows its reason
+        // on the pane. Uppercase only: lowercase `r` is the global Routes-zone mnemonic (AppShell
+        // exact-matches it whenever zoneInputCaptured is false, and Ink forwards every keypress to
+        // all mounted useInput hooks) and lowercase `o` is the stdout toggle.
+        const fullscreenService = logsFullscreenServiceName ?? logsPanes[logsFullscreenTarget]?.service ?? logsFullscreenTarget;
         if (input === 'R') {
-          const pane = logsPanes[logsFullscreenTarget];
-          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container' && pane.noContainer !== true) {
-            void restartLogsPane(logsFullscreenTarget);
-          }
+          void runLogsPaneShortcut(logsFullscreenTarget, 'restart', fullscreenService);
           return;
         }
-        // Uppercase `O` opens the service's repo in the editor — lowercase `o` is the stdout toggle.
-        // Works for container-less panes too.
         if (input === 'O') {
-          openLogsPaneInIde(logsFullscreenTarget);
+          void runLogsPaneShortcut(logsFullscreenTarget, 'ide', fullscreenService);
+          return;
+        }
+        if (input === 'a' && !key.ctrl && !key.meta) {
+          openActionsMenu(logsFullscreenTarget, fullscreenService);
           return;
         }
         const toggle = resolveVisibilityToggleKey(input);
@@ -801,25 +858,19 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         return;
       }
-      // Developer-triggered restart for the sub-focused grid pane's service — disabled while
-      // restarting (no-op; the slice's guard is the second line of defense against a concurrent
-      // `docker restart`). A container-less pane has no restart control at all. Uppercase `R`
-      // only — lowercase `r` is the global Routes-zone mnemonic
-      // (see the fullscreen branch above for why accepting it would double-dispatch).
-      if (input === 'R') {
+      // `R` / `O` / `a` on the sub-focused grid pane — the registry shortcuts and the actions
+      // menu, like fullscreen (see there for why only uppercase `R`/`O`).
+      if (input === 'R' || input === 'O') {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
-          const pane = logsPanes[focused.path];
-          if (pane && !pane.restarting && (pane.health ?? 'down') !== 'restarting' && pane.health !== 'no-container' && pane.noContainer !== true) {
-            void restartLogsPane(focused.path);
-          }
+          void runLogsPaneShortcut(focused.path, input === 'R' ? 'restart' : 'ide', focused.service);
         }
         return;
       }
-      if (input === 'O') {
+      if (input === 'a' && !key.ctrl && !key.meta) {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
-          openLogsPaneInIde(focused.path);
+          openActionsMenu(focused.path, focused.service);
         }
         return;
       }
@@ -942,7 +993,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
                   overflows the terminal and Ink's diff-render corrupts painted lines. Also bounded
                   (hintsMaxVisibleRows), since the lists above can push it past the terminal's
                   rows even with the editor closed. */}
-              {filterEditor === null ? (
+              {filterEditor === null && actionsMenu === null ? (
                 <Box flexDirection="column" marginTop={spacing['section-gap']}>
                   <BoundedList
                     items={logsLegendHints(visibility).map(formatHint)}
@@ -991,6 +1042,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           gridAvailableHeight={historyGridAvailableHeight}
         />
       ) : null}
+      {actionsMenu !== null ? <LogsActionsMenu menu={actionsMenu} /> : null}
     </Box>
   );
 }

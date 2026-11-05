@@ -157,7 +157,10 @@ const HISTORY_GRID_MIN_VISIBLE_ROWS = 3;
 // Rough total-rows budget for the Logs zone's list column (top bar, zone-tab bar, footer, and the
 // "LOGS" title row) — the list column and the pane grid are row siblings sharing the same
 // vertical extent, so this reuses CHROME_ROWS' estimate.
-const LOGS_LIST_HEADER_ROWS = 2; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" header rows, always rendered.
+const LOGS_LIST_HEADER_ROWS = 2;
+// The actions menu's footprint: ModalDialog chrome (6 rows) + the service line + the registry's
+// five rows. Approximate like HISTORY_GRID_CHROME_ROWS; the dialog clips itself beyond its bounds.
+export const LOGS_ACTIONS_MENU_ROWS = 12; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" header rows, always rendered.
 
 export type LogsLayoutInput = {
   windowColumns: number;
@@ -169,6 +172,8 @@ export type LogsLayoutInput = {
   filterEditorOpen: boolean;
   historyGridOpen: boolean;
   filterHistoryGridMaxRows: number;
+  // The `a` actions menu, a sibling below the block like the filter editor (never both open).
+  actionsMenuOpen?: boolean;
 };
 
 export type LogsLayout = {
@@ -219,7 +224,8 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   // gridAvailableHeight. Handed out top-down (EDT list, then OTHER list, then the hints panel) so
   // a section shorter than its share leaves more room for the ones after it; each BoundedList
   // only consumes what its content needs.
-  const listsContentBudget = Math.max(gridAvailableHeight - LOGS_LIST_HEADER_ROWS - filterEditorReservedRows, 3);
+  const actionsMenuReservedRows = input.actionsMenuOpen === true ? LOGS_ACTIONS_MENU_ROWS : 0;
+  const listsContentBudget = Math.max(gridAvailableHeight - LOGS_LIST_HEADER_ROWS - Math.max(filterEditorReservedRows, actionsMenuReservedRows), 3);
   const edtListMaxVisibleRows = listsContentBudget;
   // An empty list still renders a 1-row placeholder ("No active EDT."/"No services in the active
   // EDT."/"No other managed services."), so it counts as 1 row, not the BoundedList's 0 —
@@ -383,15 +389,26 @@ export function toggleVisibilityFlag(flags: VisibilityFlags, toggle: VisibilityT
 
 export const DEFAULT_VISIBILITY_FLAGS: VisibilityFlags = { showTimestamps: true, showStdout: true, showStderr: true };
 
-// The footer context while an overlay owns the keyboard: the filter editor (its history grid is
-// its own sub-mode) sits above the fullscreen pane it may have been opened from.
-// A service without a container has no restart, so its fullscreen pane never advertises one.
+// Whether a fullscreen pane's footer advertises `R`: a pane known to be container-less does
+// not. Display only — whether `R` actually runs is the service-action registry's decision.
+export function isPaneRestartAdvertised(pane: { health?: string; noContainer?: boolean } | undefined): boolean {
+  return pane === undefined || (pane.health !== 'no-container' && pane.noContainer !== true);
+}
+
+// The footer context while an overlay owns the keyboard: the actions menu and the filter editor
+// (its history grid is its own sub-mode) sit above the fullscreen pane they may have been
+// opened from. A service without a container has no restart, so its fullscreen pane never
+// advertises one.
 export function logsFooterContext(
   filterEditorOpen: boolean,
   historyGridOpen: boolean,
   fullscreen: { open: boolean; restartable: boolean },
   restartMode: RestartMode = 'simple',
+  actionsMenuOpen = false,
 ): FooterContextId | null {
+  if (actionsMenuOpen) {
+    return 'logs-actions-menu';
+  }
   if (filterEditorOpen) {
     return historyGridOpen ? 'logs-filter-history' : 'logs-filter-edit';
   }
@@ -425,6 +442,7 @@ export function logsLegendHints(visibility: VisibilityFlags): Hint[] {
     ['w', 'wrap/truncate this pane'],
     ['W', 'wrap/truncate all'],
     ['R', 'restart focused pane'],
+    ['a', 'actions (focused pane)'],
     ['/', 'edit global filter'],
     ['f', "edit this pane's filter"],
     ['i', 'toggle global filter (pane)'],

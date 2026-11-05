@@ -146,6 +146,10 @@ export const FOOTER_CONTEXTS = {
     label: 'Logs filter history',
     hints: [['↑/↓/←/→', 'browse history'], ['Enter', 'recall'], CLOSE],
   },
+  'logs-actions-menu': {
+    label: 'Logs service actions menu',
+    hints: [MOVE, ['Enter', 'run'], CLOSE],
+  },
   'logs-fullscreen-no-container': {
     label: 'Logs fullscreen pane (no container)',
     hints: [
@@ -158,6 +162,7 @@ export const FOOTER_CONTEXTS = {
       ['f', 'pane filter'],
       ['i', 'toggle global engagement'],
       ['O', 'open in IDE'],
+      ['a', 'actions'],
     ],
   },
   'logs-fullscreen': {
@@ -173,6 +178,7 @@ export const FOOTER_CONTEXTS = {
       ['f', 'pane filter'],
       ['i', 'toggle global engagement'],
       ['O', 'open in IDE'],
+      ['a', 'actions'],
     ],
   },
   'logs-fullscreen-clean': {
@@ -188,6 +194,7 @@ export const FOOTER_CONTEXTS = {
       ['f', 'pane filter'],
       ['i', 'toggle global engagement'],
       ['O', 'open in IDE'],
+      ['a', 'actions'],
     ],
   },
   'routes-filter': { label: 'Routes filter', hints: [['Enter', 'apply'], ['Esc', 'clear']] },
