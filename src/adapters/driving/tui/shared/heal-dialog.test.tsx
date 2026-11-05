@@ -91,6 +91,8 @@ describe('HealDialog render', () => {
     expect(output).toContain('EDT: demo-topic');
     expect(output).toContain('1 service to restart · 2 skipped');
     expect(output).toContain('(•) Clean restart');
+    expect(output).toContain('Services to restart (clean)');
+    expect(output).not.toContain('Restarting services');
     expect(output).not.toContain('Aucun');
     expect(output.indexOf('svc-a — pending')).toBeLessThan(output.indexOf('svc-b — skipped (up)'));
     expect(output).toContain('svc-c — skipped (no container)');

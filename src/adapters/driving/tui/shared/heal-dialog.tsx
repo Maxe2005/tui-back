@@ -127,6 +127,7 @@ export function HealDialog({
             error: null,
           }}
           maxVisibleRows={healListBudget(bounds.rows, view)}
+          {...(view === 'confirm' ? { heading: `Services to restart (${run.mode})` } : {})}
         />
         {view === 'confirm-close' ? <ClampedParagraph color={colors.warning} maxLines={CONFIRM_CLOSE_ROWS}>{HEAL_CONFIRM_CLOSE_TEXT}</ClampedParagraph> : null}
       </Box>
