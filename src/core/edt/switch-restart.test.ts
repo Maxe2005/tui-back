@@ -7,11 +7,11 @@ import {
   orderRestartRows,
   restartAfterSwitch,
   restartNeedsAttention,
+  runRestartRows,
   type RestartRow,
   type SwitchRestartRepo,
 } from './switch-restart.js';
 import type { SwitchEdtRepoResult } from './switch.js';
-import { runRestartRows } from './switch-restart.js';
 
 const repos: SwitchRestartRepo[] = [
   { service: 'api', repoPath: '/r/api', hasContainer: true },
