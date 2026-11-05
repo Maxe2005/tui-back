@@ -78,8 +78,8 @@ describe('heal dialog logic', () => {
   it('keeps at least one list row however small the region', () => {
     expect(healListBudget(3, 'confirm')).toBe(1);
     expect(healListBudget(40, 'confirm')).toBe(40 - 16);
-    expect(healListBudget(40, 'running')).toBe(40 - 10);
-    expect(healListBudget(40, 'confirm-close')).toBe(40 - 13);
+    expect(healListBudget(40, 'running')).toBe(40 - 9);
+    expect(healListBudget(40, 'confirm-close')).toBe(40 - 12);
   });
 });
 
@@ -92,6 +92,7 @@ describe('HealDialog render', () => {
     expect(output).toContain('1 service to restart · 2 skipped');
     expect(output).toContain('(•) Clean restart');
     expect(output).toContain('Services to restart (clean)');
+    expect(output).toContain('pour ce heal uniquement');
     expect(output).not.toContain('Restarting services');
     expect(output).not.toContain('Aucun');
     expect(output.indexOf('svc-a — pending')).toBeLessThan(output.indexOf('svc-b — skipped (up)'));
@@ -106,6 +107,7 @@ describe('HealDialog render', () => {
     expect(output).toContain('Restarting services (simple)');
     expect(output).toContain('svc-a — verifying');
     expect(output).not.toContain('Redémarrage simple');
+    expect(output).not.toContain('to restart ·');
     expect(await footerContextOf(store, <HealDialog useStore={store} />)).toBe('heal-busy');
   });
 
@@ -125,6 +127,7 @@ describe('HealDialog render', () => {
     const store = storeWith(healRun({ status: 'done', rows }));
     const output = await renderToString(<HealDialog useStore={store} />, { columns: 160, rows: 40 });
     expect(output).toContain('Restart simple finished: 1 functional · 1 unhealthy · 1 skipped');
+    expect(output).not.toContain('to restart ·');
     expect(output.indexOf('svc-bad — unhealthy: HTTP 503')).toBeLessThan(output.indexOf('svc-ok — functional'));
     expect(await footerContextOf(store, <HealDialog useStore={store} />)).toBe('heal-close');
   });

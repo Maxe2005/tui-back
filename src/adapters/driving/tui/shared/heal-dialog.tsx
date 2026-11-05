@@ -18,8 +18,10 @@ import { HEAL_CONFIRM_CLOSE_TEXT, HEAL_MODES, describeHealPlan, healFooterContex
 
 // Modal frame: border, padding, title, separator and the PgUp/PgDn line.
 const MODAL_CHROME_ROWS = 7;
-// The EDT line and the plan summary line.
-const HEADER_ROWS = 2;
+// The EDT line.
+const HEADER_ROWS = 1;
+// The plan summary line, shown in the confirm view only.
+const PLAN_SUMMARY_ROWS = 1;
 // The mode selector: its top margin, title, choices and hint (DimAnnotation, up to 3 lines).
 const SELECTOR_ROWS = 6;
 // The report's own header line.
@@ -34,7 +36,7 @@ export function healListBudget(regionRows: number, view: 'confirm' | 'running' |
     MODAL_CHROME_ROWS +
     HEADER_ROWS +
     REPORT_HEADER_ROWS +
-    (view === 'confirm' ? SELECTOR_ROWS : 0) +
+    (view === 'confirm' ? PLAN_SUMMARY_ROWS + SELECTOR_ROWS : 0) +
     (view === 'confirm-close' ? CONFIRM_CLOSE_ROWS : 0);
   return Math.max(1, regionRows - chrome);
 }
@@ -116,9 +118,12 @@ export function HealDialog({
     body = (
       <Box flexDirection="column">
         <Text color={colors.text} wrap="truncate-end">{`EDT: ${topic}`}</Text>
-        <Text color={colors['text-dim']} wrap="truncate-end">{describeHealPlan(run.plan?.rows ?? run.rows)}</Text>
         {view === 'confirm' ? (
-          <RestartModeSelector mode={run.mode} modes={HEAL_MODES} title="Mode de redémarrage" keysHint="←/→ ou Espace pour changer (ce heal seulement)." />
+          <>
+            {/* The plan summary describes the confirm list only; once rows move it would go stale. */}
+            <Text color={colors['text-dim']} wrap="truncate-end">{describeHealPlan(run.plan?.rows ?? run.rows)}</Text>
+            <RestartModeSelector mode={run.mode} modes={HEAL_MODES} title="Mode de redémarrage" keysHint="←/→ ou Espace pour changer (pour ce heal uniquement)." />
+          </>
         ) : null}
         <SwitchRestartReport
           state={{
