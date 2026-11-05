@@ -996,6 +996,7 @@ describe('subcommand registry guards', () => {
     ) {
       const checkout = vi.fn(opts.checkout ?? (async () => ok(undefined)));
       const acquire = vi.fn(async () => ok({ release: async () => ok(undefined) }));
+      const probe = vi.fn(async () => ok({ healthy: opts.healthy ?? true, status: 200 }));
       const containerRestart = vi.fn(async () => ok(undefined));
       const logAction = vi.fn(async () => ok(undefined));
       const subcommands = buildTestSubcommands({
@@ -1033,12 +1034,12 @@ describe('subcommand registry guards', () => {
                 getContainerHealth: async () => ok('up' as const),
                 restartContainer: async () => ok(undefined),
               },
-              healthProbe: { probe: async () => ok({ healthy: opts.healthy ?? true, status: 200 }) },
+              healthProbe: { probe },
             }),
       });
       const realign = subcommands.find((subcommand) => subcommand.name === 'realign');
       if (!realign) throw new Error('expected realign subcommand');
-      return { realign, checkout, acquire, containerRestart, logAction, subcommands };
+      return { realign, checkout, acquire, containerRestart, logAction, probe, subcommands };
     }
 
     it.each([
@@ -1183,9 +1184,10 @@ describe('subcommand registry guards', () => {
         load: async () => ok({ settings: { ...DEFAULT_SETTINGS, services: { healthCheckDisabled: ['svc-a'] } }, warning: null }),
         save: async () => ok(undefined),
       };
-      const { realign, containerRestart } = realignSetup({ settings, healthy: false });
+      const { realign, containerRestart, probe } = realignSetup({ settings, healthy: false });
       const result = await realign.run(['--restart', 'simple']);
       expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+      expect(probe).not.toHaveBeenCalled();
       expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
         expect.arrayContaining([expect.objectContaining({ service: 'svc-a', mode: 'simple', state: 'up-unverified' })]),
       );
