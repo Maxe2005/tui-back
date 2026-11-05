@@ -914,7 +914,7 @@ describe('actions menu', () => {
     expect(isPaneRestartAdvertised({ health: 'up', noContainer: true })).toBe(false);
   });
 
-  it('reserves the menu footprint off the list column budget while it is open', () => {
+  it("reserves the menu's rendered rows off the list column budget while it is open", () => {
     const base = {
       windowColumns: 120,
       listRatio: 0.3,
@@ -927,7 +927,8 @@ describe('actions menu', () => {
       filterHistoryGridMaxRows: 8,
     };
     const closed = computeLogsLayout(base);
-    const open = computeLogsLayout({ ...base, actionsMenuOpen: true });
-    expect(closed.edtListMaxVisibleRows - open.edtListMaxVisibleRows).toBe(12);
+    expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 12 }).edtListMaxVisibleRows).toBe(12);
+    expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 8 }).edtListMaxVisibleRows).toBe(8);
+    expect(computeLogsLayout({ ...base, actionsMenuRows: 0 }).edtListMaxVisibleRows).toBe(closed.edtListMaxVisibleRows);
   });
 });

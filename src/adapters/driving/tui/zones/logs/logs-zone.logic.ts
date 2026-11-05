@@ -157,10 +157,7 @@ const HISTORY_GRID_MIN_VISIBLE_ROWS = 3;
 // Rough total-rows budget for the Logs zone's list column (top bar, zone-tab bar, footer, and the
 // "LOGS" title row) — the list column and the pane grid are row siblings sharing the same
 // vertical extent, so this reuses CHROME_ROWS' estimate.
-const LOGS_LIST_HEADER_ROWS = 2;
-// The actions menu's footprint: ModalDialog chrome (6 rows) + the service line + the registry's
-// five rows. Approximate like HISTORY_GRID_CHROME_ROWS; the dialog clips itself beyond its bounds.
-export const LOGS_ACTIONS_MENU_ROWS = 12; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" header rows, always rendered.
+const LOGS_LIST_HEADER_ROWS = 2; // "ACTIVE EDT MEMBERS" + "OTHER SERVICES" header rows, always rendered.
 
 export type LogsLayoutInput = {
   windowColumns: number;
@@ -172,8 +169,9 @@ export type LogsLayoutInput = {
   filterEditorOpen: boolean;
   historyGridOpen: boolean;
   filterHistoryGridMaxRows: number;
-  // The `a` actions menu, a sibling below the block like the filter editor (never both open).
-  actionsMenuOpen?: boolean;
+  // The rows the `a` actions menu renders (0 or absent while closed) — a sibling below the
+  // block like the filter editor (never both open). See logsActionsMenuRows.
+  actionsMenuRows?: number;
 };
 
 export type LogsLayout = {
@@ -224,7 +222,7 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   // gridAvailableHeight. Handed out top-down (EDT list, then OTHER list, then the hints panel) so
   // a section shorter than its share leaves more room for the ones after it; each BoundedList
   // only consumes what its content needs.
-  const actionsMenuReservedRows = input.actionsMenuOpen === true ? LOGS_ACTIONS_MENU_ROWS : 0;
+  const actionsMenuReservedRows = Math.max(0, input.actionsMenuRows ?? 0);
   const listsContentBudget = Math.max(gridAvailableHeight - LOGS_LIST_HEADER_ROWS - Math.max(filterEditorReservedRows, actionsMenuReservedRows), 3);
   const edtListMaxVisibleRows = listsContentBudget;
   // An empty list still renders a 1-row placeholder ("No active EDT."/"No services in the active

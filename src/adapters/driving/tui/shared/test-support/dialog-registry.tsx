@@ -273,7 +273,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   {
     id: 'logs/actions-menu-loading',
     file: 'zones/logs/logs-actions-menu.tsx',
-    render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null }) }),
+    render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null }), restartMode: 'simple' }),
   },
   {
     id: 'logs/actions-menu',
@@ -286,15 +286,16 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
             id,
             label: `${id}-${'l'.repeat(300)}`,
             key: `Ctrl+${'K'.repeat(100)}`,
-            availability: i === 0 ? { available: true as const } : { available: false as const, reason: LONG_TEXT },
+            availability: i < 2 ? { available: true as const } : { available: false as const, reason: LONG_TEXT },
           })),
         }),
+        restartMode: 'simple',
       }),
   },
   {
     id: 'logs/actions-menu-error',
     file: 'zones/logs/logs-actions-menu.tsx',
-    render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }) }),
+    render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }), restartMode: 'simple' }),
   },
   { id: 'shared/keybinding-help', file: 'shared/components/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
   { id: 'shared/command-bar', file: 'shared/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },

@@ -2,6 +2,7 @@
 // manifest services) drive an auto-resizing grid of scrollable log panes, with a per-pane
 // fullscreen view and a two-tier text/regex/level filter. A single `useInput` dispatches every
 // keystroke to pure functions in logs-zone.logic.ts; overlays (filter editor, fullscreen) first.
+import { basename } from 'node:path';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
@@ -24,6 +25,7 @@ import {
   LOGS_ACTIONS_MENU_CLOSE,
   LOGS_ACTIONS_MENU_LIST_ERROR,
   LogsActionsMenu,
+  logsActionsMenuRows,
   toMenuItems,
   type LogsActionsMenuState,
 } from './logs-actions-menu.js';
@@ -208,6 +210,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const [actionsMenu, setActionsMenu] = useState<LogsActionsMenuState | null>(null);
   // Bumped on every open so a late listing for an earlier menu is dropped.
   const actionsMenuSeq = useRef(0);
+  // A listing still in flight when the zone unmounts must not touch its state.
+  useEffect(
+    () => () => {
+      actionsMenuSeq.current += 1;
+    },
+    [],
+  );
 
   // `Enter` on a Dashboard row lands here: select that service's pane (when it has a container)
   // and put the list cursor on it. Dropped once the listing is loaded without it.
@@ -338,7 +347,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     filterEditorOpen: filterEditor !== null,
     historyGridOpen: historyGridCursor !== null,
     filterHistoryGridMaxRows,
-    actionsMenuOpen: actionsMenu !== null,
+    actionsMenuRows: actionsMenu === null ? 0 : logsActionsMenuRows(actionsMenu),
   });
 
   function handlePaneScroll(repoPath: string, direction: 'up' | 'down'): void {
@@ -410,6 +419,23 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     actionsMenuSeq.current += 1;
     setActionsMenu(null);
   }
+  // The slice's actions never reject by contract; the catch keeps a broken one from surfacing as
+  // an unhandled rejection.
+  function runPaneAction(repoPath: string, actionId: string, service: string): void {
+    void runLogsPaneAction(repoPath, actionId, service).catch(() => {});
+  }
+  function runPaneShortcut(repoPath: string, shortcut: 'restart' | 'ide', service: string): void {
+    void runLogsPaneShortcut(repoPath, shortcut, service).catch(() => {});
+  }
+  // The fullscreen pane's service name — captured when it opened, else the listed row, else the
+  // repo directory's name (never the full path).
+  function serviceNameFor(repoPath: string): string {
+    return (
+      (logsFullscreenTarget === repoPath ? logsFullscreenServiceName : null) ??
+      rows.find((row) => row.path === repoPath)?.service ??
+      (basename(repoPath) || repoPath)
+    );
+  }
 
   // The exact (scope, mode) history list backing the open editor — recomputed live off the
   // store's `filterHistory`, never cached locally, so a commit is immediately visible to the next
@@ -440,14 +466,15 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       // The actions menu captures every keystroke while open: ↑/↓/Home/End move, Enter runs an
       // enabled row (the slice re-reads its availability first), Esc closes.
       if (actionsMenu !== null) {
-        const items = toMenuItems(actionsMenu.actions ?? []);
+        const items = toMenuItems(actionsMenu.actions ?? [], restartMode);
         const step = resolveMenuKey(key, actionsMenu.cursor, items, LOGS_ACTIONS_MENU_CLOSE);
         if (step.type === 'move') {
-          setActionsMenu({ ...actionsMenu, cursor: step.cursor });
+          // Functional update: the closed-over menu may predate a list that just loaded.
+          setActionsMenu((current) => (current === null ? null : { ...current, cursor: step.cursor }));
         } else if (step.type === 'choose') {
           closeActionsMenu();
           if (step.choice !== LOGS_ACTIONS_MENU_CLOSE) {
-            void runLogsPaneAction(actionsMenu.repoPath, step.choice, actionsMenu.service);
+            runPaneAction(actionsMenu.repoPath, step.choice, actionsMenu.service);
           }
         }
         return;
@@ -662,13 +689,13 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         // on the pane. Uppercase only: lowercase `r` is the global Routes-zone mnemonic (AppShell
         // exact-matches it whenever zoneInputCaptured is false, and Ink forwards every keypress to
         // all mounted useInput hooks) and lowercase `o` is the stdout toggle.
-        const fullscreenService = logsFullscreenServiceName ?? logsPanes[logsFullscreenTarget]?.service ?? logsFullscreenTarget;
+        const fullscreenService = serviceNameFor(logsFullscreenTarget);
         if (input === 'R') {
-          void runLogsPaneShortcut(logsFullscreenTarget, 'restart', fullscreenService);
+          runPaneShortcut(logsFullscreenTarget, 'restart', fullscreenService);
           return;
         }
         if (input === 'O') {
-          void runLogsPaneShortcut(logsFullscreenTarget, 'ide', fullscreenService);
+          runPaneShortcut(logsFullscreenTarget, 'ide', fullscreenService);
           return;
         }
         if (input === 'a' && !key.ctrl && !key.meta) {
@@ -863,7 +890,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       if (input === 'R' || input === 'O') {
         const focused = activePanes[subFocus];
         if (focused !== undefined) {
-          void runLogsPaneShortcut(focused.path, input === 'R' ? 'restart' : 'ide', focused.service);
+          runPaneShortcut(focused.path, input === 'R' ? 'restart' : 'ide', focused.service);
         }
         return;
       }
@@ -1042,7 +1069,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           gridAvailableHeight={historyGridAvailableHeight}
         />
       ) : null}
-      {actionsMenu !== null ? <LogsActionsMenu menu={actionsMenu} /> : null}
+      {actionsMenu !== null ? <LogsActionsMenu menu={actionsMenu} restartMode={restartMode} /> : null}
     </Box>
   );
 }
