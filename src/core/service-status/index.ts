@@ -25,6 +25,9 @@ export interface ServiceStatus {
   containerError?: { code: string; message: string };
   // Why the health probe did not answer 2xx.
   probeReason?: string;
+  // Set only when the manifest declares a `healthUrl` but the local health-check toggle turned it
+  // off: the state was resolved as if no route were declared, and the route was never probed.
+  healthCheck?: 'disabled';
 }
 
 // The health probe outcome, in the resolver's terms: none declared, a 2xx, or anything else.
@@ -41,6 +44,10 @@ export interface ServiceStatusDeps {
   docker: Pick<DockerPort, 'getContainerHealth'>;
   // Not wired = behaves as if no `healthUrl` were declared.
   healthProbe?: HealthProbePort;
+  // The local per-service health-check toggle (`services.healthCheckDisabled`), read at call time
+  // so a change applies at the next resolution. Not wired = every health check is enabled. This
+  // resolver (and `verifyService`, through `isProbeEnabled`) is the only reader of the decision.
+  isHealthCheckEnabled?: (manifest: Manifest) => boolean;
 }
 
 export const DEFAULT_PROBE_REASON = 'health route did not answer 2xx';
@@ -51,6 +58,19 @@ export function hasContainer(manifest: Manifest): manifest is Manifest & { conta
 
 export function hasHealthUrl(manifest: Manifest): manifest is Manifest & { healthUrl: string } {
   return manifest.healthUrl !== undefined && manifest.healthUrl.trim() !== '';
+}
+
+// True when the local toggle lets this manifest's health check run (absent dep = enabled). A
+// throwing dep never disables a check silently: it counts as enabled.
+export function isProbeEnabled(deps: Pick<ServiceStatusDeps, 'isHealthCheckEnabled'>, manifest: Manifest): boolean {
+  if (deps.isHealthCheckEnabled === undefined) {
+    return true;
+  }
+  try {
+    return deps.isHealthCheckEnabled(manifest);
+  } catch {
+    return true;
+  }
 }
 
 // A blank reason (empty message, whitespace) would print as "health check: " — use the default.
@@ -94,9 +114,19 @@ export function combineStatus(probe: ProbeReading, container: ContainerReading):
 }
 
 // Probes the declared route and reads the container in parallel, then combines them.
+// A service whose health check is turned off locally resolves as if no `healthUrl` existed — the
+// route is never probed — and is marked `healthCheck: 'disabled'` when it does declare one.
 export async function resolveManifestStatus(deps: Omit<ServiceStatusDeps, 'manifest'>, manifest: Manifest, probeTimeoutMs = STATUS_PROBE_TIMEOUT_MS): Promise<Result<ServiceStatus>> {
-  const [probe, container] = await Promise.all([readProbe(deps, manifest, probeTimeoutMs), readContainer(deps, manifest)]);
-  return combineStatus(probe, container);
+  const enabled = isProbeEnabled(deps, manifest);
+  const [probe, container] = await Promise.all([
+    enabled ? readProbe(deps, manifest, probeTimeoutMs) : Promise.resolve<ProbeReading>({ kind: 'none' }),
+    readContainer(deps, manifest),
+  ]);
+  const combined = combineStatus(probe, container);
+  if (!enabled && combined.ok && hasHealthUrl(manifest)) {
+    return ok({ ...combined.data, healthCheck: 'disabled' });
+  }
+  return combined;
 }
 
 export async function resolveServiceStatus(deps: ServiceStatusDeps, repoPath: string): Promise<Result<ServiceStatus>> {

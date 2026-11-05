@@ -3,7 +3,7 @@ import type { HealthState } from '../ports/docker.js';
 import type { HealthProbeOutcome } from '../ports/health-probe.js';
 import type { Manifest } from '../ports/manifest.js';
 import { err, ok, type Result } from '../result.js';
-import { DEFAULT_PROBE_REASON, STATUS_PROBE_TIMEOUT_MS, combineStatus, resolveServiceStatus, type ServiceStatusDeps } from './index.js';
+import { DEFAULT_PROBE_REASON, STATUS_PROBE_TIMEOUT_MS, combineStatus, isProbeEnabled, resolveServiceStatus, type ServiceStatusDeps } from './index.js';
 
 function deps(
   manifest: Partial<Manifest> | 'broken',
@@ -139,6 +139,69 @@ describe('resolveServiceStatus (AD-23 matrix)', () => {
   it('rejects a blank repoPath', async () => {
     const result = await resolveServiceStatus(deps(WITH_BOTH, ok('up'), HEALTHY).deps, ' ');
     expect(!result.ok && result.error.code).toBe('invalid-argument');
+  });
+});
+
+describe('resolveServiceStatus — per-service health check toggle (story 9.11)', () => {
+  const disabled = (d: ServiceStatusDeps, names: string[] = ['api']): ServiceStatusDeps => ({
+    ...d,
+    isHealthCheckEnabled: (manifest) => !names.includes(manifest.service),
+  });
+
+  it('disabled, container up → up, unverified, healthCheck disabled, probe never called', async () => {
+    const { deps: d, probeFn } = deps(WITH_BOTH, ok('up'), FAILING);
+    expect(await resolveServiceStatus(disabled(d), '/r')).toEqual({
+      ok: true,
+      data: { state: 'up', verified: false, container: 'up', healthCheck: 'disabled' },
+    });
+    expect(probeFn).not.toHaveBeenCalled();
+  });
+
+  it.each(['down', 'restarting'] as const)('disabled, container %s → %s, healthCheck disabled, no probe', async (state) => {
+    const { deps: d, probeFn } = deps(WITH_BOTH, ok(state), HEALTHY);
+    expect(await resolveServiceStatus(disabled(d), '/r')).toEqual({
+      ok: true,
+      data: { state, verified: false, container: state, healthCheck: 'disabled' },
+    });
+    expect(probeFn).not.toHaveBeenCalled();
+  });
+
+  it('disabled, container-less → no-container, healthCheck disabled, no probe', async () => {
+    const { deps: d, probeFn } = deps({ healthUrl: 'http://x/h' }, null, HEALTHY);
+    expect(await resolveServiceStatus(disabled(d), '/r')).toEqual({
+      ok: true,
+      data: { state: 'no-container', verified: false, container: 'no-container', healthCheck: 'disabled' },
+    });
+    expect(probeFn).not.toHaveBeenCalled();
+  });
+
+  it('disabled without a healthUrl → unchanged no-healthUrl result, no healthCheck field', async () => {
+    const { deps: d, probeFn } = deps({ container: 'api' }, ok('up'), HEALTHY);
+    expect(await resolveServiceStatus(disabled(d), '/r')).toEqual({ ok: true, data: { state: 'up', verified: false, container: 'up' } });
+    expect(probeFn).not.toHaveBeenCalled();
+  });
+
+  it('disabled with a Docker error → err, as for a service without healthUrl', async () => {
+    const { deps: d, probeFn } = deps(WITH_BOTH, DOCKER_DOWN, HEALTHY);
+    const result = await resolveServiceStatus(disabled(d), '/r');
+    expect(!result.ok && result.error.code).toBe('docker-unavailable');
+    expect(probeFn).not.toHaveBeenCalled();
+  });
+
+  it('a service not in the list resolves exactly as before', async () => {
+    const { deps: d, probeFn } = deps(WITH_BOTH, ok('up'), FAILING);
+    expect(await resolveServiceStatus(disabled(d, ['other']), '/r')).toEqual({
+      ok: true,
+      data: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' },
+    });
+    expect(probeFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('isProbeEnabled: absent dep = enabled, a throwing dep = enabled', () => {
+    const manifest = { service: 'api', sharedBranch: 'd', modules: {} } as Manifest;
+    expect(isProbeEnabled({}, manifest)).toBe(true);
+    expect(isProbeEnabled({ isHealthCheckEnabled: () => false }, manifest)).toBe(false);
+    expect(isProbeEnabled({ isHealthCheckEnabled: () => { throw new Error('x'); } }, manifest)).toBe(true);
   });
 });
 
