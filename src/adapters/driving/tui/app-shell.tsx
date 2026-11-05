@@ -41,27 +41,61 @@ export function shouldOpenHelp(input: string): boolean {
   return input === '?';
 }
 
-export function shouldCloseHelp(
-  input: string,
-  key: { escape?: boolean },
-): boolean {
-  return input === '?' || key.escape === true;
+export type HelpKey = {
+  escape?: boolean;
+  ctrl?: boolean;
+  meta?: boolean;
+  return?: boolean;
+  backspace?: boolean;
+  delete?: boolean;
+};
+
+export type HelpKeyAction =
+  | { type: 'open' }
+  | { type: 'close' }
+  | { type: 'set-filter'; filter: string }
+  | { type: 'none' };
+
+// The single `?`/Esc decision. Closed help: only `?` opens it. Open help: it owns the type-to-
+// filter text, so Esc clears a non-empty filter before it closes, `?` closes only an empty filter
+// (otherwise it is a literal character), Backspace/Delete erase the last code point (Ink 7 may
+// deliver Backspace as `key.delete`), and other input without Ctrl/Meta is appended once its
+// control characters are stripped — so a lone Tab/Enter/Esc does nothing (Tab is not read as a key
+// flag, see the focus-navigation guard) while a paste keeps its printable part.
+export function resolveHelpKey(input: string, key: HelpKey, helpOpen: boolean, filter: string): HelpKeyAction {
+  if (!helpOpen) {
+    return shouldOpenHelp(input) ? { type: 'open' } : { type: 'none' };
+  }
+  if (key.escape === true) {
+    return filter.length > 0 ? { type: 'set-filter', filter: '' } : { type: 'close' };
+  }
+  if (hasModifier(key)) {
+    return { type: 'none' };
+  }
+  if (input === '?' && filter.length === 0) {
+    return { type: 'close' };
+  }
+  if (key.backspace === true || key.delete === true) {
+    return filter.length > 0 ? { type: 'set-filter', filter: Array.from(filter).slice(0, -1).join('') } : { type: 'none' };
+  }
+  const printable = input.replace(/[\u0000-\u001f\u007f]/g, '');
+  if (printable.length === 0 || key.return === true) {
+    return { type: 'none' };
+  }
+  return { type: 'set-filter', filter: filter + printable };
 }
 
 export function resolveHelpDispatch(
   input: string,
-  key: { escape?: boolean },
+  key: HelpKey,
   helpOpen: boolean,
-  openHelp: () => void,
-  closeHelp: () => void,
+  filter: string,
+  actions: { openHelp: () => void; closeHelp: () => void; setHelpFilter: (text: string) => void },
 ): void {
-  if (helpOpen) {
-    if (shouldCloseHelp(input, key)) {
-      closeHelp();
-    }
-  } else if (shouldOpenHelp(input)) {
-    openHelp();
-  }
+  const action = resolveHelpKey(input, key, helpOpen, filter);
+  if (action.type === 'open') actions.openHelp();
+  else if (action.type === 'close') actions.closeHelp();
+  else if (action.type === 'set-filter') actions.setHelpFilter(action.filter);
 }
 
 // `reachable` defaults to every zone. A mnemonic whose zone isn't in `reachable` (it's
@@ -184,6 +218,7 @@ export function AppShell({
   const helpOpen = useStore((state) => state.helpOpen);
   const openHelp = useStore((state) => state.openHelp);
   const closeHelp = useStore((state) => state.closeHelp);
+  const setHelpFilter = useStore((state) => state.setHelpFilter);
   // The registry screen's open/close flag lives in the store (not local AppShell state) so
   // both the `registry` command and Dashboard's empty-registry prompt can trigger it.
   const registryScreenOpen = useStore((state) => state.registryScreenOpen);
@@ -294,13 +329,14 @@ export function AppShell({
     }
     const state = useStore.getState();
 
-    // An open help panel is the sole consumer of keys, so it can always be closed — even when a
-    // zone dialog captured input after it opened (the zones are inert behind it meanwhile).
+    // An open help panel is the sole consumer of keys (its type-to-filter text included), so it
+    // can always be closed — even when a zone dialog captured input after it opened (the zones
+    // are inert behind it meanwhile).
     // Help opened by another handler during this very keypress (the Terminal's `?` on its output)
     // is not rendered yet: that same `?` must not close it again.
     if (state.helpOpen) {
       if (helpOpen) {
-        resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+        resolveHelpDispatch(input, key, state.helpOpen, state.helpFilter, { openHelp, closeHelp, setHelpFilter });
       }
       return;
     }
@@ -359,7 +395,7 @@ export function AppShell({
     // never also pop the keybinding-help modal on top of the overlay. Mirrors how the registry
     // screen's own Esc-close below is gated on registryScreenOpen.
     if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
-      resolveHelpDispatch(input, key, state.helpOpen, openHelp, closeHelp);
+      resolveHelpDispatch(input, key, state.helpOpen, state.helpFilter, { openHelp, closeHelp, setHelpFilter });
     }
 
     // resizeMode gates this block too: while it's active, arrows resize the targeted boundary

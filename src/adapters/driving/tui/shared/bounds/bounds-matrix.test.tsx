@@ -89,6 +89,9 @@ describe('size matrix: zones', () => {
 
 const OVERLAYS: Record<string, Record<string, unknown>> = {
   help: { helpOpen: true },
+  // A 200-char filter: one truncated filter line plus a no-match line built from the same text.
+  'help with a long filter': { helpOpen: true, helpFilter: 'z'.repeat(200) },
+  'help filtered': { helpOpen: true, helpFilter: 'e' },
   'command bar': { commandBarOpen: true },
   settings: { settingsScreenOpen: true },
   reset: { resetScreenOpen: true, resetStatus: 'idle', resetError: MULTILINE },

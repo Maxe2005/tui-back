@@ -136,7 +136,16 @@ export const FOOTER_CONTEXTS = {
     label: 'Branch picker, rename current',
     hints: [['Tab', 'switch mode'], ['Enter', 'rename'], CANCEL],
   },
-  help: { label: 'Keybinding help', hints: [[KEY_UP_DOWN, 'scroll'], ['Esc/?', 'close']] },
+  help: {
+    label: 'Keybinding help',
+    hints: [
+      [KEY_UP_DOWN, 'scroll'],
+      ['PgUp/PgDn', 'page'],
+      ['type', 'filter'],
+      ['Backspace', 'erase'],
+      ['Esc', 'clear/close'],
+    ],
+  },
   command: { label: 'Command entry', hints: [['Tab', 'complete'], ['Enter', 'run'], ['Esc', 'close']] },
   'logs-filter-edit': {
     label: 'Logs filter editor',
