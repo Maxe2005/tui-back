@@ -151,6 +151,7 @@ Every real state per zone (loading/empty/error/offline/stale/focus/background-ev
 | Streaming | Live aggregated stream, debounced/batched re-renders. |
 | Filtered | Service / free-text-regex / level filter applied without interrupting the stream (FR-17). |
 | Invalid filter | A regex that doesn't compile is rejected with an inline error, never silently ignored (FR-17). |
+| Filter rules | The Logs filter editor shows an ordered rule list; each rule shows its query, mode, action (`show`/`hide`) and target (`line`/`match`) and can be enabled, edited, moved or deleted; rules apply top to bottom, are capped at 10 per scope and persist across restarts, and rule lists can be saved as named sets (FR-49, Stories 5.8–5.10). |
 | Service down / crashed mid-stream | Shown as such inline; the tool attempts automatic reconnection when the service returns (FR-16). |
 | Health: up / down / restarting | Visible inline with the log view itself — no separate health check step (FR-18). Every row carries its badge, cursor or not; a restarting service states explicitly that a restart was requested and the container state is being re-verified (amended 2026-10-05). |
 | Restart in progress | The restart control disables itself on the already-restarting service — never triggers a second concurrent restart (FR-18). |

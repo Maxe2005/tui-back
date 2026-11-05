@@ -33,7 +33,7 @@ FR-13: A developer can publish a new `shared-types` version through the tool (pu
 FR-14: The tool searches the `shared-types` source repo's branches and commits in real time and shows the version history (`"version"` line of `package.json`) by branch (last `n` versions, `n` in settings) or by version (branch(es) and date) — read-only, uncached (redefined 2026-10-12, Sprint Change Proposal; supersedes the 2026-10-05 drift view).
 FR-15: A developer enters a `shared-types` version and applies it to some or all of the active EDT's consumer services (dependency-line rewrite, then optional `npm i` / clean restart / commit of `package.json` and `package-lock.json` only, never a push) (amended 2026-10-05).
 FR-16: A developer can view a single, live, aggregated log stream from every service in the active EDT, or a chosen subset.
-FR-17: The aggregated log stream can be filtered by service, by free-text/regex search, and by log level, without restarting it (amended 2026-09-18, Sprint Change Proposal, Story 5.4: extends to recall of previously used text/regex filters, per scope, not just new filtering mechanics).
+FR-17: The aggregated log stream can be filtered by service, by free-text/regex search, and by log level, without restarting it (amended 2026-09-18, Sprint Change Proposal, Story 5.4: extends to recall of previously used text/regex filters, per scope, not just new filtering mechanics). Amended 2026-11-05 (Sprint Change Proposal, Stories 5.8–5.10): a filter can also hide what matches and act on the whole line or only the matched text, several rules stack, and rules and named rule sets persist (FR-49).
 FR-18: Service health (up / down / restarting) is visible inline with the log view.
 FR-19: For any managed repo whose manifest activates a route-explorer module, the tool lists the routes that module's scanner discovers for that repo.
 FR-20: A developer can fire a request against any route discovered via FR-19, with authentication for protected routes handled automatically in dev mode.
@@ -54,6 +54,10 @@ FR-40 (added 2026-11-04): All per-service actions are available from the Dashboa
 FR-41 (added 2026-11-04): Shared Types shows every action as a labelled command and presents post-publish next steps as an explicit choice screen.
 FR-42 (added 2026-11-04, SCP 2): Service status is health-first (manifest `healthUrl`, then container), with an explicit `inconsistent` state, across every view and the CLI.
 FR-43 (added 2026-11-04, SCP 2): Heal — restart every active-EDT service that is not up, from the Dashboard and the `heal` CLI.
+FR-46 (added 2026-11-05): The package exposes one `tui-back` binary: `tui-back <subcommand>` runs the CLI and `tui-back tui` opens the TUI (exit 1 without a terminal).
+FR-47 (added 2026-11-05): `npx -y github:<owner>/tui-back install` installs the tool globally with the `tb`/`tbt` aliases and bash completion through an idempotent `~/.bashrc` block; `--uninstall` reverses it; Node < 24 stops with exact fix instructions.
+FR-48 (added 2026-11-05): `tui-back mcp` exposes every subcommand as an MCP tool; write and destructive tools run only after explicit per-call human approval, and are refused when the client cannot ask.
+FR-49 (added 2026-11-05): The log filter is an ordered list of rules (text/regex, show/hide, whole line/matched text only), kept across restarts and savable as named rule sets; history recall restores every field.
 
 ### NonFunctional Requirements
 
@@ -80,7 +84,7 @@ NFR-6 (Single-instance enforcement): A second running instance of the tool on th
 - **Logs are ephemeral; Docker remains the log-truth source.** `adapters/driven/docker` only streams raw lines in; a bounded in-memory ring buffer per service (sized for FR-22's fire-correlation window plus scroll-back) is owned by `core/logs`; nothing is written to disk, discarded on restart (AD-11).
 - **Performance budget enforcement.** Log-stream re-renders are debounced/batched, never a full redraw per emitted line; CPU-heavy work never runs synchronously in-process on the TUI's event loop — it goes through the CLI's subprocess boundary instead (AD-12).
 - **Testing strategy by layer.** `core/` unit-tested (Vitest) against fake port implementations; `adapters/driven/*` get targeted integration tests against the real system (temp file for persistence, temp repo for git); the Zustand store is tested directly without rendering Ink; `adapters/driving/cli` tested black-box (invoke subcommand as child process, assert AD-3 envelope); `adapters/driving/tui` gets smoke-tests via Ink's `render()` only (AD-13).
-- **Packaging is deferred.** v1 runs via `tsx`/`node` directly; a packaging mechanism (Node SEA / `pkg` / `bun --compile`) is chosen only when teammate distribution becomes a real goal (AD-14).
+- **Distribution is GitHub + npx, no compiled binary** (AD-14, amended 2026-11-05). v1 runs via `tsx`/`node`; one `tui-back` bin; the installer is a driving-adapter concern (AD-24); the MCP server enforces human authorization itself (AD-25).
 - **TUI zone structure mirrors core capability boundaries 1:1.** Each zone under `adapters/driving/tui/` maps to exactly one core capability area (`edts/`→`core/edt`, `update/`→`core/scripts`, `logs/`→`core/logs`, `routes/`→`core/routes`, `shared-types/`→`adapters/driven/modules/shared-types`), except `dashboard/`, the one zone allowed to read (never write) across all of them (AD-15).
 - **Stack (fixed versions):** TypeScript 7.0.2, Node.js 24, Ink 7.1.1, React 19.2.8, Zustand 5.0.14, better-sqlite3 13.0.3, dockerode 5.0.1, openapi-typescript 7.13.0, jose 6.2.8, zod 4.4.3, yaml (eemeli) 2.9.0, ulid 3.0.2, vitest 4.1.10, tsx 4.23.12.
 - **Naming/data conventions.** kebab-case files/directories; `PascalCase` types/classes; `camelCase` functions/variables. Manifest module ids are kebab-case, matched 1:1 against the compiled-in module registry. Generated entity ids (EDT id, saved-request id) are ULIDs. Dates/times are ISO 8601. Any use-case reporting a per-service outcome (group update, migrations, propagation status/propagate) puts it in `data.results: {service, outcome, detail?}[]` with `outcome` from a shared closed set (`"updated"`/`"skipped"`/`"failed"`, or equivalent).
@@ -124,6 +128,7 @@ UX-DR29 amended 2026-09-16 (Sprint Change Proposal): the registered command set 
 UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error. Amended 2026-08-28 (Sprint Change Proposal, Story 2.19): a tab may itself hold more than one distinct settings group (first case: the "EDTs" tab, see Story 2.19 below) — such a tab opens on an Up/Down-navigable group list, `Enter` drills into a group's own `checkbox-list-item` list, and `Esc` steps back up one level (out of a group, then — one more `Esc` — closing the whole screen); a tab with a single flat settings list (Command Palette) is unaffected, no group level. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): the Logs tab, which previously had no row cursor (`Up`/`Down` claimed exclusively by `bufferSize`), grows to 4+ fields plus history-clear actions and gains its own row-cursor navigation model, mirroring the EDTs tab's group-list precedent. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): the Command Palette tab grows from its single flat field (`gridMaxRows`, which owned `Up`/`Down`) to three fields — grid max rows, command history size, deduplicate command history — plus a "clear command history" action, and gains the same row-cursor navigation model the Logs tab adopted in Story 5.4.
 
 UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-history recall in the Logs zone's filter editor — `↑`/`↓` arrow-browse over a scope+mode-specific history (global/per-service × text/regex, each independent) with draft preservation (the in-progress, uncommitted draft is restored when browsing back past the most recent entry), any printable character or Backspace pressed while browsing snapping back to the draft with that keypress applied on top of it, and `↓` from the draft (not browsing) opening the reused `command-grid` component (UX-DR30) as a grid browser over the full history. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): generalized into a shared input-history recall pattern with two consumers — the Logs filter editor (above, scope+mode-keyed lists, with the `↓`-from-draft grid browser) and the `:` command bar (UX-DR29, a single command list, no grid browser). The push/dedup/trim rules, arrow-browse with draft preservation and skip-equal-to-draft, and snap-back-on-keypress behavior are one implementation shared by both; each consumer only supplies its own history list(s) and its own size/dedup settings.
+UX-DR32 amended 2026-11-05 (Sprint Change Proposal, Stories 5.8–5.10): a filter carries an action (show/hide) and a target (line/match) shown beside the query; history entries store and restore both; the filter editor manages an ordered rule list, and rule lists plus named rule sets persist.
 UX-DR33 (added 2026-09-20, Sprint Change Proposal, Story 5.5): Implement the `bounded-list` component — a scrollable window over any list or panel whose content can exceed the terminal's available rows, extracted from `keybinding-help.tsx`'s `resolveHelpWindow`/`clampHelpOffset`; shows a subtle more-above/below indicator when scrolled away from either end, recalculates live off `useWindowSize()`. Reused by the Logs zone (service lists, hints panel, `LogFilterEditor`) and the EDTs zone (EDT SERVICES/OTHER SERVICES lists).
 UX-DR34 (added 2026-09-30, Sprint Change Proposal, Stories 6.6–6.9): Implement the `JsonTree` component and the Routes right-pane sub-tabs — a shared, windowed, line-by-line navigable JSON tree (built on `bounded-list`, UX-DR33) with per-node fold and global key show/hide rules (per route, session-only, stored by normalized path / key name), in read-only (response) and edit (request body) modes; hidden content is never removed from a request body, and a truncated or non-JSON response falls back to raw text with a visible reason. Pane sub-tabs switch with `Ctrl+→`/`Ctrl+←`, fallback `Ctrl+N`/`Ctrl+P` (the same convention as the EDT create wizard).
 UX-DR35 (added 2026-10-01, Sprint Change Proposal, Story 7.3): Every zone builds its layout through one shared zone-layout contract declaring its panes and the boundaries between them (orientation, default ratio, min/max); the contract provides splitter rendering, accent recoloring when targeted, Ctrl+W resize-mode, Tab boundary cycling and per-zone persisted ratios — no zone hand-rolls a split.
@@ -175,6 +180,10 @@ FR-40: Epic 9 - Every service action available from Dashboard and Logs through o
 FR-41: Epic 9 - Shared Types: labelled action bar and explicit post-publish choice screen (added 2026-11-04 — Story 9.6)
 FR-42: Epic 9 - Health-first service status (added 2026-11-04 — Story 9.7)
 FR-43: Epic 9 - Heal action on the Dashboard + CLI (added 2026-11-04 — Stories 9.8, 9.9)
+FR-46: Epic 10 - Single installable binary: `tui-back` (CLI) and `tui-back tui` (TUI) (added 2026-11-05 — Story 10.1)
+FR-47: Epic 10 - Guided install and uninstall: global npm install, aliases, bash completion (added 2026-11-05 — Stories 10.2, 10.3, 10.4)
+FR-48: Epic 11 - MCP server exposing every subcommand, with human authorization for write and destructive tools (added 2026-11-05 — Stories 11.1–11.4)
+FR-49: Epic 5 - Log filter action (show/hide) and target (line/match), stored in filter history (added 2026-11-05 — Story 5.8; stackable rules: Story 5.9; persisted rules and named sets: Story 5.10)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
@@ -195,6 +204,20 @@ A developer lands on a Dashboard that answers "should I worry about anything?" a
 A developer opens a terminal on a service or its container from the Dashboard or Logs, every service action is identical everywhere, and Shared Types makes its commands and post-publish choices obvious.
 **FRs covered:** FR-39, FR-40, FR-41, FR-42, FR-43; draws on FR-35, FR-29, FR-37
 **Implementation notes:** Order: 9.1 → 9.3 (parallelizable) → 9.2 → 9.4 → 9.5; 9.6 independent. Line-oriented shell (AD-22), no PTY. Added by SCP 2026-11-04-2: 9.7 → 9.8 → 9.9, independent of 9.1–9.6 (AD-23).
+
+### Epic 10: Distribution — npx Installer, Aliases & Shell Completion
+> Added 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`). Amends AD-14, adds AD-24.
+
+A colleague installs the tool with one command, gets `tb` and `tbt` aliases and bash completion, and can update or remove it the same way.
+**FRs covered:** FR-46, FR-47
+**Implementation notes:** Order: 10.1 → 10.2 → 10.3 → 10.4 (10.1 blocks the others). Epic 9 is already merged into `devlopment` (merge 8ad7b011, 2026-11-05), so 10.2 sees its subcommands. Branch: `epic-10-distribution-npx-installer-shell-completion`.
+
+### Epic 11: MCP Server
+> Added 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`). Adds AD-25; extends AD-24.
+
+An AI agent can drive the tool through MCP; anything that changes or destroys state needs the human's explicit approval.
+**FRs covered:** FR-48
+**Implementation notes:** Order: 11.1 → 11.2 → 11.3 → 11.4. Starts after Story 10.1; 11.4 needs 10.3. Branch: `epic-11-mcp-server`.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 A developer can launch the tool, see the full navigation shell (top bar, six zone-tabs, footer, resizable list/detail split, modal-dialog, `?` help screen), register managed repos via a manifest, and run any action identically via the TUI or as a standalone CLI script.
@@ -2700,6 +2723,8 @@ As a developer, I want the st zone's option checkboxes to start the way I like, 
 
 A developer can view a live, filterable, aggregated log stream across multiple services, with inline health status and a developer-triggered restart control.
 
+> Reopened 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`) for Stories 5.8, 5.9 and 5.10 (hide/show-only filters, stackable rules, persisted rules and named sets). Story 5.2's "ephemeral" boundary is amended by 5.10: the stream and buffer are never persisted; filter rules are.
+
 ### Story 5.1: Aggregated Live Log Stream
 
 As a developer,
@@ -2934,6 +2959,104 @@ As a developer, I want `[R]` in Logs to do the restart I usually want, and a key
 **Given** the grid focus or the fullscreen pane **When** the IDE key is pressed **Then** the IDE opens on the focused service's repo through `openInIde`; failure shows an explicit one-line notice. The key is chosen under UX-DR36 (proposal: `o`; it must not collide with the filter, scroll or fullscreen keys) and is listed in the footer and `?` help.
 
 **Given** a container-less service **When** the IDE key is pressed **Then** it works (it needs no container); only restart is unavailable.
+
+### Story 5.8: Hide / Show-Only Log Filters
+
+> Added 2026-11-05 (Sprint Change Proposal). Extends Story 5.2 (filter) and Story 5.4 (history).
+
+As a developer,
+I want to hide the log lines (or just the text) that match a pattern, or show only what matches,
+So that repeated noise does not bury the lines I care about.
+
+**Acceptance Criteria:**
+
+**Given** the filter editor (global or per-service) **Then** besides the text/regex mode it offers an **action** (`show` or `hide`) and a **target** (`line` or `match`), each switchable from the keyboard with keys taken from the keybinding declarations; the active combination is always visible next to the query. The default is `show` + `line`, which is exactly the Story 5.2 behaviour.
+
+**Given** action `hide` and target `line` **When** a line matches **Then** the whole line is not displayed.
+
+**Given** action `show` and target `line` **Then** only the matching lines are displayed (unchanged).
+
+**Given** action `hide` and target `match` **When** a line matches **Then** the line is displayed with each matched text removed and the rest kept; a line that is empty after removal is not displayed.
+
+**Given** action `show` and target `match` **When** a line matches **Then** only the matched text(s) of that line are displayed; non-matching lines are not displayed.
+
+**Given** a regex that can match an empty string (for example `a*`) **Then** empty matches are ignored, so a filter never hides or shows "nothing" in an endless loop.
+
+**Given** the filter is committed **Then** its action and target are pushed to the history together with the query, in the same scope+mode list; recalling an entry (arrow browse or grid browser) restores query, action and target; two entries are duplicates only if all three are equal; a history entry written before this story reads as `show` + `line`.
+
+**Given** the filter is combined with the service and level filters **Then** they still combine with AND (Story 5.2), and applying or clearing the filter never interrupts the stream or alters the buffered original lines (`Esc` restores them all).
+
+**Given** an invalid regex **Then** it is rejected inline, whatever the action and target.
+
+**Given** a long line, a small terminal or a rewritten line **Then** the Logs zone still respects bounded rendering (AD-19); the editor's added indicator is truncated, not wrapped.
+
+**Given** the unit and render tests **Then** a pure `applyLogFilter` is tested for the four action/target combinations with Max's `[Nest] … WARN [AffectationJoursUseCase] Aucun service de restauration trouvé pour l'utilisateur …` lines as fixtures, history round-trip is tested with legacy and new entries, and the keybinding help lists the new keys.
+
+**Implementation notes:** the rewrite happens when a line is rendered, not when it is stored (AD-11 ring buffer unchanged). `README`/help text mention the two choices. UX-DR32's history recall and EXPERIENCE.md's filter-editor row gain one sentence each.
+
+### Story 5.9: Stackable Log Filter Rules
+
+> Added 2026-11-05 (Sprint Change Proposal). Extends Story 5.8: a scope holds several rules instead of one.
+
+As a developer,
+I want to keep several independent hide / show rules active at once and manage them as a list,
+So that I can silence each kind of noise separately and keep the rest of the stream readable.
+
+**Acceptance Criteria:**
+
+**Given** the filter editor of a scope (global or per-service) **Then** it shows the list of that scope's rules, each with its query, mode (text/regex), action (`show`/`hide`), target (`line`/`match`) and enabled state; an empty list means no filter.
+
+**Given** the rule list **When** the developer adds, edits, enables/disables, deletes or moves a rule **Then** the stream is not interrupted and the new result applies immediately; editing a rule uses the Story 5.8 editor, including history recall (Story 5.4).
+
+**Given** several enabled rules **Then** they apply as a pipeline from top to bottom: each rule filters or rewrites the output of the previous one; a disabled rule is skipped; moving a rule changes the result accordingly.
+
+**Given** two `show` rules **Then** a line must satisfy both (AND); **Given** a `hide` + `match` rule above a `show` rule **Then** the `show` rule sees the rewritten line.
+
+**Given** an invalid regex in a rule **Then** the rule is rejected inline when committed and never enters the list; a stored rule can therefore never crash the view.
+
+**Given** a scope already holding 10 rules **When** another is added **Then** the add is refused with a visible message; the list is a windowed, cursor-driven list with more-above/below indicators (AD-19), its keys come from the keybinding declarations and appear in the `?` help.
+
+**Given** the service and level filters (Story 5.2) **Then** they still combine with the rule pipeline by AND, and the global and per-service rule lists both apply (global first, then the service's own).
+
+**Given** the app restarts **Then** the rule list is empty again until Story 5.10 (live filter state stays ephemeral, Story 5.2), while the history of committed rules is still available (Story 5.4).
+
+**Given** the unit tests **Then** the pipeline is tested for ordering (hide-match above/below show), AND of two show rules, disabled rules, the 10-rule cap, and the real `[Nest] … AffectationJoursUseCase` lines as fixtures.
+
+**Implementation notes:** `applyLogFilter` (5.8) becomes `applyLogRules(line, rules)` reducing over the list; the single-rule editor of 5.8 is reused as the rule editor. The `Esc` contract (Story 1.13): `Esc` steps out of the rule editor to the list, then closes the editor; clearing all rules is an explicit action, not an accident of `Esc`.
+
+**Prerequisites:** 5.8.
+
+### Story 5.10: Persisted Filter Rules and Named Rule Sets
+
+> Added 2026-11-05 (Sprint Change Proposal). Amends Story 5.2's boundary: filter rules are persisted; the log stream and buffer still never are.
+
+As a developer,
+I want my hide / show rules to survive a restart and to save them as named sets,
+So that I do not rebuild my noise filters every day and can switch between setups.
+
+**Acceptance Criteria:**
+
+**Given** a scope (global or one service) with rules **When** the app restarts and the Logs tab opens **Then** that scope's rule list is restored as it was, including each rule's enabled state and order.
+
+**Given** the rule list **When** the developer saves it as a set with a name **Then** it appears in the rule-set library; saving under an existing name asks to confirm the overwrite; an empty name is refused.
+
+**Given** the library **When** the developer applies a set to a scope **Then** its rules are copied into that scope's active list; a non-empty list is replaced only after confirmation; later edits to the active list do not change the saved set.
+
+**Given** the library **When** the developer renames or deletes a set **Then** only that set changes; deleting asks to confirm (destructive-action confirmation, UX-DR36); no active list is affected.
+
+**Given** a stored rule whose regex no longer compiles, or a corrupt stored value **Then** the offending rule (or the whole value) is dropped with a visible warning naming the field; the Logs tab still opens.
+
+**Given** a persisted rule list for a service that is no longer registered **Then** it is kept and ignored, so re-registering the service brings the rules back.
+
+**Given** the `:settings` Logs tab **Then** it offers clearing all persisted rules of one scope and deleting the whole library as separate actions, never clearing more than what is targeted.
+
+**Given** the library and rule lists **Then** they are bounded in size (at most 20 sets, 10 rules per set) and rendered with windowed lists (AD-19); keys come from the keybinding declarations and the `?` help.
+
+**Given** the tests **Then** the state adapter is integration-tested against a temp file (round-trip, corrupt value, uncompilable regex), and the library operations (save, overwrite, apply, rename, delete) are tested in core against a fake `StatePort`.
+
+**Implementation notes:** `StatePort` gains read/write for the active rule lists (keyed by scope) and for the library; keep the same tolerant-reader approach as the filter history. EXPERIENCE.md's filter-editor row and UX-DR32 mention persistence and sets. The 5.2 "ephemeral" wording in `epics.md` gets an amendment note.
+
+**Prerequisites:** 5.9.
 
 ## Epic 6: Route Explorer
 
@@ -3856,3 +3979,161 @@ As a developer, I want to turn the `healthUrl` check off or on for chosen servic
 **Implementation notes:** `ServiceStatusDeps` gets `isHealthCheckEnabled?: (manifest) => boolean` (absent = enabled), wired from the live settings so a change applies at the next call. Settings port, zod schema, defaults and `SETTINGS_TABS` (new `services` tab, last) updated with tests. `docs/tui-back-manifest.md` § `healthUrl` and the CLI `dashboard` envelope doc mention the toggle. AD-23 extension.
 
 **Prerequisites:** 9.7.
+
+## Epic 10: Distribution — npx Installer, Aliases & Shell Completion
+
+### Story 10.1: Repair the Bin — One Binary, `tui` Routing
+
+As a colleague installing the tool, I want one `tui-back` command that runs the CLI and, with `tui`, the TUI, so that a global install actually works.
+
+**Acceptance Criteria:**
+
+**Given** `package.json` **Then** `bin` is exactly `{ "tui-back": "./src/bin/tui-back.mjs" }` and `tsx` is in `dependencies`.
+
+**Given** `src/bin/tui-back.mjs` **When** `argv[2] === 'tui'` **Then** it loads `./tui.ts` (the TUI bypasses the AD-3 envelope and keeps the raw terminal); **otherwise** it loads `./main.ts`. `cli-back.mjs` is deleted.
+
+**Given** a non-TTY stdin **When** `tui-back tui` runs **Then** exit code is 1 and stderr says `tui-back tui requires an interactive terminal` (message updated in `tui.ts`).
+
+**Given** `tui-back --help` **Then** the JSON lists a static `tui` entry (it is not in the subcommand registry).
+
+**Given** the e2e suite **Then** it asserts the `bin` keys equal `['tui-back']` and that the target file exists and is executable, and `scriptPath` points at the unified shim.
+
+**Given** `AGENTS.md` (§ Commands, § Testing) and `CLAUDE.md` (tsx troubleshooting) **Then** they no longer mention `cli-back.mjs` or `tui-back-tui`.
+
+**Given** the spike **Then** `npm install -g github:…` (or an equivalent local `npm pack` + `npm i -g`) of the package with `private: true` is tried; if it fails, `private` is removed and the reason is recorded in the story file.
+
+**Implementation notes:** `tui.ts` keeps its top-level `process.exit(1)`; only the message changes. `npm run depcheck` must still pass with `.mjs` shims in the graph.
+
+### Story 10.2: `completion bash` Subcommand
+
+As a colleague, I want tab completion for `tui-back`, so that I do not have to remember subcommands and actions.
+
+**Acceptance Criteria:**
+
+**Given** `src/adapters/driving/cli/completion-spec.ts` **Then** it generates a bash script from the subcommand registry (subcommand names, `edt` and `registry` actions, flags documented in the usage strings), plus `tui` and `--help`.
+
+**Given** `tui-back completion bash` **When** stdout is a TTY **Then** the raw script is printed; **otherwise** the AD-3 JSON envelope carries it in `data.script`.
+
+**Given** the guard test (black-box, dialog-registry pattern) **Then** every subcommand name in `tui-back --help` appears in the `completion bash` output and vice versa.
+
+**Given** the generator **Then** it is a pure function callable in-process (used by Story 10.3), with `bash -n` passing on its output.
+
+**Out of scope (v1):** dynamic completion (EDT topics, repo paths).
+
+**Prerequisites:** 10.1; Epic 9 merged (subcommand list).
+
+### Story 10.3: `install` Subcommand
+
+As a colleague, I want `npx -y github:<owner>/tui-back install` to set everything up, so that I get the command, the aliases and the completion in one step.
+
+**Acceptance Criteria:**
+
+**Given** `tui-back install` **When** `process.version` is below 24 **Then** it exits 1 with the exact nvm/apt/brew instructions and changes nothing.
+
+**Given** a supported Node **Then** it runs `npm install -g github:<owner>/tui-back` (URL derived from `package.json` `repository`); on `EACCES` it prints the remedy (`npm config set prefix ~/.local`, add to `PATH`) and exits 1.
+
+**Given** a successful install **Then** `completion.bash` is written under the XDG data dir (`<XDG_DATA_HOME>/tui-back/`), generated in-process by Story 10.2's generator.
+
+**Given** `~/.bashrc` **Then** an idempotent block between `# >>> tui-back >>>` and `# <<< tui-back <<<` defines `alias tb='tui-back'`, `alias tbt='tui-back tui'` and sources the completion file if present. Running install twice leaves exactly one block. The command ends by telling the user to `source ~/.bashrc`.
+
+**Given** `$SHELL` is not bash **Then** a warning says only bash is supported; the npm install still happens.
+
+**Given** `tui-back install --uninstall` **Then** the block, the completion file and the global package are removed; a missing piece is not an error.
+
+**Given** the AD-3 contract **Then** the result is one JSON envelope when piped and human text on a TTY; exit code 0 or 1 only.
+
+**Given** the e2e tests **Then** they use a temp `HOME`/`XDG_DATA_HOME` and a stub `npm` on `PATH` (same technique as the docker stubs), covering idempotence, alias presence, envelope shape and `--uninstall`. The real `~/.bashrc` is never touched.
+
+**Prerequisites:** 10.1, 10.2.
+
+### Story 10.4: Publication, `install.sh` and Docs
+
+As the maintainer, I want the repo published with an install script and a README, so that a colleague can start from a URL.
+
+**Acceptance Criteria:**
+
+**Given** `install.sh` at the repo root **Then** it passes `bash -n`; it checks `git` and Node ≥ 24 (otherwise prints precise instructions, exit 1, modifies nothing), then runs `npx -y github:<owner>/tui-back install`.
+
+**Given** `README.md` **Then** it covers installation, the commands, the `tb`/`tbt` aliases, completion, update (re-run install) and uninstall, and notes the `build-essential` fallback if the `better-sqlite3` prebuild fails.
+
+**Given** `LICENSE` (ISC) and `package.json` `repository` and `files` **Then** `_bmad-output` and `.agents` are excluded from the installed package; if `files` is not honoured for git installs, a `.npmignore` does it.
+
+**Given** the planning artifacts **Then** the AD-14 amendment and AD-24 are in `ARCHITECTURE-SPINE.md`, with the memlog entry.
+
+**Given** a clean machine (container without Node or build tools) **When** `install.sh` then the `npx … install` run **Then** `tb`, `tbt` and `<TAB>` completion work; the result is recorded in the story file.
+
+**Manual steps (Max):** create the public GitHub repo `<owner>/tui-back`, confirm the default branch, and approve the first push. Nothing is pushed without that approval.
+
+**Prerequisites:** 10.1–10.3.
+
+## Epic 11: MCP Server
+
+### Story 11.1: MCP Skeleton and Read-Only Tools
+
+As a developer, I want `tui-back mcp` to expose the read-only commands to an AI agent, so that it can inspect my workspace.
+
+**Acceptance Criteria:**
+
+**Given** `tui-back mcp` **Then** it serves MCP over stdio; nothing but protocol messages is ever written to stdout.
+
+**Given** the MCP tool registry (`adapters/driving/mcp/`) **Then** each tool declares a name, a zod input schema, the subcommand it wraps and a safety class `read | write | destructive`; the server builds the same subcommand registry as `main.ts` in-process, from a shared composition factory.
+
+**Given** the `read` tools (at least `dashboard`, `edts`, `list-repos`, `list-routes`, `request-list`, `ping`, `registry validate`) **Then** each returns the AD-3 envelope as the tool result, with `readOnlyHint: true`.
+
+**Given** the guard test (black-box, completion-guard pattern) **Then** every subcommand in `tui-back --help` is either in the tool registry with a safety class or in an explicit exclusion list with a reason; adding a subcommand without deciding fails the test.
+
+**Given** a tool whose command would prompt on stdin (`registry clean`) **Then** the MCP path never reads stdin; its confirmation comes from Story 11.2's gate.
+
+**Spike:** record which MCP SDK version is used and whether the target client (Claude Code) supports elicitation; the result is written in the story file and decides 11.2's wording.
+
+**Prerequisites:** 10.1.
+
+### Story 11.2: Authorization Gate and Write Tools
+
+As a developer, I want every state-changing tool to ask me before it runs, so that an agent cannot change my workspace on its own.
+
+**Acceptance Criteria:**
+
+**Given** a `write` or `destructive` tool call **Then** the server first asks the human through MCP elicitation, showing the tool, its exact arguments and the repos or EDTs affected; it runs only on an explicit accept.
+
+**Given** a decline, a cancel or a timeout **Then** nothing runs and the result is an AD-3 error envelope with a kebab-case code (`authorization-denied`).
+
+**Given** a client without elicitation support **Then** every `write` and `destructive` tool is refused with `authorization-unavailable` and a message explaining why; read tools keep working (fail closed).
+
+**Given** the `write` tools (at least `register`, `scan`, `edt create`, `edt modify`, `edt switch` without discard, `realign`, `heal`, `request-fire`, `fire-request`, `request save` equivalents) **Then** each is wired through the gate; the gate lives in one place and a tool cannot be registered without a safety class.
+
+**Given** `fire-request` **Then** the dev-auth token never appears in the tool result or in the authorization prompt.
+
+**Given** tests **Then** a fake client covers accept, decline, timeout and no-elicitation for one tool of each class; an unclassified tool is a registration error.
+
+**Prerequisites:** 11.1.
+
+### Story 11.3: Destructive Tools and Long Operations
+
+As a developer, I want the destructive and long-running commands available to the agent, still behind my approval.
+
+**Acceptance Criteria:**
+
+**Given** the `destructive` tools (`edt delete`, `edt switch` with `--discard-dirty`, `reset`, `registry clean`, `request-delete`, `update`) **Then** each carries `destructiveHint: true` and passes through the gate with a prompt that names exactly what will be lost or changed.
+
+**Given** a destructive tool **Then** the approval applies to that single call and those exact arguments; it is never remembered for later calls in the session.
+
+**Given** `registry clean` **Then** the stale entries are listed in the prompt and only the confirmed ones are removed; no stdin prompt is used.
+
+**Given** `update` **Then** it reports progress through MCP progress notifications and honours cancellation (AD-20 bounded run still applies).
+
+**Given** concurrent use with the TUI **Then** the existing locks still serialize conflicting operations; a held lock returns the usual envelope error and is covered by a test.
+
+**Prerequisites:** 11.2.
+
+### Story 11.4: Install Registration and Docs
+
+As a colleague, I want the install to offer the MCP registration, so that I do not have to write the config by hand.
+
+**Acceptance Criteria:**
+
+**Given** `tui-back install` **Then** it prints the exact `claude mcp add tui-back -- tui-back mcp` command (and the JSON config for other clients) and does not edit any client config by itself; `--uninstall` mentions removing it.
+
+**Given** `README.md` **Then** it documents the tool list by safety class, the authorization behaviour, the fail-closed rule for clients without elicitation, and a warning that `fire-request` hits real endpoints.
+
+**Prerequisites:** 10.3, 11.3.

@@ -157,11 +157,11 @@ graph LR
 - **Prevents:** core business logic ending up covered only by fragile end-to-end TUI tests, or left untested altogether, on the excuse that "Ink is hard to test."
 - **Rule:** `core/` is unit-tested (Vitest) against fake port implementations — no real git/docker/sqlite in these tests. `adapters/driven/*` get targeted integration tests against the real system (temp file for persistence, temp repo for git). The Zustand store is tested directly, without rendering Ink. `adapters/driving/cli` is tested black-box — invoke a subcommand as a child process, assert the AD-3 envelope on stdout/exit code — which doubles as the executable spec of that contract. `adapters/driving/tui` gets smoke-tests via Ink's own `render()` only, not exhaustive render coverage — an accepted trade-off given `ink-testing-library` has no actively-maintained current version (last released ~2 years ago, predates Ink 7/React 19), since `core` and the store already carry the real logic coverage.
 
-### AD-14 — Packaging is deferred
+### AD-14 — Distribution: GitHub + npx, no compiled binary (amended 2026-11-05)
 
-- **Binds:** deployment envelope
-- **Prevents:** premature packaging investment before teammate distribution is a real goal, and a build artifact nobody keeps in sync with actual daily usage (which stays `tsx`/`node`).
-- **Rule:** v1 runs via `tsx`/`node` directly (a `package.json` bin, `npm link` for a local global command) — no compiled binary. A packaging mechanism (Node SEA / `pkg` / `bun --compile`) is chosen only when teammate distribution becomes a real goal, not before.
+- **Binds:** deployment envelope, FR-46, FR-47, Epic 10
+- **Prevents:** a build artifact nobody keeps in sync with daily usage, and a bin map that points at the wrong or a missing file.
+- **Rule:** the distribution channel is a public GitHub repo installed with `npx -y github:<owner>/tui-back install`. The tool keeps running on `tsx`/`node` (so `tsx` is a runtime dependency); no compiled binary (Node SEA / `pkg` / `bun --compile` stay rejected until a real need appears). The package exposes one bin, `tui-back`; `tui-back tui` routes to the TUI entrypoint, which bypasses the AD-3 envelope.
 
 ### AD-15 — TUI zone structure mirrors core capability boundaries 1:1
 
@@ -222,12 +222,12 @@ graph LR
 ## Deferred
 
 - **Exact FR-22 correlation-window duration** — the mechanism (bounded in-memory ring buffer, AD-11) is fixed here; the window's size is a UX/tuning call for `bmad-ux` or empirical adjustment once the tool is in daily use.
-- **Packaging mechanism specifics** (Node SEA vs `pkg` vs `bun --compile`) — AD-14 defers the choice itself until teammate distribution is a real goal.
+- **Compiled-binary packaging** (Node SEA / `pkg` / `bun --compile`) — rejected for now by the AD-14 amendment (2026-11-05); revisit only if install friction becomes a real problem.
 - **Validating the generic-core/module split against a second, structurally different stack** (gateway-less Java/Python) — explicitly out of v1 scope (PRD §5, §6.2); this spine's module boundary (AD-4, AD-5) is built to make that validation possible later, not to prove it now.
 - **AI-assisted manifest bootstrapping** (PRD §6.2, Could-scope) — the manifest schema it would target is fixed here (AD-4); building the bootstrapping skill itself stays deferred.
 - **Internal tool-diagnostic logging** (the tool's own debug logs, distinct from the aggregated container logs of AD-11) — not required by any FR; add only if debugging the tool itself in daily use turns out to need it.
 - **Single-instance detection mechanism** (lock file vs PID check vs OS-level lock) — AD-9 fixes that it must happen; the concrete technique is an implementation detail with no cross-builder divergence risk worth fixing here.
-- **Guided onboarding/installation wizard** — explicitly out of scope for v1 (PRD §6.2).
+- **Guided onboarding/installation wizard** — still out of scope (PRD §6.2); the non-interactive installer of FR-47 is in scope (AD-24).
 - **OpenTUI migration** — only evaluated if Ink's FPS/memory ceiling is actually observed as a problem in practice (SM-8), per AD-12.
 - **`XDG_CACHE_HOME`** — named by the PRD's local-state-layout NFR, but no cacheable derived data (e.g. a resolved OpenAPI schema) was identified during this run; left unused until one emerges.
 - **Canonical route-identity key across `RouteScannerPort` implementations** (method+path vs an opaque id) — the PRD doesn't specify one scheme, and different scanner implementations (NestJS/OpenAPI today, a future language's scanner later) may have different natural identities; left to each `RouteScannerPort` implementation's own contract, revisit only if a second implementation actually struggles to agree with the first on what identifies "the same route" for FR-21's saved-request matching.
@@ -269,3 +269,16 @@ graph LR
 - **Prevents:** each view combining health probe and container state its own way; a service shown `up` while it does not answer; a Docker outage marking every service inconsistent.
 - **Rule:** `core/service-status/resolveServiceStatus(repoPath)` is the only producer of a service's displayed state. Order: manifest `healthUrl` probe first (`HealthProbePort`), then container (`DockerPort.getContainerHealth`). Closed set: `up | unhealthy | inconsistent | restarting | down | no-container`, plus `Probed` error. The combination table lives in the resolver and nowhere else. `healthUrl` stays the only probe kind; a new kind (command, TCP) is added inside the resolver, not in consumers. Returns `Result`, never rejects.
 - **Extension (2026-11-04, SCP 3, FR-45, Story 9.11):** whether a declared `healthUrl` is probed is decided inside the resolver from the local setting `services.healthCheckDisabled` (manifest service names, default empty = probe). A disabled check takes the "no `healthUrl`" rows of the table and marks the status `healthCheck: 'disabled'`. `verifyService` uses the same decision. No consumer reads the setting.
+
+### AD-24 — The installer is a driving-adapter concern (added 2026-11-05)
+
+- **Binds:** FR-47, Stories 10.2, 10.3
+- **Prevents:** distribution logic (spawning `npm`, editing shell rc files) leaking into `core/`, and tests touching a developer's real `~/.bashrc`.
+- **Rule:** `install` and `completion` live in `adapters/driving/cli`. They are not Must-scope actions, so FR-1 script/CLI parity does not apply, but they use the AD-3 envelope like any subcommand. Paths come from the XDG helper so tests redirect them; the rc-file block is delimited by fixed markers and is idempotent. The completion generator is a pure function over the subcommand registry, called in-process by `install`.
+- **Extension (2026-11-05):** the MCP adapter (AD-25) is also a driving adapter; the installer only prints MCP registration commands and never edits client config.
+
+### AD-25 — MCP exposure and human authorization (added 2026-11-05)
+
+- **Binds:** FR-48, Epic 11
+- **Prevents:** an agent changing or deleting a developer's workspace without a human decision, and a new subcommand becoming reachable over MCP by accident.
+- **Rule:** the MCP server is a driving adapter (`adapters/driving/mcp/`) over the same subcommand registry as the CLI, in-process. Each tool declares a safety class (`read | write | destructive`) in one registry; an unclassified subcommand fails a guard test. The server itself enforces authorization: `write` and `destructive` calls go through MCP elicitation, per call, with the exact arguments shown, and are refused (fail closed) when the client cannot elicit. Tool annotations are set for clients but never relied on. Stdout carries protocol messages only. Secrets (dev-auth tokens) never appear in results or prompts.

@@ -53,7 +53,11 @@ development_status:
   epic-4: done
   epic-4-retrospective: optional
 
-  epic-5: done
+  epic-5: in-progress
+  # Reopened 2026-11-05 (sprint-change-proposal-2026-11-05.md): hide/show-only filters, stackable rules, persisted rules and named sets. Order: 5-8 -> 5-9 -> 5-10.
+  5-8-hide-show-only-log-filters: backlog
+  5-9-stackable-log-filter-rules: backlog
+  5-10-persisted-filter-rules-and-named-rule-sets: backlog
   epic-5-retrospective: optional
 
   epic-6: in-progress
@@ -81,3 +85,19 @@ development_status:
   9-10-text-filter-in-the-keybinding-help: review
   9-11-per-service-health-check-toggle: review
   epic-9-retrospective: optional
+
+  epic-10: backlog
+  # Distribution (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 10-1 -> 10-2 -> 10-3 -> 10-4. Epic 9 already merged into devlopment (8ad7b011).
+  10-1-repair-the-bin-one-binary-tui-routing: backlog
+  10-2-completion-bash-subcommand: backlog
+  10-3-install-subcommand: backlog
+  10-4-publication-install-sh-and-docs: backlog
+  epic-10-retrospective: optional
+
+  epic-11: backlog
+  # MCP server (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 11-1 -> 11-2 -> 11-3 -> 11-4. Starts after 10-1; 11-4 needs 10-3.
+  11-1-mcp-skeleton-and-read-only-tools: backlog
+  11-2-authorization-gate-and-write-tools: backlog
+  11-3-destructive-tools-and-long-operations: backlog
+  11-4-install-registration-and-docs: backlog
+  epic-11-retrospective: optional

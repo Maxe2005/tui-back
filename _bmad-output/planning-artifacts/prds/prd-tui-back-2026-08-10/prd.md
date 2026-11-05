@@ -407,6 +407,22 @@ The `?` help can be narrowed by typing: only the keybindings whose keys, descrip
 
 From the settings screen, a developer turns the `healthUrl` check off or on per service. The preference is local (not in the manifest), enabled by default, and applies everywhere a status is resolved or verified (views, CLI, heal, post-restart verification). A disabled check is visibly marked so an unverified state is not mistaken for a missing route.
 
+#### FR-46: Single installable binary (added 2026-11-05, Sprint Change Proposal)
+
+The package exposes one `tui-back` binary. `tui-back <subcommand>` runs the CLI (AD-3 envelope); `tui-back tui` opens the interactive TUI and exits 1 when no terminal is attached.
+
+#### FR-47: Guided install and uninstall (added 2026-11-05, Sprint Change Proposal)
+
+`npx -y github:<owner>/tui-back install` installs the tool globally, adds the `tb` and `tbt` aliases and bash completion through a marked, idempotent block in `~/.bashrc`, and tells the developer to reload the shell. `--uninstall` reverses every step. A Node version below 24 stops the install with the exact commands to fix it; the installer never changes Node itself. Bash is the only supported shell.
+
+#### FR-48: MCP server with human authorization (added 2026-11-05, Sprint Change Proposal)
+
+`tui-back mcp` exposes every subcommand to an MCP client as a tool. Read-only tools run freely. Any tool that changes or destroys state runs only after the human explicitly approves that exact call; if the client cannot ask the human, those tools are refused. Approvals are per call and never remembered.
+
+#### FR-49: Hide / show-only log filters (added 2026-11-05, Sprint Change Proposal)
+
+The log filter is a list of rules (one in the first delivery, several afterwards, applied in order). Each rule is a text or regex query with an action (keep only what matches, or hide what matches) and a target (the whole line, or only the matched text); the default rule is today's behaviour. The choices apply to the live view only, never alter the buffered lines, rule lists and named rule sets are kept across restarts (FR-49 extension, Story 5.10), and the choices are recorded with the query in the filter history so recalling a filter restores them.
+
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
 **Description:** Absorbs `shared-types`'s release script and removes the manual `package.json` bump across services, including inside a group update (amended 2026-10-05). Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation and drift (FR-14/FR-15) apply only to repos declaring `shared-types-consumer`; the smart update (FR-30/FR-31) builds on Epic 3's group update.
@@ -473,7 +489,7 @@ A developer can view a single, live, aggregated log stream from every service in
 
 #### FR-17: Filter the aggregated stream
 
-The stream can be filtered by service, by free-text/regex search `[ASSUMPTION: regex support specifically, not just free-text — a stronger capability commitment than the brief states outright]`, and by log level, without restarting it.
+The stream can be filtered by service, by free-text/regex search `[ASSUMPTION: regex support specifically, not just free-text — a stronger capability commitment than the brief states outright]`, and by log level, without restarting it. *(Amended 2026-11-05, Sprint Change Proposal: a filter can also hide what matches and act on the whole line or only the matched text, several rules stack and persist — FR-49.)*
 
 **Consequences (testable):**
 - Applying or changing a filter does not interrupt the live stream.
@@ -623,7 +639,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 
 ### 6.2 Out of Scope for MVP
 
-- Guided, step-by-step installation/onboarding wizard — deferred to when the tool is shared with teammates (brief's Could-scope item).
+- Guided, step-by-step installation/onboarding wizard — deferred to when the tool is shared with teammates (brief's Could-scope item). Superseded in part by FR-47 (2026-11-05): a non-interactive installer is in scope; a wizard still is not.
 - **AI-assisted per-repo manifest bootstrapping (Could)** — an AI skill (e.g. a Claude Code skill) that scans an existing backend and drafts per-repo manifests to help initialize tool usage on it, including for onboarding the second, structurally different project later. Deferred until the manifest schema itself is fixed in architecture. `[NOTE FOR PM: Could-scope, not required for v1 — flag if this should be prioritized higher.]`
 - Validating the generic-core/module split against the second, gateway-less Java/Python project — proof deferred past v1.
 - Any AI-copilot layer automating error resolution or the git workflow — ruled out for now, not just deferred casually (see §5).
