@@ -20,4 +20,10 @@ describe('RestartModeSelector', () => {
     expect(output).toContain('(•) Clean restart');
     expect(output).toContain('←/→ pour changer.');
   });
+
+  it('offers only the modes it is given, in order', async () => {
+    const output = await renderToString(<RestartModeSelector mode="simple" modes={['simple', 'clean']} />, { columns: 200, rows: 10 });
+    expect(output).not.toContain('Aucun');
+    expect(output).toMatch(/\(•\) Redémarrage simple\s+\( \) Clean restart/);
+  });
 });
