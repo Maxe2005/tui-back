@@ -399,7 +399,8 @@ export type SettingsGroupId =
   | 'branch-dropdown-rows'
   | 'switch-restart'
   | 'realign-scope'
-  | 'realign-restart';
+  | 'realign-restart'
+  | 'heal-restart';
 
 export type SettingsGroup = { id: SettingsGroupId; label: string };
 
@@ -410,6 +411,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'switch-restart', label: 'Post-switch restart' },
   { id: 'realign-scope', label: 'Realign default scope' },
   { id: 'realign-restart', label: 'Post-realign restart' },
+  { id: 'heal-restart', label: 'Heal restart mode' },
 ];
 
 const SWITCH_RESTART_LABELS: Record<SwitchRestartMode, string> = { none: 'None', simple: 'Simple restart', clean: 'Clean restart' };
@@ -469,6 +471,7 @@ const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | Pale
   'switch-restart': 'settings-toggle',
   'realign-scope': 'settings-toggle',
   'realign-restart': 'settings-toggle',
+  'heal-restart': 'settings-toggle',
   'buffer-size': 'settings-adjust',
   'start-with-history': 'settings-toggle',
   'filter-history-size': 'settings-adjust',
@@ -964,6 +967,14 @@ export function SettingsScreen({
       return;
     }
 
+    if (edtsGroup === 'heal-restart') {
+      // Two values only: Left, Right and Space all flip simple ↔ clean.
+      if (key.leftArrow || key.rightArrow || input === ' ') {
+        void updateSettings({ dashboard: { restartMode: settings.dashboard.restartMode === 'clean' ? 'simple' : 'clean' } });
+      }
+      return;
+    }
+
     if (edtsGroup === 'realign-scope' || edtsGroup === 'realign-restart') {
       const direction = key.leftArrow ? -1 : key.rightArrow || input === ' ' ? 1 : null;
       if (direction === null) {
@@ -1350,6 +1361,15 @@ export function SettingsScreen({
               Restart services after a realign: <Text color={colors.accent}>{SWITCH_RESTART_LABELS[settings.realign.restartMode]}</Text>
             </Text>
             <DimAnnotation text="Default for the realign dialog and `realign --restart`. Clean restart falls back to a simple restart where no recipe exists." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'heal-restart' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Restart mode for a heal: <Text color={colors.accent}>{SWITCH_RESTART_LABELS[settings.dashboard.restartMode]}</Text>
+            </Text>
+            <DimAnnotation text="Default for the Dashboard heal and `heal --restart`. Clean restart falls back to a simple restart where no recipe exists." />
           </Box>
         ) : null}
 

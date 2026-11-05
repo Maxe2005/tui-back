@@ -1795,6 +1795,38 @@ describe('AppShell settings screen (:settings)', () => {
     }
   });
 
+  it('Right/Left/Space on the EDTs tab "Heal restart mode" group flip dashboard.restartMode live and persist', async () => {
+    const settingsPort: SettingsPort = {
+      load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }),
+      save: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ settings: settingsPort }));
+    store.getState().openSettingsScreen();
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab); // General -> EDTs (group list)
+      for (let i = 0; i < 6; i += 1) {
+        await press(instance, stdin, KEYS.down); // -> "Heal restart mode"
+      }
+      await press(instance, stdin, KEYS.enter);
+
+      await press(instance, stdin, KEYS.right);
+      expect(store.getState().settings.dashboard.restartMode).toBe('clean');
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ dashboard: { restartMode: 'clean' } }));
+      await press(instance, stdin, KEYS.left);
+      expect(store.getState().settings.dashboard.restartMode).toBe('simple');
+      await press(instance, stdin, KEYS.space);
+      expect(store.getState().settings.dashboard.restartMode).toBe('clean');
+      expect(settingsPort.save).toHaveBeenLastCalledWith(expect.objectContaining({ dashboard: { restartMode: 'clean' } }));
+      expect(store.getState().settings.realign.restartMode).toBe('none');
+      expect(store.getState().settings.switch.restartMode).toBe('none');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   // End-to-end coverage of the filter-history fields and the clear actions, real-keypress
   // driven (mirrors the two tests just above).
   it('Left/Right on the "Filter history size"/"Filter history grid" groups adjusts them live and persists', async () => {
