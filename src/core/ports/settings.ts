@@ -124,6 +124,14 @@ export interface Settings {
     // declared). Read on every `R`, so a change applies live. Default `simple`.
     restartMode: 'simple' | 'clean';
   };
+  // Per-service local preferences, keyed by the manifest `service` name.
+  services: {
+    // Services whose `healthUrl` health check is turned off on this machine: the status
+    // resolver (core/service-status) resolves them as if no `healthUrl` were declared and never
+    // probes them. Unknown names are kept and ignored. Toggled from the :settings Services tab;
+    // read at every resolution, so a change applies at the next poll/refresh.
+    healthCheckDisabled: string[];
+  };
 }
 
 // Single source of truth for every default value — reused by the driven adapter's zod schema
@@ -143,6 +151,7 @@ export const DEFAULT_SETTINGS: Settings = {
   switch: { restartMode: 'none' },
   realign: { defaultScope: 'edt', restartMode: 'none' },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' },
+  services: { healthCheckDisabled: [] },
 };
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/
