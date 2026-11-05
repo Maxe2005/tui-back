@@ -115,10 +115,15 @@ export function createRealignSlice(deps?: AppStoreDeps): StateCreator<AppState, 
           lock: deps.lock,
           docker: deps.docker,
           healthProbe: deps.healthProbe,
+          // Late-bound: the registry is built before the store exists, and the toggle is read
+          // live at each verification so a :settings change applies without a restart.
+          isHealthCheckEnabled: (manifest) => !(getState?.().settings.services.healthCheckDisabled.includes(manifest.service) ?? false),
         })
       : null;
+  let getState: (() => AppState) | null = null;
 
   return (set, get) => {
+    getState = get;
     const loadCandidates = async (current: number, preset: RealignScope) => {
       if (!deps) {
         set({ realignCandidates: { status: 'error', rows: [], error: NO_DEPS_ERROR } });

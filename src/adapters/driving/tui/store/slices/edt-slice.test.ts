@@ -454,6 +454,24 @@ describe('edt slice — post-switch restart (FR-37)', () => {
     expect(store.getState().serviceRestartInFlight).toEqual({});
   });
 
+  it('verifies a service whose health check is disabled without probing it (story 9.11)', async () => {
+    const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
+    const { deps } = restartDeps({
+      healthProbe: { probe },
+      manifest: {
+        load: async (repoPath: string) =>
+          ok({ service: `svc-${repoPath.split('/').pop()}`, container: `ctr-${repoPath.split('/').pop()}`, healthUrl: 'http://x/h', sharedBranch: 'development', modules: {} }),
+      },
+    });
+    const store = createAppStore(deps);
+    store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: ['svc-a', 'svc-b'] } } }));
+
+    await store.getState().runSwitchRestart({ topic: 'target-topic', mode: 'simple', results: rows });
+
+    expect(store.getState().switchRestart?.rows.filter((row) => row.service !== 'svc-c').map((row) => row.phase)).toEqual(['up-unverified', 'up-unverified']);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
   it('publishes live rows while running and marks the targets in flight', async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((done) => {

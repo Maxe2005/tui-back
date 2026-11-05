@@ -235,9 +235,13 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
           lock: deps.lock,
           docker: deps.docker,
           healthProbe: deps.healthProbe,
+          // Late-bound: the registry is built before the store exists, and the toggle is read
+          // live at each verification so a :settings change applies without a restart.
+          isHealthCheckEnabled: (manifest) => !(getState?.().settings.services.healthCheckDisabled.includes(manifest.service) ?? false),
         })
       : null;
-  return (set, get) => ({
+  let getState: (() => AppState) | null = null;
+  const createState: StateCreator<AppState, [], [], EdtSlice> = (set, get) => ({
     activeEdt: null,
     setActiveEdt: (edt) => set({ activeEdt: edt }),
     edtsBranches: null,
@@ -643,4 +647,8 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       }
     },
   });
+  return (set, get, api) => {
+    getState = get;
+    return createState(set, get, api);
+  };
 }

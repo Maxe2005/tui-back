@@ -380,7 +380,13 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       }
       try {
         const status = await resolveServiceStatus(
-          { manifest: deps.manifest, docker: deps.docker, ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }) },
+          {
+            manifest: deps.manifest,
+            docker: deps.docker,
+            ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
+            // Read at every poll, so a :settings toggle applies at the next tick.
+            isHealthCheckEnabled: (manifest) => !get().settings.services.healthCheckDisabled.includes(manifest.service),
+          },
           repoPath,
         );
         // A repo no longer polled (stopped, or retargeted away) keeps no late write.

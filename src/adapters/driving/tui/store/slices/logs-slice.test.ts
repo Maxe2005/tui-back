@@ -520,6 +520,38 @@ describe('logs slice: health-first status', () => {
     }
   });
 
+  it('a listed row whose health check is disabled reads its container state without probing (story 9.11)', async () => {
+    const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
+    const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+    store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: ['a'] } } }));
+    store.getState().startLogsListedHealthPolling(['/repo/a']);
+    await flush();
+    expect(store.getState().logsListedHealth['/repo/a']).toBe('up');
+    expect(probe).not.toHaveBeenCalled();
+    store.getState().stopLogsListedHealthPolling();
+  });
+
+  it('a disabled container-less pane reads no-container, and re-enabling probes it at the next poll (story 9.11)', async () => {
+    vi.useFakeTimers();
+    try {
+      const probe = vi.fn(async () => ok({ healthy: true }));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(), manifest: manifestWithHealth(false), healthProbe: { probe } }));
+      store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: ['lib'] } } }));
+      await store.getState().subscribeLogsPane('/repo/lib', 'lib');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes['/repo/lib']).toMatchObject({ health: 'no-container', noContainer: true });
+      expect(probe).not.toHaveBeenCalled();
+
+      store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: [] } } }));
+      await vi.advanceTimersByTimeAsync(LOGS_HEALTH_POLL_INTERVAL_MS);
+      expect(store.getState().logsPanes['/repo/lib']?.health).toBe('up');
+      expect(probe).toHaveBeenCalled();
+      store.getState().stopAllLogsPanes();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('releases the listed-row guard after a rejected poll, so the next tick polls again', async () => {
     vi.useFakeTimers();
     try {

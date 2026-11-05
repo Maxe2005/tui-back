@@ -216,7 +216,9 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   // probe is wired. Recorded whenever their manifest loads, so the presence cache can skip the
   // reload for every other container-less row.
   const probeOnlyRows = new Set<string>();
-  const statusPorts = deps ? { docker: deps.docker, ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }) } : null;
+  // A row whose health check is turned off locally stays recorded here: the resolver then reads
+  // it as `no-container` on each poll (never probing it), and re-enabling the check needs no
+  // resubscribe — the next poll probes it again.
   function recordProbeOnly(repoPath: string, manifest: Manifest): void {
     if (!hasContainer(manifest) && hasHealthUrl(manifest) && deps?.healthProbe !== undefined) {
       probeOnlyRows.add(repoPath);
@@ -226,6 +228,15 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   }
 
   return (set, get) => {
+    // The status resolver's ports, plus the live per-service health-check toggle — read at
+    // every poll, so a change in :settings applies at the next tick.
+    const statusPorts = deps
+      ? {
+          docker: deps.docker,
+          ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
+          isHealthCheckEnabled: (manifest: Manifest) => !get().settings.services.healthCheckDisabled.includes(manifest.service),
+        }
+      : null;
     // Shared by loadOlderLogsPane and subscribeLogsPane's startWithHistory fetch — both "fetch
     // the next bufferSize older lines and prepend them" over an already-subscribed key,
     // differing only in when they're invoked (a manual scrollback-to-oldest vs. right after a

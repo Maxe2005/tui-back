@@ -262,7 +262,11 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
           dashboardRegistryStatus: 'loading',
         });
         // A builder that throws degrades its own section; the other one is untouched.
-        const services = buildDashboardServices(deps).then(
+        // The live per-service health-check toggle, read at every refresh.
+        const services = buildDashboardServices({
+          ...deps,
+          isHealthCheckEnabled: (manifest) => !get().settings.services.healthCheckDisabled.includes(manifest.service),
+        }).then(
           (result) =>
             set((state) => ({
               dashboardServicesStatus: result.ok ? 'ready' : 'error',
