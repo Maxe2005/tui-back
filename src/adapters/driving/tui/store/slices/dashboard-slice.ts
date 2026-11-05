@@ -19,7 +19,7 @@ import {
   type DashboardServicesSection,
 } from '../../../../../core/dashboard/snapshot.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
-import type { TerminalKind } from './terminal-slice.js';
+import { RESTART_MODES, TERMINAL_KINDS } from './service-action-ids.js';
 
 export type DashboardSectionStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -49,16 +49,6 @@ export type DashboardSlice = {
   clearPendingServiceFocus: () => void;
 };
 
-const RESTART_MODES: Record<string, RestartMode> = {
-  'restart-simple': 'simple',
-  'restart-clean': 'clean',
-};
-// The registry's terminal entries open the Terminal overlay on the row's target; their
-// availability was already re-read by runDashboardServiceAction, like every other action.
-const TERMINAL_KINDS: Record<string, TerminalKind> = {
-  'terminal-service': 'service',
-  'terminal-container': 'container',
-};
 const RESTART_LABELS: Record<RestartMode, string> = {
   simple: 'Restart',
   clean: 'Clean restart',
@@ -156,6 +146,7 @@ export function createDashboardSlice(deps?: AppStoreDeps): StateCreator<AppState
         });
         return;
       }
+      // The terminal entries' availability was already re-read by runDashboardServiceAction.
       const terminalKind = TERMINAL_KINDS[actionId];
       if (terminalKind !== undefined) {
         const row = get().dashboardServices?.services.find((service) => service.path === repoPath);
