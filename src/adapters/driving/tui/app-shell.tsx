@@ -14,6 +14,7 @@ import { ZoneTabBar } from './shared/components/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/repo-registry-screen.js';
 import { ResetScreen } from './shared/reset-screen.js';
 import { RealignDialog } from './shared/realign-dialog.js';
+import { HealDialog } from './shared/heal-dialog.js';
 import { TerminalView } from './shared/terminal-view.js';
 import { terminalWindowRows } from './shared/terminal-view.logic.js';
 import { SettingsScreen } from './shared/settings-screen.js';
@@ -28,6 +29,9 @@ import { boundaryOrientation, hasResizableBoundary } from './zones/zone-layouts.
 // The Ctrl+W keyboard resize-mode's per-keypress step: ~12 positions across the
 // MIN_LIST_RATIO..MAX_LIST_RATIO (0.2..0.8) clamp range.
 export const RESIZE_STEP = 0.05;
+
+// The heal notice's colour per tone; the text itself always says what happened.
+const HEAL_NOTICE_COLORS = { success: colors.success, warning: colors.warning, error: colors.error } as const;
 
 // Ink delivers Ctrl+<letter> as the bare letter with `key.ctrl` set: a modified letter is a
 // zone binding (Ctrl+R restart...), never a global mnemonic.
@@ -245,6 +249,11 @@ export function AppShell({
   // `:realign` overlay (also `A` on the Dashboard): same open flag + onClose pattern.
   const realignScreenOpen = useStore((state) => state.realignScreenOpen);
   const closeRealignScreen = useStore((state) => state.closeRealignScreen);
+  // The Heal overlay (`H` on the Dashboard): same open flag + onClose pattern. `healNotice` is the
+  // auto-dismissed line shown instead of the overlay (no target, a plan error, a busy restart).
+  const healScreenOpen = useStore((state) => state.healScreenOpen);
+  const closeHeal = useStore((state) => state.closeHeal);
+  const healNotice = useStore((state) => state.healNotice);
   // The Terminal overlay (Ctrl+T / Ctrl+X on the Dashboard). It owns every key while open — `q`,
   // `:`, `?` and the zone mnemonics land in its prompt — and fullscreen hides the zone below.
   const terminalOpen = useStore((state) => state.terminalOpen);
@@ -360,7 +369,7 @@ export function AppShell({
     // Ctrl+W resize-mode. Entering and dispatching within it both sit under the same overlay
     // exclusion as the zone-switch block below; entering additionally requires the active zone
     // to declare a boundary (shouldEnterResizeMode), and the Logs fullscreen preview has none.
-    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
+    if (!helpOpen && !registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen && !healScreenOpen) {
       if (state.resizeMode !== null) {
         const boundaryStep = resolveFocusStep(input, key, 'tab');
         if (boundaryStep !== null) {
@@ -394,7 +403,7 @@ export function AppShell({
     // must land as a literal character (or, for settings, simply not open help on top of it),
     // never also pop the keybinding-help modal on top of the overlay. Mirrors how the registry
     // screen's own Esc-close below is gated on registryScreenOpen.
-    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen) {
+    if (!registryScreenOpen && !commandBarOpen && !settingsScreenOpen && !resetScreenOpen && !realignScreenOpen && !healScreenOpen) {
       resolveHelpDispatch(input, key, state.helpOpen, state.helpFilter, { openHelp, closeHelp, setHelpFilter });
     }
 
@@ -408,6 +417,7 @@ export function AppShell({
       !settingsScreenOpen &&
       !resetScreenOpen &&
       !realignScreenOpen &&
+      !healScreenOpen &&
       state.resizeMode === null
     ) {
       // The reachable-zone set (every zone minus whichever gated tab is currently 'omitted')
@@ -488,8 +498,10 @@ export function AppShell({
             {settingsScreenOpen && <SettingsScreen useStore={useStore} onClose={closeSettingsScreen} />}
             {resetScreenOpen && <ResetScreen useStore={useStore} onClose={closeResetScreen} />}
             {realignScreenOpen && <RealignDialog useStore={useStore} onClose={closeRealignScreen} />}
+            {healScreenOpen && <HealDialog useStore={useStore} onClose={closeHeal} />}
             {terminalOpen && <TerminalView useStore={useStore} />}
             {resetNotice !== null && <TruncatedText color={colors.warning}>{resetNotice}</TruncatedText>}
+            {healNotice !== null && <TruncatedText color={HEAL_NOTICE_COLORS[healNotice.tone]}>{healNotice.message}</TruncatedText>}
           </BoundsProvider>
         </Box>
         {commandBarOpen && (
