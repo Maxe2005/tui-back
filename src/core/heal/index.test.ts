@@ -142,6 +142,20 @@ describe('planHeal', () => {
     expect(deps.manifest.load).toHaveBeenCalledWith('/r/api');
   });
 
+  it('never targets a service whose health check is disabled as unhealthy, and never probes it', async () => {
+    const deps = world([
+      { name: 'stuck', container: 'up', probe: 'failed' },
+      { name: 'other', container: 'up', probe: 'failed' },
+    ]);
+    const planned = await planHeal({ ...deps, isHealthCheckEnabled: (manifest) => manifest.service !== 'stuck' });
+    if (!planned.ok) throw new Error(planned.error.message);
+    expect(reasons(planned.data.rows)).toEqual([
+      ['stuck', 'skipped', 'up'],
+      ['other', 'pending', undefined],
+    ]);
+    expect(deps.healthProbe.probe).not.toHaveBeenCalledWith('http://stuck/health', expect.anything());
+  });
+
   it('is err no-active-edt when no EDT is active or the active ulid is unknown', async () => {
     for (const activeUlid of [null, 'unknown']) {
       const planned = await planHeal(world([{ name: 'api', container: 'down' }], { activeUlid }));

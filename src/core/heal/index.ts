@@ -12,7 +12,7 @@ import type { DockerPort } from '../ports/docker.js';
 import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
 import type { HealthProbePort } from '../ports/health-probe.js';
 import type { LockPort } from '../ports/lock.js';
-import type { ManifestPort } from '../ports/manifest.js';
+import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result } from '../result.js';
 import { serviceRestartLockKey } from '../scripts/service-restart.js';
@@ -49,6 +49,10 @@ export interface PlanHealParams {
   docker: Pick<DockerPort, 'getContainerHealth'>;
   // Not wired = statuses are container-only, as if no healthUrl were declared.
   healthProbe?: HealthProbePort;
+  // The per-service health-check toggle (`services.healthCheckDisabled`), forwarded to the resolver: a disabled
+  // service resolves as if it had no healthUrl, so heal never targets it as `unhealthy`.
+  // Not wired = every health check is enabled.
+  isHealthCheckEnabled?: (manifest: Manifest) => boolean;
 }
 
 export interface RunHealParams {
@@ -107,6 +111,7 @@ export async function planHeal(params: PlanHealParams): Promise<Result<HealPlan>
       manifest: params.manifest,
       docker: params.docker,
       ...(params.healthProbe === undefined ? {} : { healthProbe: params.healthProbe }),
+      ...(params.isHealthCheckEnabled === undefined ? {} : { isHealthCheckEnabled: params.isHealthCheckEnabled }),
     };
     // Resolved in parallel; rows keep member order.
     const rows = await Promise.all(active.members.map((member) => planRow(deps, member)));

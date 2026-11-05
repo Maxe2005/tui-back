@@ -465,7 +465,9 @@ calculé à partir de `healthUrl` et du conteneur selon le tableau ci-dessus :
 `tui-back heal [--restart simple|clean]` redémarre, puis vérifie, chaque service de l'EDT actif
 dont le statut (tableau ci-dessus, le même que `tui-back dashboard`) est `down` ou `unhealthy` et
 qui déclare un `container`. Aucune confirmation n'est demandée. `--restart` retombe sur
-`dashboard.restartMode` ; les services sont traités `update.concurrency` à la fois. L'enveloppe
+`dashboard.restartMode` ; les services sont traités `update.concurrency` à la fois. Un service
+listé dans `services.healthCheckDisabled` n'est jamais sondé, ni au calcul des cibles ni à la
+vérification après redémarrage : il n'est donc jamais ciblé comme `unhealthy`. L'enveloppe
 est l'enveloppe standard :
 
 ```json

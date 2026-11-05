@@ -1390,6 +1390,19 @@ describe('subcommand registry guards', () => {
       expect(containerRestart).toHaveBeenCalledWith('ctr-a');
     });
 
+    it('honours services.healthCheckDisabled: a disabled service is verified container-only, never unhealthy', async () => {
+      const { heal, containerRestart } = healSetup({
+        healthyAfter: false,
+        settings: {
+          load: async () => ok({ settings: { ...DEFAULT_SETTINGS, services: { healthCheckDisabled: ['svc-a'] } }, warning: null }),
+          save: async () => ok(undefined),
+        },
+      });
+      const result = await heal.run([]);
+      expect(result).toMatchObject({ ok: true, data: { targets: ['svc-a'], restart: [{ service: 'svc-a', state: 'up-unverified' }] } });
+      expect(containerRestart).toHaveBeenCalledWith('ctr-a');
+    });
+
     it('uses dashboard.restartMode when --restart is absent', async () => {
       const { heal, restartRun } = healSetup({
         settings: { load: async () => ok({ settings: { ...DEFAULT_SETTINGS, dashboard: { restartMode: 'clean' } }, warning: null }), save: async () => ok(undefined) },

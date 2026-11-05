@@ -1222,6 +1222,7 @@ async function runHealCommand(
     manifest: deps.manifest,
     docker: deps.docker,
     healthProbe: deps.healthProbe,
+    isHealthCheckEnabled: healthCheckEnabledFrom(() => settings),
   });
   if (!plan.ok) {
     return plan;
@@ -1240,6 +1241,7 @@ async function runHealCommand(
       lock: deps.lock,
       docker: deps.docker,
       healthProbe: deps.healthProbe,
+      isHealthCheckEnabled: healthCheckEnabledFrom(() => settings),
     }),
   });
   if (!report.ok) {
