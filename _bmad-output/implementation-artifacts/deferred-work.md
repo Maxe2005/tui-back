@@ -839,11 +839,11 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: `restartAfterSwitch` keys restart targets by service name, so two managed repos sharing a manifest service name can be conflated in the restart report.
   evidence: Pre-existing in Story 2.44's restart phase; realign rejects ambiguous `--service` names but `--scope all` can still select both repos.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-1-shell-session-port-driven-adapter-core-shell-use-case.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-1-shell-session-port-driven-adapter-core-shell-use-case.md`
   summary: Cancelling a container-shell run only kills the local `docker exec` client; the in-container process can keep running (mitigation: record the in-container PGID and `docker exec <c> kill -TERM -<pgid>`, or the 9.7 PTY adapter).
   evidence: Accepted limitation of the no-PTY decision (AD-22); without `-t` docker does not forward the signal into the container.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-1-shell-session-port-driven-adapter-core-shell-use-case.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-1-shell-session-port-driven-adapter-core-shell-use-case.md`
   summary: Background jobs started with `cmd &` in a terminal run keep running after the run settles (until tui-back exits); decide whether the terminal view should list or reap them.
   evidence: Review of story 9.1 — adapter settles after the pipe-drain grace and only reaps groups on app exit; no policy exists for long-lived background jobs.
 
@@ -854,29 +854,29 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: `app-shell.interaction.test.tsx > AppShell reset screen (:reset) > opens only through the reset command, and Esc closes it with zero writes` fails (`RESET TOOL DATA` not in output).
   evidence: Fails at baseline 72dc5611 with the story changes stashed (1 failed / 5 passed in that file), so it predates story 9.6.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-3-shared-scrollable-output-and-fullscreen-primitive.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-3-shared-scrollable-output-and-fullscreen-primitive.md`
   summary: A stored scroll offset larger than the current visible line count (e.g. stream toggle or filter applied while scrolled up) yields an empty window and a misleading "Waiting for logs" placeholder; offset is only clamped at keypress time.
   evidence: `sliceVisibleWindow` computes `end = max(lines.length - offset, 0)` and returns [] when offset >= length; behaviour pre-dates story 9.3 (moved verbatim from logs-zone.logic.ts) and fixing it would change Logs frames, which 9.3 forbids. Terminal view (9.4) will hit the same path when its buffer is cleared.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-2-registry-entries-for-service-and-container-terminals.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-2-registry-entries-for-service-and-container-terminals.md`
   summary: The Dashboard service-actions row now carries five entries and is truncated at common widths (~120 cols), hiding the container terminal and its greyed reason.
   evidence: The story 9.2 zone test must render at 240 columns to see all five entries; ServiceActionsRow is a single truncate-end line and was out of scope to change (Ask First).
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-2-registry-entries-for-service-and-container-terminals.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-2-registry-entries-for-service-and-container-terminals.md`
   summary: Each Dashboard row-focus change and every pre-run re-check now spawns a docker inspect for the container terminal, with no short-lived health cache or debounce.
   evidence: list() probes getContainerHealth on every call (dashboard-slice fetchActions on focus change and in runDashboardServiceAction); scrolling the services table can stack concurrent inspects.
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-2-registry-entries-for-service-and-container-terminals.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-2-registry-entries-for-service-and-container-terminals.md`
   summary: app-shell.interaction.test.tsx "AppShell reset screen (:reset) > opens only through the reset command, and Esc closes it with zero writes" fails on the epic-9 branch.
   evidence: Fails 3/3 on story 9.2 and at the baseline 198de464 (output lacks 'RESET TOOL DATA'); not caused by story 9.2.
 
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-4-terminal-view-in-the-tui.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-4-terminal-view-in-the-tui.md`
   summary: Cancelling a container command while `core/shell` is still awaiting the container health check has no effect until that unbounded `getContainerHealth` call settles.
   evidence: `src/core/shell/index.ts` `execute` awaits `deps.docker.getContainerHealth` before honouring `cancelRequested`, with no timeout (Story 9.1 contract); the Terminal view shows "running" meanwhile.
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-4-terminal-view-in-the-tui.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-4-terminal-view-in-the-tui.md`
   summary: No test covers the composition root `src/bin/tui.ts` wiring the shell port and closing the terminal on exit.
   evidence: every slice/view test injects its own fake `shell`; removing `shell: createShellSessionPort()` from `src/bin/tui.ts` would leave the real app's terminal disabled with the suite green.
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-7-health-first-service-status-resolution.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-7-health-first-service-status-resolution.md`
   summary: A `healthUrl` added to the manifest of a container-less service while the Logs zone is open is not picked up until container presence is re-resolved, because the presence cache short-circuits the manifest reload.
   evidence: Flagged by blind-hunter in the 9.7 review. The presence cache (`logsNoContainer`) predates 9.7; the resolver only reloads the manifest for rows already known to be probe-only. Manifest edits mid-session are rare; a zone re-entry or app restart picks the change up.
-- source_spec: `_bmad-output/implementation-artifacts/spec-9-7-health-first-service-status-resolution.md`
+- source_spec: `_bmad-output/implementation-artifacts/epic-9/spec-9-7-health-first-service-status-resolution.md`
   summary: The same `healthUrl` can be probed by up to three independent pollers per 5 s interval (Logs pane, Logs listed row, Update list) with no shared cache or dedupe.
   evidence: Flagged by blind-hunter in the 9.7 review. Each poller existed before 9.7 with its own container read; 9.7 routes each through the resolver, so steady health-route traffic now scales with the number of open views. Acceptable for local dev services; a shared short-TTL status cache would remove it.
