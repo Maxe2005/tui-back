@@ -2427,7 +2427,7 @@ describe("logs slice: inline service health & restart", () => {
     await store.getState().runLogsPaneShortcut("/repo/a", "restart", "svc-a");
 
     expect(containerRestart).not.toHaveBeenCalled();
-    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("group update");
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("Restart unavailable — group update");
   });
 
   it("R (clean mode) while blocked never falls back: the blocking reason shows", async () => {
@@ -2439,7 +2439,7 @@ describe("logs slice: inline service health & restart", () => {
     await store.getState().runLogsPaneShortcut("/repo/a", "restart", "svc-a");
 
     expect(containerRestart).not.toHaveBeenCalled();
-    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("group update");
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("Clean restart unavailable — group update");
   });
 
   it("R on a container-less pane does not restart and shows `no container` on the pane", async () => {
@@ -2451,7 +2451,7 @@ describe("logs slice: inline service health & restart", () => {
 
     expect(containerRestart).not.toHaveBeenCalled();
     expect(recipeRun).not.toHaveBeenCalled();
-    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("no container");
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("Restart unavailable — no container");
   });
 
   it("R on a pane already restarting is a no-op (the slice guard)", async () => {
@@ -2545,24 +2545,140 @@ describe("logs slice: inline service health & restart", () => {
     await store.getState().runLogsPaneAction("/repo/a", "restart-simple", "svc-a");
 
     expect(containerRestart).not.toHaveBeenCalled();
-    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("group update");
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("Restart unavailable — group update");
   });
 
-  it("runLogsPaneAction with a failed re-list runs nothing", async () => {
-    const rejecting: LockPort = {
+  function rejectingLock(): LockPort {
+    return {
       acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
       peek: vi.fn(async () => {
         throw new Error("boom");
       }),
     };
-    const { deps, launch } = restartDeps({ lock: rejecting });
+  }
+
+  it("runLogsPaneAction with a failed re-list runs no restart and says so", async () => {
+    const { deps, containerRestart } = restartDeps({ lock: rejectingLock() });
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().runLogsPaneAction("/repo/a", "restart-simple", "svc-a");
+
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("the service actions could not be loaded — try again");
+  });
+
+  it("Open in IDE (menu or O) is never blocked by a failed listing: it opens without re-listing", async () => {
+    const lock = rejectingLock();
+    const { deps, launch } = restartDeps({ lock });
     const store = createAppStore(deps);
     await store.getState().subscribeLogsPane("/repo/a", "svc-a");
 
     await store.getState().runLogsPaneAction("/repo/a", "open-in-ide", "svc-a");
+    await store.getState().runLogsPaneShortcut("/repo/a", "ide", "svc-a");
 
-    expect(launch).not.toHaveBeenCalled();
-    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("the service actions could not be loaded — try again");
+    expect(launch).toHaveBeenCalledTimes(2);
+    expect(lock.peek).not.toHaveBeenCalled();
+  });
+
+  it("a restart is refused with a notice while the health poll reports the pane restarting (shortcut and menu)", async () => {
+    const { deps, containerRestart, getContainerHealth } = restartDeps();
+    // The poll keeps reading `restarting`, so an in-flight cycle never overwrites the seed.
+    getContainerHealth.mockImplementation(async () => ok("restarting" as never));
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    const seed = () =>
+      store.setState((state) => ({
+        logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, health: "restarting" as const } },
+      }));
+
+    seed();
+    await store.getState().runLogsPaneShortcut("/repo/a", "restart", "svc-a");
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("Restart unavailable — restart in progress");
+    seed();
+    await store.getState().runLogsPaneAction("/repo/a", "restart-simple", "svc-a");
+
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("Restart unavailable — restart in progress");
+  });
+
+  it("restartLogsPane on a pane known container-less says so instead of returning silently", async () => {
+    const { deps, containerRestart } = restartDeps();
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+    store.setState((state) => ({
+      logsPanes: { ...state.logsPanes, "/repo/a": { ...state.logsPanes["/repo/a"]!, noContainer: true } },
+    }));
+
+    await store.getState().restartLogsPane("/repo/a");
+
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("Restart unavailable — no container");
+  });
+
+  it("R (clean, no recipe) falls back to the simple restart's own reason when that one is disabled too", async () => {
+    // list() checks the simple restart's service lock first, then the clean one's: answering
+    // "held" to the first peek only lists simple as `restart in progress` while clean is
+    // disabled solely for its missing recipe — the fallback then meets a disabled simple entry.
+    let servicePeeks = 0;
+    const peek = vi.fn(async (key: string) => ok({ locked: key.startsWith("service:") && servicePeeks++ === 0 }));
+    const { deps, containerRestart } = restartDeps({
+      lock: { acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })), peek },
+    });
+    const store = createAppStore(deps);
+    store.setState((s) => ({ settings: { ...s.settings, logs: { ...s.settings.logs, restartMode: "clean" } } }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().runLogsPaneShortcut("/repo/a", "restart", "svc-a");
+
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("Restart unavailable — restart in progress");
+  });
+
+  it("R fallback: a failed simple restart keeps the no-recipe notice next to the streamError", async () => {
+    const { deps } = restartDeps({ container: { restart: vi.fn(async () => err("container-restart-error", "boom")) } });
+    const store = createAppStore(deps);
+    store.setState((s) => ({ settings: { ...s.settings, logs: { ...s.settings.logs, restartMode: "clean" } } }));
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().runLogsPaneShortcut("/repo/a", "restart", "svc-a");
+
+    const pane = store.getState().logsPanes["/repo/a"];
+    expect(pane?.streamError?.message).toBe("boom");
+    expect(pane?.notice).toBe("no clean-restart recipe — simple restart");
+  });
+
+  it("the actions never reject: a throwing terminal open becomes a pane notice", async () => {
+    const { deps } = restartDeps();
+    const store = createAppStore(deps);
+    store.setState({ openTerminal: vi.fn(async () => { throw new Error("boom"); }) });
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await expect(store.getState().runLogsPaneAction("/repo/a", "terminal-service", "svc-a")).resolves.toBeUndefined();
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("the action failed unexpectedly");
+  });
+
+  it("an action id missing from the fresh list shows a notice instead of returning silently", async () => {
+    const { deps } = restartDeps();
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    await store.getState().runLogsPaneAction("/repo/a", "made-up", "svc-a");
+
+    expect(store.getState().logsPanes["/repo/a"]?.notice).toBe("made-up unavailable — not offered for this service");
+  });
+
+  it("a pane closed while the list was loading gets nothing run on it", async () => {
+    const { deps, containerRestart } = restartDeps();
+    const store = createAppStore(deps);
+    await store.getState().subscribeLogsPane("/repo/a", "svc-a");
+
+    const run = store.getState().runLogsPaneAction("/repo/a", "restart-simple", "svc-a");
+    store.getState().unsubscribeLogsPane("/repo/a");
+    await run;
+
+    expect(containerRestart).not.toHaveBeenCalled();
+    expect(store.getState().logsPanes["/repo/a"]).toBeUndefined();
   });
 });
 
