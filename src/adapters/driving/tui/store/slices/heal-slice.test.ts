@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RestartRow } from '../../../../../core/edt/switch-restart.js';
 import { HEAL_NOTHING_TO_DO_MESSAGE } from '../../../../../core/heal/index.js';
 import type { DockerPort, HealthState } from '../../../../../core/ports/docker.js';
+import type { HealthProbePort } from '../../../../../core/ports/health-probe.js';
 import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../../core/ports/git.js';
 import type { LockPort } from '../../../../../core/ports/lock.js';
@@ -20,7 +21,7 @@ import { HEAL_BUSY_MESSAGE, HEAL_NOTICE_TIMEOUT_MS, HEAL_UNWIRED_MESSAGE, orderH
 // route answers 2xx only while the container is up. A restart brings the container up.
 function fakeDeps(
   health: Record<string, HealthState>,
-  overrides: { activeUlid?: string | null; restartGate?: Promise<void>; withHealthProbe?: boolean } = {},
+  overrides: { activeUlid?: string | null; restartGate?: Promise<void>; withHealthProbe?: boolean; probe?: HealthProbePort['probe'] } = {},
 ) {
   const containers = { ...health };
   const names = Object.keys(health);
@@ -38,12 +39,12 @@ function fakeDeps(
     containers[container.replace('ctr-', '')] = 'up';
     return ok(undefined);
   });
-  const healthProbe = {
-    probe: vi.fn(async (url: string) => {
-      const name = url.replace('http://', '').replace('/health', '');
-      return ok(containers[name] === 'up' ? { healthy: true, status: 200 } : { healthy: false, reason: 'connection refused' });
-    }),
+  // By default the route answers 2xx only while the container is up.
+  const defaultProbe: HealthProbePort['probe'] = async (url) => {
+    const name = url.replace('http://', '').replace('/health', '');
+    return ok(containers[name] === 'up' ? { healthy: true, status: 200 } : { healthy: false, reason: 'connection refused' });
   };
+  const healthProbe = { probe: vi.fn(overrides.probe ?? defaultProbe) };
   const edtRegistry = {
     list: vi.fn(async () =>
       ok([
@@ -80,7 +81,7 @@ function fakeDeps(
     restart: { run: vi.fn(async () => ok({ output: '' })) },
     ...(overrides.withHealthProbe === false ? {} : { healthProbe }),
   };
-  return { deps, containerRestart, settings };
+  return { deps, containerRestart, settings, healthProbe };
 }
 
 function storeWith(deps: AppStoreDeps) {
@@ -177,6 +178,22 @@ describe('heal slice', () => {
     expect(store.getState().healRun?.mode).toBe('clean');
     expect(store.getState().settings.dashboard.restartMode).toBe('simple');
     expect(settings.save).not.toHaveBeenCalled();
+  });
+
+  it('never probes a service whose health check is disabled, in the plan or the verify step', async () => {
+    // x is up but its route fails; y is down. Both have their health check turned off.
+    const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
+    const { deps, healthProbe } = fakeDeps({ x: 'up', y: 'down' }, { probe });
+    const { store } = storeWith(deps);
+    store.setState({ settings: { ...DEFAULT_SETTINGS, services: { healthCheckDisabled: ['svc-x', 'svc-y'] } } });
+    await store.getState().openHeal();
+    expect(store.getState().healRun?.rows.map((row) => [row.service, row.phase, row.skipReason])).toEqual([
+      ['svc-y', 'pending', undefined],
+      ['svc-x', 'skipped', 'up'],
+    ]);
+    await store.getState().startHeal();
+    expect(store.getState().healRun?.rows.find((row) => row.service === 'svc-y')).toMatchObject({ phase: 'up-unverified' });
+    expect(healthProbe.probe).not.toHaveBeenCalled();
   });
 
   it('Esc in confirm closes and restarts nothing', async () => {
