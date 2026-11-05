@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardOtherService, DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import { MIN_TERMINAL_ROWS, SHELL_CHROME_ROWS } from '../../shared/bounds/bounds.js';
 import { BANNER_LINES } from './launch-banner.js';
-import { edtKeyEffect, edtSectionActions, formatEdtAction, formatEdtLine, resolveEdtSection, actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, statusLabel, attentionBadge, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, type AttentionItem, rowIndexForAttention } from './dashboard.logic.js';
+import { healthCheckNote, edtKeyEffect, edtSectionActions, formatEdtAction, formatEdtLine, resolveEdtSection, actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, statusLabel, attentionBadge, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, type AttentionItem, rowIndexForAttention } from './dashboard.logic.js';
 
 const FIELD_ERROR = { ok: false as const, error: { code: 'x', message: 'y' } };
 
@@ -81,6 +81,27 @@ function row(overrides: Partial<DashboardService> = {}): DashboardService {
     ...overrides,
   };
 }
+
+describe('health check off note (story 9.11)', () => {
+  const off = row({ status: { ok: true, value: { state: 'up', verified: false, container: 'up', healthCheck: 'disabled' } } });
+  it('is a dim note, never an issue: no marker and no reason on its own', () => {
+    expect(healthCheckNote(off)).toBe('health check off');
+    expect(issueMarker(off)).toBe(' ');
+    expect(reasonLine(off)).toBeNull();
+  });
+  it('leaves real issues marked alongside it', () => {
+    const dirty = row({
+      status: { ok: true, value: { state: 'down', verified: false, container: 'down', healthCheck: 'disabled' } },
+      workingTree: { ok: true, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
+    });
+    expect(healthCheckNote(dirty)).toBe('health check off');
+    expect(issueMarker(dirty)).toBe('!');
+    expect(reasonLine(dirty)).toBe('uncommitted changes');
+  });
+  it('is absent for an enabled check', () => {
+    expect(healthCheckNote(row())).toBeNull();
+  });
+});
 
 describe('row anomalies', () => {
   it('prints no marker and no reason for a healthy row', () => {

@@ -261,6 +261,32 @@ describe('DashboardZone snapshot sections', () => {
     expect(output).toMatch(/⚠\s*svc-b · health route answers but container is down/);
   });
 
+  it('shows a dim "health check off" instead of "No issue." for a disabled check, and after a real issue (story 9.11)', async () => {
+    const [first, second] = ACTIVE.services;
+    const clean = { uncommitted: false, mergeInProgress: false, rebaseInProgress: false };
+    const off = { ok: true as const, value: { state: 'up' as const, verified: false, container: 'up' as const, healthCheck: 'disabled' as const } };
+    const quiet = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { ...ACTIVE, services: [{ ...first, workingTree: { ok: true, value: clean }, status: off }, second] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const quietOutput = await renderToString(<DashboardZone useStore={quiet} />);
+    expect(quietOutput).toContain('health check off');
+    expect(quietOutput).not.toContain('No issue.');
+    expect(quietOutput).not.toMatch(/!\s*svc-a/);
+
+    const dirty = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { ...ACTIVE, services: [{ ...first, workingTree: { ok: true, value: { ...clean, uncommitted: true } }, status: off }, second] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const dirtyOutput = await renderToString(<DashboardZone useStore={dirty} />);
+    expect(dirtyOutput).toContain('uncommitted changes');
+    expect(dirtyOutput).toContain('health check off');
+  });
+
   it('shows the focused row actions with their unavailable reasons, and the running progress', async () => {
     const actions = [
       { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: { available: true as const } },

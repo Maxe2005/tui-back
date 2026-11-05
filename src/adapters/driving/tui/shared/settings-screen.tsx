@@ -76,7 +76,7 @@ export const SERVICES_MANIFEST_UNAVAILABLE_REASON = 'manifest unavailable';
 
 export function buildServicesSettingsRows(
   branches: readonly Pick<ServiceBranchDivergence, 'service' | 'path' | 'healthUrl'>[] | null,
-  errors: readonly Pick<BranchDivergenceEntryError, 'path'>[],
+  errors: readonly BranchDivergenceEntryError[],
 ): ServicesSettingsRow[] {
   const listed: ServicesSettingsRow[] = (branches ?? []).map((row) => ({
     key: row.path,
