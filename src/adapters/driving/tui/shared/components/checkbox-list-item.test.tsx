@@ -52,7 +52,6 @@ describe('CheckboxListItem', () => {
     expect(output).toContain('(no healthUrl)');
   });
 
-
   it('renders the unchecked state', async () => {
     const output = await renderToString(<CheckboxListItem label="api-gateway" />);
     expect(output).toContain('[ ]');

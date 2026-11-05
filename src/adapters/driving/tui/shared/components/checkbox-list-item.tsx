@@ -3,6 +3,8 @@ import { colors } from '../theme/theme.js';
 
 export type CheckboxListItemProps = {
   label: string;
+  // Accepted for callers' symmetry but not drawn here: the highlighted row's `›` cursor is a
+  // sibling column each list renders itself (see settings-screen).
   selected?: boolean;
   nested?: boolean;
   meta?: string;
@@ -23,7 +25,7 @@ export type ResolvedCheckboxItem = {
 export function resolveCheckboxItemLayout(
   props: CheckboxListItemProps,
 ): ResolvedCheckboxItem {
-  const { nested = false, state = 'unchecked', disabled = false } = props;
+  const { selected = false, nested = false, state = 'unchecked', disabled = false } = props;
   const isChecked = state === 'checked';
   return {
     boxGlyph: disabled ? '[-]' : isChecked ? '[x]' : '[ ]',
