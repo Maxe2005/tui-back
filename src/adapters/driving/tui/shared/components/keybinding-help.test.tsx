@@ -108,7 +108,7 @@ describe('KeybindingHelp modal', () => {
     store.setState({ helpFilter: 'heal' });
     const output = await renderToString(<KeybindingHelp useStore={store} />, { columns: 160, rows: 40 });
     expect(output).toContain('[H (Dashboard)]');
-    expect(output).toContain('Heal: restart services that are not up');
+    expect(output).toContain('Dashboard: heal — restart services that are not up, after confirmation');
   });
 
   it('renders only the visible slice of keybindings', async () => {

@@ -204,7 +204,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'H (Dashboard)',
-    description: 'Heal: restart services that are not up',
+    description: 'Dashboard: heal — restart services that are not up, after confirmation',
     footer: { key: 'H', verb: 'heal', zones: ['dashboard'], when: 'active-edt' },
   },
   {
