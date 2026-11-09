@@ -522,7 +522,7 @@ export function isDefaultLogFilterScope(scope: LogFilterScope): boolean {
 const LOG_LEVEL_PATTERN = /\b(ERROR|WARN|INFO|DEBUG)\b/i;
 
 export function detectLogLevel(text: string): LogLevel | null {
-  const match = LOG_LEVEL_PATTERN.exec(text);
+  const match = LOG_LEVEL_PATTERN.exec(splitAnsi(text).visible);
   return match === null ? null : (match[1].toUpperCase() as LogLevel);
 }
 
@@ -534,6 +534,52 @@ export function detectLogLevel(text: string): LogLevel | null {
 export type CompiledLogFilter =
   | { ok: true; apply: (line: LogLine) => LogLine | null }
   | { ok: false; error: string };
+
+// Colourised logs carry CSI escape sequences (`ESC [ … final byte`) inside the text. Rules and level
+// detection work on the visible text; `escapes` remembers each sequence and the visible offset it
+// sat in front of, so a rewritten line can keep every colour code.
+const CSI_SEQUENCE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
+
+type AnsiSplit = { visible: string; escapes: Array<{ at: number; sequence: string }> };
+
+function splitAnsi(text: string): AnsiSplit {
+  if (!text.includes('\u001b')) {
+    return { visible: text, escapes: [] };
+  }
+  const escapes: AnsiSplit['escapes'] = [];
+  let visible = '';
+  let cursor = 0;
+  for (const match of text.matchAll(CSI_SEQUENCE)) {
+    visible += text.slice(cursor, match.index);
+    escapes.push({ at: visible.length, sequence: match[0] });
+    cursor = match.index + match[0].length;
+  }
+  return { visible: visible + text.slice(cursor), escapes };
+}
+
+// Rebuilds a line from the kept visible ranges (ordered, non-overlapping), joined by `separator`,
+// re-inserting every escape sequence in its original order so kept characters keep their colours.
+function rebuildWithEscapes(split: AnsiSplit, kept: Array<[number, number]>, separator: string): string {
+  let result = '';
+  let escapeIndex = 0;
+  const flushEscapes = (upTo: number): void => {
+    while (escapeIndex < split.escapes.length && split.escapes[escapeIndex].at <= upTo) {
+      result += split.escapes[escapeIndex].sequence;
+      escapeIndex += 1;
+    }
+  };
+  kept.forEach(([start, end], index) => {
+    if (index > 0) {
+      result += separator;
+    }
+    for (let position = start; position < end; position += 1) {
+      flushEscapes(position);
+      result += split.visible[position];
+    }
+  });
+  flushEscapes(split.visible.length);
+  return result;
+}
 
 // Every non-empty match of `query` in `text`, as [start, end) ranges. Empty matches (e.g. `a*`)
 // are skipped, and the scan always advances, so a pattern that can match nothing cannot loop.
@@ -554,16 +600,6 @@ function findMatchRanges(text: string, matcher: RegExp): Array<[number, number]>
     }
     ranges.push([match.index, match.index + match[0].length]);
   }
-}
-
-function removeRanges(text: string, ranges: Array<[number, number]>): string {
-  let result = '';
-  let cursor = 0;
-  for (const [start, end] of ranges) {
-    result += text.slice(cursor, start);
-    cursor = end;
-  }
-  return result + text.slice(cursor);
 }
 
 export function compileLogFilter(spec: Pick<LogFilterRule, 'mode' | 'query' | 'action' | 'target'>): CompiledLogFilter {
@@ -588,18 +624,34 @@ export function compileLogFilter(spec: Pick<LogFilterRule, 'mode' | 'query' | 'a
       if (matcher === null) {
         return line;
       }
-      const ranges = findMatchRanges(line.text, matcher);
+      const split = splitAnsi(line.text);
+      const ranges = findMatchRanges(split.visible, matcher);
       if (target === 'line') {
         return (ranges.length > 0) === (action === 'show') ? line : null;
       }
       if (ranges.length === 0) {
         return action === 'show' ? null : line;
       }
-      const text =
-        action === 'hide'
-          ? removeRanges(line.text, ranges)
-          : ranges.map(([start, end]) => line.text.slice(start, end)).join(' ');
-      return text.trim() === '' ? null : { ...line, text };
+      let kept = ranges;
+      let separator = ' ';
+      if (action === 'hide') {
+        kept = [];
+        separator = '';
+        let cursor = 0;
+        for (const [start, end] of ranges) {
+          if (start > cursor) {
+            kept.push([cursor, start]);
+          }
+          cursor = end;
+        }
+        if (cursor < split.visible.length) {
+          kept.push([cursor, split.visible.length]);
+        }
+      }
+      if (kept.every(([start, end]) => split.visible.slice(start, end).trim() === '')) {
+        return null;
+      }
+      return { ...line, text: rebuildWithEscapes(split, kept, separator) };
     },
   };
 }
