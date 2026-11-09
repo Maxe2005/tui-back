@@ -15,6 +15,6 @@
 ## Troubleshooting: dependencies in worktrees
 
 - Each git worktree needs its **own** `node_modules`: run `npm ci` at the worktree root (it is git-ignored). Never replace it with a symlink to another checkout's `node_modules`.
-- `Cannot find package 'tsx'` when running `node src/bin/tui-back.mjs` means `node_modules` is missing or incomplete in this worktree → run `npm ci`.
+- `Cannot find package 'tsx'` when running `node src/bin/tui-back.mjs tui` means `node_modules` is missing or incomplete in this worktree → run `npm ci`.
 - Vitest/Ink failures like `Cannot read properties of null (reading 'useRef')` mean two copies of React are loaded. Look for a stray `node_modules/node_modules` symlink (typically created by an `ln -s ... node_modules` run while the directory already existed) and delete it, plus `node_modules/.vite`; if in doubt, `rm -rf node_modules && npm ci`.
 - Never leave a worktree without `node_modules` after a verification run: if one was linked temporarily, remove the link and run `npm ci`.
