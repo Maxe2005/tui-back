@@ -12,7 +12,7 @@ import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
-import { historyEntryLabel, type FilterEditorState } from './logs-zone.logic.js';
+import { formatFilterActionTarget, historyEntryLabel, type FilterEditorState } from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
 
 // The filter-history grid browser's column gap — mirrors command-bar.tsx's grid spacing since
@@ -64,7 +64,9 @@ export function LogFilterEditor({
         cursor={editor.cursor}
         focused={gridCursor === null}
       />
-      <Text color={colors.text} wrap="truncate-end">Level: {editor.level ?? 'ALL'}</Text>
+      <Text color={colors.text} wrap="truncate-end">
+        Level: {editor.level ?? 'ALL'}  Filter: {formatFilterActionTarget(editor.action, editor.target)}
+      </Text>
       {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
       {gridCursor !== null && gridLayout !== null ? (
         history.length === 0 ? (

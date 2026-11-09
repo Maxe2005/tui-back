@@ -1,6 +1,7 @@
 // tui/zones/logs: real-keypress interactions — renderToString's fake stdin never emits data, so
 // Tab/Space/Enter/Escape/Ctrl+A's dispatch through a real `useInput` round-trip is only
 // observable here (shared/test-support/fake-tty.ts).
+import { encodeFilterHistoryEntry } from './logs-zone.logic.js';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
@@ -498,6 +499,120 @@ describe('LogsZone real-keypress interactions', () => {
       instance.unmount();
       await instance.waitUntilExit();
     }
+  });
+
+  it('Ctrl+X / Ctrl+T switch action and target, commit them to history, and recall restores all three', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    const lastFrame = () => stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await press(instance, stdin, '/');
+      expect(lastFrame()).toContain('Filter: show line');
+      await press(instance, stdin, 'noise');
+      await press(instance, stdin, '\x18');
+      expect(lastFrame()).toContain('Filter: hide line');
+      await press(instance, stdin, '\x14');
+      expect(lastFrame()).toContain('Filter: hide match');
+      expect(store.getState().logsGlobalFilter).toMatchObject({ query: 'noise', action: 'hide', target: 'match' });
+      await press(instance, stdin, KEYS.enter);
+
+      const history = store.getState().filterHistory['global:text'];
+      expect(history).toHaveLength(1);
+
+      await press(instance, stdin, '/');
+      await press(instance, stdin, '\x18');
+      await press(instance, stdin, '\x14');
+      expect(lastFrame()).toContain('Filter: show line');
+      await press(instance, stdin, KEYS.up);
+      expect(lastFrame()).toContain('Text: noise');
+      expect(lastFrame()).toContain('Filter: hide match');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  describe('action/target in the filter editor', () => {
+    const hidden = encodeFilterHistoryEntry({ query: 'recalled', action: 'hide', target: 'match' });
+    const lastGlobalFrame = (out: string) => out.slice(out.lastIndexOf('GLOBAL LOG FILTER'));
+
+    it('after recalling a hide/match entry, typing, Backspace or Tab restores the draft own action and target', async () => {
+      for (const keystroke of ['X', KEYS.backspace, KEYS.tab]) {
+        const store = seedStore({ filterHistory: { 'global:text': [hidden] } });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await press(instance, stdin, '/');
+          await press(instance, stdin, 'draft');
+          await press(instance, stdin, KEYS.up);
+          expect(lastGlobalFrame(stdout.output)).toContain('Filter: hide match');
+          await press(instance, stdin, keystroke);
+          expect(lastGlobalFrame(stdout.output)).toContain('Filter: show line');
+          expect(store.getState().logsGlobalFilter).toMatchObject({ action: 'show', target: 'line' });
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      }
+    });
+
+    it('Enter on a hide/match grid entry applies its query, action and target', async () => {
+      const store = seedStore({ filterHistory: { 'global:text': [hidden] } });
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, '/');
+        await press(instance, stdin, KEYS.down);
+        await press(instance, stdin, KEYS.enter);
+        expect(store.getState().logsGlobalFilter).toMatchObject({ query: 'recalled', action: 'hide', target: 'match' });
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('the pane editor stores action/target, annotates the pane and shows them again on reopen', async () => {
+      const store = seedStore();
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.tab);
+        await press(instance, stdin, ' ');
+        await press(instance, stdin, KEYS.tab);
+        await press(instance, stdin, 'f');
+        await press(instance, stdin, 'boom');
+        await press(instance, stdin, '\x18');
+        await press(instance, stdin, '\x14');
+        await press(instance, stdin, KEYS.enter);
+        expect(store.getState().logsPaneFilters['/repos/api-gateway']).toMatchObject({ query: 'boom', action: 'hide', target: 'match' });
+        expect(stdout.output.slice(stdout.output.lastIndexOf('LOGS'))).toContain('hide match');
+        await press(instance, stdin, 'f');
+        expect(stdout.output.slice(stdout.output.lastIndexOf('PANE LOG FILTER'))).toContain('Filter: hide match');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('Escape after Ctrl+X / Ctrl+T restores the pre-open action and target', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, '/');
+        await press(instance, stdin, 'boom');
+        await press(instance, stdin, '\x18');
+        await press(instance, stdin, '\x14');
+        expect(store.getState().logsGlobalFilter).toMatchObject({ action: 'hide', target: 'match' });
+        await pressEscape(instance, stdin);
+        expect(store.getState().logsGlobalFilter).toMatchObject({ query: '', action: 'show', target: 'line' });
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
   });
 
   // A pure caret move while browsing history must not snap the draft back — only typing/
