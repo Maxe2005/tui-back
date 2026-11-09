@@ -5,6 +5,7 @@
 // points XDG_CONFIG_HOME at a temp dir so the real config dir is never touched.
 import { describe, expect, it, afterEach } from 'vitest';
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -12,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { lockPathFor } from '../adapters/driven/lock/helpers.js';
 
-const scriptPath = fileURLToPath(new URL('./cli-back.mjs', import.meta.url));
+const scriptPath = fileURLToPath(new URL('./tui-back.mjs', import.meta.url));
 const manifestYaml = [
   'service: route-explorer',
   'container: route-explorer',
@@ -138,12 +139,25 @@ describe('tui-back CLI (black-box)', () => {
     expect(parsed.error.code).toBe('unknown-subcommand');
   });
 
-  it("package.json's bin field exposes the umbrella CLI and the interactive TUI entry point (AD-2)", async () => {
+  it("package.json's bin field exposes exactly one executable binary, tui-back (AD-2)", async () => {
     const pkg = await import('../../package.json', { with: { type: 'json' } });
-    expect(Object.keys(pkg.default.bin).sort()).toEqual([
-      'tui-back',
-      'tui-back-tui',
-    ]);
+    expect(Object.keys(pkg.default.bin)).toEqual(['tui-back']);
+    const target = fileURLToPath(new URL(`../../${pkg.default.bin['tui-back']}`, import.meta.url));
+    await access(target, constants.X_OK);
+  });
+
+  it('`tui` with non-TTY stdin exits 1 with an interactive-terminal message', () => {
+    const { status, stdout, stderr } = runCli(['tui']);
+
+    expect(status).toBe(1);
+    expect(stdout).toBe('');
+    expect(stderr).toContain('tui-back tui requires an interactive terminal');
+  });
+
+  it('--help lists the static tui entry', () => {
+    const parsed = JSON.parse(runCli(['--help']).stdout.trim());
+
+    expect(parsed.data.commands.map((c: { name: string }) => c.name)).toContain('tui');
   });
 });
 
@@ -786,7 +800,7 @@ describe('tui-back --help (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'heal', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'heal', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete', 'tui']);
   });
 });
 
