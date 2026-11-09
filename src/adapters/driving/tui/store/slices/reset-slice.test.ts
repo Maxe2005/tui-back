@@ -24,6 +24,8 @@ type Disk = {
   activeEdt: string | null;
   filterHistory: Record<string, string[]> | null;
   commandHistory: string[] | null;
+  logRules: unknown;
+  logRuleSets: unknown;
 };
 
 let baseDir: string;
@@ -76,6 +78,16 @@ function fakeDeps(disk: Disk, overrides: { lock?: LockPort } = {}): AppStoreDeps
       disk.commandHistory = history;
       return ok(undefined);
     }),
+    readLogRules: vi.fn(async () => ok(disk.logRules)),
+    writeLogRules: vi.fn(async (rules: unknown) => {
+      disk.logRules = rules;
+      return ok(undefined);
+    }),
+    readLogRuleSets: vi.fn(async () => ok(disk.logRuleSets)),
+    writeLogRuleSets: vi.fn(async (sets: unknown) => {
+      disk.logRuleSets = sets;
+      return ok(undefined);
+    }),
   };
   const manifest: ManifestPort = {
     load: vi.fn(async (repoPath: string) =>
@@ -121,6 +133,8 @@ function populatedDisk(): Disk {
     activeEdt: 'ULID1',
     filterHistory: { 'global:text': ['error'] },
     commandHistory: ['update-service api'],
+    logRules: { global: [{ mode: 'text', query: 'noise', action: 'hide', target: 'line', enabled: true }] },
+    logRuleSets: [{ name: 'n', rules: [{ mode: 'text', query: 'noise', action: 'hide', target: 'line', enabled: true }] }],
   };
 }
 
@@ -324,6 +338,24 @@ describe('reset slice', () => {
     expect(store.getState().resetStatus).toBe('done');
     // withActionLock turns a throw inside the locked work into an internal-error outcome.
     expect(store.getState().resetResult?.outcomes.edts?.outcome).toBe('failed');
+  });
+
+  it('runReset with histories clears the persisted rules and library, on disk and in the store', async () => {
+    const disk = populatedDisk();
+    const store = createAppStore(fakeDeps(disk));
+    const rule = { mode: 'text' as const, query: 'noise', action: 'hide' as const, target: 'line' as const, enabled: true };
+    await store.getState().loadLogsRules();
+    expect(store.getState().logsGlobalFilter.rules).toHaveLength(1);
+    expect(store.getState().logsRuleSets).toHaveLength(1);
+    store.getState().setLogsGlobalFilter((current) => ({ ...current, level: 'WARN' }));
+    store.getState().openResetScreen();
+    await store.getState().runReset(['histories']);
+
+    expect(disk.logRules).toEqual({});
+    expect(disk.logRuleSets).toEqual([]);
+    expect(store.getState().logsGlobalFilter).toEqual({ level: 'WARN', rules: [] });
+    expect(store.getState().logsRuleSets).toEqual([]);
+    expect(rule.query).toBe('noise');
   });
 
   it('runReset never stays running when something outside the use-case throws', async () => {

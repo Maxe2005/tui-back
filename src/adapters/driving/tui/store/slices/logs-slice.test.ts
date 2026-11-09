@@ -7,6 +7,7 @@ import type { DockerPort } from '../../../../../core/ports/docker.js';
 import type { ManifestPort } from '../../../../../core/ports/manifest.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { isPaneEngagedInGlobalFilter, resolveEffectiveLines } from '../../zones/logs/logs-zone.logic.js';
 import { LOGS_HEALTH_POLL_INTERVAL_MS, LOGS_LISTED_HEALTH_POLL_INTERVAL_MS } from './logs-slice.js';
 
 async function flush(): Promise<void> {
@@ -33,6 +34,10 @@ function fakeState(): StatePort {
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
   };
 }
 
@@ -653,23 +658,25 @@ describe('logs display settings (session-only)', () => {
     return store;
   }
 
-  it('deselecting a service drops its own settings but keeps the global ones and other services', () => {
+  it('deselecting a service drops its own settings (its rules stay) but keeps the global ones and other services', () => {
     const store = seed();
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { ...spec, level: 'ERROR' } }));
     store.getState().toggleLogsEdtSelection('/repo/api');
     const state = store.getState();
     expect(state.logsPaneWrap).toEqual({ '/repo/web': true });
     expect(state.logsPaneFilterEngaged).toEqual({});
-    expect(state.logsPaneFilters).toEqual({ '/repo/web': spec });
+    expect(state.logsPaneFilters).toEqual({ '/repo/api': spec, '/repo/web': spec });
     expect(state.logsVisibility.showTimestamps).toBe(false);
     expect(state.logsGlobalFilter).toEqual(spec);
   });
 
-  it('deselect-all and select-all drop the settings of every service that leaves the selection', () => {
+  it('deselect-all and select-all drop the settings of every service that leaves the selection, keeping rules', () => {
     const store = seed();
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { ...spec, level: 'WARN' } }));
     store.getState().selectAllLogsEdtServices(['/repo/web']);
-    expect(Object.keys(store.getState().logsPaneFilters)).toEqual(['/repo/web']);
+    expect(store.getState().logsPaneFilters['/repo/api']).toEqual(spec);
     store.getState().deselectAllLogsEdtServices();
-    expect(store.getState().logsPaneFilters).toEqual({});
+    expect(store.getState().logsPaneFilters).toEqual({ '/repo/api': spec, '/repo/web': spec });
     expect(store.getState().logsPaneWrap).toEqual({});
     expect(store.getState().logsVisibility.showTimestamps).toBe(false);
   });
@@ -683,5 +690,159 @@ describe('logs display settings (session-only)', () => {
     store.getState().openLogsFullscreen('/repo/web', 'web');
     store.getState().closeLogsFullscreen();
     expect(store.getState().logsPaneWrap['/repo/web']).toBe(true);
+  });
+});
+
+describe('persisted filter rules and rule sets', () => {
+  const rule = (query: string, patch: Record<string, unknown> = {}) => ({
+    mode: 'text' as const,
+    query,
+    action: 'hide' as const,
+    target: 'line' as const,
+    enabled: true,
+    ...patch,
+  });
+
+  function storeWith(disk: { rules?: unknown; sets?: unknown } = {}) {
+    const state = fakeState();
+    state.readLogRules = vi.fn(async () => ok(disk.rules ?? null));
+    state.readLogRuleSets = vi.fn(async () => ok(disk.sets ?? null));
+    const store = createAppStore(fakeDeps({ state }));
+    return { store, state };
+  }
+
+  it('restores each scope with order and enabled state, and the library', async () => {
+    const lists = { global: [rule('a'), rule('b', { enabled: false })], '/repo/api': [rule('c')] };
+    const { store } = storeWith({ rules: lists, sets: [{ name: 'noise', rules: [rule('a')] }] });
+    await store.getState().loadLogsRules();
+    const s = store.getState();
+    expect(s.logsGlobalFilter).toEqual({ level: null, rules: lists.global });
+    expect(s.logsPaneFilters['/repo/api']).toEqual({ level: null, rules: lists['/repo/api'] });
+    expect(s.logsRuleSets).toHaveLength(1);
+    expect(s.logsRulesWarning).toBeNull();
+  });
+
+  it('drops an uncompilable rule or a corrupt value and warns naming the field, still loading the rest', async () => {
+    const { store } = storeWith({ rules: { global: [rule('ok'), rule('(', { mode: 'regex' })] }, sets: 'oops' });
+    await store.getState().loadLogsRules();
+    const s = store.getState();
+    expect(s.logsGlobalFilter.rules.map((r) => r.query)).toEqual(['ok']);
+    expect(s.logsRuleSets).toEqual([]);
+    expect(s.logsRulesWarning).toContain('logRules.global[1]');
+    expect(s.logsRulesWarning).toContain('(+1 more)');
+  });
+
+  it('persists every rule change, never the level, and skips writes for level-only changes', async () => {
+    const { store, state } = storeWith();
+    await store.getState().loadLogsRules();
+    store.getState().setLogsGlobalFilter({ level: 'ERROR', rules: [rule('a')] });
+    await flush();
+    expect(state.writeLogRules).toHaveBeenLastCalledWith({ global: [rule('a')] });
+    const writes = vi.mocked(state.writeLogRules).mock.calls.length;
+    store.getState().setLogsGlobalFilter((current) => ({ ...current, level: 'WARN' }));
+    await flush();
+    expect(vi.mocked(state.writeLogRules).mock.calls.length).toBe(writes);
+  });
+
+  it('keeps persisted lists of unselected or unregistered services untouched across other edits', async () => {
+    const { store, state } = storeWith({ rules: { '/gone': [rule('x')] } });
+    await store.getState().loadLogsRules();
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { level: null, rules: [rule('y')] } }));
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    store.getState().setLogsGlobalFilter({ level: null, rules: [rule('g')] });
+    await flush();
+    expect(state.writeLogRules).toHaveBeenLastCalledWith({ global: [rule('g')], '/gone': [rule('x')], '/repo/api': [rule('y')] });
+  });
+
+  it('clearLogsScopeRules empties only that scope, keeping its level', async () => {
+    const { store, state } = storeWith({ rules: { global: [rule('g')], '/repo/api': [rule('y')] } });
+    await store.getState().loadLogsRules();
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { level: 'ERROR', rules: current['/repo/api'].rules } }));
+    store.getState().clearLogsScopeRules('/repo/api');
+    await flush();
+    expect(store.getState().logsPaneFilters['/repo/api']).toEqual({ level: 'ERROR', rules: [] });
+    expect(store.getState().logsGlobalFilter.rules).toHaveLength(1);
+    expect(state.writeLogRules).toHaveBeenLastCalledWith({ global: [rule('g')] });
+  });
+
+  it('library operations persist, never touch active lists, and clearLogsRuleSets leaves them alone', async () => {
+    const { store, state } = storeWith({ rules: { global: [rule('g')] } });
+    await store.getState().loadLogsRules();
+    expect(store.getState().saveLogsRuleSet('noise', store.getState().logsGlobalFilter.rules).ok).toBe(true);
+    expect(store.getState().saveLogsRuleSet('noise', [rule('z')]).ok).toBe(false);
+    expect(store.getState().saveLogsRuleSet('noise', [rule('z')], { overwrite: true }).ok).toBe(true);
+    expect(store.getState().renameLogsRuleSet(0, 'quiet').ok).toBe(true);
+    await flush();
+    expect(state.writeLogRuleSets).toHaveBeenLastCalledWith([{ name: 'quiet', rules: [rule('z')] }]);
+    expect(store.getState().deleteLogsRuleSet(0).ok).toBe(true);
+    expect(store.getState().logsGlobalFilter.rules).toEqual([rule('g')]);
+    store.getState().saveLogsRuleSet('again', [rule('a')]);
+    store.getState().clearLogsRuleSets();
+    await flush();
+    expect(store.getState().logsRuleSets).toEqual([]);
+    expect(state.writeLogRuleSets).toHaveBeenLastCalledWith([]);
+    expect(store.getState().logsGlobalFilter.rules).toEqual([rule('g')]);
+  });
+
+  it('clearLogsRulesAndDrainSaves empties lists and library in memory, keeping levels', async () => {
+    const { store } = storeWith({ rules: { global: [rule('g')] }, sets: [{ name: 'n', rules: [rule('a')] }] });
+    await store.getState().loadLogsRules();
+    store.getState().setLogsGlobalFilter((current) => ({ ...current, level: 'INFO' }));
+    await store.getState().clearLogsRulesAndDrainSaves();
+    expect(store.getState().logsGlobalFilter).toEqual({ level: 'INFO', rules: [] });
+    expect(store.getState().logsRuleSets).toEqual([]);
+  });
+
+  it('a rule edit made while the load is in flight keeps the not-yet-hydrated scopes in what it persists', async () => {
+    const { store, state } = storeWith({ rules: { global: [rule('g')], '/repo/api': [rule('y')] } });
+    const loading = store.getState().loadLogsRules();
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/web': { level: null, rules: [rule('w')] } }));
+    await loading;
+    await flush();
+    expect(state.writeLogRules).toHaveBeenLastCalledWith({ global: [rule('g')], '/repo/api': [rule('y')], '/repo/web': [rule('w')] });
+    expect(store.getState().logsGlobalFilter.rules).toEqual([rule('g')]);
+  });
+
+  it('a library edit made while the load is in flight is replayed on the loaded library', async () => {
+    const { store, state } = storeWith({ sets: [{ name: 'disk', rules: [rule('d')] }] });
+    const loading = store.getState().loadLogsRules();
+    expect(store.getState().saveLogsRuleSet('mine', [rule('m')]).ok).toBe(true);
+    await loading;
+    await flush();
+    expect(store.getState().logsRuleSets.map((set) => set.name)).toEqual(['disk', 'mine']);
+    expect(state.writeLogRuleSets).toHaveBeenLastCalledWith(store.getState().logsRuleSets);
+  });
+
+  it('never overwrites an unreadable field blindly: writes wait until the file reads again', async () => {
+    const state = fakeState();
+    state.readLogRules = vi.fn(async () => err('state-invalid-json', 'broken'));
+    const store = createAppStore(fakeDeps({ state }));
+    await store.getState().loadLogsRules();
+    expect(store.getState().logsRulesWarning).toContain('could not be read');
+    store.getState().setLogsGlobalFilter({ level: null, rules: [rule('a')] });
+    await flush();
+    expect(state.writeLogRules).not.toHaveBeenCalled();
+    state.readLogRules = vi.fn(async () => ok(null));
+    store.getState().setLogsGlobalFilter({ level: null, rules: [rule('a'), rule('b')] });
+    await flush();
+    expect(state.writeLogRules).toHaveBeenCalledTimes(1);
+  });
+
+  it('a deselected service keeps its rules and applies them again when reselected', () => {
+    const { store } = storeWith();
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { level: 'ERROR', rules: [rule('y')] } }));
+    store.getState().setLogsPaneFilterEngaged(() => ({ '/repo/api': false }));
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    const s = store.getState();
+    expect(s.logsEdtSelected).toEqual(['/repo/api']);
+    expect(s.logsPaneFilters['/repo/api']).toEqual({ level: null, rules: [rule('y')] });
+    expect(isPaneEngagedInGlobalFilter(s.logsPaneFilterEngaged, '/repo/api')).toBe(true);
+    const lines = [{ text: 'y here' }, { text: 'other' }] as never;
+    expect(
+      resolveEffectiveLines({ lines }, { showTimestamps: true, showStdout: true, showStderr: true }, s.logsGlobalFilter, true, s.logsPaneFilters['/repo/api']),
+    ).toHaveLength(1);
   });
 });
