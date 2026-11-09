@@ -3,6 +3,10 @@ import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import {
   applyLogFilters,
+  decodeFilterHistoryEntry,
+  encodeFilterHistoryEntry,
+  historyEntryLabel,
+  isDefaultLogFilterSpec,
   compileLogFilter,
   cycleFilterLevel,
   DEFAULT_LOG_FILTER,
@@ -521,31 +525,31 @@ describe('compileLogFilter', () => {
   const line = (text: string): LogLine => ({ timestamp: 't', stream: 'stdout', text });
 
   it('text mode: case-insensitive substring match; an empty query passes everything', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: 'boom', level: null });
+    const compiled = compileLogFilter({ mode: 'text', query: 'boom', level: null, action: 'show', target: 'line' });
     expect(compiled.ok).toBe(true);
     if (compiled.ok) {
-      expect(compiled.test(line('a BOOM happened'))).toBe(true);
-      expect(compiled.test(line('all quiet'))).toBe(false);
+      expect((compiled.apply(line('a BOOM happened')) !== null)).toBe(true);
+      expect((compiled.apply(line('all quiet')) !== null)).toBe(false);
     }
     const emptyQuery = compileLogFilter(DEFAULT_LOG_FILTER);
     expect(emptyQuery.ok).toBe(true);
     if (emptyQuery.ok) {
-      expect(emptyQuery.test(line('anything'))).toBe(true);
+      expect((emptyQuery.apply(line('anything')) !== null)).toBe(true);
     }
   });
 
   it('regex mode: compiles and matches a valid pattern', () => {
-    const compiled = compileLogFilter({ mode: 'regex', query: '^\\d+ms$', level: null });
+    const compiled = compileLogFilter({ mode: 'regex', query: '^\\d+ms$', level: null, action: 'show', target: 'line' });
     expect(compiled.ok).toBe(true);
     if (compiled.ok) {
-      expect(compiled.test(line('120ms'))).toBe(true);
-      expect(compiled.test(line('120 ms'))).toBe(false);
+      expect((compiled.apply(line('120ms')) !== null)).toBe(true);
+      expect((compiled.apply(line('120 ms')) !== null)).toBe(false);
     }
   });
 
   it('regex mode: an invalid pattern fails to compile with an inline error, never throws', () => {
-    expect(() => compileLogFilter({ mode: 'regex', query: '(unterminated', level: null })).not.toThrow();
-    const compiled = compileLogFilter({ mode: 'regex', query: '(unterminated', level: null });
+    expect(() => compileLogFilter({ mode: 'regex', query: '(unterminated', level: null, action: 'show', target: 'line' })).not.toThrow();
+    const compiled = compileLogFilter({ mode: 'regex', query: '(unterminated', level: null, action: 'show', target: 'line' });
     expect(compiled.ok).toBe(false);
     if (!compiled.ok) {
       expect(compiled.error.length).toBeGreaterThan(0);
@@ -553,22 +557,22 @@ describe('compileLogFilter', () => {
   });
 
   it('level restriction: a line with no detectable level is excluded once any level restriction is active', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: '', level: 'ERROR' });
+    const compiled = compileLogFilter({ mode: 'text', query: '', level: 'ERROR', action: 'show', target: 'line' });
     expect(compiled.ok).toBe(true);
     if (compiled.ok) {
-      expect(compiled.test(line('ERROR disk full'))).toBe(true);
-      expect(compiled.test(line('WARN low disk'))).toBe(false);
-      expect(compiled.test(line('no level tag at all'))).toBe(false);
+      expect((compiled.apply(line('ERROR disk full')) !== null)).toBe(true);
+      expect((compiled.apply(line('WARN low disk')) !== null)).toBe(false);
+      expect((compiled.apply(line('no level tag at all')) !== null)).toBe(false);
     }
   });
 
   it('combines text and level restrictions with AND', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: 'disk', level: 'ERROR' });
+    const compiled = compileLogFilter({ mode: 'text', query: 'disk', level: 'ERROR', action: 'show', target: 'line' });
     expect(compiled.ok).toBe(true);
     if (compiled.ok) {
-      expect(compiled.test(line('ERROR disk full'))).toBe(true);
-      expect(compiled.test(line('ERROR network down'))).toBe(false);
-      expect(compiled.test(line('WARN disk almost full'))).toBe(false);
+      expect((compiled.apply(line('ERROR disk full')) !== null)).toBe(true);
+      expect((compiled.apply(line('ERROR network down')) !== null)).toBe(false);
+      expect((compiled.apply(line('WARN disk almost full')) !== null)).toBe(false);
     }
   });
 });
@@ -585,7 +589,7 @@ describe('applyLogFilters', () => {
   });
 
   it('a disengaged pane (global passed as null) ignores the global filter entirely', () => {
-    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null };
+    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null, action: 'show', target: 'line' };
     // Engaged: only "disk" lines survive.
     expect(applyLogFilters(lines, global, null)).toEqual([lines[0], lines[2]]);
     // Disengaged (caller passes null in global's place): every line survives regardless.
@@ -593,13 +597,13 @@ describe('applyLogFilters', () => {
   });
 
   it('a global text filter and an own level filter both apply — a line must satisfy both', () => {
-    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null };
-    const own: LogFilterSpec = { mode: 'text', query: '', level: 'ERROR' };
+    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null, action: 'show', target: 'line' };
+    const own: LogFilterSpec = { mode: 'text', query: '', level: 'ERROR', action: 'show', target: 'line' };
     expect(applyLogFilters(lines, global, own)).toEqual([lines[0]]);
   });
 
   it('an own filter alone (no global) still applies', () => {
-    const own: LogFilterSpec = { mode: 'text', query: '', level: 'WARN' };
+    const own: LogFilterSpec = { mode: 'text', query: '', level: 'WARN', action: 'show', target: 'line' };
     expect(applyLogFilters(lines, null, own)).toEqual([lines[2]]);
   });
 });
@@ -630,13 +634,13 @@ describe('isPaneEngagedInGlobalFilter / toggleGlobalFilterEngagement / setPaneGl
 
 describe('setPaneLogFilter', () => {
   it('sets a spec for the targeted repoPath, independent of others', () => {
-    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null };
+    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null, action: 'show', target: 'line' };
     const next = setPaneLogFilter({}, '/repo/a', spec);
     expect(next).toEqual({ '/repo/a': spec });
   });
 
   it('clears (removes the key) when given null', () => {
-    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null };
+    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null, action: 'show', target: 'line' };
     const withFilter = setPaneLogFilter({}, '/repo/a', spec);
     const cleared = setPaneLogFilter(withFilter, '/repo/a', null);
     expect(cleared).toEqual({});
@@ -669,17 +673,17 @@ describe('cycleFilterLevel / toggleFilterMode', () => {
 
 describe('formatLogFilterSpec', () => {
   it('renders mode, a quoted query, and no level suffix by default', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: null })).toBe('text "boom"');
-    expect(formatLogFilterSpec({ mode: 'regex', query: '^ERR', level: null })).toBe('regex "^ERR"');
+    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: null, action: 'show', target: 'line' })).toBe('text "boom"');
+    expect(formatLogFilterSpec({ mode: 'regex', query: '^ERR', level: null, action: 'show', target: 'line' })).toBe('regex "^ERR"');
   });
 
   it('renders an empty query as "(any)"', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: '', level: null })).toBe('text (any)');
+    expect(formatLogFilterSpec({ mode: 'text', query: '', level: null, action: 'show', target: 'line' })).toBe('text (any)');
   });
 
   it('appends the level restriction, when set, as a trailing bracketed suffix', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: 'ERROR' })).toBe('text "boom" [ERROR]');
-    expect(formatLogFilterSpec({ mode: 'text', query: '', level: 'WARN' })).toBe('text (any) [WARN]');
+    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: 'ERROR', action: 'show', target: 'line' })).toBe('text "boom" [ERROR]');
+    expect(formatLogFilterSpec({ mode: 'text', query: '', level: 'WARN', action: 'show', target: 'line' })).toBe('text (any) [WARN]');
   });
 });
 
@@ -930,5 +934,101 @@ describe('actions menu', () => {
     expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 12 }).edtListMaxVisibleRows).toBe(12);
     expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 8 }).edtListMaxVisibleRows).toBe(8);
     expect(computeLogsLayout({ ...base, actionsMenuRows: 0 }).edtListMaxVisibleRows).toBe(closed.edtListMaxVisibleRows);
+  });
+});
+
+describe('hide / show-only filters (action x target)', () => {
+  const NEST = '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase] Aucun service de restauration trouvé pour le 12';
+  const lines: LogLine[] = [
+    { timestamp: 't1', stream: 'stdout', text: NEST },
+    { timestamp: 't2', stream: 'stdout', text: '[Nest] 12  - 09/11/2026 LOG [Other] fine' },
+    { timestamp: 't3', stream: 'stdout', text: 'Aucun service' },
+  ];
+  const spec = (over: Partial<LogFilterSpec>): LogFilterSpec => ({
+    mode: 'text',
+    query: 'Aucun service',
+    level: null,
+    action: 'show',
+    target: 'line',
+    ...over,
+  });
+  const texts = (s: LogFilterSpec) => applyLogFilters(lines, s, null).map((l) => l.text);
+
+  it('show+line keeps matching lines unchanged', () => {
+    expect(texts(spec({}))).toEqual([NEST, 'Aucun service']);
+  });
+
+  it('hide+line drops matching lines', () => {
+    expect(texts(spec({ action: 'hide' }))).toEqual(['[Nest] 12  - 09/11/2026 LOG [Other] fine']);
+  });
+
+  it('hide+match removes matched text, keeps the rest and drops emptied lines', () => {
+    expect(texts(spec({ action: 'hide', target: 'match' }))).toEqual([
+      '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase]  de restauration trouvé pour le 12',
+      '[Nest] 12  - 09/11/2026 LOG [Other] fine',
+    ]);
+  });
+
+  it('show+match displays only matched text and hides non-matching lines', () => {
+    expect(texts(spec({ target: 'match', mode: 'regex', query: 'WARN|\\d+$' }))).toEqual(['WARN 12']);
+  });
+
+  it('never mutates the stored lines', () => {
+    const before = JSON.stringify(lines);
+    texts(spec({ action: 'hide', target: 'match' }));
+    expect(JSON.stringify(lines)).toBe(before);
+  });
+
+  it('ignores empty regex matches', () => {
+    expect(texts(spec({ mode: 'regex', query: 'a*', action: 'hide', target: 'match' }))).toHaveLength(3);
+    expect(texts(spec({ mode: 'regex', query: 'x*', target: 'match' }))).toEqual([]);
+  });
+
+  it('rejects an invalid regex for every action/target', () => {
+    for (const action of ['show', 'hide'] as const) {
+      for (const target of ['line', 'match'] as const) {
+        expect(compileLogFilter(spec({ mode: 'regex', query: '(', action, target })).ok).toBe(false);
+      }
+    }
+  });
+
+  it('judges the level on the stored text even after another filter rewrote it', () => {
+    const rewritten = applyLogFilters(lines, spec({ target: 'match', query: 'Aucun service' }), spec({ query: '', level: 'WARN' }));
+    expect(rewritten.map((l) => l.text)).toEqual(['Aucun service']);
+    const own = applyLogFilters(lines, spec({ action: 'hide', target: 'match', query: 'Aucun service' }), spec({ query: '', level: 'WARN' }));
+    expect(own).toHaveLength(1);
+  });
+
+  it('counts a non-default action/target as a non-default spec', () => {
+    expect(isDefaultLogFilterSpec(spec({ query: '' }))).toBe(true);
+    expect(isDefaultLogFilterSpec(spec({ query: '', action: 'hide' }))).toBe(false);
+    expect(isDefaultLogFilterSpec(spec({ query: '', target: 'match' }))).toBe(false);
+  });
+
+  it('annotates a non-default action/target', () => {
+    expect(formatLogFilterSpec(spec({ action: 'hide', target: 'match' }))).toContain('hide match');
+    expect(formatLogFilterSpec(spec({}))).not.toContain('{');
+  });
+
+  it('history entries: legacy plain string reads as show+line; encoding round-trips and keeps entries distinct', () => {
+    expect(decodeFilterHistoryEntry('plain')).toEqual({ query: 'plain', action: 'show', target: 'line' });
+    expect(encodeFilterHistoryEntry({ query: 'plain', action: 'show', target: 'line' })).toBe('plain');
+    const hidden = encodeFilterHistoryEntry({ query: 'plain', action: 'hide', target: 'match' });
+    expect(hidden).not.toBe('plain');
+    expect(decodeFilterHistoryEntry(hidden)).toEqual({ query: 'plain', action: 'hide', target: 'match' });
+    expect(historyEntryLabel(hidden)).toBe('[hide match] plain');
+    expect(historyEntryLabel('plain')).toBe('plain');
+  });
+
+  it('keeps match ranges aligned when lowercasing would change the text length', () => {
+    const line: LogLine = { timestamp: 't', stream: 'stdout', text: 'İİ boom end' };
+    const out = applyLogFilters([line], spec({ query: 'boom', action: 'hide', target: 'match' }), null);
+    expect(out.map((l) => l.text)).toEqual(['İİ  end']);
+  });
+
+  it('never misdecodes a show+line query that starts with the header pattern', () => {
+    const query = '\u001fhide:match\u001frest';
+    const encoded = encodeFilterHistoryEntry({ query, action: 'show', target: 'line' });
+    expect(decodeFilterHistoryEntry(encoded)).toEqual({ query, action: 'show', target: 'line' });
   });
 });

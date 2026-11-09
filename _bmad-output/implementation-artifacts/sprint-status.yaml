@@ -33,7 +33,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-11-05
+last_updated: 2026-11-09
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -55,7 +55,7 @@ development_status:
 
   epic-5: in-progress
   # Reopened 2026-11-05 (sprint-change-proposal-2026-11-05.md): hide/show-only filters, stackable rules, persisted rules and named sets. Order: 5-8 -> 5-9 -> 5-10.
-  5-8-hide-show-only-log-filters: backlog
+  5-8-hide-show-only-log-filters: review
   5-9-stackable-log-filter-rules: backlog
   5-10-persisted-filter-rules-and-named-rule-sets: backlog
   epic-5-retrospective: optional

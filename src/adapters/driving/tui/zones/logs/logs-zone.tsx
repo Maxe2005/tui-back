@@ -36,7 +36,7 @@ import {
   partitionServicesByEdtMembership,
 } from '../edts/edts-zone.logic.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
-import { resolveHistoryBrowseDown, resolveHistoryBrowseUp, resolveSnapBackBase } from '../../shared/input-history/index.js';
+import { resolveHistoryBrowseDown, resolveHistoryBrowseUp } from '../../shared/input-history/index.js';
 import {
   commandAtGridCursor,
   groupCommandsByColumn,
@@ -52,6 +52,8 @@ import {
   applyLogFilters,
   computeLogsLayout,
   cycleFilterLevel,
+  decodeFilterHistoryEntry,
+  encodeFilterHistoryEntry,
   cycleLogsPaneFocus,
   LOGS_PANE_FOCUS_NAV,
   DEFAULT_LOG_FILTER,
@@ -83,11 +85,14 @@ import {
   setPaneLogFilter,
   splitNoContainerRows,
   toggleAllPanesWrapFlag,
+  toggleFilterAction,
   toggleFilterMode,
+  toggleFilterTarget,
   toggleGlobalFilterEngagement,
   togglePaneWrapFlag,
   toggleVisibilityFlag,
   type FilterEditorState,
+  type FilterHistoryBrowseResult,
   type FilterHistoryKey,
   type LogFilterSpec,
   type LogsPaneFocus,
@@ -376,6 +381,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       query: globalFilter.query,
       cursor: globalFilter.query.length,
       level: globalFilter.level,
+      action: globalFilter.action,
+      target: globalFilter.target,
       error: null,
       preOpen: globalFilter,
       browsing: null,
@@ -391,6 +398,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       query: existing.query,
       cursor: existing.query.length,
       level: existing.level,
+      action: existing.action,
+      target: existing.target,
       error: null,
       preOpen: existing,
       browsing: null,
@@ -443,6 +452,30 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   function historyForEditor(editor: FilterEditorState): string[] {
     const key: FilterHistoryKey = { scope: editor.scope, repoPath: editor.repoPath, mode: editor.mode };
     return filterHistory[filterHistoryKeyString(key)] ?? [];
+  }
+
+  // Browse results carry the draft as an encoded history entry (query + action + target); this
+  // spreads it back onto the editor state.
+  function withBrowseResult(editor: FilterEditorState, result: FilterHistoryBrowseResult): FilterEditorState {
+    const decoded = decodeFilterHistoryEntry(result.query);
+    return {
+      ...editor,
+      query: decoded.query,
+      cursor: decoded.query.length,
+      action: decoded.action,
+      target: decoded.target,
+      browsing: result.browsing,
+    };
+  }
+
+  // Snapping back out of a browse restores the saved draft's action/target too; an untouched
+  // draft keeps its own.
+  function snapBackDraft(editor: FilterEditorState): Pick<FilterEditorState, 'query' | 'cursor' | 'action' | 'target'> {
+    if (editor.browsing === null) {
+      return { query: editor.query, cursor: editor.cursor, action: editor.action, target: editor.target };
+    }
+    const decoded = decodeFilterHistoryEntry(editor.browsing.savedDraft);
+    return { query: decoded.query, cursor: decoded.query.length, action: decoded.action, target: decoded.target };
   }
 
   // The actual commit decision (compile the draft, decide which of globalFilter/paneFilters —
@@ -511,7 +544,15 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           if (key.return) {
             const entry = commandAtGridCursor(columns, historyGridCursor);
             if (entry !== undefined) {
-              applyFilterEditorDraft({ ...filterEditor, query: entry, cursor: entry.length, browsing: null });
+              const recalled = decodeFilterHistoryEntry(entry);
+              applyFilterEditorDraft({
+                ...filterEditor,
+                query: recalled.query,
+                cursor: recalled.query.length,
+                action: recalled.action,
+                target: recalled.target,
+                browsing: null,
+              });
             }
             setHistoryGridCursor(null);
             return;
@@ -550,7 +591,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           if (filterEditor.error === null && filterEditor.query !== '') {
             commitFilterHistoryEntry(
               { scope: filterEditor.scope, repoPath: filterEditor.repoPath, mode: filterEditor.mode },
-              filterEditor.query,
+              encodeFilterHistoryEntry(filterEditor),
             );
           }
           setFilterEditor(null);
@@ -565,19 +606,25 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           // recalled entry is discarded and the original draft carries over into the new mode.
           // Snapping back out of a browsed entry changes `query`, so the caret resets to its end
           // (programmatic-overwrite convention); an untouched draft's caret position carries over.
-          const { base: baseQuery, cursor: baseCursor } = resolveSnapBackBase(
-            filterEditor.query,
-            filterEditor.cursor,
-            filterEditor.browsing,
-          );
           applyFilterEditorDraft({
             ...filterEditor,
-            query: baseQuery,
-            cursor: baseCursor,
+            ...snapBackDraft(filterEditor),
             mode: toggleFilterMode(filterEditor.mode),
             browsing: null,
           });
           setHistoryGridCursor(null);
+          return;
+        }
+        // Ctrl+X flips show/hide, Ctrl+T flips line/match; like the level cycle they leave the
+        // query in place; a recalled entry becomes the draft (browsing ends).
+        if (key.ctrl && input.toLowerCase() === 'x') {
+          setHistoryGridCursor(null);
+          applyFilterEditorDraft({ ...filterEditor, action: toggleFilterAction(filterEditor.action), browsing: null });
+          return;
+        }
+        if (key.ctrl && input.toLowerCase() === 't') {
+          setHistoryGridCursor(null);
+          applyFilterEditorDraft({ ...filterEditor, target: toggleFilterTarget(filterEditor.target), browsing: null });
           return;
         }
         if (key.ctrl && (key.leftArrow || key.rightArrow)) {
@@ -597,13 +644,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         // draft — opens the grid browser over the full history (a no-op with nothing to browse).
         if (key.upArrow) {
           const history = historyForEditor(filterEditor);
-          const result = resolveHistoryBrowseUp(filterEditor.query, filterEditor.browsing, history);
-          applyFilterEditorDraft({
-            ...filterEditor,
-            query: result.query,
-            cursor: result.query.length,
-            browsing: result.browsing,
-          });
+          const result = resolveHistoryBrowseUp(encodeFilterHistoryEntry(filterEditor), filterEditor.browsing, history);
+          applyFilterEditorDraft(withBrowseResult(filterEditor, result));
           return;
         }
         if (key.downArrow) {
@@ -617,29 +659,24 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           }
           const history = historyForEditor(filterEditor);
           const result = resolveHistoryBrowseDown(filterEditor.browsing, history);
-          applyFilterEditorDraft({
-            ...filterEditor,
-            query: result.query,
-            cursor: result.query.length,
-            browsing: result.browsing,
-          });
+          applyFilterEditorDraft(withBrowseResult(filterEditor, result));
           return;
         }
         if (key.backspace || key.delete) {
           // While browsing, Backspace snaps back to the saved draft with the backspace applied on
           // top, rather than editing the recalled entry in place — caret at the saved draft's end,
           // like the typed-char snap-back below.
-          const { base, cursor } = resolveSnapBackBase(filterEditor.query, filterEditor.cursor, filterEditor.browsing);
-          const result = nextTextInputValue({ value: base, cursor }, input, key);
-          applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
+          const base = snapBackDraft(filterEditor);
+          const result = nextTextInputValue({ value: base.query, cursor: base.cursor }, input, key);
+          applyFilterEditorDraft({ ...filterEditor, ...base, query: result.value, cursor: result.cursor, browsing: null });
           return;
         }
         if (!key.ctrl && !key.meta && input.length > 0) {
           // Any printable character while browsing snaps back to the draft with that keystroke
           // applied on top, inserted at the caret.
-          const { base, cursor } = resolveSnapBackBase(filterEditor.query, filterEditor.cursor, filterEditor.browsing);
-          const result = nextTextInputValue({ value: base, cursor }, input, key);
-          applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
+          const base = snapBackDraft(filterEditor);
+          const result = nextTextInputValue({ value: base.query, cursor: base.cursor }, input, key);
+          applyFilterEditorDraft({ ...filterEditor, ...base, query: result.value, cursor: result.cursor, browsing: null });
         }
         return;
       }

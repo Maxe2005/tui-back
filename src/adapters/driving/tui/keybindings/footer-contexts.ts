@@ -149,7 +149,7 @@ export const FOOTER_CONTEXTS = {
   command: { label: 'Command entry', hints: [['Tab', 'complete'], ['Enter', 'run'], ['Esc', 'close']] },
   'logs-filter-edit': {
     label: 'Logs filter editor',
-    hints: [['Tab', 'text/regex'], ['Ctrl+←/→', 'level'], [KEY_UP_DOWN, 'history'], ['Enter', 'apply'], CANCEL],
+    hints: [['Tab', 'text/regex'], ['Ctrl+←/→', 'level'], ['Ctrl+X', 'show/hide'], ['Ctrl+T', 'line/match'], [KEY_UP_DOWN, 'history'], ['Enter', 'apply'], CANCEL],
   },
   'logs-filter-history': {
     label: 'Logs filter history',

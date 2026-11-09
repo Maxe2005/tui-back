@@ -458,20 +458,33 @@ export function filterVisibleLines(lines: readonly LogLine[], flags: VisibilityF
 export type LogFilterMode = 'text' | 'regex';
 export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
 
+// `action` keeps (`show`) or drops (`hide`) what the query matches; `target` says whether the
+// unit is the whole line or only the matched text inside it. show+line is the classic filter.
+export type LogFilterAction = 'show' | 'hide';
+export type LogFilterTarget = 'line' | 'match';
+
 export type LogFilterSpec = {
   mode: LogFilterMode;
   query: string;
   level: LogLevel | null;
+  action: LogFilterAction;
+  target: LogFilterTarget;
 };
 
-export const DEFAULT_LOG_FILTER: LogFilterSpec = { mode: 'text', query: '', level: null };
+export const DEFAULT_LOG_FILTER: LogFilterSpec = { mode: 'text', query: '', level: null, action: 'show', target: 'line' };
 
 // Shared by the filter-editor commit/cancel paths and every pane's "pane filter: on" annotation —
 // a spec deep-equal to DEFAULT_LOG_FILTER (empty query, no level restriction, either mode) is a
 // no-op filter and must never be stored as an explicit paneFilters[repoPath] entry (the
 // annotation/hasOwnFilter check would see a filter that isn't filtering anything).
 export function isDefaultLogFilterSpec(spec: LogFilterSpec): boolean {
-  return spec.mode === DEFAULT_LOG_FILTER.mode && spec.query === DEFAULT_LOG_FILTER.query && spec.level === DEFAULT_LOG_FILTER.level;
+  return (
+    spec.mode === DEFAULT_LOG_FILTER.mode &&
+    spec.query === DEFAULT_LOG_FILTER.query &&
+    spec.level === DEFAULT_LOG_FILTER.level &&
+    spec.action === DEFAULT_LOG_FILTER.action &&
+    spec.target === DEFAULT_LOG_FILTER.target
+  );
 }
 
 // Level filtering has no source field (LogLine has no level), so it uses a text heuristic
@@ -488,30 +501,83 @@ export function detectLogLevel(text: string): LogLevel | null {
 // An invalid regex shows an inline error in the editor and is never applied, never thrown into
 // the render tree — `compileLogFilter` is the one place a malformed pattern may throw (RegExp's
 // constructor), caught here and turned into a typed failure the editor surfaces as text.
-export type CompiledLogFilter = { ok: true; test: (line: LogLine) => boolean } | { ok: false; error: string };
+// `apply` returns the line as it should be displayed (a new object when the text was rewritten,
+// the stored line untouched otherwise) or `null` when the line must not be displayed. The level
+// restriction is always judged on `levelText` (the stored, unrewritten text) so a rewrite by an
+// earlier filter never hides the level token.
+export type CompiledLogFilter =
+  | { ok: true; apply: (line: LogLine, levelText?: string) => LogLine | null }
+  | { ok: false; error: string };
+
+// Every non-empty match of `query` in `text`, as [start, end) ranges. Empty matches (e.g. `a*`)
+// are skipped, and the scan always advances, so a pattern that can match nothing cannot loop.
+function findMatchRanges(text: string, matcher: RegExp): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  matcher.lastIndex = 0;
+  for (;;) {
+    const match = matcher.exec(text);
+    if (match === null) {
+      return ranges;
+    }
+    if (match[0].length === 0) {
+      matcher.lastIndex += 1;
+      if (matcher.lastIndex > text.length) {
+        return ranges;
+      }
+      continue;
+    }
+    ranges.push([match.index, match.index + match[0].length]);
+  }
+}
+
+function removeRanges(text: string, ranges: Array<[number, number]>): string {
+  let result = '';
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    result += text.slice(cursor, start);
+    cursor = end;
+  }
+  return result + text.slice(cursor);
+}
 
 export function compileLogFilter(spec: LogFilterSpec): CompiledLogFilter {
-  let textTest: (text: string) => boolean;
-  if (spec.mode === 'regex') {
-    if (spec.query === '') {
-      textTest = () => true;
-    } else {
-      let regex: RegExp;
+  let matcher: RegExp | null = null;
+  if (spec.query !== '') {
+    if (spec.mode === 'regex') {
       try {
-        regex = new RegExp(spec.query, 'i');
+        matcher = new RegExp(spec.query, 'gi');
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : 'Invalid regular expression' };
       }
-      textTest = (text) => regex.test(text);
+    } else {
+      // Matching on the original text (never a lowercased copy) keeps ranges aligned for
+      // characters whose lowercase form has a different length.
+      matcher = new RegExp(spec.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     }
-  } else {
-    const needle = spec.query.toLowerCase();
-    textTest = needle === '' ? () => true : (text) => text.toLowerCase().includes(needle);
   }
-  const { level } = spec;
+  const { level, action, target } = spec;
   return {
     ok: true,
-    test: (line) => textTest(line.text) && (level === null || detectLogLevel(line.text) === level),
+    apply: (line, levelText = line.text) => {
+      if (level !== null && detectLogLevel(levelText) !== level) {
+        return null;
+      }
+      if (matcher === null) {
+        return line;
+      }
+      const ranges = findMatchRanges(line.text, matcher);
+      if (target === 'line') {
+        return (ranges.length > 0) === (action === 'show') ? line : null;
+      }
+      if (ranges.length === 0) {
+        return action === 'show' ? null : line;
+      }
+      const text =
+        action === 'hide'
+          ? removeRanges(line.text, ranges)
+          : ranges.map(([start, end]) => line.text.slice(start, end)).join(' ');
+      return text.trim() === '' ? null : { ...line, text };
+    },
   };
 }
 
@@ -527,7 +593,7 @@ export type FilterEditorDraftResult = {
 };
 
 export function resolveFilterEditorDraft(next: FilterEditorState): FilterEditorDraftResult {
-  const spec: LogFilterSpec = { mode: next.mode, query: next.query, level: next.level };
+  const spec: LogFilterSpec = { mode: next.mode, query: next.query, level: next.level, action: next.action, target: next.target };
   const compiled = compileLogFilter(spec);
   if (!compiled.ok) {
     return { editor: { ...next, error: compiled.error }, globalFilter: null, paneFilterUpdate: null };
@@ -559,15 +625,20 @@ export function resolveFilterEditorDraft(next: FilterEditorState): FilterEditorD
 export function applyLogFilters(lines: readonly LogLine[], global: LogFilterSpec | null, own: LogFilterSpec | null): LogLine[] {
   const globalFilter = global !== null ? compileLogFilter(global) : null;
   const ownFilter = own !== null ? compileLogFilter(own) : null;
-  return lines.filter((line) => {
-    if (globalFilter !== null && globalFilter.ok && !globalFilter.test(line)) {
-      return false;
+  const result: LogLine[] = [];
+  for (const original of lines) {
+    let line: LogLine | null = original;
+    if (globalFilter !== null && globalFilter.ok) {
+      line = globalFilter.apply(line, original.text);
     }
-    if (ownFilter !== null && ownFilter.ok && !ownFilter.test(line)) {
-      return false;
+    if (line !== null && ownFilter !== null && ownFilter.ok) {
+      line = ownFilter.apply(line, original.text);
     }
-    return true;
-  });
+    if (line !== null) {
+      result.push(line);
+    }
+  }
+  return result;
 }
 
 // Shared by LogsPaneView and FullscreenPane (both call applyLogFilters right after
@@ -642,13 +713,31 @@ export function toggleFilterMode(mode: LogFilterMode): LogFilterMode {
   return mode === 'text' ? 'regex' : 'text';
 }
 
+function isDefaultActionTarget(action: LogFilterAction, target: LogFilterTarget): boolean {
+  return action === 'show' && target === 'line';
+}
+
+export function toggleFilterAction(action: LogFilterAction): LogFilterAction {
+  return action === 'show' ? 'hide' : 'show';
+}
+
+export function toggleFilterTarget(target: LogFilterTarget): LogFilterTarget {
+  return target === 'line' ? 'match' : 'line';
+}
+
+// The compact action/target indicator shown beside the query, e.g. `show line`, `hide match`.
+export function formatFilterActionTarget(action: LogFilterAction, target: LogFilterTarget): string {
+  return `${action} ${target}`;
+}
+
 // A short human-readable rendering of a filter spec, e.g. `text "boom"`, `regex (any) [ERROR]` —
 // used on the pane/fullscreen annotations so a user can tell *what* is filtering a pane without
 // reopening its editor.
 export function formatLogFilterSpec(spec: LogFilterSpec): string {
   const queryPart = spec.query === '' ? '(any)' : `"${spec.query}"`;
   const levelPart = spec.level !== null ? ` [${spec.level}]` : '';
-  return `${spec.mode} ${queryPart}${levelPart}`;
+  const actionPart = isDefaultActionTarget(spec.action, spec.target) ? '' : ` {${formatFilterActionTarget(spec.action, spec.target)}}`;
+  return `${spec.mode} ${queryPart}${levelPart}${actionPart}`;
 }
 
 // Escape, when no editor is open: on a sub-focused grid pane (not fullscreen), clears that pane's
@@ -689,6 +778,29 @@ export function filterHistoryKeyString(key: FilterHistoryKey): string {
   return key.scope === 'global' ? `global:${key.mode}` : `service:${key.repoPath}:${key.mode}`;
 }
 
+// History entries stay plain strings so older state files load unchanged and the shared
+// input-history primitive keeps working as is. A show+line entry is the bare query (exactly what
+// earlier versions wrote); any other action/target is the query behind a control-character
+// header, so equality of two entries means equality of query, action and target.
+const HISTORY_HEADER = '\u001f';
+const HISTORY_HEADER_PATTERN = /^\u001f(show|hide):(line|match)\u001f/;
+
+export type FilterHistoryEntry = { query: string; action: LogFilterAction; target: LogFilterTarget };
+
+export function encodeFilterHistoryEntry(entry: FilterHistoryEntry): string {
+  return isDefaultActionTarget(entry.action, entry.target) && !HISTORY_HEADER_PATTERN.test(entry.query)
+    ? entry.query
+    : `${HISTORY_HEADER}${entry.action}:${entry.target}${HISTORY_HEADER}${entry.query}`;
+}
+
+export function decodeFilterHistoryEntry(encoded: string): FilterHistoryEntry {
+  const header = HISTORY_HEADER_PATTERN.exec(encoded);
+  if (header === null) {
+    return { query: encoded, action: 'show', target: 'line' };
+  }
+  return { query: encoded.slice(header[0].length), action: header[1] as LogFilterAction, target: header[2] as LogFilterTarget };
+}
+
 // Push/dedup/trim and the arrow-browse state machine are the shared input-history primitive
 // (tui/shared/input-history) — re-exported under the Logs-facing names so callers read as before.
 export { pushHistoryEntry as pushFilterHistoryEntry } from '../../shared/input-history/index.js';
@@ -713,6 +825,8 @@ export type FilterEditorState = {
   // recall, arrow-browse) resets this to `query.length`.
   cursor: number;
   level: LogLevel | null;
+  action: LogFilterAction;
+  target: LogFilterTarget;
   error: string | null;
   // The spec in effect for this scope when the editor opened — restored verbatim on Escape, so the
   // "[Enter] confirm  [Esc] cancel" hint behaves as a true cancel.
@@ -723,9 +837,12 @@ export type FilterEditorState = {
   browsing: HistoryBrowseState | null;
 };
 
-// The filter-history grid's `getLabel` for command-bar.tsx's generic grid primitives — history
-// entries are plain strings, so this is the identity function. Shared by LogsZone's useInput and
-// LogFilterEditor's render.
+// The filter-history grid's `getLabel` for command-bar.tsx's generic grid primitives — the bare
+// query for a show+line entry, prefixed with its action/target otherwise. Shared by LogsZone's
+// useInput and LogFilterEditor's render.
 export function historyEntryLabel(entry: string): string {
-  return entry;
+  const decoded = decodeFilterHistoryEntry(entry);
+  return isDefaultActionTarget(decoded.action, decoded.target)
+    ? decoded.query
+    : `[${formatFilterActionTarget(decoded.action, decoded.target)}] ${decoded.query}`;
 }
