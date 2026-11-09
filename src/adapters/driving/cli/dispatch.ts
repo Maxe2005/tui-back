@@ -26,6 +26,8 @@ function buildHelp(subcommands: Subcommand[]): HelpData {
       ...subcommands.map((candidate) => ({ name: candidate.name, usage: candidate.usage })),
       // `tui` is routed by the bin shim, not the subcommand registry, so it is listed statically.
       { name: 'tui', usage: 'tui-back tui' },
+      // `mcp` is likewise routed by the bin shim (MCP over stdio, no AD-3 envelope on stdout).
+      { name: 'mcp', usage: 'tui-back mcp' },
     ],
   };
 }
