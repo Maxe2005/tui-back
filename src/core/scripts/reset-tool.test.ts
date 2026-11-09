@@ -63,6 +63,8 @@ type StateData = {
   splitterRatios: Record<string, number[]> | null;
   filterHistory: Record<string, string[]> | null;
   commandHistory?: string[] | null;
+  logRules?: unknown;
+  logRuleSets?: unknown;
 };
 
 function fakeState(initial: StateData): StatePort & { data: StateData } {
@@ -86,6 +88,16 @@ function fakeState(initial: StateData): StatePort & { data: StateData } {
     readCommandHistory: vi.fn(async () => ok(port.data.commandHistory ?? null)),
     writeCommandHistory: vi.fn(async (history: string[]) => {
       port.data.commandHistory = history;
+      return ok(undefined);
+    }),
+    readLogRules: vi.fn(async () => ok(port.data.logRules ?? null)),
+    writeLogRules: vi.fn(async (rules: unknown) => {
+      port.data.logRules = rules;
+      return ok(undefined);
+    }),
+    readLogRuleSets: vi.fn(async () => ok(port.data.logRuleSets ?? null)),
+    writeLogRuleSets: vi.fn(async (sets: unknown) => {
+      port.data.logRuleSets = sets;
       return ok(undefined);
     }),
   };
@@ -187,6 +199,28 @@ describe('resetTool', () => {
 
     expect(result.ok).toBe(true);
     expect(state.data.commandHistory).toEqual([]);
+    expect(state.data.activeEdt).toBe('ULID1');
+  });
+
+  it('HISTORY_ONLY: also clears the persisted filter rules and the rule-set library', async () => {
+    const { edtRegistry, registry, state } = fullSetup();
+    const rule = { mode: 'text', query: 'x', action: 'hide', target: 'line', enabled: true };
+    state.data.logRules = { global: [rule] };
+    state.data.logRuleSets = [{ name: 'n', rules: [rule] }];
+
+    const result = await resetTool({
+      categories: ['histories'],
+      edtRegistry,
+      registry,
+      state,
+      lock: fakeLock(),
+      keys: KEYS,
+      edtsBaseDir,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(state.data.logRules).toEqual({});
+    expect(state.data.logRuleSets).toEqual([]);
     expect(state.data.activeEdt).toBe('ULID1');
   });
 
