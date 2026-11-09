@@ -1188,3 +1188,79 @@ describe('rule-set views layout budget', () => {
     expect(many.edtListMaxVisibleRows).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('ANSI-aware rules', () => {
+  const line = (text: string): LogLine => ({ timestamp: 't', stream: 'stdout', text });
+  const stripAnsi = (text: string): string => text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
+  const nest =
+    '\u001b[32m[Nest] 32  - \u001b[39m11/09/2026, 9:20:21 AM \u001b[32m    LOG\u001b[39m \u001b[33m[Ctx]\u001b[39m hello';
+  const prefix = String.raw`^\[[\w-]+\]\s+\d+\s+(?:-\s+)?\d{1,2}\/\d{1,2}\/\d{4},\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\s*`;
+  const hideRule = (query: string): LogFilterRule => ({ ...rule(query), mode: 'regex', action: 'hide', target: 'match' });
+
+  const applyOne = (r: LogFilterRule, l: LogLine): LogLine | null => {
+    const compiled = compileLogFilter(r);
+    if (!compiled.ok) {
+      throw new Error(compiled.error);
+    }
+    return compiled.apply(l);
+  };
+
+  it('hides the Nest prefix across colour changes and keeps the remainder colours', () => {
+    const result = applyOne(hideRule(prefix), line(nest));
+    expect(result).not.toBeNull();
+    // Every escape is kept in order (the two leading ones are an empty pair, harmless on screen).
+    expect(result).toEqual({
+      ...line(nest),
+      text: '\u001b[32m\u001b[39m\u001b[32mLOG\u001b[39m \u001b[33m[Ctx]\u001b[39m hello',
+    });
+  });
+
+  it('show+match with several matches keeps each range with its own escapes', () => {
+    const r: LogFilterRule = { ...rule('\\d+'), mode: 'regex', action: 'show', target: 'match' };
+    const result = applyOne(r, line('\u001b[32m12\u001b[39m ab \u001b[33m34\u001b[39m'));
+    expect(result?.text).toBe('\u001b[32m12 \u001b[39m\u001b[33m34\u001b[39m');
+  });
+
+  it('keeps a trailing escape after the last kept character and the line metadata', () => {
+    const result = applyOne(hideRule('b'), { timestamp: 'ts', stream: 'stderr', text: '\u001b[32mab\u001b[39m' });
+    expect(result).toEqual({ timestamp: 'ts', stream: 'stderr', text: '\u001b[32ma\u001b[39m' });
+  });
+
+  it('removes the prefix of an uncoloured api-gateway line', () => {
+    const result = applyOne(hideRule(prefix), line('[api-gateway] 32 11/9/2026, 1:34:52 PM  LOG [FAST] GET /health'));
+    expect(result?.text).toBe('LOG [FAST] GET /health');
+  });
+
+  it('removes a span across a colour change and keeps all escapes', () => {
+    const result = applyOne(hideRule(String.raw`Nest\] 32`), line(nest));
+    expect(stripAnsi(result!.text)).toContain('[  - 11/09/2026');
+    expect(result!.text.match(/\u001b\[/g)).toHaveLength(nest.match(/\u001b\[/g)!.length);
+  });
+
+  it('returns null when every visible char is hidden', () => {
+    expect(applyOne(hideRule('.+'), line('\u001b[32mabc\u001b[39m'))).toBeNull();
+  });
+
+  it('show+match keeps matched visible chars with escapes', () => {
+    const r: LogFilterRule = { ...rule('LOG'), action: 'show', target: 'match' };
+    const result = applyOne(r, line(nest));
+    expect(stripAnsi(result!.text)).toBe('LOG');
+    expect(result!.text).toContain('\u001b[32m');
+  });
+
+  it('line target tests the stripped text and returns the original line', () => {
+    const r: LogFilterRule = { ...rule('^\\[Nest\\]'), mode: 'regex', action: 'show', target: 'line' };
+    const original = line(nest);
+    expect(applyOne(r, original)).toBe(original);
+  });
+
+  it('detects the level next to an escape code', () => {
+    expect(detectLogLevel('\u001b[32mDEBUG\u001b[39m')).toBe('DEBUG');
+  });
+
+  it('pipes two rules over a coloured line', () => {
+    const out = applyLogRules([line(nest)], scopeOf([hideRule(prefix), { ...rule('hello'), action: 'show', target: 'line' }]), null);
+    expect(out).toHaveLength(1);
+    expect(stripAnsi(out[0].text)).toBe('LOG [Ctx] hello');
+  });
+});
