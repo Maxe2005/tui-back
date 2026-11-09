@@ -4,6 +4,7 @@
 // generic list navigation and EDT-membership partition are reused from edts-zone.logic.ts.
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
+import { MAX_RULES_PER_LIST } from '../../../../../core/logs/rule-sets.js';
 import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { StatusBadgeState } from '../../shared/components/status-badge.js';
@@ -157,6 +158,9 @@ const HISTORY_GRID_MIN_VISIBLE_ROWS = 3;
 // The rule list view's fixed rows: ModalDialog's chrome (6) plus its header line, the
 // clear-all confirmation line and the notice line (1 each, counted even when not shown).
 const RULES_LIST_CHROME_ROWS = 9;
+// The library view renders one more line than the rule list (a confirmation, a notice and an
+// error can all show at once).
+const LIBRARY_CHROME_ROWS = RULES_LIST_CHROME_ROWS + 1;
 // Rough total-rows budget for the Logs zone's list column (top bar, zone-tab bar, footer, and the
 // "LOGS" title row) — the list column and the pane grid are row siblings sharing the same
 // vertical extent, so this reuses CHROME_ROWS' estimate.
@@ -173,7 +177,7 @@ export type LogsLayoutInput = {
   historyGridOpen: boolean;
   filterHistoryGridMaxRows: number;
   // The open editor's view and, for the list view, how many rules it lists.
-  filterEditorView?: 'list' | 'rule';
+  filterEditorView?: 'list' | 'rule' | 'library' | 'name';
   filterRuleCount?: number;
   // The rows the `a` actions menu renders (0 or absent while closed) — a sibling below the
   // block like the filter editor (never both open). See logsActionsMenuRows.
@@ -227,8 +231,8 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   const rulesListMaxVisibleRows = Math.max(1, historyGridAvailableHeight);
   const filterEditorReservedRows = !input.filterEditorOpen
     ? 0
-    : input.filterEditorView === 'list'
-      ? RULES_LIST_CHROME_ROWS + Math.min(Math.max(input.filterRuleCount ?? 0, 1), rulesListMaxVisibleRows)
+    : input.filterEditorView === 'list' || input.filterEditorView === 'library'
+      ? (input.filterEditorView === 'library' ? LIBRARY_CHROME_ROWS : RULES_LIST_CHROME_ROWS) + Math.min(Math.max(input.filterRuleCount ?? 0, 1), rulesListMaxVisibleRows)
       : HISTORY_GRID_CHROME_ROWS + (!input.historyGridOpen ? 0 : Math.min(input.filterHistoryGridMaxRows, historyGridAvailableHeight));
   // The list column's own total row budget — a row sibling of the pane grid, so it reuses
   // gridAvailableHeight. Handed out top-down (EDT list, then OTHER list, then the hints panel) so
@@ -417,9 +421,13 @@ export function logsFooterContext(
   restartMode: RestartMode = 'simple',
   actionsMenuOpen = false,
   rules: { listOpen: boolean; confirmingClear: boolean } = { listOpen: false, confirmingClear: false },
+  setsContext: FooterContextId | null = null,
 ): FooterContextId | null {
   if (actionsMenuOpen) {
     return 'logs-actions-menu';
+  }
+  if (filterEditorOpen && setsContext !== null) {
+    return setsContext;
   }
   if (filterEditorOpen && rules.listOpen) {
     return rules.confirmingClear ? 'logs-filter-rules-confirm' : 'logs-filter-rules';
@@ -498,7 +506,7 @@ export type LogFilterScope = {
 
 export const DEFAULT_LOG_FILTER: LogFilterScope = { level: null, rules: [] };
 
-export const MAX_LOG_FILTER_RULES = 10;
+export const MAX_LOG_FILTER_RULES = MAX_RULES_PER_LIST;
 
 // Shared by every editor change and every pane's "pane filter: on" annotation — a scope with no
 // rule and no level restriction is a no-op filter and must never be stored as an explicit
@@ -859,12 +867,26 @@ export {
 // the owning pane). It has two views: the scope's rule `list` (every change there is applied to
 // the scope immediately) and the `rule` editor, whose draft only enters the list on Enter.
 // `error` mirrors compileLogFilter's last result for the draft (recomputed on every keystroke).
+export type RuleSetConfirm =
+  | { kind: 'overwrite'; name: string }
+  | { kind: 'apply'; index: number }
+  | { kind: 'delete'; index: number };
+
 export type FilterEditorState = {
   scope: 'global' | 'pane';
   repoPath: string | null;
-  view: 'list' | 'rule';
-  // The highlighted row of the rule list.
+  view: 'list' | 'rule' | 'library' | 'name';
+  // The highlighted row of the rule list / of the named-set library.
   listCursor: number;
+  libraryCursor: number;
+  // The set-name input (`name` view): saving the active list as a set, or renaming one
+  // (`nameIndex` is the renamed set's index).
+  nameMode: 'save' | 'rename';
+  nameIndex: number | null;
+  name: string;
+  nameCursor: number;
+  // Non-null while the library views wait for a yes/no answer.
+  setConfirm: RuleSetConfirm | null;
   // The rule the draft replaces on commit; null while adding a new one.
   ruleIndex: number | null;
   mode: LogFilterMode;
@@ -892,6 +914,12 @@ export function openFilterEditorState(scope: 'global' | 'pane', repoPath: string
     repoPath,
     view: 'list',
     listCursor: 0,
+    libraryCursor: 0,
+    nameMode: 'save',
+    nameIndex: null,
+    name: '',
+    nameCursor: 0,
+    setConfirm: null,
     ruleIndex: null,
     ...ruleDraftOf(null),
     cursor: 0,
@@ -916,4 +944,59 @@ export function historyEntryLabel(entry: string): string {
   return isDefaultActionTarget(decoded.action, decoded.target)
     ? decoded.query
     : `[${formatFilterActionTarget(decoded.action, decoded.target)}] ${decoded.query}`;
+}
+
+// The footer context of the library views (the named rule sets), or null while the rule list or
+// the rule editor is showing.
+export function ruleSetsFooterContext(editor: FilterEditorState): FooterContextId | null {
+  if (editor.view === 'library') {
+    return editor.setConfirm !== null ? 'logs-filter-sets-confirm' : 'logs-filter-sets';
+  }
+  if (editor.view === 'name') {
+    return editor.setConfirm !== null ? 'logs-filter-sets-confirm' : 'logs-filter-set-name';
+  }
+  return null;
+}
+
+// Opens the name input to save the active list (`index` null) or to rename the set at `index`.
+export function openRuleSetNameState(editor: FilterEditorState, index: number | null, current: string): FilterEditorState {
+  return {
+    ...editor,
+    view: 'name',
+    nameMode: index === null ? 'save' : 'rename',
+    nameIndex: index,
+    name: current,
+    nameCursor: current.length,
+    setConfirm: null,
+    error: null,
+    notice: null,
+    confirmClear: false,
+  };
+}
+
+// Back to the active rule list from the library or the name input, with an optional notice.
+export function backToRuleListState(editor: FilterEditorState, notice: string | null = null, listCursor = editor.listCursor): FilterEditorState {
+  return { ...editor, view: 'list', listCursor, setConfirm: null, error: null, notice, confirmClear: false, browsing: null };
+}
+
+function singleLine(text: string): string {
+  return text.replace(/[\s\u0000-\u001f\u007f]+/g, ' ');
+}
+
+// The question shown while a library confirmation is pending.
+export function formatRuleSetConfirm(confirm: RuleSetConfirm, library: readonly { name: string }[], activeRuleCount: number): string {
+  switch (confirm.kind) {
+    case 'overwrite':
+      return `Overwrite set "${singleLine(confirm.name)}"? (y/Enter = yes, Esc = no)`;
+    case 'apply':
+      return `Replace the ${activeRuleCount} active ${activeRuleCount === 1 ? 'rule' : 'rules'} with set "${singleLine(library[confirm.index]?.name ?? '')}"? (y/Enter = yes, Esc = no)`;
+    case 'delete':
+      return `Delete set "${singleLine(library[confirm.index]?.name ?? '')}"? (y/Enter = yes, Esc = no)`;
+  }
+}
+
+// One library row, e.g. `noise (3 rules)`.
+export function formatRuleSetRow(set: { name: string; rules: readonly unknown[] }): string {
+  const name = set.name.replace(/[\s\u0000-\u001f\u007f]+/g, ' ');
+  return `${name} (${set.rules.length} ${set.rules.length === 1 ? 'rule' : 'rules'})`;
 }

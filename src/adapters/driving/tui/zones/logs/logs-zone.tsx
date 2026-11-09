@@ -6,6 +6,7 @@ import { basename } from 'node:path';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { applyRuleSet } from '../../../../../core/logs/rule-sets.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
@@ -78,6 +79,9 @@ import {
   resolveFilterClearTarget,
   openFilterEditorState,
   openRuleEditorState,
+  openRuleSetNameState,
+  backToRuleListState,
+  ruleSetsFooterContext,
   replaceLogRule,
   toggleLogRule,
   deleteLogRule,
@@ -157,6 +161,12 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const filterHistory = useStore((state) => state.filterHistory);
   const commitFilterHistoryEntry = useStore((state) => state.commitFilterHistoryEntry);
   const filterHistoryGridMaxRows = useStore((state) => state.settings.logs.filterHistoryGridMaxRows);
+  const ruleSets = useStore((state) => state.logsRuleSets);
+  const saveRuleSetAction = useStore((state) => state.saveLogsRuleSet);
+  const renameRuleSetAction = useStore((state) => state.renameLogsRuleSet);
+  const deleteRuleSetAction = useStore((state) => state.deleteLogsRuleSet);
+  const rulesWarning = useStore((state) => state.logsRulesWarning);
+  const dismissRulesWarning = useStore((state) => state.dismissLogsRulesWarning);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -321,6 +331,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       restartMode,
       actionsMenu !== null,
       { listOpen: filterEditor?.view === 'list', confirmingClear: filterEditor?.confirmClear === true },
+      filterEditor === null ? null : ruleSetsFooterContext(filterEditor),
     ),
     useStore,
   );
@@ -362,7 +373,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     historyGridOpen: historyGridCursor !== null,
     filterHistoryGridMaxRows,
     filterEditorView: filterEditor?.view,
-    filterRuleCount: filterEditor === null ? 0 : currentScopeOf(filterEditor).rules.length,
+    filterRuleCount: filterEditor === null ? 0 : filterEditor.view === 'library' ? ruleSets.length : currentScopeOf(filterEditor).rules.length,
     actionsMenuRows: actionsMenu === null ? 0 : logsActionsMenuRows(actionsMenu),
   });
 
@@ -384,10 +395,12 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   // Opens the filter-editor modal on its rule list — `/` (global, any Logs-zone focus) or `f`
   // (pane, sub-focused grid pane / fullscreen only). The list shows the scope's committed rules.
   function openGlobalFilterEditor(): void {
+    dismissRulesWarning();
     setFilterEditor(openFilterEditorState('global', null));
     setHistoryGridCursor(null);
   }
   function openPaneFilterEditor(repoPath: string): void {
+    dismissRulesWarning();
     setFilterEditor(openFilterEditorState('pane', repoPath));
     setHistoryGridCursor(null);
   }
@@ -562,6 +575,18 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       setFilterEditor(openRuleEditorState(base, null, null));
       return;
     }
+    if (input === 's') {
+      if (count === 0) {
+        setFilterEditor({ ...base, notice: 'No rules to save — add one first.' });
+        return;
+      }
+      setFilterEditor(openRuleSetNameState(base, null, ''));
+      return;
+    }
+    if (input === 'l') {
+      setFilterEditor({ ...base, view: 'library', libraryCursor: Math.min(editor.libraryCursor, Math.max(ruleSets.length - 1, 0)) });
+      return;
+    }
     const rule = scope.rules[cursor];
     if (rule === undefined) {
       setFilterEditor(base);
@@ -580,6 +605,128 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     } else {
       setFilterEditor(base);
     }
+  }
+
+  // Replaces the scope's active list with a copy of a set's rules and returns to the list.
+  function applySetToScope(editor: FilterEditorState, index: number): void {
+    const applied = applyRuleSet(ruleSets, index);
+    if (!applied.ok) {
+      setFilterEditor({ ...editor, setConfirm: null, error: applied.error.message });
+      return;
+    }
+    const name = ruleSets[index]?.name ?? '';
+    const rules = applied.data.map((rule) => ({ ...rule }));
+    if (!updateScopeOf(editor, (current) => ({ ...current, rules }))) {
+      setFilterEditor(null);
+      setHistoryGridCursor(null);
+      return;
+    }
+    setFilterEditor(backToRuleListState(editor, `Applied set "${name}".`, 0));
+  }
+
+  // Keys of the named-set library: Enter applies (asking first when the active list is not
+  // empty), r renames, d deletes (asking first), Esc returns to the rule list.
+  function handleLibraryKey(editor: FilterEditorState, input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]): void {
+    const count = ruleSets.length;
+    const cursor = Math.min(editor.libraryCursor, Math.max(count - 1, 0));
+    if (editor.setConfirm !== null) {
+      const confirm = editor.setConfirm;
+      // A confirmation whose set vanished (the library shrank) is dropped, never acted on.
+      if (confirm.kind !== 'overwrite' && ruleSets[confirm.index] === undefined) {
+        setFilterEditor({ ...editor, setConfirm: null, libraryCursor: Math.max(Math.min(cursor, count - 1), 0), error: 'That set no longer exists.' });
+        return;
+      }
+      if (input === 'y' || input === 'Y' || key.return) {
+        if (confirm.kind === 'apply') {
+          applySetToScope({ ...editor, libraryCursor: cursor }, confirm.index);
+        } else if (confirm.kind === 'delete') {
+          const deleted = deleteRuleSetAction(confirm.index);
+          setFilterEditor({
+            ...editor,
+            setConfirm: null,
+            libraryCursor: Math.max(Math.min(cursor, count - 2), 0),
+            notice: deleted.ok ? 'Set deleted.' : deleted.error.message,
+          });
+        }
+      } else {
+        setFilterEditor({ ...editor, setConfirm: null });
+      }
+      return;
+    }
+    if (key.escape) {
+      setFilterEditor(backToRuleListState(editor));
+      return;
+    }
+    const base: FilterEditorState = { ...editor, libraryCursor: cursor, notice: null };
+    const nextCursor = nextCursorForKey(key, cursor, count);
+    if (nextCursor !== null) {
+      setFilterEditor({ ...base, libraryCursor: nextCursor });
+      return;
+    }
+    const set = ruleSets[cursor];
+    if (key.ctrl || key.meta || set === undefined) {
+      setFilterEditor(base);
+      return;
+    }
+    if (key.return) {
+      if (currentScopeOf(editor).rules.length > 0) {
+        setFilterEditor({ ...base, setConfirm: { kind: 'apply', index: cursor } });
+      } else {
+        applySetToScope(base, cursor);
+      }
+    } else if (input === 'r') {
+      setFilterEditor(openRuleSetNameState(base, cursor, set.name));
+    } else if (input === 'd') {
+      setFilterEditor({ ...base, setConfirm: { kind: 'delete', index: cursor } });
+    } else {
+      setFilterEditor(base);
+    }
+  }
+
+  // Saves the active list as a set. A name already in the library asks before overwriting.
+  function saveActiveRulesAs(editor: FilterEditorState, overwrite: boolean): void {
+    const saved = saveRuleSetAction(editor.name, currentScopeOf(editor).rules, { overwrite });
+    if (saved.ok) {
+      setFilterEditor(backToRuleListState(editor, `Saved set "${editor.name.trim()}".`));
+    } else if (saved.error.code === 'rule-set-exists') {
+      setFilterEditor({ ...editor, setConfirm: { kind: 'overwrite', name: editor.name.trim() }, error: null });
+    } else {
+      setFilterEditor({ ...editor, setConfirm: null, error: saved.error.message });
+    }
+  }
+
+  // Keys of the set-name input (save or rename): Enter confirms, Esc goes back.
+  function handleSetNameKey(editor: FilterEditorState, input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]): void {
+    if (editor.setConfirm !== null) {
+      if (input === 'y' || input === 'Y' || key.return) {
+        saveActiveRulesAs(editor, true);
+      } else {
+        setFilterEditor({ ...editor, setConfirm: null });
+      }
+      return;
+    }
+    if (key.escape) {
+      setFilterEditor(editor.nameMode === 'rename' ? { ...editor, view: 'library', error: null } : backToRuleListState(editor));
+      return;
+    }
+    if (key.return) {
+      if (editor.nameMode === 'save') {
+        saveActiveRulesAs(editor, false);
+        return;
+      }
+      const renamed = renameRuleSetAction(editor.nameIndex ?? -1, editor.name);
+      setFilterEditor(
+        renamed.ok
+          ? { ...editor, view: 'library', error: null, notice: `Renamed to "${editor.name.trim()}".` }
+          : { ...editor, error: renamed.error.message },
+      );
+      return;
+    }
+    if (key.upArrow || key.downArrow || resolveFocusStep(input, key, 'tab') !== null || key.ctrl || key.meta) {
+      return;
+    }
+    const result = nextTextInputValue({ value: editor.name, cursor: editor.nameCursor }, input, key);
+    setFilterEditor({ ...editor, name: result.value, nameCursor: result.cursor, error: null });
   }
 
   // Enter in the rule editor: an invalid or empty draft is refused inline and never enters the
@@ -663,6 +810,14 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
         if (filterEditor.view === 'list') {
           handleRuleListKey(filterEditor, input, key);
+          return;
+        }
+        if (filterEditor.view === 'library') {
+          handleLibraryKey(filterEditor, input, key);
+          return;
+        }
+        if (filterEditor.view === 'name') {
+          handleSetNameKey(filterEditor, input, key);
           return;
         }
         // Esc leaves the rule editor for the list, even while the history grid is open on top
@@ -1090,7 +1245,16 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         />
       ) : (
         <Box flexDirection="column" flexGrow={1} minHeight={0}>
-          <Text color={colors['text-dim']}>LOGS</Text>
+          {/* The warning shares the title row, so the row budget is unchanged. */}
+          <Box flexDirection="row" height={1} overflow="hidden">
+            <Text color={colors['text-dim']}>LOGS</Text>
+            {rulesWarning !== null ? (
+              <Text color={colors.warning} wrap="truncate-end">
+                {'  '}
+                {rulesWarning}
+              </Text>
+            ) : null}
+          </Box>
           <ZoneLayout
             zoneId="logs"
             useStore={useStore}
@@ -1224,6 +1388,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           filterScope={currentScopeOf(filterEditor)}
           rulesMaxVisibleRows={rulesListMaxVisibleRows}
           serviceName={filterEditor.repoPath !== null ? (rows.find((row) => row.path === filterEditor.repoPath)?.service ?? null) : null}
+          ruleSets={ruleSets}
           history={historyForEditor(filterEditor)}
           gridMaxRows={filterHistoryGridMaxRows}
           gridCursor={historyGridCursor}

@@ -158,8 +158,22 @@ export const FOOTER_CONTEXTS = {
       ['Ctrl+↑/↓', 'move'],
       ['Ctrl+←/→', 'level'],
       ['X', 'clear all'],
+      ['s', 'save as set'],
+      ['l', 'sets'],
       CLOSE,
     ],
+  },
+  'logs-filter-sets': {
+    label: 'Logs filter rule sets',
+    hints: [[KEY_UP_DOWN, 'select'], ['Enter', 'apply'], ['r', 'rename'], ['d', 'delete'], BACK],
+  },
+  'logs-filter-set-name': {
+    label: 'Logs filter rule set name',
+    hints: [['Enter', 'confirm name'], ['Esc', 'back']],
+  },
+  'logs-filter-sets-confirm': {
+    label: 'Logs filter rule sets, confirmation',
+    hints: [['y/Enter', 'confirm'], ['Esc', 'cancel']],
   },
   'logs-filter-rules-confirm': {
     label: 'Logs filter rules, clear all',
@@ -416,6 +430,14 @@ export const FOOTER_CONTEXTS = {
   'settings-adjust': {
     label: 'Settings numeric group',
     hints: [['←/→', 'adjust'], ['1-9', 'set'], BACK],
+  },
+  'settings-rules': {
+    label: 'Settings filter rules group',
+    hints: [MOVE, ['Enter', 'clear / delete'], BACK],
+  },
+  'settings-rules-confirm': {
+    label: 'Settings filter rules, confirmation',
+    hints: [['y/Enter', 'confirm'], ['Esc', 'cancel']],
   },
   'settings-run': {
     label: 'Settings action group',
