@@ -107,6 +107,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () =>
@@ -695,6 +699,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ edtRegistry, state }));
 
@@ -1434,6 +1442,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1479,6 +1491,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1500,6 +1516,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1520,6 +1540,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1543,6 +1567,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1582,6 +1610,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1604,6 +1636,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -1644,6 +1680,10 @@ describe("app store", () => {
         writeFilterHistory: vi.fn(async () => ok(undefined)),
         readCommandHistory: vi.fn(async () => ok(null)),
         writeCommandHistory: vi.fn(async () => ok(undefined)),
+        readLogRules: vi.fn(async () => ok(null)),
+        writeLogRules: vi.fn(async () => ok(undefined)),
+        readLogRuleSets: vi.fn(async () => ok(null)),
+        writeLogRuleSets: vi.fn(async () => ok(undefined)),
       };
       const store = createAppStore(fakeDeps({ state }));
 
@@ -2702,6 +2742,10 @@ describe("logs slice: filter history", () => {
       writeFilterHistory,
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2767,6 +2811,10 @@ describe("logs slice: filter history", () => {
       writeFilterHistory,
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
     store.getState().commitFilterHistoryEntry({ scope: "global", repoPath: null, mode: "text" }, "g-text");
@@ -2807,6 +2855,10 @@ describe("logs slice: filter history", () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2825,6 +2877,10 @@ describe("logs slice: filter history", () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2863,6 +2919,10 @@ describe("logs slice: filter history", () => {
       writeFilterHistory,
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2899,6 +2959,10 @@ describe("logs slice: filter history", () => {
       writeFilterHistory,
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 

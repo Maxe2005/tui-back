@@ -111,6 +111,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
@@ -2104,6 +2108,10 @@ describe('AppShell edts load activation', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ edtRegistry, state }));
 
@@ -2145,6 +2153,10 @@ describe('AppShell splitterRatios load activation', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -2178,6 +2190,10 @@ describe('AppShell commandHistory load activation', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(['settings', 'registry'])),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
     expect(store.getState().commandHistory).toEqual([]);
@@ -2480,6 +2496,10 @@ describe('AppShell Ctrl+W resize-mode', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     // A non-empty EDT registry: an empty one auto-opens the EDTs zone's create dialog, which
     // sets zoneInputCaptured — that would swallow the Ctrl+W-driven resize keypress below
@@ -3188,6 +3208,40 @@ describe('AppShell heal overlay', () => {
     try {
       await instance.waitUntilRenderFlush();
       expect(stdout.output).toContain('every service is up');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+});
+
+describe('AppShell filter rules load activation', () => {
+  it('hydrates the persisted rule lists and library from the mount-time loadLogsRules()', async () => {
+    const rule = { mode: 'text', query: 'noise', action: 'hide', target: 'line', enabled: true };
+    const state: StatePort = {
+      readActiveEdt: vi.fn(async () => ok(null)),
+      writeActiveEdt: vi.fn(async () => ok(undefined)),
+      readSplitterRatios: vi.fn(async () => ok(null)),
+      writeSplitterRatios: vi.fn(async () => ok(undefined)),
+      readFilterHistory: vi.fn(async () => ok(null)),
+      writeFilterHistory: vi.fn(async () => ok(undefined)),
+      readCommandHistory: vi.fn(async () => ok(null)),
+      writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok({ global: [rule] })),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok([{ name: 'n', rules: [rule] }])),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
+    };
+    const store = createAppStore(fakeDeps({ state }));
+    expect(store.getState().logsGlobalFilter.rules).toEqual([]);
+
+    const { instance } = mount(store);
+    try {
+      await flushAsyncLoad(instance);
+
+      expect(state.readLogRules).toHaveBeenCalled();
+      expect(store.getState().logsGlobalFilter.rules).toEqual([rule]);
+      expect(store.getState().logsRuleSets).toHaveLength(1);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

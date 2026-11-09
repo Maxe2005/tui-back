@@ -6,6 +6,7 @@ import { basename } from 'node:path';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { applyRuleSet } from '../../../../../core/logs/rule-sets.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
@@ -36,7 +37,7 @@ import {
   partitionServicesByEdtMembership,
 } from '../edts/edts-zone.logic.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
-import { resolveHistoryBrowseDown, resolveHistoryBrowseUp, resolveSnapBackBase } from '../../shared/input-history/index.js';
+import { resolveHistoryBrowseDown, resolveHistoryBrowseUp } from '../../shared/input-history/index.js';
 import {
   commandAtGridCursor,
   groupCommandsByColumn,
@@ -49,9 +50,12 @@ import {
 } from '../../shared/command-bar.js';
 import {
   adjustScrollOffset,
-  applyLogFilters,
+  addLogRule,
+  applyLogRules,
   computeLogsLayout,
   cycleFilterLevel,
+  decodeFilterHistoryEntry,
+  encodeFilterHistoryEntry,
   cycleLogsPaneFocus,
   LOGS_PANE_FOCUS_NAV,
   DEFAULT_LOG_FILTER,
@@ -64,7 +68,6 @@ import {
   historyEntryLabel,
   isAtOldestLine,
   isClearAllLogsKey,
-  isDefaultLogFilterSpec,
   isPaneEngagedInGlobalFilter,
   isPaneRestartAdvertised,
   isPaneWrapped,
@@ -74,7 +77,17 @@ import {
   movePaneSubFocus,
   reindexPaneSubFocus,
   resolveFilterClearTarget,
-  resolveFilterEditorDraft,
+  openFilterEditorState,
+  openRuleEditorState,
+  openRuleSetNameState,
+  backToRuleListState,
+  ruleSetsFooterContext,
+  replaceLogRule,
+  toggleLogRule,
+  deleteLogRule,
+  moveLogRule,
+  validateRuleDraft,
+  MAX_LOG_FILTER_RULES,
   resolveFullscreenScrollDirection,
   resolvePaneScrollDirection,
   resolveSelectAllToggle,
@@ -83,17 +96,20 @@ import {
   setPaneLogFilter,
   splitNoContainerRows,
   toggleAllPanesWrapFlag,
+  toggleFilterAction,
   toggleFilterMode,
+  toggleFilterTarget,
   toggleGlobalFilterEngagement,
   togglePaneWrapFlag,
   toggleVisibilityFlag,
   type FilterEditorState,
+  type FilterHistoryBrowseResult,
   type FilterHistoryKey,
-  type LogFilterSpec,
+  type LogFilterScope,
   type LogsPaneFocus,
 } from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
-import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
+import { jumpSelection, moveSelection, nextCursorForKey, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 
 // The info-only list of services without a container never takes more than this.
@@ -145,6 +161,12 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const filterHistory = useStore((state) => state.filterHistory);
   const commitFilterHistoryEntry = useStore((state) => state.commitFilterHistoryEntry);
   const filterHistoryGridMaxRows = useStore((state) => state.settings.logs.filterHistoryGridMaxRows);
+  const ruleSets = useStore((state) => state.logsRuleSets);
+  const saveRuleSetAction = useStore((state) => state.saveLogsRuleSet);
+  const renameRuleSetAction = useStore((state) => state.renameLogsRuleSet);
+  const deleteRuleSetAction = useStore((state) => state.deleteLogsRuleSet);
+  const rulesWarning = useStore((state) => state.logsRulesWarning);
+  const dismissRulesWarning = useStore((state) => state.dismissLogsRulesWarning);
 
   useEffect(() => {
     void loadEdtsBranches();
@@ -308,6 +330,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       },
       restartMode,
       actionsMenu !== null,
+      { listOpen: filterEditor?.view === 'list', confirmingClear: filterEditor?.confirmClear === true },
+      filterEditor === null ? null : ruleSetsFooterContext(filterEditor),
     ),
     useStore,
   );
@@ -334,6 +358,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     fullscreenContentWidth,
     historyGridAvailableWidth,
     historyGridAvailableHeight,
+    rulesListMaxVisibleRows,
     edtListMaxVisibleRows,
     otherListMaxVisibleRows,
     hintsMaxVisibleRows,
@@ -347,6 +372,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     filterEditorOpen: filterEditor !== null,
     historyGridOpen: historyGridCursor !== null,
     filterHistoryGridMaxRows,
+    filterEditorView: filterEditor?.view,
+    filterRuleCount: filterEditor === null ? 0 : filterEditor.view === 'library' ? ruleSets.length : currentScopeOf(filterEditor).rules.length,
     actionsMenuRows: actionsMenu === null ? 0 : logsActionsMenuRows(actionsMenu),
   });
 
@@ -357,7 +384,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     // position and the oldest-line trigger diverge from what's actually rendered.
     const engagedGlobal = isPaneEngagedInGlobalFilter(paneFilterEngaged, repoPath) ? globalFilter : null;
     const ownFilter = paneFilters[repoPath] ?? null;
-    const visibleLineCount = pane ? applyLogFilters(filterVisibleLines(pane.lines, visibility), engagedGlobal, ownFilter).length : 0;
+    const visibleLineCount = pane ? applyLogRules(filterVisibleLines(pane.lines, visibility), engagedGlobal, ownFilter).length : 0;
     const nextOffset = adjustScrollOffset(pane?.scrollOffset ?? 0, direction, visibleLineCount);
     setLogsPaneScrollOffset(repoPath, nextOffset);
     if (direction === 'up' && isAtOldestLine(nextOffset, visibleLineCount) && pane && !pane.noMoreHistory) {
@@ -365,37 +392,53 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     }
   }
 
-  // Opens the filter-editor modal — `/` (global, any Logs-zone focus) or `f` (pane, sub-focused
-  // grid pane / fullscreen only). Pre-fills the draft from the spec already active for that scope,
-  // so re-opening shows what's currently applied rather than resetting it.
+  // Opens the filter-editor modal on its rule list — `/` (global, any Logs-zone focus) or `f`
+  // (pane, sub-focused grid pane / fullscreen only). The list shows the scope's committed rules.
   function openGlobalFilterEditor(): void {
-    setFilterEditor({
-      scope: 'global',
-      repoPath: null,
-      mode: globalFilter.mode,
-      query: globalFilter.query,
-      cursor: globalFilter.query.length,
-      level: globalFilter.level,
-      error: null,
-      preOpen: globalFilter,
-      browsing: null,
-    });
+    dismissRulesWarning();
+    setFilterEditor(openFilterEditorState('global', null));
     setHistoryGridCursor(null);
   }
   function openPaneFilterEditor(repoPath: string): void {
-    const existing = paneFilters[repoPath] ?? DEFAULT_LOG_FILTER;
-    setFilterEditor({
-      scope: 'pane',
-      repoPath,
-      mode: existing.mode,
-      query: existing.query,
-      cursor: existing.query.length,
-      level: existing.level,
-      error: null,
-      preOpen: existing,
-      browsing: null,
-    });
+    dismissRulesWarning();
+    setFilterEditor(openFilterEditorState('pane', repoPath));
     setHistoryGridCursor(null);
+  }
+
+  // The committed scope the open editor works on — read live, so list changes apply immediately.
+  function currentScopeOf(editor: FilterEditorState): LogFilterScope {
+    return editor.scope === 'global' ? globalFilter : (paneFilters[editor.repoPath ?? ''] ?? DEFAULT_LOG_FILTER);
+  }
+  // Whether the pane a pane-scope editor targets is still shown (selected, or the fullscreen one).
+  function isPaneScopeLive(editor: FilterEditorState): boolean {
+    return editor.repoPath !== null && (activeRepoPaths.includes(editor.repoPath) || logsFullscreenTarget === editor.repoPath);
+  }
+  // Applies `update` to the scope's latest stored value (never a render-time copy). `update`
+  // returns null to refuse; the result says whether the change was applied.
+  function updateScopeOf(editor: FilterEditorState, update: (scope: LogFilterScope) => LogFilterScope | null): boolean {
+    let applied = false;
+    const run = (scope: LogFilterScope): LogFilterScope => {
+      const next = update(scope);
+      if (next === null) {
+        return scope;
+      }
+      applied = true;
+      return next;
+    };
+    if (editor.scope === 'global') {
+      setGlobalFilter(run);
+      return applied;
+    }
+    const repoPath = editor.repoPath;
+    if (repoPath === null || !isPaneScopeLive(editor)) {
+      return false;
+    }
+    setPaneFilters((current) => {
+      const previous = current[repoPath] ?? DEFAULT_LOG_FILTER;
+      const next = run(previous);
+      return next === previous ? current : setPaneLogFilter(current, repoPath, next);
+    });
+    return applied;
   }
 
   // Opens the `a` actions menu on one pane and lists the registry's actions for its service.
@@ -445,19 +488,293 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
     return filterHistory[filterHistoryKeyString(key)] ?? [];
   }
 
-  // The actual commit decision (compile the draft, decide which of globalFilter/paneFilters —
-  // if either — advances) is a pure function (resolveFilterEditorDraft, logs-zone.logic.ts);
-  // this wrapper just applies whichever state updates it reports.
+  // Browse results carry the draft as an encoded history entry (query + action + target); this
+  // spreads it back onto the editor state.
+  function withBrowseResult(editor: FilterEditorState, result: FilterHistoryBrowseResult): FilterEditorState {
+    const decoded = decodeFilterHistoryEntry(result.query);
+    return {
+      ...editor,
+      query: decoded.query,
+      cursor: decoded.query.length,
+      action: decoded.action,
+      target: decoded.target,
+      browsing: result.browsing,
+    };
+  }
+
+  // Snapping back out of a browse restores the saved draft's action/target too; an untouched
+  // draft keeps its own.
+  function snapBackDraft(editor: FilterEditorState): Pick<FilterEditorState, 'query' | 'cursor' | 'action' | 'target'> {
+    if (editor.browsing === null) {
+      return { query: editor.query, cursor: editor.cursor, action: editor.action, target: editor.target };
+    }
+    const decoded = decodeFilterHistoryEntry(editor.browsing.savedDraft);
+    return { query: decoded.query, cursor: decoded.query.length, action: decoded.action, target: decoded.target };
+  }
+
+  // The rule draft is only validated here (inline error, live); it enters the list on Enter.
   function applyFilterEditorDraft(next: FilterEditorState): void {
-    const result = resolveFilterEditorDraft(next);
-    setFilterEditor(result.editor);
-    if (result.globalFilter !== null) {
-      setGlobalFilter(result.globalFilter);
+    setFilterEditor({ ...next, error: validateRuleDraft(next) });
+  }
+
+  // Back to the rule list from the rule editor, draft discarded.
+  function backToRuleList(editor: FilterEditorState, listCursor: number, notice: string | null = null): void {
+    setFilterEditor({ ...editor, view: 'list', listCursor, ruleIndex: null, error: null, notice, confirmClear: false, browsing: null });
+    setHistoryGridCursor(null);
+  }
+
+  // Keys of the rule list view: the scope's changes apply to the store immediately.
+  function handleRuleListKey(editor: FilterEditorState, input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]): void {
+    const scope = currentScopeOf(editor);
+    const count = scope.rules.length;
+    const cursor = Math.min(editor.listCursor, Math.max(count - 1, 0));
+    if (editor.confirmClear) {
+      if (input === 'y' || input === 'Y' || key.return) {
+        updateScopeOf(editor, (current) => ({ ...current, rules: [] }));
+        setFilterEditor({ ...editor, listCursor: 0, confirmClear: false, notice: null });
+      } else {
+        setFilterEditor({ ...editor, confirmClear: false });
+      }
+      return;
     }
-    if (result.paneFilterUpdate !== null) {
-      const { repoPath, spec } = result.paneFilterUpdate;
-      setPaneFilters((current) => setPaneLogFilter(current, repoPath, spec));
+    if (key.escape) {
+      setFilterEditor(null);
+      setHistoryGridCursor(null);
+      return;
     }
+    const base: FilterEditorState = { ...editor, listCursor: cursor, notice: null };
+    if (key.ctrl && (key.leftArrow || key.rightArrow)) {
+      updateScopeOf(editor, (current) => ({ ...current, level: cycleFilterLevel(current.level, key.rightArrow ? 'next' : 'previous') }));
+      setFilterEditor(base);
+      return;
+    }
+    if (key.ctrl && (key.upArrow || key.downArrow)) {
+      const direction = key.upArrow ? 'up' : 'down';
+      const moved = moveLogRule(scope, cursor, direction);
+      if (moved !== scope) {
+        updateScopeOf(editor, (current) => moveLogRule(current, cursor, direction));
+        setFilterEditor({ ...base, listCursor: direction === 'up' ? cursor - 1 : cursor + 1 });
+      } else {
+        setFilterEditor(base);
+      }
+      return;
+    }
+    const nextCursor = nextCursorForKey(key, cursor, count);
+    if (nextCursor !== null) {
+      setFilterEditor({ ...base, listCursor: nextCursor });
+      return;
+    }
+    if (key.ctrl || key.meta) {
+      return;
+    }
+    if (input === 'a') {
+      if (count >= MAX_LOG_FILTER_RULES) {
+        setFilterEditor({ ...base, notice: `Rule limit reached (${MAX_LOG_FILTER_RULES}) — delete one to add another.` });
+        return;
+      }
+      setFilterEditor(openRuleEditorState(base, null, null));
+      return;
+    }
+    if (input === 's') {
+      if (count === 0) {
+        setFilterEditor({ ...base, notice: 'No rules to save — add one first.' });
+        return;
+      }
+      setFilterEditor(openRuleSetNameState(base, null, ''));
+      return;
+    }
+    if (input === 'l') {
+      setFilterEditor({ ...base, view: 'library', libraryCursor: Math.min(editor.libraryCursor, Math.max(ruleSets.length - 1, 0)) });
+      return;
+    }
+    const rule = scope.rules[cursor];
+    if (rule === undefined) {
+      setFilterEditor(base);
+      return;
+    }
+    if (key.return) {
+      setFilterEditor(openRuleEditorState(base, cursor, rule));
+    } else if (input === ' ') {
+      updateScopeOf(editor, (current) => toggleLogRule(current, cursor));
+      setFilterEditor(base);
+    } else if (input === 'd') {
+      updateScopeOf(editor, (current) => deleteLogRule(current, cursor));
+      setFilterEditor({ ...base, listCursor: Math.max(Math.min(cursor, count - 2), 0) });
+    } else if (input === 'X') {
+      setFilterEditor({ ...base, confirmClear: true });
+    } else {
+      setFilterEditor(base);
+    }
+  }
+
+  // Replaces the scope's active list with a copy of a set's rules and returns to the list.
+  function applySetToScope(editor: FilterEditorState, index: number): void {
+    const applied = applyRuleSet(ruleSets, index);
+    if (!applied.ok) {
+      setFilterEditor({ ...editor, setConfirm: null, error: applied.error.message });
+      return;
+    }
+    const name = ruleSets[index]?.name ?? '';
+    const rules = applied.data.map((rule) => ({ ...rule }));
+    if (!updateScopeOf(editor, (current) => ({ ...current, rules }))) {
+      setFilterEditor(null);
+      setHistoryGridCursor(null);
+      return;
+    }
+    setFilterEditor(backToRuleListState(editor, `Applied set "${name}".`, 0));
+  }
+
+  // Keys of the named-set library: Enter applies (asking first when the active list is not
+  // empty), r renames, d deletes (asking first), Esc returns to the rule list.
+  function handleLibraryKey(editor: FilterEditorState, input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]): void {
+    const count = ruleSets.length;
+    const cursor = Math.min(editor.libraryCursor, Math.max(count - 1, 0));
+    if (editor.setConfirm !== null) {
+      const confirm = editor.setConfirm;
+      // A confirmation whose set vanished (the library shrank) is dropped, never acted on.
+      if (confirm.kind !== 'overwrite' && ruleSets[confirm.index] === undefined) {
+        setFilterEditor({ ...editor, setConfirm: null, libraryCursor: Math.max(Math.min(cursor, count - 1), 0), error: 'That set no longer exists.' });
+        return;
+      }
+      if (input === 'y' || input === 'Y' || key.return) {
+        if (confirm.kind === 'apply') {
+          applySetToScope({ ...editor, libraryCursor: cursor }, confirm.index);
+        } else if (confirm.kind === 'delete') {
+          const deleted = deleteRuleSetAction(confirm.index);
+          setFilterEditor({
+            ...editor,
+            setConfirm: null,
+            libraryCursor: Math.max(Math.min(cursor, count - 2), 0),
+            notice: deleted.ok ? 'Set deleted.' : deleted.error.message,
+          });
+        }
+      } else {
+        setFilterEditor({ ...editor, setConfirm: null });
+      }
+      return;
+    }
+    if (key.escape) {
+      setFilterEditor(backToRuleListState(editor));
+      return;
+    }
+    const base: FilterEditorState = { ...editor, libraryCursor: cursor, notice: null };
+    const nextCursor = nextCursorForKey(key, cursor, count);
+    if (nextCursor !== null) {
+      setFilterEditor({ ...base, libraryCursor: nextCursor });
+      return;
+    }
+    const set = ruleSets[cursor];
+    if (key.ctrl || key.meta || set === undefined) {
+      setFilterEditor(base);
+      return;
+    }
+    if (key.return) {
+      if (currentScopeOf(editor).rules.length > 0) {
+        setFilterEditor({ ...base, setConfirm: { kind: 'apply', index: cursor } });
+      } else {
+        applySetToScope(base, cursor);
+      }
+    } else if (input === 'r') {
+      setFilterEditor(openRuleSetNameState(base, cursor, set.name));
+    } else if (input === 'd') {
+      setFilterEditor({ ...base, setConfirm: { kind: 'delete', index: cursor } });
+    } else {
+      setFilterEditor(base);
+    }
+  }
+
+  // Saves the active list as a set. A name already in the library asks before overwriting.
+  function saveActiveRulesAs(editor: FilterEditorState, overwrite: boolean): void {
+    const saved = saveRuleSetAction(editor.name, currentScopeOf(editor).rules, { overwrite });
+    if (saved.ok) {
+      setFilterEditor(backToRuleListState(editor, `Saved set "${editor.name.trim()}".`));
+    } else if (saved.error.code === 'rule-set-exists') {
+      setFilterEditor({ ...editor, setConfirm: { kind: 'overwrite', name: editor.name.trim() }, error: null });
+    } else {
+      setFilterEditor({ ...editor, setConfirm: null, error: saved.error.message });
+    }
+  }
+
+  // Keys of the set-name input (save or rename): Enter confirms, Esc goes back.
+  function handleSetNameKey(editor: FilterEditorState, input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]): void {
+    if (editor.setConfirm !== null) {
+      if (input === 'y' || input === 'Y' || key.return) {
+        saveActiveRulesAs(editor, true);
+      } else {
+        setFilterEditor({ ...editor, setConfirm: null });
+      }
+      return;
+    }
+    if (key.escape) {
+      setFilterEditor(editor.nameMode === 'rename' ? { ...editor, view: 'library', error: null } : backToRuleListState(editor));
+      return;
+    }
+    if (key.return) {
+      if (editor.nameMode === 'save') {
+        saveActiveRulesAs(editor, false);
+        return;
+      }
+      const renamed = renameRuleSetAction(editor.nameIndex ?? -1, editor.name);
+      setFilterEditor(
+        renamed.ok
+          ? { ...editor, view: 'library', error: null, notice: `Renamed to "${editor.name.trim()}".` }
+          : { ...editor, error: renamed.error.message },
+      );
+      return;
+    }
+    if (key.upArrow || key.downArrow || resolveFocusStep(input, key, 'tab') !== null || key.ctrl || key.meta) {
+      return;
+    }
+    const result = nextTextInputValue({ value: editor.name, cursor: editor.nameCursor }, input, key);
+    setFilterEditor({ ...editor, name: result.value, nameCursor: result.cursor, error: null });
+  }
+
+  // Enter in the rule editor: an invalid or empty draft is refused inline and never enters the
+  // list; a valid one is added/replaced, recorded in the (scope, mode) history, and the editor
+  // returns to the list.
+  function commitRuleDraft(editor: FilterEditorState): void {
+    if (editor.error !== null) {
+      return;
+    }
+    if (editor.query === '') {
+      setFilterEditor({ ...editor, error: 'Enter a query for this rule.' });
+      return;
+    }
+    const rule = { mode: editor.mode, query: editor.query, action: editor.action, target: editor.target };
+    let listCursor = 0;
+    let refusal: 'full' | null = null;
+    const applied = updateScopeOf(editor, (scope) => {
+      if (editor.ruleIndex === null) {
+        const next = addLogRule(scope, { ...rule, enabled: true });
+        if (next === null) {
+          refusal = 'full';
+          return null;
+        }
+        listCursor = scope.rules.length;
+        return next;
+      }
+      const existing = scope.rules[editor.ruleIndex];
+      if (existing === undefined) {
+        return null;
+      }
+      listCursor = editor.ruleIndex;
+      return replaceLogRule(scope, editor.ruleIndex, { ...rule, enabled: existing.enabled });
+    });
+    if (!applied) {
+      if (refusal === 'full') {
+        backToRuleList(editor, MAX_LOG_FILTER_RULES - 1, `Rule limit reached (${MAX_LOG_FILTER_RULES}) — delete one to add another.`);
+      } else {
+        // The rule or the pane is gone: nothing to save into.
+        setFilterEditor(null);
+        setHistoryGridCursor(null);
+      }
+      return;
+    }
+    commitFilterHistoryEntry(
+      { scope: editor.scope, repoPath: editor.repoPath, mode: editor.mode },
+      encodeFilterHistoryEntry(editor),
+    );
+    backToRuleList(editor, listCursor);
   }
 
   const zoneInputActive = useZoneInputActive(useStore);
@@ -481,23 +798,32 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       }
 
       // The filter editor captures every keystroke while open, from the grid or fullscreen —
-      // checked first. Tab toggles text/regex mode; Ctrl+Left/Right cycle the level restriction
-      // (bare Left/Right belong to the text caret). Escape restores the scope's pre-open spec
-      // (filterEditor.preOpen) — a true cancel; Enter closes, keeping what's committed — a true
-      // confirm, as TextInputLine's "[Enter] confirm  [Esc] cancel" hint promises.
+      // checked first. Its list view manages the scope's rules (changes apply at once, Esc closes
+      // and keeps them); its rule view edits one draft: Tab toggles text/regex, Ctrl+X/Ctrl+T the
+      // action/target, Enter saves the rule into the list, Esc goes back to the list discarding
+      // the draft.
       if (filterEditor !== null) {
-        // Esc always closes the *whole* filter editor, even while the history grid is open on
-        // top of it — never just the grid.
-        if (key.escape) {
-          if (filterEditor.scope === 'global') {
-            setGlobalFilter(filterEditor.preOpen);
-          } else if (filterEditor.repoPath !== null) {
-            const repoPath = filterEditor.repoPath;
-            const preOpen = filterEditor.preOpen;
-            setPaneFilters((current) => setPaneLogFilter(current, repoPath, isDefaultLogFilterSpec(preOpen) ? null : preOpen));
-          }
+        if (filterEditor.scope === 'pane' && !isPaneScopeLive(filterEditor)) {
           setFilterEditor(null);
           setHistoryGridCursor(null);
+          return;
+        }
+        if (filterEditor.view === 'list') {
+          handleRuleListKey(filterEditor, input, key);
+          return;
+        }
+        if (filterEditor.view === 'library') {
+          handleLibraryKey(filterEditor, input, key);
+          return;
+        }
+        if (filterEditor.view === 'name') {
+          handleSetNameKey(filterEditor, input, key);
+          return;
+        }
+        // Esc leaves the rule editor for the list, even while the history grid is open on top
+        // of it — never just the grid.
+        if (key.escape) {
+          backToRuleList(filterEditor, filterEditor.listCursor);
           return;
         }
 
@@ -511,7 +837,15 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           if (key.return) {
             const entry = commandAtGridCursor(columns, historyGridCursor);
             if (entry !== undefined) {
-              applyFilterEditorDraft({ ...filterEditor, query: entry, cursor: entry.length, browsing: null });
+              const recalled = decodeFilterHistoryEntry(entry);
+              applyFilterEditorDraft({
+                ...filterEditor,
+                query: recalled.query,
+                cursor: recalled.query.length,
+                action: recalled.action,
+                target: recalled.target,
+                browsing: null,
+              });
             }
             setHistoryGridCursor(null);
             return;
@@ -545,16 +879,7 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         }
 
         if (key.return) {
-          // Commit — a compiled, non-empty draft is pushed onto its exact (scope, mode) history
-          // list before the editor closes.
-          if (filterEditor.error === null && filterEditor.query !== '') {
-            commitFilterHistoryEntry(
-              { scope: filterEditor.scope, repoPath: filterEditor.repoPath, mode: filterEditor.mode },
-              filterEditor.query,
-            );
-          }
-          setFilterEditor(null);
-          setHistoryGridCursor(null);
+          commitRuleDraft(filterEditor);
           return;
         }
         // Tab and Shift+Tab both flip: with only two modes, reversing is the same move.
@@ -565,28 +890,29 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           // recalled entry is discarded and the original draft carries over into the new mode.
           // Snapping back out of a browsed entry changes `query`, so the caret resets to its end
           // (programmatic-overwrite convention); an untouched draft's caret position carries over.
-          const { base: baseQuery, cursor: baseCursor } = resolveSnapBackBase(
-            filterEditor.query,
-            filterEditor.cursor,
-            filterEditor.browsing,
-          );
           applyFilterEditorDraft({
             ...filterEditor,
-            query: baseQuery,
-            cursor: baseCursor,
+            ...snapBackDraft(filterEditor),
             mode: toggleFilterMode(filterEditor.mode),
             browsing: null,
           });
           setHistoryGridCursor(null);
           return;
         }
-        if (key.ctrl && (key.leftArrow || key.rightArrow)) {
-          applyFilterEditorDraft({ ...filterEditor, level: cycleFilterLevel(filterEditor.level, key.rightArrow ? 'next' : 'previous') });
+        // Ctrl+X flips show/hide, Ctrl+T flips line/match; they leave the query in place; a recalled entry becomes the draft (browsing ends).
+        if (key.ctrl && input.toLowerCase() === 'x') {
+          setHistoryGridCursor(null);
+          applyFilterEditorDraft({ ...filterEditor, action: toggleFilterAction(filterEditor.action), browsing: null });
           return;
         }
-        // Cursor navigation: bare Left/Right/Home/End move the caret only — Ctrl+Left/Right above
-        // claims the level cycle — and never touch `query`/`browsing`/`error`, so a pure caret move
-        // never snaps a browsed history entry back to the saved draft.
+        if (key.ctrl && input.toLowerCase() === 't') {
+          setHistoryGridCursor(null);
+          applyFilterEditorDraft({ ...filterEditor, target: toggleFilterTarget(filterEditor.target), browsing: null });
+          return;
+        }
+        // Cursor navigation: bare Left/Right/Home/End move the caret only and never touch
+        // `query`/`browsing`/`error`, so a pure caret move never snaps a browsed history entry
+        // back to the saved draft.
         if (key.leftArrow || key.rightArrow || key.home || key.end) {
           const result = nextTextInputValue({ value: filterEditor.query, cursor: filterEditor.cursor }, input, key);
           setFilterEditor({ ...filterEditor, cursor: result.cursor });
@@ -597,13 +923,8 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         // draft — opens the grid browser over the full history (a no-op with nothing to browse).
         if (key.upArrow) {
           const history = historyForEditor(filterEditor);
-          const result = resolveHistoryBrowseUp(filterEditor.query, filterEditor.browsing, history);
-          applyFilterEditorDraft({
-            ...filterEditor,
-            query: result.query,
-            cursor: result.query.length,
-            browsing: result.browsing,
-          });
+          const result = resolveHistoryBrowseUp(encodeFilterHistoryEntry(filterEditor), filterEditor.browsing, history);
+          applyFilterEditorDraft(withBrowseResult(filterEditor, result));
           return;
         }
         if (key.downArrow) {
@@ -617,29 +938,24 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
           }
           const history = historyForEditor(filterEditor);
           const result = resolveHistoryBrowseDown(filterEditor.browsing, history);
-          applyFilterEditorDraft({
-            ...filterEditor,
-            query: result.query,
-            cursor: result.query.length,
-            browsing: result.browsing,
-          });
+          applyFilterEditorDraft(withBrowseResult(filterEditor, result));
           return;
         }
         if (key.backspace || key.delete) {
           // While browsing, Backspace snaps back to the saved draft with the backspace applied on
           // top, rather than editing the recalled entry in place — caret at the saved draft's end,
           // like the typed-char snap-back below.
-          const { base, cursor } = resolveSnapBackBase(filterEditor.query, filterEditor.cursor, filterEditor.browsing);
-          const result = nextTextInputValue({ value: base, cursor }, input, key);
-          applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
+          const base = snapBackDraft(filterEditor);
+          const result = nextTextInputValue({ value: base.query, cursor: base.cursor }, input, key);
+          applyFilterEditorDraft({ ...filterEditor, ...base, query: result.value, cursor: result.cursor, browsing: null });
           return;
         }
         if (!key.ctrl && !key.meta && input.length > 0) {
           // Any printable character while browsing snaps back to the draft with that keystroke
           // applied on top, inserted at the caret.
-          const { base, cursor } = resolveSnapBackBase(filterEditor.query, filterEditor.cursor, filterEditor.browsing);
-          const result = nextTextInputValue({ value: base, cursor }, input, key);
-          applyFilterEditorDraft({ ...filterEditor, query: result.value, cursor: result.cursor, browsing: null });
+          const base = snapBackDraft(filterEditor);
+          const result = nextTextInputValue({ value: base.query, cursor: base.cursor }, input, key);
+          applyFilterEditorDraft({ ...filterEditor, ...base, query: result.value, cursor: result.cursor, browsing: null });
         }
         return;
       }
@@ -929,7 +1245,16 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
         />
       ) : (
         <Box flexDirection="column" flexGrow={1} minHeight={0}>
-          <Text color={colors['text-dim']}>LOGS</Text>
+          {/* The warning shares the title row, so the row budget is unchanged. */}
+          <Box flexDirection="row" height={1} overflow="hidden">
+            <Text color={colors['text-dim']}>LOGS</Text>
+            {rulesWarning !== null ? (
+              <Text color={colors.warning} wrap="truncate-end">
+                {'  '}
+                {rulesWarning}
+              </Text>
+            ) : null}
+          </Box>
           <ZoneLayout
             zoneId="logs"
             useStore={useStore}
@@ -1060,7 +1385,10 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
       {filterEditor !== null ? (
         <LogFilterEditor
           editor={filterEditor}
+          filterScope={currentScopeOf(filterEditor)}
+          rulesMaxVisibleRows={rulesListMaxVisibleRows}
           serviceName={filterEditor.repoPath !== null ? (rows.find((row) => row.path === filterEditor.repoPath)?.service ?? null) : null}
+          ruleSets={ruleSets}
           history={historyForEditor(filterEditor)}
           gridMaxRows={filterHistoryGridMaxRows}
           gridCursor={historyGridCursor}

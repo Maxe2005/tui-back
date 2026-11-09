@@ -12,7 +12,19 @@ import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/modal-dialog.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
-import { historyEntryLabel, type FilterEditorState } from './logs-zone.logic.js';
+import { BoundedList } from '../../shared/components/bounded-list.js';
+import { MAX_RULE_SETS } from '../../../../../core/logs/rule-sets.js';
+import type { StoredRuleSet } from '../../../../../core/logs/rule-sets.js';
+import {
+  formatFilterActionTarget,
+  formatLogRule,
+  formatRuleSetConfirm,
+  formatRuleSetRow,
+  MAX_LOG_FILTER_RULES,
+  historyEntryLabel,
+  type FilterEditorState,
+  type LogFilterScope,
+} from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
 
 // The filter-history grid browser's column gap — mirrors command-bar.tsx's grid spacing since
@@ -21,7 +33,10 @@ const HISTORY_GRID_COLUMN_GAP = 1;
 
 export function LogFilterEditor({
   editor,
+  filterScope,
+  rulesMaxVisibleRows,
   serviceName,
+  ruleSets,
   history,
   gridMaxRows,
   gridCursor,
@@ -30,7 +45,12 @@ export function LogFilterEditor({
   gridAvailableHeight,
 }: {
   editor: FilterEditorState;
+  // The scope's committed state — what the rule list shows.
+  filterScope: LogFilterScope;
+  rulesMaxVisibleRows: number;
   serviceName: string | null;
+  // The named-set library (the `library` view lists it).
+  ruleSets: readonly StoredRuleSet[];
   history: string[];
   gridMaxRows: number;
   gridCursor: GridCursor | null;
@@ -38,7 +58,15 @@ export function LogFilterEditor({
   gridAvailableWidth: number;
   gridAvailableHeight: number;
 }) {
-  const title = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : `PANE LOG FILTER — ${serviceName ?? 'unknown'}`;
+  const baseTitle = editor.scope === 'global' ? 'GLOBAL LOG FILTER' : `PANE LOG FILTER — ${serviceName ?? 'unknown'}`;
+  const title =
+    editor.view === 'list'
+      ? `${baseTitle} — RULES`
+      : editor.view === 'library'
+        ? `${baseTitle} — RULE SETS`
+        : editor.view === 'name'
+          ? `${baseTitle} — ${editor.nameMode === 'save' ? 'SAVE AS SET' : 'RENAME SET'}`
+          : `${baseTitle} — ${editor.ruleIndex === null ? 'NEW RULE' : `RULE ${editor.ruleIndex + 1}`}`;
   // The history grid browser — reuses command-bar.tsx's generic grid primitives over plain query
   // strings (`getLabel = historyEntryLabel`, the identity function) with its own small JSX loop.
   // A `verticalWindow` paginates it vertically like its horizontal truncation, centered on the
@@ -56,6 +84,78 @@ export function LogFilterEditor({
   const fullHistoryColumns = gridCursor !== null ? groupCommandsByColumn(history, gridMaxRows) : [];
   // layoutCommandGrid windows the history grid to the available width and height.
   const visibleColumns = gridLayout?.columns ?? [];
+  if (editor.view === 'library') {
+    const cursor = Math.min(editor.libraryCursor, Math.max(ruleSets.length - 1, 0));
+    return (
+      <ModalDialog title={title} open>
+        <Text color={colors.text} wrap="truncate-end">
+          Sets: {ruleSets.length}/{MAX_RULE_SETS}  Active rules: {filterScope.rules.length}/{MAX_LOG_FILTER_RULES}
+        </Text>
+        {ruleSets.length === 0 ? (
+          <StateLine kind="empty" subject="rule sets" text="No saved sets — go back and press s to save the active rules." />
+        ) : (
+          <BoundedList
+            items={ruleSets}
+            maxVisibleRows={rulesMaxVisibleRows}
+            cursorIndex={cursor}
+            renderItem={(set, index) => (
+              <Text key={set.name} color={index === cursor ? colors.accent : colors.text} wrap="truncate-end">
+                {index === cursor ? '› ' : '  '}
+                {formatRuleSetRow(set)}
+              </Text>
+            )}
+          />
+        )}
+        {editor.setConfirm !== null ? (
+          <Text color={colors.warning} wrap="truncate-end">{formatRuleSetConfirm(editor.setConfirm, ruleSets, filterScope.rules.length)}</Text>
+        ) : null}
+        {editor.notice !== null ? <DimAnnotation text={editor.notice} /> : null}
+        {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
+      </ModalDialog>
+    );
+  }
+  if (editor.view === 'name') {
+    return (
+      <ModalDialog title={title} open>
+        <TextInputLine label="Name" value={editor.name} cursor={editor.nameCursor} focused={editor.setConfirm === null} />
+        {editor.setConfirm !== null ? (
+          <Text color={colors.warning} wrap="truncate-end">{formatRuleSetConfirm(editor.setConfirm, ruleSets, filterScope.rules.length)}</Text>
+        ) : null}
+        {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
+      </ModalDialog>
+    );
+  }
+  if (editor.view === 'list') {
+    const cursor = Math.min(editor.listCursor, Math.max(filterScope.rules.length - 1, 0));
+    return (
+      <ModalDialog title={title} open>
+        <Text color={colors.text} wrap="truncate-end">
+          Level: {filterScope.level ?? 'ALL'}  Rules: {filterScope.rules.length}/{MAX_LOG_FILTER_RULES}
+        </Text>
+        {filterScope.rules.length === 0 ? (
+          <StateLine kind="empty" subject="rules" text="No rules — press a to add one." />
+        ) : (
+          <BoundedList
+            items={filterScope.rules}
+            maxVisibleRows={rulesMaxVisibleRows}
+            cursorIndex={cursor}
+            renderItem={(rule, index) => (
+              <Text
+                key={index}
+                color={index === cursor ? colors.accent : rule.enabled ? colors.text : colors['text-dim']}
+                wrap="truncate-end"
+              >
+                {index === cursor ? '› ' : '  '}
+                {index + 1}. {formatLogRule(rule)}
+              </Text>
+            )}
+          />
+        )}
+        {editor.confirmClear ? <Text color={colors.warning} wrap="truncate-end">Clear all {filterScope.rules.length} rules? (y/Enter = yes, Esc = keep)</Text> : null}
+        {editor.notice !== null ? <DimAnnotation text={editor.notice} /> : null}
+      </ModalDialog>
+    );
+  }
   return (
     <ModalDialog title={title} open>
       <TextInputLine
@@ -64,7 +164,9 @@ export function LogFilterEditor({
         cursor={editor.cursor}
         focused={gridCursor === null}
       />
-      <Text color={colors.text} wrap="truncate-end">Level: {editor.level ?? 'ALL'}</Text>
+      <Text color={colors.text} wrap="truncate-end">
+        Filter: {formatFilterActionTarget(editor.action, editor.target)}
+      </Text>
       {editor.error !== null ? <DimAnnotation text={editor.error} /> : null}
       {gridCursor !== null && gridLayout !== null ? (
         history.length === 0 ? (

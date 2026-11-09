@@ -2,7 +2,7 @@
 // hoc fullscreen preview target, and the per-pane buffer/error/scroll/health state. The ring
 // buffer itself lives in core/logs' LogsManager (one per store, in memory only); `logsPanes`
 // is a mirror kept in sync via `onUpdate` so React re-renders, never a second source of truth.
-// Also owns the persisted filter-history lists.
+// Also owns the persisted filter-history lists, the persisted rule lists and the rule-set library.
 import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
 import type { StateCreator } from 'zustand';
 import { createLogsManager, type LogsManager } from '../../../../../core/logs/index.js';
@@ -20,7 +20,18 @@ import {
   type ServiceAction,
   type ServiceActions,
 } from '../../../../../core/service-actions/index.js';
-import { err, type Result } from '../../../../../core/result.js';
+import { err, ok, type Result } from '../../../../../core/result.js';
+import {
+  deleteRuleSet,
+  GLOBAL_RULES_KEY,
+  readRuleLists,
+  readRuleSets,
+  renameRuleSet,
+  saveRuleSet,
+  type StoredLogRule,
+  type StoredRuleLists,
+  type StoredRuleSet,
+} from '../../../../../core/logs/rule-sets.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS, RESTART_MODES, TERMINAL_KINDS } from './service-action-ids.js';
 import { createPersistedHistoryStore, pushHistoryEntry } from '../../shared/input-history/index.js';
@@ -29,9 +40,11 @@ import {
   DEFAULT_LOG_FILTER,
   DEFAULT_VISIBILITY_FLAGS,
   filterHistoryKeyString,
+  setPaneLogFilter,
   resolvePostLoadScrollOffset,
   type FilterHistoryKey,
-  type LogFilterSpec,
+  type LogFilterRule,
+  type LogFilterScope,
   type VisibilityFlags,
 } from '../../zones/logs/logs-zone.logic.js';
 
@@ -64,18 +77,52 @@ export type LogsPaneData = {
   scrollOffset: number;
 };
 
-// Drops every per-service display setting (wrap, own filter, global-filter engagement) for the
-// given repoPaths — what deselecting a service resets, so re-selecting it starts from the
-// defaults. The global settings (visibility flags, global filter) are never touched here.
+// Drops every per-service display setting (wrap, level restriction, global-filter engagement) for
+// the given repoPaths — what deselecting a service resets, so re-selecting it starts from the
+// defaults. The service's rule list is kept (it is persisted and only an explicit clear erases
+// it), and the global settings (visibility flags, global filter) are never touched here.
 function withoutPaneSettings(state: AppState, repoPaths: readonly string[]): Partial<AppState> {
   const drop = new Set(repoPaths);
   const omit = <T>(record: Record<string, T>): Record<string, T> =>
     Object.fromEntries(Object.entries(record).filter(([path]) => !drop.has(path)));
+  const paneFilters: Record<string, LogFilterScope> = {};
+  for (const [path, scope] of Object.entries(state.logsPaneFilters)) {
+    if (!drop.has(path)) {
+      paneFilters[path] = scope;
+    } else if (scope.rules.length > 0) {
+      paneFilters[path] = { level: null, rules: scope.rules };
+    }
+  }
   return {
     logsPaneWrap: omit(state.logsPaneWrap),
     logsPaneFilterEngaged: omit(state.logsPaneFilterEngaged),
-    logsPaneFilters: omit(state.logsPaneFilters),
+    logsPaneFilters: paneFilters,
   };
+}
+
+// The persisted shape of every scope's active rule list: `global` plus one entry per repoPath
+// (selected or not), empty lists left out. The level restriction is never part of it.
+function persistedRuleLists(state: Pick<AppState, 'logsGlobalFilter' | 'logsPaneFilters'>): StoredRuleLists {
+  const lists: StoredRuleLists = {};
+  const copy = (rules: readonly LogFilterRule[]): StoredLogRule[] => rules.map((rule) => ({ ...rule }));
+  if (state.logsGlobalFilter.rules.length > 0) {
+    lists[GLOBAL_RULES_KEY] = copy(state.logsGlobalFilter.rules);
+  }
+  for (const [path, scope] of Object.entries(state.logsPaneFilters)) {
+    if (scope.rules.length > 0) {
+      lists[path] = copy(scope.rules);
+    }
+  }
+  return lists;
+}
+
+function summarizeRulesWarnings(warnings: readonly string[]): string | null {
+  if (warnings.length === 0) {
+    return null;
+  }
+  const more = warnings.length > 1 ? ` (+${warnings.length - 1} more)` : '';
+  // Warnings can carry stored text (a regex, a set name): keep the line single and printable.
+  return `Saved filter rules: ${warnings[0].replace(/[\u0000-\u001f\u007f]+/g, ' ')}${more}`;
 }
 
 function emptyPane(repoPath: string, service: string): LogsPaneData {
@@ -120,21 +167,23 @@ export type LogsSlice = {
   // fullscreen target). A key with no entry yet (subscribe still in flight) is treated as an
   // empty/loading pane by the zone.
   logsPanes: Record<string, LogsPaneData>;
-  // Display settings of the Logs tab, kept in the store (in memory only, never written to
-  // disk) so they survive switching tabs and coming back, but not closing the tool.
+  // Display settings of the Logs tab, kept in the store so they survive switching tabs and coming
+  // back. Only the rule lists inside the two filters are also written to disk (see the persisted
+  // rules below); everything else is lost on closing the tool.
   // Global ones: the t/o/p visibility flags and the global filter. Per-service ones, keyed by
   // repoPath: wrap, global-filter engagement, own filter — all dropped when the service is
-  // deselected, so re-selecting it starts fresh while the global ones stay applied.
+  // deselected (its rule list excepted), so re-selecting it starts fresh while the global ones
+  // stay applied.
   logsVisibility: VisibilityFlags;
-  logsGlobalFilter: LogFilterSpec;
+  logsGlobalFilter: LogFilterScope;
   logsPaneWrap: Record<string, boolean>;
   logsPaneFilterEngaged: Record<string, boolean>;
-  logsPaneFilters: Record<string, LogFilterSpec>;
+  logsPaneFilters: Record<string, LogFilterScope>;
   setLogsVisibility: (update: (current: VisibilityFlags) => VisibilityFlags) => void;
-  setLogsGlobalFilter: (filter: LogFilterSpec) => void;
+  setLogsGlobalFilter: (filter: LogFilterScope | ((current: LogFilterScope) => LogFilterScope)) => void;
   setLogsPaneWrap: (update: (current: Record<string, boolean>) => Record<string, boolean>) => void;
   setLogsPaneFilterEngaged: (update: (current: Record<string, boolean>) => Record<string, boolean>) => void;
-  setLogsPaneFilters: (update: (current: Record<string, LogFilterSpec>) => Record<string, LogFilterSpec>) => void;
+  setLogsPaneFilters: (update: (current: Record<string, LogFilterScope>) => Record<string, LogFilterScope>) => void;
   toggleLogsEdtSelection: (repoPath: string) => void;
   toggleLogsOtherSelection: (repoPath: string) => void;
   selectAllLogsEdtServices: (repoPaths: readonly string[]) => void;
@@ -221,6 +270,28 @@ export type LogsSlice = {
   // writeFilterHistory has landed — so the reset's own disk write can't be overwritten by a
   // save that was still pending when it ran.
   clearFilterHistoryAndDrainSaves: () => Promise<void>;
+
+  // Persisted filter rules. Every scope's active list (global, per service) is written to
+  // state.json whenever its rules change (the level restriction stays in memory only); the named
+  // sets live in `logsRuleSets`. A service's persisted list survives its deselection, and lists of
+  // services that are no longer registered stay in the file untouched.
+  logsRuleSets: StoredRuleSet[];
+  // One line naming what could not be restored from state.json (an uncompilable rule, a corrupt
+  // value) — null when the load was clean or the warning was dismissed.
+  logsRulesWarning: string | null;
+  dismissLogsRulesWarning: () => void;
+  // Hydrates the rule lists and the library from state.json (AppShell mount, and again after `:reset`).
+  loadLogsRules: () => Promise<void>;
+  saveLogsRuleSet: (name: string, rules: readonly LogFilterRule[], options?: { overwrite?: boolean }) => Result<void>;
+  renameLogsRuleSet: (index: number, name: string) => Result<void>;
+  deleteLogsRuleSet: (index: number) => Result<void>;
+  // `:settings` — deletes the whole library; active lists are untouched.
+  clearLogsRuleSets: () => void;
+  // `:settings` — empties one scope's persisted list (GLOBAL_RULES_KEY or a repoPath), live too;
+  // its level restriction and every other scope are untouched.
+  clearLogsScopeRules: (scopeKey: string) => void;
+  // `:reset` — empties every list and the library, resolving once queued saves have landed.
+  clearLogsRulesAndDrainSaves: () => Promise<void>;
 };
 
 export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [], [], LogsSlice> {
@@ -233,6 +304,57 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   // history alike.
   const filterHistoryStore = createPersistedHistoryStore<Record<string, string[]>>(
     deps ? { read: () => deps.state.readFilterHistory(), write: (history) => deps.state.writeFilterHistory(history) } : null,
+  );
+
+  // The same controller sequences the rule lists and the library. The read wrappers sanitize what
+  // state.json holds and report what they had to drop through `logsRulesWarning`.
+  const loadWarnings: { rules: string[]; sets: string[] } = { rules: [], sets: [] };
+  // A field whose last read failed is never overwritten blindly: the next write first re-reads it
+  // and only proceeds once the file is readable again.
+  const unreadable = { rules: false, sets: false };
+  const rulesStore = createPersistedHistoryStore<StoredRuleLists>(
+    deps
+      ? {
+          read: async () => {
+            const result = await readRuleLists(deps.state);
+            unreadable.rules = !result.ok;
+            loadWarnings.rules = result.ok ? result.data.warnings : [`logRules: could not be read — ${result.error.message}`];
+            return ok(result.ok ? result.data.value : null);
+          },
+          write: async (lists) => {
+            if (unreadable.rules) {
+              const probe = await deps.state.readLogRules();
+              if (!probe.ok) {
+                return err(probe.error.code, probe.error.message);
+              }
+              unreadable.rules = false;
+            }
+            return deps.state.writeLogRules(lists);
+          },
+        }
+      : null,
+  );
+  const ruleSetsStore = createPersistedHistoryStore<StoredRuleSet[]>(
+    deps
+      ? {
+          read: async () => {
+            const result = await readRuleSets(deps.state);
+            unreadable.sets = !result.ok;
+            loadWarnings.sets = result.ok ? result.data.warnings : [`logRuleSets: could not be read — ${result.error.message}`];
+            return ok(result.ok ? result.data.value : null);
+          },
+          write: async (sets) => {
+            if (unreadable.sets) {
+              const probe = await deps.state.readLogRuleSets();
+              if (!probe.ok) {
+                return err(probe.error.code, probe.error.message);
+              }
+              unreadable.sets = false;
+            }
+            return deps.state.writeLogRuleSets(sets);
+          },
+        }
+      : null,
   );
 
   // The shared service-actions registry (restart + open-in-IDE), built once from the injected
@@ -266,6 +388,39 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
   }
 
   return (set, get) => {
+    // Writes the active rule lists when (and only when) a change touched their rules — level
+    // changes, selection and engagement never cause a write.
+    const persistRuleListsIfChanged = (before: StoredRuleLists): void => {
+      if (JSON.stringify(persistedRuleLists(get())) !== JSON.stringify(before)) {
+        rulesStore.mutate(() => persistedRuleLists(get()));
+      }
+    };
+    const publishRulesWarning = (): void => {
+      set({ logsRulesWarning: summarizeRulesWarnings([...loadWarnings.rules, ...loadWarnings.sets]) });
+    };
+    // Applies a library operation: the new library lands in the store at once (the UI answers
+    // synchronously) and is persisted. If the hydration read replaced the library in between, the
+    // operation is replayed on what that read brought in, so neither side is lost.
+    const mutateRuleSets = (op: (library: readonly StoredRuleSet[]) => Result<StoredRuleSet[]>): Result<void> => {
+      const result = op(get().logsRuleSets);
+      if (!result.ok) {
+        return result;
+      }
+      const optimistic = result.data;
+      set({ logsRuleSets: optimistic });
+      ruleSetsStore.mutate(() => {
+        let library = get().logsRuleSets;
+        if (library !== optimistic) {
+          const replayed = op(library);
+          if (replayed.ok) {
+            library = replayed.data;
+            set({ logsRuleSets: library });
+          }
+        }
+        return library;
+      });
+      return ok(undefined);
+    };
     // The status resolver's ports, plus the live per-service health-check toggle — read at
     // every poll, so a change in :settings applies at the next tick.
     const statusPorts = deps
@@ -631,12 +786,22 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       logsPaneWrap: {},
       logsPaneFilterEngaged: {},
       logsPaneFilters: {},
+      logsRuleSets: [],
+      logsRulesWarning: null,
 
       setLogsVisibility: (update) => set((state) => ({ logsVisibility: update(state.logsVisibility) })),
-      setLogsGlobalFilter: (filter) => set({ logsGlobalFilter: filter }),
+      setLogsGlobalFilter: (filter) => {
+        const before = persistedRuleLists(get());
+        set((state) => ({ logsGlobalFilter: typeof filter === 'function' ? filter(state.logsGlobalFilter) : filter }));
+        persistRuleListsIfChanged(before);
+      },
       setLogsPaneWrap: (update) => set((state) => ({ logsPaneWrap: update(state.logsPaneWrap) })),
       setLogsPaneFilterEngaged: (update) => set((state) => ({ logsPaneFilterEngaged: update(state.logsPaneFilterEngaged) })),
-      setLogsPaneFilters: (update) => set((state) => ({ logsPaneFilters: update(state.logsPaneFilters) })),
+      setLogsPaneFilters: (update) => {
+        const before = persistedRuleLists(get());
+        set((state) => ({ logsPaneFilters: update(state.logsPaneFilters) }));
+        persistRuleListsIfChanged(before);
+      },
 
       toggleLogsEdtSelection: (repoPath) =>
         set((state) =>
@@ -1044,6 +1209,63 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
         });
       },
       clearFilterHistoryAndDrainSaves: () => filterHistoryStore.resetAndDrain(() => set({ filterHistory: {} })),
+
+      dismissLogsRulesWarning: () => set({ logsRulesWarning: null }),
+      loadLogsRules: async () => {
+        loadWarnings.rules = [];
+        loadWarnings.sets = [];
+        await Promise.all([
+          rulesStore.load((lists) =>
+            set((state) => {
+              // Never overwrite a scope the user already edited while the read was in flight.
+              const paneFilters = { ...state.logsPaneFilters };
+              for (const [key, rules] of Object.entries(lists)) {
+                if (key !== GLOBAL_RULES_KEY && (paneFilters[key]?.rules.length ?? 0) === 0) {
+                  paneFilters[key] = { level: paneFilters[key]?.level ?? null, rules };
+                }
+              }
+              const globalRules = lists[GLOBAL_RULES_KEY];
+              return {
+                logsPaneFilters: paneFilters,
+                ...(globalRules !== undefined && state.logsGlobalFilter.rules.length === 0
+                  ? { logsGlobalFilter: { ...state.logsGlobalFilter, rules: globalRules } }
+                  : {}),
+              };
+            }),
+          ),
+          ruleSetsStore.load((sets) => set({ logsRuleSets: sets })),
+        ]);
+        publishRulesWarning();
+      },
+      saveLogsRuleSet: (name, rules, options) => mutateRuleSets((library) => saveRuleSet(library, name, rules, options)),
+      renameLogsRuleSet: (index, name) => mutateRuleSets((library) => renameRuleSet(library, index, name)),
+      deleteLogsRuleSet: (index) => mutateRuleSets((library) => deleteRuleSet(library, index)),
+      clearLogsRuleSets: () => {
+        mutateRuleSets(() => ok([]));
+      },
+      clearLogsScopeRules: (scopeKey) => {
+        const before = persistedRuleLists(get());
+        set((state) => {
+          if (scopeKey === GLOBAL_RULES_KEY) {
+            return { logsGlobalFilter: { ...state.logsGlobalFilter, rules: [] } };
+          }
+          return { logsPaneFilters: setPaneLogFilter(state.logsPaneFilters, scopeKey, state.logsPaneFilters[scopeKey] === undefined ? null : { ...state.logsPaneFilters[scopeKey], rules: [] }) };
+        });
+        persistRuleListsIfChanged(before);
+      },
+      clearLogsRulesAndDrainSaves: async () => {
+        const clearLive = () =>
+          set((state) => ({
+            logsRuleSets: [],
+            logsGlobalFilter: { ...state.logsGlobalFilter, rules: [] },
+            logsPaneFilters: Object.fromEntries(
+              Object.entries(state.logsPaneFilters)
+                .map(([path, scope]) => [path, { ...scope, rules: [] }] as const)
+                .filter(([, scope]) => scope.level !== null),
+            ),
+          }));
+        await Promise.all([rulesStore.resetAndDrain(clearLive), ruleSetsStore.resetAndDrain(() => {})]);
+      },
       clearServiceFilterHistory: (repoPath) => {
         filterHistoryStore.mutate(() => {
           set((state) => {

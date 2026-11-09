@@ -6,7 +6,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { StatePort } from '../../../core/ports/state.js';
+import type { StatePort, StoredRuleLists, StoredRuleSet } from '../../../core/ports/state.js';
 import type { XdgPaths } from '../xdg/index.js';
 import { ensureXdgDir } from '../xdg/index.js';
 import { stateSchema } from './schema.js';
@@ -16,7 +16,11 @@ type StateFileShape = {
   splitterRatios?: Record<string, number[]>;
   filterHistory?: Record<string, string[]>;
   commandHistory?: string[];
+  logRules?: unknown;
+  logRuleSets?: unknown;
 };
+
+type OptionalKey = 'splitterRatios' | 'filterHistory' | 'commandHistory' | 'logRules' | 'logRuleSets';
 
 export function resolveStateFile(xdg: XdgPaths): string {
   return join(xdg.stateDir, 'state.json');
@@ -32,6 +36,10 @@ export function createStatePort(stateFile: string): StatePort {
     writeFilterHistory: (history) => writeFilterHistory(stateFile, history),
     readCommandHistory: () => readCommandHistory(stateFile),
     writeCommandHistory: (history) => writeCommandHistory(stateFile, history),
+    readLogRules: () => readOptionalField(stateFile, 'logRules'),
+    writeLogRules: (rules) => mergeWriteStateFile(stateFile, { logRules: rules satisfies StoredRuleLists }),
+    readLogRuleSets: () => readOptionalField(stateFile, 'logRuleSets'),
+    writeLogRuleSets: (sets) => mergeWriteStateFile(stateFile, { logRuleSets: sets satisfies StoredRuleSet[] }),
   };
 }
 
@@ -143,8 +151,8 @@ function extractActiveEdt(raw: unknown): Result<string | null> {
 }
 
 // Symmetric to extractActiveEdt: recovers one optional field (`splitterRatios`, `filterHistory`,
-// `commandHistory`) alone when another field failed the whole-file validation.
-function extractOptionalField<K extends 'splitterRatios' | 'filterHistory' | 'commandHistory'>(
+// `commandHistory`, `logRules`, `logRuleSets`) alone when another field failed the whole-file validation.
+function extractOptionalField<K extends OptionalKey>(
   raw: unknown,
   key: K,
 ): Result<StateFileShape[K]> {
@@ -163,7 +171,7 @@ function extractOptionalField<K extends 'splitterRatios' | 'filterHistory' | 'co
 
 // Shared read step for the optional fields: ok(value ?? null), recovering the field on its own
 // when only a sibling failed validation.
-async function readOptionalField<K extends 'splitterRatios' | 'filterHistory' | 'commandHistory'>(
+async function readOptionalField<K extends OptionalKey>(
   stateFile: string,
   key: K,
 ): Promise<Result<NonNullable<StateFileShape[K]> | null>> {
@@ -195,6 +203,8 @@ function mergeWriteStateFile(stateFile: string, patch: Partial<StateFileShape>):
       splitterRatios: existing?.splitterRatios,
       filterHistory: existing?.filterHistory,
       commandHistory: existing?.commandHistory,
+      logRules: existing?.logRules,
+      logRuleSets: existing?.logRuleSets,
       ...patch,
     });
   });

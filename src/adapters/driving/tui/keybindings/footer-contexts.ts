@@ -147,13 +147,45 @@ export const FOOTER_CONTEXTS = {
     ],
   },
   command: { label: 'Command entry', hints: [['Tab', 'complete'], ['Enter', 'run'], ['Esc', 'close']] },
+  'logs-filter-rules': {
+    label: 'Logs filter rules',
+    hints: [
+      [KEY_UP_DOWN, 'select'],
+      ['a', 'add'],
+      ['Enter', 'edit'],
+      ['Space', 'on/off'],
+      ['d', 'delete'],
+      ['Ctrl+↑/↓', 'move'],
+      ['Ctrl+←/→', 'level'],
+      ['X', 'clear all'],
+      ['s', 'save as set'],
+      ['l', 'sets'],
+      CLOSE,
+    ],
+  },
+  'logs-filter-sets': {
+    label: 'Logs filter rule sets',
+    hints: [[KEY_UP_DOWN, 'select'], ['Enter', 'apply'], ['r', 'rename'], ['d', 'delete'], BACK],
+  },
+  'logs-filter-set-name': {
+    label: 'Logs filter rule set name',
+    hints: [['Enter', 'confirm name'], ['Esc', 'back']],
+  },
+  'logs-filter-sets-confirm': {
+    label: 'Logs filter rule sets, confirmation',
+    hints: [['y/Enter', 'confirm'], ['Esc', 'cancel']],
+  },
+  'logs-filter-rules-confirm': {
+    label: 'Logs filter rules, clear all',
+    hints: [['y/Enter', 'clear all rules'], ['Esc', 'keep']],
+  },
   'logs-filter-edit': {
-    label: 'Logs filter editor',
-    hints: [['Tab', 'text/regex'], ['Ctrl+←/→', 'level'], [KEY_UP_DOWN, 'history'], ['Enter', 'apply'], CANCEL],
+    label: 'Logs filter rule editor',
+    hints: [['Tab', 'text/regex'], ['Ctrl+X', 'show/hide'], ['Ctrl+T', 'line/match'], [KEY_UP_DOWN, 'history'], ['Enter', 'save rule'], ['Esc', 'back']],
   },
   'logs-filter-history': {
     label: 'Logs filter history',
-    hints: [['↑/↓/←/→', 'browse history'], ['Enter', 'recall'], CLOSE],
+    hints: [['↑/↓/←/→', 'browse history'], ['Enter', 'recall'], BACK],
   },
   'logs-actions-menu': {
     label: 'Logs service actions menu',
@@ -398,6 +430,14 @@ export const FOOTER_CONTEXTS = {
   'settings-adjust': {
     label: 'Settings numeric group',
     hints: [['←/→', 'adjust'], ['1-9', 'set'], BACK],
+  },
+  'settings-rules': {
+    label: 'Settings filter rules group',
+    hints: [MOVE, ['Enter', 'clear / delete'], BACK],
+  },
+  'settings-rules-confirm': {
+    label: 'Settings filter rules, confirmation',
+    hints: [['y/Enter', 'confirm'], ['Esc', 'cancel']],
   },
   'settings-run': {
     label: 'Settings action group',

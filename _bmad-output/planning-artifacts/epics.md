@@ -2723,7 +2723,7 @@ As a developer, I want the st zone's option checkboxes to start the way I like, 
 
 A developer can view a live, filterable, aggregated log stream across multiple services, with inline health status and a developer-triggered restart control.
 
-> Reopened 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`) for Stories 5.8, 5.9 and 5.10 (hide/show-only filters, stackable rules, persisted rules and named sets). Story 5.2's "ephemeral" boundary is amended by 5.10: the stream and buffer are never persisted; filter rules are.
+> Reopened 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`) for Stories 5.8, 5.9 and 5.10 (hide/show-only filters, stackable rules, persisted rules and named sets). Story 5.2's "ephemeral" boundary is amended by 5.10: the stream and buffer are never persisted; filter rules (active lists and named sets) are, and the level restriction stays ephemeral.
 
 ### Story 5.1: Aggregated Live Log Stream
 
@@ -2810,7 +2810,7 @@ So that I never need a separate health check step and a failing service is never
 
 ### Story 5.4: Filter History Recall
 
-> Added 2026-09-18 (Sprint Change Proposal): new capability for the filter editor (Story 5.2) — recall the last N text/regex filters used, per scope (global / per-service), instead of retyping them. Introduces the first *persisted* data tied to filters — Story 5.2's "ephemeral, never persisted" boundary continues to apply to the live/active filter state; history is a distinct concept (a record of past commits) and is explicitly exempted. Also reworks the Logs tab of `:settings` to a row-cursor navigation model to accommodate the new fields and history-clear actions.
+> Added 2026-09-18 (Sprint Change Proposal): new capability for the filter editor (Story 5.2) — recall the last N text/regex filters used, per scope (global / per-service), instead of retyping them. Introduces the first *persisted* data tied to filters — Story 5.2's "ephemeral, never persisted" boundary continues to apply to the live/active filter state (amended by Story 5.10: the active rule lists and named rule sets are now persisted too; the level restriction and the stream stay ephemeral); history is a distinct concept (a record of past commits) and is explicitly exempted. Also reworks the Logs tab of `:settings` to a row-cursor navigation model to accommodate the new fields and history-clear actions.
 
 As a developer,
 I want the filter editor to remember and let me recall the recent text/regex filters I've used,
@@ -2860,7 +2860,7 @@ So that I don't have to retype filters I've already used, across services and ac
 
 **Given** the app is restarted
 **When** the filter editor is reopened
-**Then** previously recorded history is still available — persisted to disk (unlike the live filter state itself, which stays ephemeral per Story 5.2's boundary)
+**Then** previously recorded history is still available — persisted to disk (unlike the live filter state itself, which stays ephemeral per Story 5.2's boundary — amended by Story 5.10, which also persists rule lists)
 
 ### Story 5.5: Bound List & Filter-Editor Height to the Terminal Window
 
@@ -3055,6 +3055,32 @@ So that I do not rebuild my noise filters every day and can switch between setup
 **Given** the tests **Then** the state adapter is integration-tested against a temp file (round-trip, corrupt value, uncompilable regex), and the library operations (save, overwrite, apply, rename, delete) are tested in core against a fake `StatePort`.
 
 **Implementation notes:** `StatePort` gains read/write for the active rule lists (keyed by scope) and for the library; keep the same tolerant-reader approach as the filter history. EXPERIENCE.md's filter-editor row and UX-DR32 mention persistence and sets. The 5.2 "ephemeral" wording in `epics.md` gets an amendment note.
+
+**Prerequisites:** 5.9.
+
+### Story 5.11: ANSI-Aware Log Filter Rules
+
+> Added 2026-11-09 (bug found in daily use). Extends Stories 5.8–5.9: rules must match what the developer reads, not the raw escape codes.
+
+As a developer,
+I want my text/regex filter rules to match the visible text of colourised log lines,
+So that a rule like `^\[Nest\] …` hides or keeps what I see, and the remaining text keeps its colours.
+
+**Acceptance Criteria:**
+
+**Given** a log line carrying ANSI SGR colour codes (e.g. NestJS: `\x1b[32m[Nest] 32  - \x1b[39m11/09/2026, 9:20:21 AM \x1b[32m    LOG\x1b[39m …`) **When** a rule's query is matched **Then** matching runs on the text with the ANSI sequences removed, so anchors (`^`) and patterns spanning a colour change behave as if the line were uncoloured.
+
+**Given** a `hide` + `match` rule **When** it matches **Then** the matched visible characters are removed from the original line, and the colour of every remaining character is unchanged (SGR state is preserved or restored across the removal; nothing bleeds into the following text).
+
+**Given** a `show` + `match` rule **Then** the displayed text is the matched visible ranges joined as before, each keeping its own colour; a `line`-target rule only tests the stripped text and returns the original line untouched.
+
+**Given** a level restriction (Story 5.2) **Then** the level is detected on the stripped text.
+
+**Given** a line with no ANSI codes **Then** every rule behaves exactly as before (no regression on Stories 5.8–5.10).
+
+**Given** the unit tests **Then** they use the real organizations-back Nest lines and the api-gateway lines (`[api-gateway] 32 11/9/2026, 1:34:52 PM  LOG [FAST] GET /health`) as fixtures, including the regex `^\[[\w-]+\]\s+\d+\s+(?:-\s+)?\d{1,2}\/\d{1,2}\/\d{4},\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\s*` as hide+match stripping the prefix while the remainder keeps its colour.
+
+**Implementation notes:** change confined to `compileLogFilter`/`applyLogRules`/`detectLogLevel` in `logs-zone.logic.ts` (pure functions): build a visible-text copy plus an index map visible→original offsets, match on the copy, map ranges back, and re-emit the SGR codes found inside removed ranges.
 
 **Prerequisites:** 5.9.
 
