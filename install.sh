@@ -24,11 +24,14 @@ node_help=(
   "brew: brew install node@${MIN_NODE}"
 )
 
-if ! command -v node >/dev/null 2>&1 || ! command -v npx >/dev/null 2>&1; then
-  fail "node and npx (Node >= ${MIN_NODE}) are required but were not found." "${node_help[@]}"
+if ! command -v node >/dev/null 2>&1; then
+  fail "node (Node >= ${MIN_NODE}) is required but was not found." "${node_help[@]}"
+fi
+if ! command -v npx >/dev/null 2>&1; then
+  fail "npx was not found. It ships with npm: reinstall Node (>= ${MIN_NODE}) with npm included." "${node_help[@]}"
 fi
 
-node_version="$(node -v)"
+node_version="$(node -v 2>/dev/null)" || fail "could not run 'node -v'." "${node_help[@]}"
 node_version="${node_version#v}"
 node_major="${node_version%%.*}"
 case "$node_major" in

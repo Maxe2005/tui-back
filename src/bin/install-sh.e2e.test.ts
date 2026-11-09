@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 
 const scriptPath = fileURLToPath(new URL('../../install.sh', import.meta.url));
 const tmpDirs: string[] = [];
@@ -68,12 +69,50 @@ describe('install.sh', () => {
 
   it('exits 1 when node is missing', async () => {
     const { dir, log } = await makeStubs({ nodeVersion: null });
-    expect(run(dir).status).toBe(1);
+    const r = run(dir);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/node .*required/);
     expect(await logOf(log)).toBeNull();
   });
 
-  it('exits 1 when npx is missing', async () => {
+  it('exits 1 with a dedicated message when npx is missing', async () => {
     const { dir } = await makeStubs({ npx: false });
-    expect(run(dir).status).toBe(1);
+    const r = run(dir);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/npx was not found/);
+  });
+
+  it('rejects Node 23 and accepts exactly Node 24.0.0', async () => {
+    const old = await makeStubs({ nodeVersion: '23.9.0' });
+    expect(run(old.dir).status).toBe(1);
+    expect(await logOf(old.log)).toBeNull();
+    const ok = await makeStubs({ nodeVersion: '24.0.0' });
+    expect(run(ok.dir).status).toBe(7);
+    expect(await logOf(ok.log)).not.toBeNull();
+  });
+
+  it('exits 1 with the parse-error message on an unparsable Node version', async () => {
+    const { dir, log } = await makeStubs({ nodeVersion: 'abc' });
+    const r = run(dir);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/could not parse/);
+    expect(await logOf(log)).toBeNull();
+  });
+
+  it('targets the same repository as package.json', async () => {
+    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { repository: { url: string } };
+    const slug = /github\.com[/:]([^/]+\/[^/.]+)/.exec(pkg.repository.url)?.[1];
+    const { dir, log } = await makeStubs({});
+    run(dir);
+    expect(await logOf(log)).toBe(`-y github:${slug} install\n`);
+  });
+
+  it('ships only runtime files according to npm pack', () => {
+    const r = spawnSync('npm', ['pack', '--dry-run', '--json'], { encoding: 'utf8', cwd: fileURLToPath(new URL('../../', import.meta.url)) });
+    expect(r.status).toBe(0);
+    const files = (JSON.parse(r.stdout) as Array<{ files: Array<{ path: string }> }>)[0]!.files.map((f) => f.path);
+    expect(files).toContain('src/bin/tui-back.mjs');
+    expect(files).toContain('package.json');
+    expect(files.filter((f) => /^(_bmad|\.agents|\.claude|\.opencode|\.bmad-loop)/.test(f) || /\.test\.tsx?$/.test(f))).toEqual([]);
   });
 });

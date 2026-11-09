@@ -2,7 +2,7 @@
 title: 'Story 10.4: Publication, `install.sh` and Docs'
 type: 'feature'
 created: '2026-11-09'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: '4545bdf94f87b3c1099bd367cc68b73f7dccbfd5'
 review_loop_iteration: 0
 context:
@@ -52,13 +52,13 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `install.sh` -- bash script: `set -eu`, check git, node, npx, Node major >= 24, then `exec npx -y github:Maxe2005/tui-back install "$@"`; executable bit
-- [ ] `src/bin/install-sh.e2e.test.ts` -- `bash -n`; stubbed `PATH` cases from the matrix (no git, old Node, happy path with stub `npx` recording its args)
-- [ ] `LICENSE` -- ISC text, copyright Maxence Choisel
-- [ ] `package.json` -- add `files`; verify with `npm pack --dry-run` that `_bmad-output`, `.agents`, `.claude`, `.opencode`, `.bmad-loop` are absent and `src/bin/tui-back.mjs` present; add `.npmignore` only if needed
-- [ ] `README.md` -- install one-liner (curl `install.sh` and `npx`), commands, aliases, completion, update, uninstall, `build-essential` fallback, link to docs
-- [ ] `.memlog.md` -- append (decision) entry: AD-14 amendment + AD-24 added 2026-11-05
-- [ ] `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md` -- record the clean-machine result (container run if available, else mark as pending manual step for Max)
+- [x] `install.sh` -- bash script: `set -eu`, check git, node, npx, Node major >= 24, then `exec npx -y github:Maxe2005/tui-back install "$@"`; executable bit
+- [x] `src/bin/install-sh.e2e.test.ts` -- `bash -n`; stubbed `PATH` cases from the matrix (no git, old Node, happy path with stub `npx` recording its args)
+- [x] `LICENSE` -- ISC text, copyright Maxence Choisel
+- [x] `package.json` -- add `files`; verify with `npm pack --dry-run` that `_bmad-output`, `.agents`, `.claude`, `.opencode`, `.bmad-loop` are absent and `src/bin/tui-back.mjs` present; add `.npmignore` only if needed
+- [x] `README.md` -- install one-liner (curl `install.sh` and `npx`), commands, aliases, completion, update, uninstall, `build-essential` fallback, link to docs
+- [x] `.memlog.md` -- append (decision) entry: AD-14 amendment + AD-24 added 2026-11-05
+- [x] `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md` -- record the clean-machine result (container run if available, else mark as pending manual step for Max)
 
 **Acceptance Criteria:**
 - Given `install.sh`, when `bash -n` runs, then it passes; when a check fails, then exit 1 and nothing is installed.

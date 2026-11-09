@@ -10,7 +10,7 @@ Requires Node >= 24, git and bash.
 curl -fsSL https://raw.githubusercontent.com/Maxe2005/tui-back/HEAD/install.sh | bash
 ```
 
-`install.sh` only checks `git` and Node >= 24 (it changes nothing and prints nvm/apt/brew instructions if one is missing), then runs the npm installer. You can skip it:
+`install.sh` itself writes nothing: it checks `git` and Node >= 24 (printing nvm/apt/brew instructions and stopping if one is missing), then runs the npm installer. That installer modifies the global npm prefix, `~/.bashrc` and `<XDG data dir>/tui-back/completion.bash`. To pass flags through the pipe, use `bash -s -- --uninstall`. You can skip it:
 
 ```bash
 npx -y github:Maxe2005/tui-back install

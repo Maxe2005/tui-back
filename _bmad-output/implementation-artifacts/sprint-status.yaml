@@ -91,7 +91,7 @@ development_status:
   10-1-repair-the-bin-one-binary-tui-routing: done
   10-2-completion-bash-subcommand: done
   10-3-install-subcommand: review
-  10-4-publication-install-sh-and-docs: in-progress
+  10-4-publication-install-sh-and-docs: review
   epic-10-retrospective: optional
 
   epic-11: backlog
