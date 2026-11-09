@@ -40,7 +40,7 @@ tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
-  # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-11-04); only open work is listed here.
+  # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-11-09); only open work is listed here.
   epic-1: done
   epic-1-retrospective: done
 
@@ -54,11 +54,6 @@ development_status:
   epic-4-retrospective: optional
 
   epic-5: done
-  # Reopened 2026-11-05 (sprint-change-proposal-2026-11-05.md): hide/show-only filters, stackable rules, persisted rules and named sets. Order: 5-8 -> 5-9 -> 5-10.
-  5-8-hide-show-only-log-filters: done
-  5-9-stackable-log-filter-rules: done
-  5-10-persisted-filter-rules-and-named-rule-sets: done
-  5-11-ansi-aware-log-filter-rules: done
   epic-5-retrospective: optional
 
   epic-6: in-progress
@@ -72,19 +67,7 @@ development_status:
   epic-8: done
   epic-8-retrospective: optional
 
-  epic-9: in-progress
-  # Service terminals & unified service actions (2026-11-04): sprint-change-proposal-2026-11-04.md. Order: 9-1 -> 9-3 -> 9-2 -> 9-4 -> 9-5; 9-6 independent. + health-first status & heal (2026-11-04, sprint-change-proposal-2026-11-04-2.md): 9-7 -> 9-8 -> 9-9. + help filter & per-service health check toggle (2026-11-04, sprint-change-proposal-2026-11-04-3.md): 9-10 independent; 9-7 -> 9-11.
-  9-1-shell-session-port-driven-adapter-core-shell-use-case: done
-  9-2-registry-entries-for-service-and-container-terminals: done
-  9-3-shared-scrollable-output-and-fullscreen-primitive: done
-  9-4-terminal-view-in-the-tui: review
-  9-5-unified-service-actions-in-the-logs-tab: review
-  9-6-shared-types-ux-action-bar-and-post-publish-choice-screen: done
-  9-7-health-first-service-status-resolution: review
-  9-8-heal-use-case-and-cli: review
-  9-9-dashboard-heal-action: review
-  9-10-text-filter-in-the-keybinding-help: review
-  9-11-per-service-health-check-toggle: review
+  epic-9: done
   epic-9-retrospective: optional
 
   epic-10: backlog
