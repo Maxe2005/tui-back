@@ -2,7 +2,7 @@
 title: 'Story 10.4: Publication, `install.sh` and Docs'
 type: 'feature'
 created: '2026-11-09'
-status: 'in-review'
+status: 'done'
 baseline_commit: '4545bdf94f87b3c1099bd367cc68b73f7dccbfd5'
 review_loop_iteration: 0
 context:
@@ -84,3 +84,32 @@ The `npx` install ends with the existing `install` subcommand (Story 10.3), so `
 - `npm pack --dry-run`: 266 files, no `_bmad-output`, `.agents`, `.claude`, `.opencode`, `.bmad-loop`, no test files; `src/bin/tui-back.mjs` present. `files` is honoured, so no `.npmignore`.
 - Clean-machine run of `install.sh`: PENDING manual step for Max (needs the public repo and first push). Stubbed-PATH e2e covers the matrix.
 - `npm test`: one pre-existing failure, `app-shell.interaction.test.tsx` (reset screen), also fails on the baseline without these changes. typecheck and depcheck pass.
+
+## Suggested Review Order
+
+**Installer precheck**
+
+- Entry point: thin precheck, no writes, then hands over to the `install` subcommand.
+  [`install.sh:1`](../../../install.sh#L1)
+
+- Black-box tests under a stub-only PATH cover the whole matrix and the Node 23/24 boundary.
+  [`install-sh.e2e.test.ts:1`](../../../src/bin/install-sh.e2e.test.ts#L1)
+
+**Package contents**
+
+- `files` allow-list keeps planning and agent folders and tests out of the install.
+  [`package.json:13`](../../../package.json#L13)
+
+- Test asserts the `npm pack` file list and slug agreement with `repository`.
+  [`install-sh.e2e.test.ts:80`](../../../src/bin/install-sh.e2e.test.ts#L80)
+
+**Docs and license**
+
+- Public entry point: install, aliases, completion, update, uninstall, `build-essential` fallback.
+  [`README.md:1`](../../../README.md#L1)
+
+- ISC license.
+  [`LICENSE:1`](../../../LICENSE#L1)
+
+- Memlog entry for the AD-14 amendment and AD-24.
+  [`.memlog.md`](../../planning-artifacts/architecture/architecture-tui-back-2026-08-11/.memlog.md)
