@@ -42,7 +42,7 @@ import { err, ok } from "../core/result.js";
 import type { DependencyConsumerConfig, SourceConfig } from "../core/shared-types/list-consumers.js";
 
 if (!process.stdin.isTTY) {
-  process.stderr.write("tui-back-tui requires an interactive terminal\n");
+  process.stderr.write("tui-back tui requires an interactive terminal\n");
   process.exit(1);
 }
 
