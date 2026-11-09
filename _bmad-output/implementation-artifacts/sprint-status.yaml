@@ -58,7 +58,7 @@ development_status:
   5-8-hide-show-only-log-filters: done
   5-9-stackable-log-filter-rules: review
   5-10-persisted-filter-rules-and-named-rule-sets: review
-  5-11-ansi-aware-log-filter-rules: ready-for-dev
+  5-11-ansi-aware-log-filter-rules: review
   epic-5-retrospective: optional
 
   epic-6: in-progress
