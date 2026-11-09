@@ -432,7 +432,7 @@ describe('currentBranch', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.code).toBe('git-current-branch-error');
+      expect(result.error.code).toBe('git-detached-head');
       expect(result.error.message).toContain('detached');
     }
   });
@@ -1004,6 +1004,63 @@ describe('renameBranch', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
     expect(branchExists(repo, 'staging')).toBe(true);
+  });
+});
+
+describe('renameBranch — cross-EDT gate', () => {
+  it('rejects an old name owned by another EDT before any git call', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+    const registry = fakeEdtRegistry([edtEntry('U1', repo, 'feat/old')]);
+
+    const result = await renameBranch(manifest, repo, 'feat/old', 'feat/new', 'U2', registry);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-owned-by-other-edt' } });
+    expect(branchExists(repo, 'feat/old')).toBe(true);
+    expect(branchExists(repo, 'feat/new')).toBe(false);
+  });
+
+  it('rejects a new name owned by another EDT', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+    const registry = fakeEdtRegistry([edtEntry('U1', repo, 'feat/new')]);
+
+    const result = await renameBranch(manifest, repo, 'feat/old', 'feat/new', 'U2', registry);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-owned-by-other-edt' } });
+    expect(branchExists(repo, 'feat/old')).toBe(true);
+  });
+
+  it('without edtId any registered owner blocks', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+    const registry = fakeEdtRegistry([edtEntry('U1', repo, 'feat/old')]);
+
+    const result = await renameBranch(manifest, repo, 'feat/old', 'feat/new', undefined, registry);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'branch-owned-by-other-edt' } });
+  });
+
+  it('lets the owning EDT rename its own branch', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+    const registry = fakeEdtRegistry([edtEntry('U1', repo, 'feat/old')]);
+
+    const result = await renameBranch(manifest, repo, 'feat/old', 'feat/new', 'U1', registry);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    expect(branchExists(repo, 'feat/new')).toBe(true);
+  });
+
+  it('is wired through the factory with the registry', async () => {
+    const repo = await makeGitRepo();
+    expect(runGit(repo, ['branch', 'feat/old']).status).toBe(0);
+    const port = createGitPort(manifest, fakeEdtRegistry([edtEntry('U1', repo, 'feat/old')]));
+
+    expect(await port.renameBranch(repo, 'feat/old', 'feat/new', 'U2')).toMatchObject({
+      ok: false,
+      error: { code: 'branch-owned-by-other-edt' },
+    });
   });
 });
 

@@ -393,7 +393,7 @@ async function resolveBranchRenames(params: {
       continue;
     }
 
-    const renamed = await git.renameBranch(resolved, oldName, newName);
+    const renamed = await git.renameBranch(resolved, oldName, newName, target.ulid);
     if (!renamed.ok) {
       results.push({
         service: resolved,
@@ -554,11 +554,13 @@ export interface RenameMemberBranchParams {
   repoPath: string;
   oldName: string;
   newName: string;
+  // the target EDT's ulid — its own branches are exempt from the cross-EDT gate.
+  edtId?: string;
 }
 
 export async function renameMemberBranch(params: RenameMemberBranchParams): Promise<Result<void>> {
-  const { git, repoPath, oldName, newName } = params;
-  return git.renameBranch(repoPath, oldName, newName);
+  const { git, repoPath, oldName, newName, edtId } = params;
+  return git.renameBranch(repoPath, oldName, newName, edtId);
 }
 
 // The branch-picker's candidate source. Exposed from core so the TUI store never calls

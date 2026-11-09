@@ -33,6 +33,8 @@ import {
 } from "../adapters/driven/settings/index.js";
 import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/saved-requests/index.js";
 import { createDockerPort } from "../adapters/driven/docker/index.js";
+import { createShellSessionPort } from "../adapters/driven/shell-session/index.js";
+import { createHttpHealthProbe } from "../adapters/driven/health/http-probe.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
 import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/edt/resolve-tab-visibility.js";
@@ -187,10 +189,12 @@ const store = createAppStore({
   edtsBaseDir,
   settings,
   docker,
+  healthProbe: createHttpHealthProbe(),
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,
   savedRequests,
   sharedTypes,
+  shell: createShellSessionPort(),
 });
 const onQuit = async () => {
   if (tuiLock) {
@@ -202,7 +206,7 @@ const onQuit = async () => {
 // Normal zone unmount stops every active `docker logs -f` subscription, but an abnormal exit
 // (an uncaught crash, Ctrl+C, a `kill`) bypasses React's unmount path and would orphan the
 // docker child processes. Stopping every LogsManager subscription here, on every exit path,
-// closes that gap.
+// closes that gap. The open Terminal's session is discarded on the same paths.
 let stoppedLogsPanes = false;
 const stopAllLogsPanes = () => {
   if (stoppedLogsPanes) {
@@ -213,6 +217,13 @@ const stopAllLogsPanes = () => {
     store.getState().stopAllLogsPanes();
   } catch {
     // Best-effort on the way out — never block the process from actually exiting.
+  }
+  // An open Terminal's running command is cancelled the same way (its process group is also
+  // killed by the shell adapter's own exit hook).
+  try {
+    store.getState().closeTerminal();
+  } catch {
+    // Same best-effort contract.
   }
 };
 process.on("exit", stopAllLogsPanes);

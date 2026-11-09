@@ -1,4 +1,4 @@
-# Archive of completed stories removed from sprint-status.yaml on 2026-10-14.
+# Archive of completed stories removed from sprint-status.yaml on 2026-10-14 and 2026-11-04.
 # Historical record only — not read by any BMAD workflow. Live tracking stays in sprint-status.yaml.
 
 development_status:
@@ -105,3 +105,38 @@ development_status:
   7-10-switch-carry-a-dirty-tui-back-yaml-across-the-edt-switch: done
   # 2026-10-12: 7-11 first (bug); 7-12 -> 5-7, 7-5 -> 7-6. 7-5 rewritten (services console).
   7-11-overlay-owns-the-arrow-keys-settings-screen-help-panel: done
+
+  # Archived 2026-11-04 (second trim; epic 1 header and stories above).
+
+  2-28-registry-manifest-semantic-validation: done
+  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: done
+  2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: done
+  2-44-edt-switch-optional-parallel-service-restart-verified-state: done
+
+  3-15-update-zone-per-service-detail-pane-last-run-live-step-tracking: done
+  3-18-parallel-update-run-incident-queue: done
+  3-19-full-screen-service-report: done
+  3-20-update-configurable-global-defaults: done
+
+  4-3-publish-a-new-shared-types-version: done
+  4-4-smart-group-update-shared-types-first: done
+  4-5-auto-resolve-shared-types-only-merge-conflicts: done
+  4-6-shared-types-version-history-library: done
+  4-7-shared-types-zone-configurable-default-options-busy-tab-indicator: done
+
+  5-6-command-history-recall-shared-input-history-primitive: done
+  5-7-logs-restart-mode-setting-open-ide-shortcut: done
+
+  6-3-save-customize-and-re-fire-a-request: done
+
+  7-9-bounded-rendering-audit-global-fix-regression-guard: done
+  7-12-shared-service-actions-open-in-ide-simple-clean-restart: done
+
+  8-1-dashboard-snapshot-use-case-and-cli: done
+  8-2-dashboard-shell-states-fixed-banner-refresh: done
+  8-3-dashboard-active-edt-services-table-service-actions: done
+  8-4-dashboard-attention-block-registry-health: done
+  8-5-dashboard-edt-actions-visual-finish: done
+  8-6-branch-drift-detection-snapshot-attention: done
+  8-7-realign-use-case-and-cli-selective-branch-realignment: done
+  8-8-realign-dialog-shortcut-settings-defaults: done

@@ -1,9 +1,9 @@
 // tui/shared/settings-screen: the `:settings` overlay — a tab-organized modal (General / EDTs /
-// Command Palette / Logs) reachable only through the `settings` command. Every change applies
+// Command Palette / Logs / Update / st / Services) reachable only through the `settings` command. Every change applies
 // to the live store and persists immediately via `updateSettings` (no save step, no dirty
 // state). The EDTs and Logs tabs open on a group list that Enter drills into, so Esc handling
 // lives here (`onClose`): only this component knows whether Esc steps back or closes.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
@@ -35,15 +35,21 @@ import {
   MIN_LOG_BUFFER_SIZE,
   MAX_UPDATE_CONCURRENCY,
   MIN_UPDATE_CONCURRENCY,
+  cycleSwitchRestartMode,
+  cycleRealignScope,
+  type RealignScope,
   type Settings,
+  type SwitchRestartMode,
   type UpdateMergeSourceDefault,
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
 import { BoundedList } from './components/bounded-list.js';
+import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../core/edt/list.js';
 
-export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update' | 'shared-types';
+export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update' | 'shared-types' | 'services';
 
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types'];
+// Services stays last: a new tab is appended, never inserted, so muscle memory for the others holds.
+export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types', 'services'];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   general: 'General',
@@ -52,7 +58,55 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   logs: 'Logs',
   update: 'Update',
   'shared-types': 'st',
+  services: 'Services',
 };
+
+// Services tab: one "health check" checkbox per registered service (checked = enabled), listed
+// from the already-loaded EDT branch rows plus the manifests that failed to load. A service with
+// no `healthUrl`, or whose manifest is unreadable, is listed but cannot be toggled.
+export type ServicesSettingsRow = {
+  key: string;
+  service: string;
+  // null = toggleable; otherwise the dim reason shown next to the disabled row.
+  disabledReason: string | null;
+};
+
+export const SERVICES_NO_HEALTH_URL_REASON = 'no healthUrl';
+export const SERVICES_MANIFEST_UNAVAILABLE_REASON = 'manifest unavailable';
+
+export function buildServicesSettingsRows(
+  branches: readonly Pick<ServiceBranchDivergence, 'service' | 'path' | 'healthUrl'>[] | null,
+  errors: readonly BranchDivergenceEntryError[],
+): ServicesSettingsRow[] {
+  const listed: ServicesSettingsRow[] = (branches ?? []).map((row) => ({
+    key: row.path,
+    service: row.service,
+    disabledReason: row.healthUrl !== undefined && row.healthUrl.trim() !== '' ? null : SERVICES_NO_HEALTH_URL_REASON,
+  }));
+  const unreadable: ServicesSettingsRow[] = errors.map((entry) => ({
+    key: entry.path,
+    // No manifest means no service name: the repo directory stands in for it.
+    service: entry.path.split('/').filter((part) => part !== '').pop() ?? entry.path,
+    disabledReason: SERVICES_MANIFEST_UNAVAILABLE_REASON,
+  }));
+  return [...listed, ...unreadable];
+}
+
+export type ServicesSettingsStep = { type: 'move'; cursor: number } | { type: 'toggle'; service: string } | { type: 'ignore' };
+
+// Up/Down move over every row (disabled ones included, so their reason can be read); Space
+// toggles only a toggleable row.
+export function resolveServicesSettingsKey(input: string, key: TextEditKey, cursor: number, rows: readonly ServicesSettingsRow[]): ServicesSettingsStep {
+  const moved = nextCursorForKey(key, cursor, rows.length);
+  if (moved !== null) {
+    return { type: 'move', cursor: moved };
+  }
+  const row = rows[cursor];
+  if (input === ' ' && row !== undefined && row.disabledReason === null) {
+    return { type: 'toggle', service: row.service };
+  }
+  return { type: 'ignore' };
+}
 
 // st tab: a flat Up/Down list of the shared-types zone's option defaults (Space toggles the
 // checkboxes) followed by the History view's two numeric bounds (+/- step them, always clamped to
@@ -389,7 +443,14 @@ export function parseBranchDropdownMaxRowsDigit(input: string): number | null {
   return clampBranchDropdownMaxRows(Number(input));
 }
 
-export type SettingsGroupId = 'hint-visibility' | 'action-types' | 'branch-dropdown-rows';
+export type SettingsGroupId =
+  | 'hint-visibility'
+  | 'action-types'
+  | 'branch-dropdown-rows'
+  | 'switch-restart'
+  | 'realign-scope'
+  | 'realign-restart'
+  | 'heal-restart';
 
 export type SettingsGroup = { id: SettingsGroupId; label: string };
 
@@ -397,7 +458,20 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'hint-visibility', label: 'Hint visibility' },
   { id: 'action-types', label: 'Recent action types' },
   { id: 'branch-dropdown-rows', label: 'Branch dropdown rows' },
+  { id: 'switch-restart', label: 'Post-switch restart' },
+  { id: 'realign-scope', label: 'Realign default scope' },
+  { id: 'realign-restart', label: 'Post-realign restart' },
+  { id: 'heal-restart', label: 'Heal restart mode' },
 ];
+
+const SWITCH_RESTART_LABELS: Record<SwitchRestartMode, string> = { none: 'None', simple: 'Simple restart', clean: 'Clean restart' };
+
+// Left/Right/Space cycle none → simple → clean (Left goes back).
+export { cycleSwitchRestartMode };
+
+const REALIGN_SCOPE_LABELS: Record<RealignScope, string> = { none: 'None', edt: 'EDT services', all: 'All' };
+
+export { cycleRealignScope };
 
 // The Logs tab's group list: one field (or a small related cluster) per group, so no screen
 // renders more than a handful of lines. ModalDialog has no height cap, and a flat list of every
@@ -444,6 +518,10 @@ const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | Pale
   'hint-visibility': 'settings-toggle',
   'action-types': 'settings-toggle',
   'branch-dropdown-rows': 'settings-adjust',
+  'switch-restart': 'settings-toggle',
+  'realign-scope': 'settings-toggle',
+  'realign-restart': 'settings-toggle',
+  'heal-restart': 'settings-toggle',
   'buffer-size': 'settings-adjust',
   'start-with-history': 'settings-toggle',
   'filter-history-size': 'settings-adjust',
@@ -475,6 +553,8 @@ export function settingsFooterContext(
       return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
     case 'shared-types':
       return 'settings-shared-types';
+    case 'services':
+      return 'settings-services';
     case 'logs':
       return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
   }
@@ -539,6 +619,8 @@ export function SettingsScreen({
   const clearServiceFilterHistory = useStore((state) => state.clearServiceFilterHistory);
   const clearCommandHistory = useStore((state) => state.clearCommandHistory);
   const edtsBranches = useStore((state) => state.edtsBranches);
+  const edtsErrors = useStore((state) => state.edtsErrors);
+  const loadEdtsBranches = useStore((state) => state.loadEdtsBranches);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   // The General tab's row cursor + in-progress editor-command edit (null when browsing).
@@ -567,6 +649,17 @@ export function SettingsScreen({
   // The Command Palette tab's group list (same shape as the Logs tab's).
   const [paletteGroup, setPaletteGroup] = useState<PaletteSettingsGroupId | null>(initialPaletteGroup);
   const [paletteGroupCursor, setPaletteGroupCursor] = useState(0);
+  // The Services tab's flat row list (clamped: a reload can shrink it under the cursor).
+  const servicesRows = buildServicesSettingsRows(edtsBranches, edtsErrors);
+  const [servicesCursorRaw, setServicesCursor] = useState(0);
+  const servicesCursor = Math.min(servicesCursorRaw, Math.max(0, servicesRows.length - 1));
+  // The Services tab owns its data: opened before any zone listed the services, it loads them
+  // once on arrival (the slice ignores a call while a load is already in flight).
+  useEffect(() => {
+    if (tab === 'services' && useStore.getState().edtsBranches === null) {
+      void loadEdtsBranches();
+    }
+  }, [tab, useStore, loadEdtsBranches]);
 
   // Drilled in on the EDTs tab's own group, or on any Logs tab group (single-field group,
   // "Clear history"'s row list, or its "clear a service's history" sub-list) — every other
@@ -682,6 +775,20 @@ export function SettingsScreen({
         void updateSettings({ sharedTypes: { [step.id]: step.value } });
       } else if (step.type === 'toggle') {
         void updateSettings({ sharedTypes: { [step.id]: !settings.sharedTypes[step.id] } });
+      }
+      return;
+    }
+
+    if (tab === 'services') {
+      const step = resolveServicesSettingsKey(input, key, servicesCursor, servicesRows);
+      if (step.type === 'move') {
+        setServicesCursor(step.cursor);
+      } else if (step.type === 'toggle') {
+        // Checked = enabled, so the stored list holds the unchecked ones; persisted at once. Read
+        // from the live store, not this render's snapshot: two quick presses before a re-render
+        // must each toggle on top of the previous one.
+        const disabled = useStore.getState().settings.services.healthCheckDisabled;
+        void updateSettings({ services: { healthCheckDisabled: toggleHiddenHint(disabled, step.service) } });
       }
       return;
     }
@@ -930,6 +1037,37 @@ export function SettingsScreen({
       return;
     }
 
+    if (edtsGroup === 'switch-restart') {
+      if (key.leftArrow) {
+        void updateSettings({ switch: { restartMode: cycleSwitchRestartMode(settings.switch.restartMode, -1) } });
+      } else if (key.rightArrow || input === ' ') {
+        void updateSettings({ switch: { restartMode: cycleSwitchRestartMode(settings.switch.restartMode, 1) } });
+      }
+      return;
+    }
+
+    if (edtsGroup === 'heal-restart') {
+      // Two values only: Left, Right and Space all flip simple ↔ clean.
+      if (key.leftArrow || key.rightArrow || input === ' ') {
+        void updateSettings({ dashboard: { restartMode: settings.dashboard.restartMode === 'clean' ? 'simple' : 'clean' } });
+      }
+      return;
+    }
+
+    if (edtsGroup === 'realign-scope' || edtsGroup === 'realign-restart') {
+      const direction = key.leftArrow ? -1 : key.rightArrow || input === ' ' ? 1 : null;
+      if (direction === null) {
+        return;
+      }
+      void updateSettings({
+        realign:
+          edtsGroup === 'realign-scope'
+            ? { defaultScope: cycleRealignScope(settings.realign.defaultScope, direction) }
+            : { restartMode: cycleSwitchRestartMode(settings.realign.restartMode, direction) },
+      });
+      return;
+    }
+
     // edtsGroup === 'action-types'
     const moved = nextCursorForKey(key, actionTypeCursor, HIDEABLE_ACTION_TYPES.length);
     if (moved !== null) {
@@ -982,6 +1120,33 @@ export function SettingsScreen({
               const focused = SHARED_TYPES_SETTINGS_ROWS[sharedTypesCursor];
               return focused?.kind === 'number' ? <DimAnnotation text={focused.hint} /> : null;
             })()}
+          </Box>
+        ) : null}
+
+        {tab === 'services' ? (
+          <Box flexDirection="column">
+            {servicesRows.length === 0 ? <StateLine kind="empty" subject="manifest services loaded" /> : null}
+            <BoundedList
+              items={servicesRows}
+              chromeRows={SETTINGS_LIST_CHROME_ROWS}
+              cursorIndex={servicesCursor}
+              renderItem={(row, index) => {
+                const highlighted = index === servicesCursor;
+                return (
+                  <Box key={row.key} flexDirection="row">
+                    <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                    <CheckboxListItem
+                      label={`${row.service} — health check`}
+                      selected={highlighted}
+                      state={settings.services.healthCheckDisabled.includes(row.service) ? 'unchecked' : 'checked'}
+                      disabled={row.disabledReason !== null}
+                      {...(row.disabledReason === null ? {} : { disabledReason: row.disabledReason })}
+                    />
+                  </Box>
+                );
+              }}
+            />
+            <DimAnnotation text="Unchecked: the service's healthUrl is never probed on this machine; its state comes from the container alone." />
           </Box>
         ) : null}
 
@@ -1275,6 +1440,42 @@ export function SettingsScreen({
               );
             })}
             <DimAnnotation text="Checked hides that action type from the Recent actions log." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'switch-restart' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Restart services after an EDT switch: <Text color={colors.accent}>{SWITCH_RESTART_LABELS[settings.switch.restartMode]}</Text>
+            </Text>
+            <DimAnnotation text="Default for the switch dialog and `edt switch --restart`. Clean restart falls back to a simple restart where no recipe exists." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'realign-scope' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Services pre-selected for a realign: <Text color={colors.accent}>{REALIGN_SCOPE_LABELS[settings.realign.defaultScope]}</Text>
+            </Text>
+            <DimAnnotation text="Initial preset of the realign dialog and `realign --scope` default. Only drifted services are ever listed." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'realign-restart' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Restart services after a realign: <Text color={colors.accent}>{SWITCH_RESTART_LABELS[settings.realign.restartMode]}</Text>
+            </Text>
+            <DimAnnotation text="Default for the realign dialog and `realign --restart`. Clean restart falls back to a simple restart where no recipe exists." />
+          </Box>
+        ) : null}
+
+        {tab === 'edts' && edtsGroup === 'heal-restart' ? (
+          <Box flexDirection="column">
+            <Text color={colors.text} wrap="truncate-end">
+              Restart mode for a heal: <Text color={colors.accent}>{SWITCH_RESTART_LABELS[settings.dashboard.restartMode]}</Text>
+            </Text>
+            <DimAnnotation text="Default for the Dashboard heal and `heal --restart`. Clean restart falls back to a simple restart where no recipe exists." />
           </Box>
         ) : null}
 

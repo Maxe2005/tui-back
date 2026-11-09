@@ -144,6 +144,24 @@ describe('listEdtBranchesDivergence', () => {
     });
   });
 
+  it('copies the manifest healthUrl onto the row when declared, and omits it otherwise', async () => {
+    const result = await listEdtBranchesDivergence({
+      registry: fakeRegistry(['/repo/a', '/repo/b']),
+      manifest: fakeManifest({
+        load: vi.fn(async (path: string) => ok({ ...manifestFor(path), ...(path === '/repo/a' ? { healthUrl: 'http://a/health' } : {}) })),
+      }),
+      git: fakeGit(),
+      edtRegistry: fakeEdtRegistry(),
+      state: fakeState(),
+    });
+
+    expect(result.ok && result.data.services.map((row) => [row.service, row.healthUrl])).toEqual([
+      ['svc-a', 'http://a/health'],
+      ['svc-b', undefined],
+    ]);
+    expect(result.ok && 'healthUrl' in (result.data.services[1] ?? {})).toBe(false);
+  });
+
   it('shows an explicit "no upstream" state, not a numeric value, when none is configured', async () => {
     const registry = fakeRegistry(['/repo/a']);
     const git = fakeGit({
@@ -200,7 +218,7 @@ describe('listEdtBranchesDivergence', () => {
   it('folds any other git error (e.g. currentBranch failure) into the same "unknown (offline)" treatment', async () => {
     const registry = fakeRegistry(['/repo/a']);
     const git = fakeGit({
-      currentBranch: vi.fn(async () => err('git-current-branch-error', 'HEAD is detached')),
+      currentBranch: vi.fn(async () => err('git-detached-head', 'HEAD is detached')),
     });
 
     const result = await listEdtBranchesDivergence({
@@ -223,7 +241,7 @@ describe('listEdtBranchesDivergence', () => {
         ahead: null,
         behind: null,
         status: 'unknown-offline',
-        detail: { code: 'git-current-branch-error', message: 'HEAD is detached' },
+        detail: { code: 'git-detached-head', message: 'HEAD is detached' },
       },
     ]);
   });

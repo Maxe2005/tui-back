@@ -5,6 +5,9 @@
 // also rejects a branch registered as a *different* EDT's own branch for that repo.
 import type { Result } from '../result.js';
 
+// currentBranch's error code for a detached HEAD, distinct from a failed probe.
+export const GIT_DETACHED_HEAD = 'git-detached-head';
+
 export interface GitPort {
   // Rejects (before any git write) a branchName that is protected for this repo — the
   // protected set (the manifest's protectedBranches ∪ its sharedBranch) is resolved by the
@@ -156,8 +159,11 @@ export interface GitPort {
   listBranches(repoPath: string): Promise<Result<string[]>>;
   // Renames a local branch ref (`git branch -m`). Gates *both* names via assertAllowedBranch
   // (no edtId, like createBranch) before touching git, so a rename can neither land on a
-  // protected name nor move a protected branch away.
-  renameBranch(repoPath: string, oldName: string, newName: string): Promise<Result<void>>;
+  // protected name nor move a protected branch away. Also rejects `branch-owned-by-other-edt`
+  // (before any git call) when the old or new name is another registered EDT's own branch for
+  // this repo; `edtId` is the caller's own EDT (its branches are exempt) — omitted, any
+  // registered owner blocks.
+  renameBranch(repoPath: string, oldName: string, newName: string, edtId?: string): Promise<Result<void>>;
   // The remote-tracking refs already known locally (`refs/remotes/`), as `<remote>/<branch>`
   // names (e.g. `origin/feat/x`); the symbolic `<remote>/HEAD` ref is excluded. Never fetches —
   // it lists only what the last fetch left behind.

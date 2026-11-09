@@ -112,7 +112,7 @@ The tool only acts on a repo that carries a manifest; the manifest declares that
 
 #### FR-29: Container-less managed services (added 2026-10-01, Sprint Change Proposal)
 
-A managed repo's manifest may omit its container: the service is still fully managed (EDT membership, branches, group update, migrations, clean-restart recipe) but has no Docker runtime.
+A managed repo's manifest may omit its container: the service is still fully managed (EDT membership, branches, group update, migrations, clean-restart recipe) but has no Docker runtime. A container-less service that declares `healthUrl` is reported up or down from its health route (FR-42, added 2026-11-04).
 
 **Consequences (testable):**
 - A manifest without `container` validates and the repo registers like any other.
@@ -373,6 +373,56 @@ When switching the active EDT, the developer can choose to restart the services 
 - A restart failure never rolls the switch back; a clean restart without a recipe falls back to a simple restart with a visible notice.
 - The default choice is the setting `switch.restartMode`; the CLI `edt switch --restart none|simple|clean` overrides it.
 
+#### FR-39: Service and container terminal (added 2026-11-04, Sprint Change Proposal)
+
+The developer can open a command terminal on a service (its repo directory) and, when the service has a container, on that container, inside the tool.
+
+**Consequences (testable):**
+- Commands are typed at a prompt; stdout/stderr stream back as lines; the output scrolls and can go full screen (shared with the Logs view).
+- A running command can be cancelled without quitting the tool; history recall works at the prompt.
+- Line-oriented only: no interactive TTY programs; a command needing a TTY fails with a visible hint.
+- A container-less service offers no container terminal (disabled, reason `no container`); a non-running container is disabled with its reason.
+
+#### FR-40: Unified service actions (added 2026-11-04, Sprint Change Proposal)
+
+Open in IDE, restart, clean restart, service terminal and container terminal are available from the Dashboard and from the Logs tab, from one registry with the same availability rules. Amends FR-35.
+
+#### FR-41: Shared Types action discoverability (added 2026-11-04, Sprint Change Proposal)
+
+In the Shared Types tab every action is shown as a labelled command with its key and, when unavailable, its reason. After a successful publish the next steps (propagate this version, back to the form, close) are presented as an explicit choice, not a hint line.
+
+#### FR-42: Health-first service status (added 2026-11-04, Sprint Change Proposal 2)
+
+Every view that shows a service's state (Dashboard, Logs, Update, CLI `dashboard`) derives it from one rule: when the manifest declares `healthUrl`, its answer is checked first and combined with the container state; otherwise the container state alone is used. The closed set of states is up, unhealthy, inconsistent, restarting, down, no-container (plus an explicit probe-error state). `inconsistent` (the health route answers while the container is down or restarting) is surfaced as an attention item. A container-less service declaring `healthUrl` gets a real up/down state. A service whose health check the developer disabled (FR-45) is resolved as if it declared no `healthUrl`.
+
+#### FR-43: Heal — restart the services that are not up (added 2026-11-04, Sprint Change Proposal 2)
+
+From the Dashboard (and the `heal` CLI), a developer restarts in one action every active-EDT service whose FR-42 status is down or unhealthy and that declares a container, after a confirmation listing targets and skipped services with reasons, in simple or clean mode; each restarted service is then verified and the run reports per-service final states.
+
+#### FR-44: Filterable keybinding help (added 2026-11-04, Sprint Change Proposal 3)
+
+The `?` help can be narrowed by typing: only the keybindings whose keys, description or section contain the typed text are listed, with a visible "no match" line when none does. Clearing the filter restores the full list; the keys that close the help keep working once the filter is empty.
+
+#### FR-45: Per-service health check toggle (added 2026-11-04, Sprint Change Proposal 3)
+
+From the settings screen, a developer turns the `healthUrl` check off or on per service. The preference is local (not in the manifest), enabled by default, and applies everywhere a status is resolved or verified (views, CLI, heal, post-restart verification). A disabled check is visibly marked so an unverified state is not mistaken for a missing route.
+
+#### FR-46: Single installable binary (added 2026-11-05, Sprint Change Proposal)
+
+The package exposes one `tui-back` binary. `tui-back <subcommand>` runs the CLI (AD-3 envelope); `tui-back tui` opens the interactive TUI and exits 1 when no terminal is attached.
+
+#### FR-47: Guided install and uninstall (added 2026-11-05, Sprint Change Proposal)
+
+`npx -y github:<owner>/tui-back install` installs the tool globally, adds the `tb` and `tbt` aliases and bash completion through a marked, idempotent block in `~/.bashrc`, and tells the developer to reload the shell. `--uninstall` reverses every step. A Node version below 24 stops the install with the exact commands to fix it; the installer never changes Node itself. Bash is the only supported shell.
+
+#### FR-48: MCP server with human authorization (added 2026-11-05, Sprint Change Proposal)
+
+`tui-back mcp` exposes every subcommand to an MCP client as a tool. Read-only tools run freely. Any tool that changes or destroys state runs only after the human explicitly approves that exact call; if the client cannot ask the human, those tools are refused. Approvals are per call and never remembered.
+
+#### FR-49: Hide / show-only log filters (added 2026-11-05, Sprint Change Proposal)
+
+The log filter is a list of rules (one in the first delivery, several afterwards, applied in order). Each rule is a text or regex query with an action (keep only what matches, or hide what matches) and a target (the whole line, or only the matched text); the default rule is today's behaviour. The choices apply to the live view only, never alter the buffered lines, rule lists and named rule sets are kept across restarts (FR-49 extension, Story 5.10), and the choices are recorded with the query in the filter history so recalling a filter restores them.
+
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
 **Description:** Absorbs `shared-types`'s release script and removes the manual `package.json` bump across services, including inside a group update (amended 2026-10-05). Realizes UJ-3. Publish (FR-13) is active only on the repo whose manifest declares it `shared-types-source`; propagation and drift (FR-14/FR-15) apply only to repos declaring `shared-types-consumer`; the smart update (FR-30/FR-31) builds on Epic 3's group update.
@@ -439,7 +489,7 @@ A developer can view a single, live, aggregated log stream from every service in
 
 #### FR-17: Filter the aggregated stream
 
-The stream can be filtered by service, by free-text/regex search `[ASSUMPTION: regex support specifically, not just free-text — a stronger capability commitment than the brief states outright]`, and by log level, without restarting it.
+The stream can be filtered by service, by free-text/regex search `[ASSUMPTION: regex support specifically, not just free-text — a stronger capability commitment than the brief states outright]`, and by log level, without restarting it. *(Amended 2026-11-05, Sprint Change Proposal: a filter can also hide what matches and act on the whole line or only the matched text, several rules stack and persist — FR-49.)*
 
 **Consequences (testable):**
 - Applying or changing a filter does not interrupt the live stream.
@@ -589,7 +639,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 
 ### 6.2 Out of Scope for MVP
 
-- Guided, step-by-step installation/onboarding wizard — deferred to when the tool is shared with teammates (brief's Could-scope item).
+- Guided, step-by-step installation/onboarding wizard — deferred to when the tool is shared with teammates (brief's Could-scope item). Superseded in part by FR-47 (2026-11-05): a non-interactive installer is in scope; a wizard still is not.
 - **AI-assisted per-repo manifest bootstrapping (Could)** — an AI skill (e.g. a Claude Code skill) that scans an existing backend and drafts per-repo manifests to help initialize tool usage on it, including for onboarding the second, structurally different project later. Deferred until the manifest schema itself is fixed in architecture. `[NOTE FOR PM: Could-scope, not required for v1 — flag if this should be prioritized higher.]`
 - Validating the generic-core/module split against the second, gateway-less Java/Python project — proof deferred past v1.
 - Any AI-copilot layer automating error resolution or the git workflow — ruled out for now, not just deferred casually (see §5).

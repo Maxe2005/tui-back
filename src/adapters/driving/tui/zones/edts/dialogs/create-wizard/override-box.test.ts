@@ -212,3 +212,19 @@ describe('validateOverrideBox', () => {
     expect(validateOverrideBox(box(), { ...CONTEXT, status: 'error' })).toEqual({ ok: false, error: OVERRIDE_BOX_ERRORS.listsUnavailable });
   });
 });
+
+describe('validateOverrideBox — cross-EDT usage', () => {
+  const owned: OverrideBoxContext = { ...CONTEXT, owners: { x: ['alpha'] } };
+
+  it('refuses applying an owned branch as existing, with or without rename, inline in French', () => {
+    const existing = box({ mode: 'existing', existing: { value: 'x', cursor: 1, pickCursor: 0 } });
+    const refused = validateOverrideBox(existing, owned);
+    expect(refused).toMatchObject({ ok: false });
+    expect(!refused.ok && refused.error).toContain("utilisée par l'EDT « alpha » — la reprendre ou la renommer casserait cet EDT");
+    expect(validateOverrideBox({ ...existing, rename: true, newName: { value: 'x2', cursor: 2 } }, owned)).toMatchObject({ ok: false });
+  });
+
+  it('accepts an owned branch as a create base', () => {
+    expect(validateOverrideBox(box({ base: { value: 'x', cursor: 1, pickCursor: 0 }, name: { value: 'n1', cursor: 2 } }), owned)).toMatchObject({ ok: true });
+  });
+});

@@ -2,10 +2,35 @@
 // driven settings adapter implements. Unlike other ports' load(), a corrupt or invalid
 // settings.yaml must never block the `:settings` screen: `load()` is `ok` with every default
 // and a field-naming `warning`; only a genuine I/O error is an `err`.
+import type { Manifest } from './manifest.js';
 import type { Result } from '../result.js';
 
 export const UPDATE_MERGE_SOURCES = ['shared', 'edt-pending'] as const;
 export type UpdateMergeSourceDefault = (typeof UPDATE_MERGE_SOURCES)[number];
+
+// Post-switch service restart (FR-37): `none` is today's behaviour, `simple` a plain container
+// restart, `clean` the manifest's clean-restart recipe (simple when none is declared).
+export const SWITCH_RESTART_MODES = ['none', 'simple', 'clean'] as const;
+export type SwitchRestartMode = (typeof SWITCH_RESTART_MODES)[number];
+
+// none → simple → clean → none (direction -1 goes back) — shared by the :settings control and
+// the switch dialog's selector so the two always cycle the same way.
+export function cycleSwitchRestartMode(current: SwitchRestartMode, direction: 1 | -1): SwitchRestartMode {
+  const index = SWITCH_RESTART_MODES.indexOf(current);
+  return SWITCH_RESTART_MODES[(index + direction + SWITCH_RESTART_MODES.length) % SWITCH_RESTART_MODES.length] ?? 'none';
+}
+
+// Which drifted services realign selects when no explicit choice is made: none, the drifted
+// active-EDT members, or every drifted service (members and other managed repos).
+export const REALIGN_SCOPES = ['none', 'edt', 'all'] as const;
+export type RealignScope = (typeof REALIGN_SCOPES)[number];
+
+// none → edt → all → none (direction -1 goes back) — shared by the :settings control and the
+// realign dialog's preset key, like cycleSwitchRestartMode below.
+export function cycleRealignScope(current: RealignScope, direction: 1 | -1): RealignScope {
+  const index = REALIGN_SCOPES.indexOf(current);
+  return REALIGN_SCOPES[(index + direction + REALIGN_SCOPES.length) % REALIGN_SCOPES.length] ?? 'edt';
+}
 
 export interface Settings {
   // The `q` keybinding (quit the app) is global, so it lives on the General tab. Only the raw
@@ -62,6 +87,25 @@ export interface Settings {
     historyDepth: number;
     maxCommitsScanned: number;
   };
+  // The EDT switch's optional post-switch restart. `restartMode` pre-selects the switch
+  // dialog's selector and is the CLI's default when `--restart` is absent; never written back
+  // from a single switch. Read when a switch starts, so a change applies live.
+  switch: {
+    restartMode: SwitchRestartMode;
+  };
+  // Realign's defaults: the realign dialog's initial preset and restart selector, and the CLI
+  // `realign`'s `--scope`/`--restart` when absent. Never written back from a run; read when a
+  // realign starts, so a change applies live.
+  realign: {
+    defaultScope: RealignScope;
+    restartMode: SwitchRestartMode;
+  };
+  // The heal's restart mode (Dashboard heal and CLI `heal`): pre-selects the heal confirm
+  // overlay's mode and is the CLI's default when `--restart` is absent. Never written back from
+  // a run; read when a heal starts. Default `simple`.
+  dashboard: {
+    restartMode: 'simple' | 'clean';
+  };
   logs: {
     bufferSize: number;
     // When true, subscribing to a service's logs immediately loads its most recent history
@@ -87,6 +131,14 @@ export interface Settings {
     // declared). Read on every `R`, so a change applies live. Default `simple`.
     restartMode: 'simple' | 'clean';
   };
+  // Per-service local preferences, keyed by the manifest `service` name.
+  services: {
+    // Services whose `healthUrl` health check is turned off on this machine: the status
+    // resolver (core/service-status) resolves them as if no `healthUrl` were declared and never
+    // probes them. Unknown names are kept and ignored. Toggled from the :settings Services tab;
+    // read at every resolution, so a change applies at the next poll/refresh.
+    healthCheckDisabled: string[];
+  };
 }
 
 // Single source of truth for every default value — reused by the driven adapter's zod schema
@@ -103,8 +155,19 @@ export const DEFAULT_SETTINGS: Settings = {
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.
   update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const },
   sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
+  switch: { restartMode: 'none' },
+  realign: { defaultScope: 'edt', restartMode: 'none' },
+  dashboard: { restartMode: 'simple' },
   logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' },
+  services: { healthCheckDisabled: [] },
 };
+
+// The per-service health-check toggle as the status resolver and verifyService consume it
+// (`isHealthCheckEnabled`). `getSettings` is called on every check, so a caller handing a live
+// getter (the TUI store) sees a :settings change at the next resolution.
+export function healthCheckEnabledFrom(getSettings: () => Settings | null): (manifest: Manifest) => boolean {
+  return (manifest) => !(getSettings()?.services.healthCheckDisabled.includes(manifest.service) ?? false);
+}
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/
 // schema.ts, which rejects out-of-range values from a hand-edited settings.yaml) and the

@@ -323,6 +323,37 @@ describe('BranchAutocompleteInput render', () => {
     expect(output).not.toContain('✔');
     expect(output).not.toContain('✖');
   });
+
+  it('renders an annotation suffix with a warning glyph only for annotated branches', async () => {
+    const output = await renderToString(
+      <BranchAutocompleteInput
+        label="Branch"
+        state={{ value: 'f', cursor: 1, pickCursor: 0 }}
+        branches={BRANCHES}
+        branchesStatus="ready"
+        maxLines={5}
+        annotations={{ 'feat-x': 'EDT « alpha »' }}
+      />,
+    );
+    expect(output).toContain('feat-x  ⚠ EDT « alpha »');
+    expect(output).not.toContain('fix-y  ⚠');
+  });
+});
+
+describe('BranchAutocompleteInput annotations — prototype keys', () => {
+  it('a branch named toString/constructor is never read as an inherited annotation', async () => {
+    const output = await renderToString(
+      <BranchAutocompleteInput
+        label="Branch"
+        state={{ value: '', cursor: 0, pickCursor: 0 }}
+        branches={['toString', 'constructor']}
+        branchesStatus="ready"
+        maxLines={5}
+        annotations={{}}
+      />,
+    );
+    expect(output).not.toContain('⚠');
+  });
 });
 
 describe('resolveSuggestWindow with a non-finite budget', () => {

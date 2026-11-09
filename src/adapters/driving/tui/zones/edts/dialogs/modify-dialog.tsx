@@ -200,7 +200,7 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
       finish(withoutRepoPath(current.branchEdits), { ...current.branchRenames, [repoPath]: outcome.newName });
       return;
     }
-    const renamed = await deps.renameBranchAction(repoPath, outcome.oldName, outcome.newName);
+    const renamed = await deps.renameBranchAction(repoPath, outcome.oldName, outcome.newName, current.target.ulid);
     if (!renamed.ok) {
       fail(renamed.error.message);
       return;
@@ -210,7 +210,7 @@ export function createModifyDialogHandlers(deps: ModifyDialogDeps) {
 
   function handleModifyBranchPickerInput(current: ModifyDialogState, session: BranchPickerSession, input: string, key: Key) {
     const otherMemberBranches = Array.from(new Set(current.target.members.map((member) => member.branch)));
-    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key, session.branchesStatus);
+    const result = handleBranchPickerKey(session.state, session.branches, otherMemberBranches, input, key, session.branchesStatus, session.owners);
     if (result.type === 'cancel') {
       deps.setDialog((prev) => (prev.kind === 'modify' ? { ...prev, branchPicker: null } : prev));
       return;
@@ -373,6 +373,7 @@ export function ModifyDialogView({
             state={dialog.branchPicker.state}
             branches={dialog.branchPicker.branches}
             branchesStatus={dialog.branchPicker.branchesStatus}
+            owners={dialog.branchPicker.owners}
             otherMemberBranches={Array.from(new Set(dialog.target.members.map((member) => member.branch)))}
             maxRows={maxRows}
           />

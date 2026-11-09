@@ -245,7 +245,7 @@ describe('activateEdt — clean first activation', () => {
 
   it('diffs from HEAD when the current branch is unreadable', async () => {
     const git = fakeGit({
-      currentBranch: vi.fn(async () => err('git-current-branch-error', 'detached')),
+      currentBranch: vi.fn(async () => err('git-detached-head', 'detached')),
       listDirtyPaths: vi.fn(async () => ok(['x'])),
     });
 

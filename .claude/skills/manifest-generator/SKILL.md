@@ -1,6 +1,6 @@
 ---
 name: manifest-generator
-description: Scan a repository and generate a .tui-back.yaml manifest file for the tui-back tool. The skill analyses the repo structure (package.json, docker-compose.yml, migration scripts, existing config) to populate the manifest fields: service, container, migrationCommand, sharedBranch, protectedBranches, and modules. Use when IA agents need to quickly create manifests for new micro-services or when refactoring existing ones.
+description: Scan a repository and generate a .tui-back.yaml manifest file for the tui-back tool. The skill analyses the repo structure (package.json, docker-compose.yml, migration scripts, existing config) to populate the manifest fields: service, container, healthUrl (the status probe every view uses), migrationCommand, sharedBranch, protectedBranches, and modules. Use when IA agents need to quickly create manifests for new micro-services or when refactoring existing ones.
 ---
 
 # BMad Manifest Generator
@@ -40,6 +40,7 @@ The skill walks the repo and extracts values for each manifest field:
 |-------|--------|----------|
 | `service` | `package.json` `name` field, or repo basename | `"unknown-service"` |
 | `container` | `docker-compose.yml` service names (first service); omitted when undetected | (key omitted) |
+| `healthUrl` | A health endpoint found in the repo (e.g. a `/health` route in the code, a compose `healthcheck` URL, a `HEALTH_URL`-style env var) combined with the detected port; omitted when none is found (never guess) | (key omitted) |
 | `migrationCommand` | `package.json` `scripts.[migrate]` or `migrate`, or `db:migrate` | `null` |
 | `sharedBranch` | Default: `"development"` (never prompt, always default) | `"development"` |
 | `protectedBranches` | Default: `[development, preprod, prod]` (never prompt; the developer edits it to match the service's branching model) | `[development, preprod, prod]` |
@@ -50,6 +51,8 @@ The skill walks the repo and extracts values for each manifest field:
 1. **`service`**: Read `package.json` (if present) and use the `name` field. If no `package.json`, use the repo directory basename, trimmed of trailing `/` and `-invalid` chars.
 
 2. **`container`**: Read `docker-compose.yml` (if present at repo root). If the file exists and has a `services` top-level key, use the first service name found. If no docker-compose file or no service matches, omit the `container` key entirely — never emit `null` or an empty value (the schema rejects both).
+
+2b. **`healthUrl`**: Optional. Offer it only when a health endpoint is evident (a compose `healthcheck` that curls a URL, a `/health` or `/healthz` route, a documented health URL) and the host port is known; write it as a full `http://` or `https://` URL (e.g. `http://localhost:3000/health`). The schema rejects blank or non-http(s) values, so omit the key entirely when undetected — never emit `null` or an empty string. `healthUrl` is tui-back's everyday status probe: every view (Dashboard, Logs, Update, CLI `dashboard`) probes it first, then combines the answer with the container state — 2xx with the container up (or no container) is `up`, 2xx with the container down/restarting is `inconsistent`, a non-2xx or timeout with the container up is `unhealthy`, and a container-less service with a `healthUrl` gets a real `up`/`down`. Without it, the status is the raw container state (an `up` stays unverified, `no-container` for a container-less service) and a restarted service is reported `up-unverified` instead of `functional`. So prefer a cheap, side-effect-free endpoint that answers within 2 s. A developer can still turn the probe off for one service on their own machine (`:settings` → Services tab, stored as `services.healthCheckDisabled` in the local `settings.yaml`, never in the manifest): that service then resolves as if it had no `healthUrl` and is marked `healthCheck: "disabled"` — so emit `healthUrl` whenever an endpoint exists; a local opt-out does not justify omitting it.
 
 3. **`migrationCommand`**: Read `package.json` `scripts` field. Look for any of: `migrate`, `db:migrate`, `migration`. Use the first found value. If none, set to `null`.
 
@@ -71,6 +74,9 @@ service: <detected-or-unknown>
 # `container`: uncomment and fill in only when a compose service matches;
 # omit the line entirely when undetected (never `null` or empty)
 # container: <detected>
+# healthUrl: uncomment only when a health endpoint is detected (http:// or https://) —
+# it drives the service status shown everywhere (probed first, then combined with the container)
+# healthUrl: http://localhost:3000/health
 migrationCommand: <detected-or-null>
 sharedBranch: development
 protectedBranches: [development, preprod, prod]

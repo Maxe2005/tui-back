@@ -33,58 +33,71 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-10-15
+last_updated: 2026-11-05
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
-  # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-10-14); only open work is listed here.
+  # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-11-04); only open work is listed here.
   epic-1: done
   epic-1-retrospective: done
 
-  epic-2: in-progress
-  2-28-registry-manifest-semantic-validation: done
-  2-38-edt-creation-wizard-step-4-activation-switch-choice: done
-  2-40-edt-switch-cli-fail-safe-dirty-handling-explicit-flags: done
-  2-41-edt-switch-resolution-dialog-global-strategy-per-service-overrides-discard-confirmation: done
-  2-43-cross-edt-branch-usage-alerts-branch-choosers-rename-gate: backlog
-  2-44-edt-switch-optional-parallel-service-restart-verified-state: backlog
+  epic-2: done
   epic-2-retrospective: optional
 
-  epic-3: in-progress
-  3-15-update-zone-per-service-detail-pane-last-run-live-step-tracking: done
-  # 3-18/3-19 added by sprint-change-proposal-2026-10-08-2.md. Order: merge 3-15, then 3-19, then 3-18; 4-4 builds on 3-18.
-  3-18-parallel-update-run-incident-queue: done
-  3-19-full-screen-service-report: done
-  3-20-update-configurable-global-defaults: done
+  epic-3: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
-  4-3-publish-a-new-shared-types-version: done
-  4-4-smart-group-update-shared-types-first: done
-  4-5-auto-resolve-shared-types-only-merge-conflicts: done
-  # 4-6 rewritten 2026-10-12 (version history library); 4-7 added. Order: 4-3 merged -> 4-7 -> 4-6. Prerequisite relaxed to 7-3/7-4 done.
-  4-6-shared-types-version-history-library: done
-  4-7-shared-types-zone-configurable-default-options-busy-tab-indicator: done
+  epic-4: done
   epic-4-retrospective: optional
 
   epic-5: in-progress
-  5-6-command-history-recall-shared-input-history-primitive: done
-  5-7-logs-restart-mode-setting-open-ide-shortcut: done
+  # Reopened 2026-11-05 (sprint-change-proposal-2026-11-05.md): hide/show-only filters, stackable rules, persisted rules and named sets. Order: 5-8 -> 5-9 -> 5-10.
+  5-8-hide-show-only-log-filters: backlog
+  5-9-stackable-log-filter-rules: backlog
+  5-10-persisted-filter-rules-and-named-rule-sets: backlog
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-3-save-customize-and-re-fire-a-request: done
   6-4-see-response-and-relevant-logs-together: backlog
   6-5-manage-the-saved-request-library-across-edts: backlog
   epic-6-retrospective: optional
 
-  epic-7: in-progress
-  # Execution order: 7-12 -> 5-7, 7-5 -> 7-6 (7-5 rewritten as services console; 7-10/7-11 done).
-  7-9-bounded-rendering-audit-global-fix-regression-guard: done
-  7-12-shared-service-actions-open-in-ide-simple-clean-restart: done
-  7-5-dashboard-active-edt-services-console-last-update-persistence: backlog
-  7-6-dashboard-alerts-quick-actions-registry-health-operation-indicator: backlog
+  epic-7: done
   epic-7-retrospective: optional
+
+  epic-8: done
+  epic-8-retrospective: optional
+
+  epic-9: in-progress
+  # Service terminals & unified service actions (2026-11-04): sprint-change-proposal-2026-11-04.md. Order: 9-1 -> 9-3 -> 9-2 -> 9-4 -> 9-5; 9-6 independent. + health-first status & heal (2026-11-04, sprint-change-proposal-2026-11-04-2.md): 9-7 -> 9-8 -> 9-9. + help filter & per-service health check toggle (2026-11-04, sprint-change-proposal-2026-11-04-3.md): 9-10 independent; 9-7 -> 9-11.
+  9-1-shell-session-port-driven-adapter-core-shell-use-case: done
+  9-2-registry-entries-for-service-and-container-terminals: done
+  9-3-shared-scrollable-output-and-fullscreen-primitive: done
+  9-4-terminal-view-in-the-tui: review
+  9-5-unified-service-actions-in-the-logs-tab: review
+  9-6-shared-types-ux-action-bar-and-post-publish-choice-screen: done
+  9-7-health-first-service-status-resolution: review
+  9-8-heal-use-case-and-cli: review
+  9-9-dashboard-heal-action: review
+  9-10-text-filter-in-the-keybinding-help: review
+  9-11-per-service-health-check-toggle: review
+  epic-9-retrospective: optional
+
+  epic-10: backlog
+  # Distribution (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 10-1 -> 10-2 -> 10-3 -> 10-4. Epic 9 already merged into devlopment (8ad7b011).
+  10-1-repair-the-bin-one-binary-tui-routing: backlog
+  10-2-completion-bash-subcommand: backlog
+  10-3-install-subcommand: backlog
+  10-4-publication-install-sh-and-docs: backlog
+  epic-10-retrospective: optional
+
+  epic-11: backlog
+  # MCP server (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 11-1 -> 11-2 -> 11-3 -> 11-4. Starts after 10-1; 11-4 needs 10-3.
+  11-1-mcp-skeleton-and-read-only-tools: backlog
+  11-2-authorization-gate-and-write-tools: backlog
+  11-3-destructive-tools-and-long-operations: backlog
+  11-4-install-registration-and-docs: backlog
+  epic-11-retrospective: optional

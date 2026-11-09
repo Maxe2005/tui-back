@@ -33,7 +33,7 @@ FR-13: A developer can publish a new `shared-types` version through the tool (pu
 FR-14: The tool searches the `shared-types` source repo's branches and commits in real time and shows the version history (`"version"` line of `package.json`) by branch (last `n` versions, `n` in settings) or by version (branch(es) and date) — read-only, uncached (redefined 2026-10-12, Sprint Change Proposal; supersedes the 2026-10-05 drift view).
 FR-15: A developer enters a `shared-types` version and applies it to some or all of the active EDT's consumer services (dependency-line rewrite, then optional `npm i` / clean restart / commit of `package.json` and `package-lock.json` only, never a push) (amended 2026-10-05).
 FR-16: A developer can view a single, live, aggregated log stream from every service in the active EDT, or a chosen subset.
-FR-17: The aggregated log stream can be filtered by service, by free-text/regex search, and by log level, without restarting it (amended 2026-09-18, Sprint Change Proposal, Story 5.4: extends to recall of previously used text/regex filters, per scope, not just new filtering mechanics).
+FR-17: The aggregated log stream can be filtered by service, by free-text/regex search, and by log level, without restarting it (amended 2026-09-18, Sprint Change Proposal, Story 5.4: extends to recall of previously used text/regex filters, per scope, not just new filtering mechanics). Amended 2026-11-05 (Sprint Change Proposal, Stories 5.8–5.10): a filter can also hide what matches and act on the whole line or only the matched text, several rules stack, and rules and named rule sets persist (FR-49).
 FR-18: Service health (up / down / restarting) is visible inline with the log view.
 FR-19: For any managed repo whose manifest activates a route-explorer module, the tool lists the routes that module's scanner discovers for that repo.
 FR-20: A developer can fire a request against any route discovered via FR-19, with authentication for protected routes handled automatically in dev mode.
@@ -48,6 +48,16 @@ FR-29 (added 2026-10-01, Sprint Change Proposal): Container-less managed service
 FR-32 (added 2026-10-05, Sprint Change Proposal): Per-service last-run merge/migration detail in Update, session-only.
 FR-34 (added 2026-10-08, Sprint Change Proposal): Full-screen, scrollable per-service update report; FR-10/FR-11 amended for parallel runs and the incident queue.
 FR-33 (added 2026-10-05, Sprint Change Proposal): Reversible, unified focus navigation — Shift+Tab reverses Tab everywhere via one configurable primitive.
+FR-38 (added 2026-10-15, Sprint Change Proposal): Branch drift detection and realignment — detect repos no longer on their expected branch (EDT members: the EDT-defined branch; others: their `sharedBranch`) and realign a chosen selection (global presets + per-service refinement), with optional post-realign restart and settings defaults.
+FR-39 (added 2026-11-04, Sprint Change Proposal): Open a line-oriented command terminal on a service (repo directory) or its container from the Dashboard/Logs: run commands, read output, scroll, cancel, full screen. No interactive TTY programs.
+FR-40 (added 2026-11-04): All per-service actions are available from the Dashboard and the Logs tab from the same registry, with the same availability rules.
+FR-41 (added 2026-11-04): Shared Types shows every action as a labelled command and presents post-publish next steps as an explicit choice screen.
+FR-42 (added 2026-11-04, SCP 2): Service status is health-first (manifest `healthUrl`, then container), with an explicit `inconsistent` state, across every view and the CLI.
+FR-43 (added 2026-11-04, SCP 2): Heal — restart every active-EDT service that is not up, from the Dashboard and the `heal` CLI.
+FR-46 (added 2026-11-05): The package exposes one `tui-back` binary: `tui-back <subcommand>` runs the CLI and `tui-back tui` opens the TUI (exit 1 without a terminal).
+FR-47 (added 2026-11-05): `npx -y github:<owner>/tui-back install` installs the tool globally with the `tb`/`tbt` aliases and bash completion through an idempotent `~/.bashrc` block; `--uninstall` reverses it; Node < 24 stops with exact fix instructions.
+FR-48 (added 2026-11-05): `tui-back mcp` exposes every subcommand as an MCP tool; write and destructive tools run only after explicit per-call human approval, and are refused when the client cannot ask.
+FR-49 (added 2026-11-05): The log filter is an ordered list of rules (text/regex, show/hide, whole line/matched text only), kept across restarts and savable as named rule sets; history recall restores every field.
 
 ### NonFunctional Requirements
 
@@ -74,7 +84,7 @@ NFR-6 (Single-instance enforcement): A second running instance of the tool on th
 - **Logs are ephemeral; Docker remains the log-truth source.** `adapters/driven/docker` only streams raw lines in; a bounded in-memory ring buffer per service (sized for FR-22's fire-correlation window plus scroll-back) is owned by `core/logs`; nothing is written to disk, discarded on restart (AD-11).
 - **Performance budget enforcement.** Log-stream re-renders are debounced/batched, never a full redraw per emitted line; CPU-heavy work never runs synchronously in-process on the TUI's event loop — it goes through the CLI's subprocess boundary instead (AD-12).
 - **Testing strategy by layer.** `core/` unit-tested (Vitest) against fake port implementations; `adapters/driven/*` get targeted integration tests against the real system (temp file for persistence, temp repo for git); the Zustand store is tested directly without rendering Ink; `adapters/driving/cli` tested black-box (invoke subcommand as child process, assert AD-3 envelope); `adapters/driving/tui` gets smoke-tests via Ink's `render()` only (AD-13).
-- **Packaging is deferred.** v1 runs via `tsx`/`node` directly; a packaging mechanism (Node SEA / `pkg` / `bun --compile`) is chosen only when teammate distribution becomes a real goal (AD-14).
+- **Distribution is GitHub + npx, no compiled binary** (AD-14, amended 2026-11-05). v1 runs via `tsx`/`node`; one `tui-back` bin; the installer is a driving-adapter concern (AD-24); the MCP server enforces human authorization itself (AD-25).
 - **TUI zone structure mirrors core capability boundaries 1:1.** Each zone under `adapters/driving/tui/` maps to exactly one core capability area (`edts/`→`core/edt`, `update/`→`core/scripts`, `logs/`→`core/logs`, `routes/`→`core/routes`, `shared-types/`→`adapters/driven/modules/shared-types`), except `dashboard/`, the one zone allowed to read (never write) across all of them (AD-15).
 - **Stack (fixed versions):** TypeScript 7.0.2, Node.js 24, Ink 7.1.1, React 19.2.8, Zustand 5.0.14, better-sqlite3 13.0.3, dockerode 5.0.1, openapi-typescript 7.13.0, jose 6.2.8, zod 4.4.3, yaml (eemeli) 2.9.0, ulid 3.0.2, vitest 4.1.10, tsx 4.23.12.
 - **Naming/data conventions.** kebab-case files/directories; `PascalCase` types/classes; `camelCase` functions/variables. Manifest module ids are kebab-case, matched 1:1 against the compiled-in module registry. Generated entity ids (EDT id, saved-request id) are ULIDs. Dates/times are ISO 8601. Any use-case reporting a per-service outcome (group update, migrations, propagation status/propagate) puts it in `data.results: {service, outcome, detail?}[]` with `outcome` from a shared closed set (`"updated"`/`"skipped"`/`"failed"`, or equivalent).
@@ -99,7 +109,7 @@ UX-DR15: Implement the dedicated keybinding-palette/help screen — opened via `
 UX-DR16: Implement the canonical keybinding contract — `j`/`k` move, `g`/`G` top/bottom (list-jump only, never zone-switching), `Space` toggle, `Enter` confirm, `Esc` cancel, `Tab` cycle, `Ctrl+W` resize-mode, `/` filter, `:` command entry, `?` help, `q` quit (confirms first if a group update/publish/propagation run is in progress), and single-letter zone mnemonics `d`/`e`/`u`/`l`/`r`/`s`. Amended 2026-08-24 (Sprint Change Proposal, Story 2.12); zone-switching mechanism corrected 2026-08-25 after a review loopback (see Story 2.12): `Left`/`Right`, with no form/overlay capturing input, directly switch the active zone to the previous/next zone in tab-bar order, wrapping at the ends — always available, no focus mode. `Tab` is unaffected by this story. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): `Ctrl+W` resize-mode is exited by either `Enter` or `Esc`.
 UX-DR17: Implement the two-layer outcome-message voice pattern across every zone — a dry/factual primary line sufficient on its own, with an optional `dim-annotation` wink line that is never required and never folded into the primary line; raw stderr/stack traces always stay one action away, never fully hidden.
 UX-DR18: Implement the resizable list/detail split as the primary content layout within each zone (roughly 2:3 list:detail ratio), per `{components.splitter}`. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the EDT zone becomes the first "multi-splitter zone" (Story 2.7's already-anticipated concept) — 3 internal boundaries (EDT selector/EDT SERVICES/OTHER SERVICES) in addition to the list/detail split.
-UX-DR19: Implement Dashboard zone states — cold-load spinner, populated (active EDT + member health + last group-update timestamp + default "enter last EDT" action), "no EDT yet" first-run prompt, and background-event badge surfacing while on Dashboard.
+UX-DR19: Implement Dashboard zone states (rewritten 2026-10-15, Sprint Change Proposal, Epic 8) — cold-load spinner per section, populated (a fixed, non-compacting banner above the active EDT's services table with per-service actions, an Attention block, a registry-health summary and the EDT actions), "no EDT yet" first-run prompt and "no repos registered" prompt (Story 2.11 keeps precedence), per-field error states. No group-update outcome and no background-event badge on the Dashboard (dropped).
 UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" prompt), populated (list with branch + ahead/behind per service), no-upstream/offline divergence display, duplicate-topic rejection, zero-member-at-creation rejection, per-service branch-creation failure reporting, shared-branch rejection (with explanation before any git write), member added/removed without disturbing others, zero-member EDT display (never an error), member branch change (protected-switch rule), protected-switch-blocked-during-update prompt, interrupted-update recovery offer, and member/non-member service categorization with per-service contextual actions (amended 2026-08-26, Sprint Change Proposal, Story 2.18); fixed, resizable borders between EDT selector/EDT SERVICES/OTHER SERVICES (amended 2026-08-27, Sprint Change Proposal, Story 2.21). Amended 2026-09-16 (Sprint Change Proposal): adds "EDT deleted" (per-service branch-disposition confirmation, active-EDT-blocked, cross-EDT branch-collision-blocked-per-service — Story 2.29), "EDT quick-pick" (filterable list for `edt-switch`/`edt-modify` with no argument, including its own "no matching EDT" state — Story 2.30), and "Create from existing EDT" (member checklist pre-seeded from a root EDT, root-branch-derived base-branch suggestion — Story 2.31) as new named states. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): EDT SERVICES/OTHER SERVICES lists adopt the same bounded/scrollable list primitive as the Logs zone (UX-DR33), for the same reason.
 UX-DR21: Implement Update zone states — idle (last outcome visible), no-op-on-zero-member message, all-repos confirmation gate, second-run-blocked message, in-progress per-service spinner, per-service outcome summary (updated/skipped/failed, none silently absent), assisted-resolution guided menu (stash/open-in-editor/cancel-repo/cancel-run), mid-merge/mid-rebase distinct state, migration-failure detail + re-trigger with re-verify, and quit-mid-run confirmation with next-launch interrupted-run resume offer.
 UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): adds filter-history browsing (arrow-recall and grid-browser, see UX-DR32) as a new named state. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): service lists, the hints panel, and `LogFilterEditor` (including its history-grid browser) now render within a bounded, scrollable window (UX-DR33) rather than unconditionally, preventing terminal-overflow rendering corruption.
@@ -118,6 +128,7 @@ UX-DR29 amended 2026-09-16 (Sprint Change Proposal): the registered command set 
 UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the settings screen — a tab-organized `modal-dialog` instance (a "General" tab plus one tab per configurable feature area), reachable only as a registered `:` command (mirrors UX-DR27's repo-registry-screen precedent — never bound to a raw keypress). Every change applies and persists immediately, no separate save step; a tab with zero settings renders validly, never as an error. Amended 2026-08-28 (Sprint Change Proposal, Story 2.19): a tab may itself hold more than one distinct settings group (first case: the "EDTs" tab, see Story 2.19 below) — such a tab opens on an Up/Down-navigable group list, `Enter` drills into a group's own `checkbox-list-item` list, and `Esc` steps back up one level (out of a group, then — one more `Esc` — closing the whole screen); a tab with a single flat settings list (Command Palette) is unaffected, no group level. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): the Logs tab, which previously had no row cursor (`Up`/`Down` claimed exclusively by `bufferSize`), grows to 4+ fields plus history-clear actions and gains its own row-cursor navigation model, mirroring the EDTs tab's group-list precedent. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): the Command Palette tab grows from its single flat field (`gridMaxRows`, which owned `Up`/`Down`) to three fields — grid max rows, command history size, deduplicate command history — plus a "clear command history" action, and gains the same row-cursor navigation model the Logs tab adopted in Story 5.4.
 
 UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-history recall in the Logs zone's filter editor — `↑`/`↓` arrow-browse over a scope+mode-specific history (global/per-service × text/regex, each independent) with draft preservation (the in-progress, uncommitted draft is restored when browsing back past the most recent entry), any printable character or Backspace pressed while browsing snapping back to the draft with that keypress applied on top of it, and `↓` from the draft (not browsing) opening the reused `command-grid` component (UX-DR30) as a grid browser over the full history. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): generalized into a shared input-history recall pattern with two consumers — the Logs filter editor (above, scope+mode-keyed lists, with the `↓`-from-draft grid browser) and the `:` command bar (UX-DR29, a single command list, no grid browser). The push/dedup/trim rules, arrow-browse with draft preservation and skip-equal-to-draft, and snap-back-on-keypress behavior are one implementation shared by both; each consumer only supplies its own history list(s) and its own size/dedup settings.
+UX-DR32 amended 2026-11-05 (Sprint Change Proposal, Stories 5.8–5.10): a filter carries an action (show/hide) and a target (line/match) shown beside the query; history entries store and restore both; the filter editor manages an ordered rule list, and rule lists plus named rule sets persist.
 UX-DR33 (added 2026-09-20, Sprint Change Proposal, Story 5.5): Implement the `bounded-list` component — a scrollable window over any list or panel whose content can exceed the terminal's available rows, extracted from `keybinding-help.tsx`'s `resolveHelpWindow`/`clampHelpOffset`; shows a subtle more-above/below indicator when scrolled away from either end, recalculates live off `useWindowSize()`. Reused by the Logs zone (service lists, hints panel, `LogFilterEditor`) and the EDTs zone (EDT SERVICES/OTHER SERVICES lists).
 UX-DR34 (added 2026-09-30, Sprint Change Proposal, Stories 6.6–6.9): Implement the `JsonTree` component and the Routes right-pane sub-tabs — a shared, windowed, line-by-line navigable JSON tree (built on `bounded-list`, UX-DR33) with per-node fold and global key show/hide rules (per route, session-only, stored by normalized path / key name), in read-only (response) and edit (request body) modes; hidden content is never removed from a request body, and a truncated or non-JSON response falls back to raw text with a visible reason. Pane sub-tabs switch with `Ctrl+→`/`Ctrl+←`, fallback `Ctrl+N`/`Ctrl+P` (the same convention as the EDT create wizard).
 UX-DR35 (added 2026-10-01, Sprint Change Proposal, Story 7.3): Every zone builds its layout through one shared zone-layout contract declaring its panes and the boundaries between them (orientation, default ratio, min/max); the contract provides splitter rendering, accent recoloring when targeted, Ctrl+W resize-mode, Tab boundary cycling and per-zone persisted ratios — no zone hand-rolls a split.
@@ -125,7 +136,7 @@ UX-DR36 amended 2026-10-12 (Story 7.11): an open overlay (settings, help, regist
 UX-DR36 (added 2026-10-01, Sprint Change Proposal, Story 7.4): Interaction consistency contract — the same intent uses the same key, wording and component in every zone (list cursor, edit/commit/cancel, confirm dialogs, destructive-action confirmation, filter, footer hint format, modal titles, empty/error/loading states). Recorded as a table in EXPERIENCE.md; deviations require a documented reason. Amended 2026-10-05 (Sprint Change Proposal, Story 7.7): Shift+Tab always reverses Tab; every zone declares focus movement through one shared navigation primitive (H/V arrows, Tab/Shift+Tab, Ctrl+N/P per zone).
 UX-DR37 (added 2026-10-07, Sprint Change Proposal, Story 7.9): Bounded-rendering contract — at every moment, whatever the terminal size, pane ratios, message length or number of accumulated entries, the TUI is legible and coherent: no rendered region (zone body, pane, dialog, row, text) may exceed the space it is given on either axis. Overflow is always resolved by a visible, deliberate treatment (ellipsis truncation, a windowed scroll region with more-above/below indicators, or an explicit "terminal too small" screen) — never by silent clipping or by letting Ink's layout push other lines off-screen. Enforced by shared primitives plus a guard test and a size-matrix render test so the defect class cannot be reintroduced.
 UX-DR10 amended 2026-10-01: resize-mode is available in every zone (UX-DR35), not only the EDTs zone.
-UX-DR19 amended 2026-10-12: Dashboard = active-EDT services console (state + branch + per-service actions, Stories 7.5/7.12). UX-DR19 amended 2026-10-01: see EXPERIENCE.md State Patterns › Dashboard (container status + branches + divergence per member, working-tree alerts, quick actions, registry health, operation in progress).
+UX-DR19 amended 2026-10-15: superseded by the Epic 8 rewrite above (Stories 8.1–8.5 replace 7.5/7.6); see EXPERIENCE.md State Patterns › Dashboard.
 UX-DR21 amended 2026-10-01: adds the merge-source strategy states (FR-28).
 UX-DR27: Implement the mouse-optional interaction model — every keyboard action has an equivalent mouse action (click select/activate, drag-resize splitter) but no action is ever mouse-only; Ink's lack of built-in mouse support is a flagged risk with `Ctrl+W` keyboard resize-mode as the confirmed-safe fallback. Amended 2026-08-27 (Sprint Change Proposal, Story 2.21): the confirmed-safe keyboard fallback is delivered by Story 2.21 (EDT zone); drag-resize stays out of scope (no mouse support in Ink).
 
@@ -160,15 +171,55 @@ FR-22: Epic 6 - See response and relevant logs together
 FR-23: Epic 6 - Manage the saved-request library across EDTs
 FR-29: Epic 7 - Container-less managed services (added 2026-10-01, Sprint Change Proposal — Story 7.2)
 FR-32: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal — Story 7.8)
-FR-35: Epic 7/5 - Service actions: open IDE, simple/clean restart (added 2026-10-12 — Stories 7.12, 5.7, 7.5)
+FR-35: Epic 7/5 - Service actions: open IDE, simple/clean restart (added 2026-10-12 — Stories 7.12, 5.7, 8.3)
 FR-36: Epics 3/4/5 - Configurable defaults: Update globals, st options, Logs restart mode (added 2026-10-12 — Stories 3.20, 4.7, 5.7)
 FR-37: Epic 2 - Post-switch service restart (none/simple/clean), parallel, verified per-service state; default in settings (added 2026-10-14 — Story 2.44)
+FR-38: Epic 8 - Branch drift detection & realignment: Attention lines, `realign` command + shortcut, selection table, optional restart, settings defaults (added 2026-10-15 — Stories 8.6, 8.7, 8.8)
+FR-39: Epic 9 - Service/container terminal inside the tool: type commands, scroll, cancel, full screen (added 2026-11-04 — Stories 9.1–9.4)
+FR-40: Epic 9 - Every service action available from Dashboard and Logs through one registry (added 2026-11-04 — Stories 9.2, 9.5)
+FR-41: Epic 9 - Shared Types: labelled action bar and explicit post-publish choice screen (added 2026-11-04 — Story 9.6)
+FR-42: Epic 9 - Health-first service status (added 2026-11-04 — Story 9.7)
+FR-43: Epic 9 - Heal action on the Dashboard + CLI (added 2026-11-04 — Stories 9.8, 9.9)
+FR-46: Epic 10 - Single installable binary: `tui-back` (CLI) and `tui-back tui` (TUI) (added 2026-11-05 — Story 10.1)
+FR-47: Epic 10 - Guided install and uninstall: global npm install, aliases, bash completion (added 2026-11-05 — Stories 10.2, 10.3, 10.4)
+FR-48: Epic 11 - MCP server exposing every subcommand, with human authorization for write and destructive tools (added 2026-11-05 — Stories 11.1–11.4)
+FR-49: Epic 5 - Log filter action (show/hide) and target (line/match), stored in filter history (added 2026-11-05 — Story 5.8; stackable rules: Story 5.9; persisted rules and named sets: Story 5.10)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
 ## Epic List
 
-### Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
+#
+
+### Epic 8: Dashboard
+> Added 2026-10-15 (Sprint Change Proposal `sprint-change-proposal-2026-10-15.md`). Replaces former Stories 7.5/7.6.
+
+A developer lands on a Dashboard that answers "should I worry about anything?" at a glance: the active EDT's services with state, branch and divergence, the shared per-service actions (open in IDE, restart, clean restart), an Attention block and a registry-health summary, under the permanent banner.
+**FRs covered:** FR-38 (Stories 8.6–8.8, added 2026-10-15); otherwise draws on FR-9, FR-29, FR-35, FR-36, FR-37; completes UX-DR19
+**Implementation notes:** Prerequisites all done: 7.3 layout contract, 7.7 focus navigation, 7.9 bounded rendering, 7.11 overlay ownership, 7.12 service actions; 2.42 protected branches, 2.43 cross-EDT branch usage. Refresh is on mount and on `R` (no live poll). Execution order: 8.1 → 8.2 → 8.3 / 8.4 (parallelizable) → 8.5; then 8.6 → 8.7 → 8.8 (branch realignment, added 2026-10-15 — 8.6 extends the 8.1 snapshot and 8.4's Attention block; 8.7/8.8 reuse the Epic 2 switch core and Story 2.44's restart phase). Dropped on purpose: last group-update outcome, background-event badges, operation-in-progress indicator.
+
+### Epic 9: Service Terminals & Unified Service Actions
+> Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`).
+
+A developer opens a terminal on a service or its container from the Dashboard or Logs, every service action is identical everywhere, and Shared Types makes its commands and post-publish choices obvious.
+**FRs covered:** FR-39, FR-40, FR-41, FR-42, FR-43; draws on FR-35, FR-29, FR-37
+**Implementation notes:** Order: 9.1 → 9.3 (parallelizable) → 9.2 → 9.4 → 9.5; 9.6 independent. Line-oriented shell (AD-22), no PTY. Added by SCP 2026-11-04-2: 9.7 → 9.8 → 9.9, independent of 9.1–9.6 (AD-23).
+
+### Epic 10: Distribution — npx Installer, Aliases & Shell Completion
+> Added 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`). Amends AD-14, adds AD-24.
+
+A colleague installs the tool with one command, gets `tb` and `tbt` aliases and bash completion, and can update or remove it the same way.
+**FRs covered:** FR-46, FR-47
+**Implementation notes:** Order: 10.1 → 10.2 → 10.3 → 10.4 (10.1 blocks the others). Epic 9 is already merged into `devlopment` (merge 8ad7b011, 2026-11-05), so 10.2 sees its subcommands. Branch: `epic-10-distribution-npx-installer-shell-completion`.
+
+### Epic 11: MCP Server
+> Added 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`). Adds AD-25; extends AD-24.
+
+An AI agent can drive the tool through MCP; anything that changes or destroys state needs the human's explicit approval.
+**FRs covered:** FR-48
+**Implementation notes:** Order: 11.1 → 11.2 → 11.3 → 11.4. Starts after Story 10.1; 11.4 needs 10.3. Branch: `epic-11-mcp-server`.
+
+## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 A developer can launch the tool, see the full navigation shell (top bar, six zone-tabs, footer, resizable list/detail split, modal-dialog, `?` help screen), register managed repos via a manifest, and run any action identically via the TUI or as a standalone CLI script.
 **FRs covered:** FR-1, FR-2
 **Implementation notes:** Lays the hexagonal foundation (AD-1–AD-6, AD-9, AD-13–AD-15), the Atelier design tokens and cross-cutting components (UX-DR1–UX-DR18, UX-DR25–UX-DR27), the script output envelope (AD-3), XDG state layout (NFR-5), single-instance enforcement (NFR-6), auditability (NFR-3).
@@ -367,9 +418,9 @@ A developer can discover a repo's routes, fire a request with automatic dev-mode
 ### Epic 7: TUI Consistency, Dashboard & Code Hygiene
 > Added 2026-10-01 (Sprint Change Proposal `sprint-change-proposal-2026-10-01.md`).
 
-A developer gets a Dashboard that actually summarizes their workspace, a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary, one focus-navigation primitive with Shift+Tab reversal), per-service last-run transparency in Update, support for services that have no container, and a codebase whose comments explain the code rather than its history.
-**FRs covered:** FR-29, FR-32, FR-33, FR-35 (plus completion of UX-DR10, UX-DR19)
-**Implementation notes:** AD-17 (comment convention), AD-4 amendment, AD-16/GitPort diff capability (7.8), UX-DR35, UX-DR36 (amended 2026-10-05: Shift+Tab rule + nav-component contract). Story 7.1 runs first, while no other story branch is in flight. Execution order: 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.9 (added 2026-10-07: bounded-rendering audit & enforcement, AD-19, UX-DR37) → 7.4 → 7.5/7.6. Amended 2026-10-12: 7.11 (overlay input ownership, bug) goes first; 7.12 (service actions) precedes 7.5/7.6 and Story 5.7.
+A developer gets a TUI whose zones all behave the same way (one layout contract with Ctrl+W resize everywhere, one interaction vocabulary, one focus-navigation primitive with Shift+Tab reversal), per-service last-run transparency in Update, support for services that have no container, and a codebase whose comments explain the code rather than its history.
+**FRs covered:** FR-29, FR-32, FR-33, FR-35 (plus completion of UX-DR10)
+**Implementation notes:** AD-17 (comment convention), AD-4 amendment, AD-16/GitPort diff capability (7.8), UX-DR35, UX-DR36 (amended 2026-10-05: Shift+Tab rule + nav-component contract). Story 7.1 runs first, while no other story branch is in flight. Execution order: 7.2-graft → 7.8 (parallel OK) → 7.3 → 7.7 → 7.9 (added 2026-10-07: bounded-rendering audit & enforcement, AD-19, UX-DR37) → 7.4. Amended 2026-10-12: 7.11 (overlay input ownership, bug) goes first; 7.12 (service actions) precedes Story 5.7. Amended 2026-10-15: Stories 7.5/7.6 (Dashboard) are removed and replaced by Epic 8.
 
 ## Epic 1: Foundation — Standalone-Script Core, Manifest & Navigation Shell
 
@@ -2672,6 +2723,8 @@ As a developer, I want the st zone's option checkboxes to start the way I like, 
 
 A developer can view a live, filterable, aggregated log stream across multiple services, with inline health status and a developer-triggered restart control.
 
+> Reopened 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`) for Stories 5.8, 5.9 and 5.10 (hide/show-only filters, stackable rules, persisted rules and named sets). Story 5.2's "ephemeral" boundary is amended by 5.10: the stream and buffer are never persisted; filter rules are.
+
 ### Story 5.1: Aggregated Live Log Stream
 
 As a developer,
@@ -2906,6 +2959,104 @@ As a developer, I want `[R]` in Logs to do the restart I usually want, and a key
 **Given** the grid focus or the fullscreen pane **When** the IDE key is pressed **Then** the IDE opens on the focused service's repo through `openInIde`; failure shows an explicit one-line notice. The key is chosen under UX-DR36 (proposal: `o`; it must not collide with the filter, scroll or fullscreen keys) and is listed in the footer and `?` help.
 
 **Given** a container-less service **When** the IDE key is pressed **Then** it works (it needs no container); only restart is unavailable.
+
+### Story 5.8: Hide / Show-Only Log Filters
+
+> Added 2026-11-05 (Sprint Change Proposal). Extends Story 5.2 (filter) and Story 5.4 (history).
+
+As a developer,
+I want to hide the log lines (or just the text) that match a pattern, or show only what matches,
+So that repeated noise does not bury the lines I care about.
+
+**Acceptance Criteria:**
+
+**Given** the filter editor (global or per-service) **Then** besides the text/regex mode it offers an **action** (`show` or `hide`) and a **target** (`line` or `match`), each switchable from the keyboard with keys taken from the keybinding declarations; the active combination is always visible next to the query. The default is `show` + `line`, which is exactly the Story 5.2 behaviour.
+
+**Given** action `hide` and target `line` **When** a line matches **Then** the whole line is not displayed.
+
+**Given** action `show` and target `line` **Then** only the matching lines are displayed (unchanged).
+
+**Given** action `hide` and target `match` **When** a line matches **Then** the line is displayed with each matched text removed and the rest kept; a line that is empty after removal is not displayed.
+
+**Given** action `show` and target `match` **When** a line matches **Then** only the matched text(s) of that line are displayed; non-matching lines are not displayed.
+
+**Given** a regex that can match an empty string (for example `a*`) **Then** empty matches are ignored, so a filter never hides or shows "nothing" in an endless loop.
+
+**Given** the filter is committed **Then** its action and target are pushed to the history together with the query, in the same scope+mode list; recalling an entry (arrow browse or grid browser) restores query, action and target; two entries are duplicates only if all three are equal; a history entry written before this story reads as `show` + `line`.
+
+**Given** the filter is combined with the service and level filters **Then** they still combine with AND (Story 5.2), and applying or clearing the filter never interrupts the stream or alters the buffered original lines (`Esc` restores them all).
+
+**Given** an invalid regex **Then** it is rejected inline, whatever the action and target.
+
+**Given** a long line, a small terminal or a rewritten line **Then** the Logs zone still respects bounded rendering (AD-19); the editor's added indicator is truncated, not wrapped.
+
+**Given** the unit and render tests **Then** a pure `applyLogFilter` is tested for the four action/target combinations with Max's `[Nest] … WARN [AffectationJoursUseCase] Aucun service de restauration trouvé pour l'utilisateur …` lines as fixtures, history round-trip is tested with legacy and new entries, and the keybinding help lists the new keys.
+
+**Implementation notes:** the rewrite happens when a line is rendered, not when it is stored (AD-11 ring buffer unchanged). `README`/help text mention the two choices. UX-DR32's history recall and EXPERIENCE.md's filter-editor row gain one sentence each.
+
+### Story 5.9: Stackable Log Filter Rules
+
+> Added 2026-11-05 (Sprint Change Proposal). Extends Story 5.8: a scope holds several rules instead of one.
+
+As a developer,
+I want to keep several independent hide / show rules active at once and manage them as a list,
+So that I can silence each kind of noise separately and keep the rest of the stream readable.
+
+**Acceptance Criteria:**
+
+**Given** the filter editor of a scope (global or per-service) **Then** it shows the list of that scope's rules, each with its query, mode (text/regex), action (`show`/`hide`), target (`line`/`match`) and enabled state; an empty list means no filter.
+
+**Given** the rule list **When** the developer adds, edits, enables/disables, deletes or moves a rule **Then** the stream is not interrupted and the new result applies immediately; editing a rule uses the Story 5.8 editor, including history recall (Story 5.4).
+
+**Given** several enabled rules **Then** they apply as a pipeline from top to bottom: each rule filters or rewrites the output of the previous one; a disabled rule is skipped; moving a rule changes the result accordingly.
+
+**Given** two `show` rules **Then** a line must satisfy both (AND); **Given** a `hide` + `match` rule above a `show` rule **Then** the `show` rule sees the rewritten line.
+
+**Given** an invalid regex in a rule **Then** the rule is rejected inline when committed and never enters the list; a stored rule can therefore never crash the view.
+
+**Given** a scope already holding 10 rules **When** another is added **Then** the add is refused with a visible message; the list is a windowed, cursor-driven list with more-above/below indicators (AD-19), its keys come from the keybinding declarations and appear in the `?` help.
+
+**Given** the service and level filters (Story 5.2) **Then** they still combine with the rule pipeline by AND, and the global and per-service rule lists both apply (global first, then the service's own).
+
+**Given** the app restarts **Then** the rule list is empty again until Story 5.10 (live filter state stays ephemeral, Story 5.2), while the history of committed rules is still available (Story 5.4).
+
+**Given** the unit tests **Then** the pipeline is tested for ordering (hide-match above/below show), AND of two show rules, disabled rules, the 10-rule cap, and the real `[Nest] … AffectationJoursUseCase` lines as fixtures.
+
+**Implementation notes:** `applyLogFilter` (5.8) becomes `applyLogRules(line, rules)` reducing over the list; the single-rule editor of 5.8 is reused as the rule editor. The `Esc` contract (Story 1.13): `Esc` steps out of the rule editor to the list, then closes the editor; clearing all rules is an explicit action, not an accident of `Esc`.
+
+**Prerequisites:** 5.8.
+
+### Story 5.10: Persisted Filter Rules and Named Rule Sets
+
+> Added 2026-11-05 (Sprint Change Proposal). Amends Story 5.2's boundary: filter rules are persisted; the log stream and buffer still never are.
+
+As a developer,
+I want my hide / show rules to survive a restart and to save them as named sets,
+So that I do not rebuild my noise filters every day and can switch between setups.
+
+**Acceptance Criteria:**
+
+**Given** a scope (global or one service) with rules **When** the app restarts and the Logs tab opens **Then** that scope's rule list is restored as it was, including each rule's enabled state and order.
+
+**Given** the rule list **When** the developer saves it as a set with a name **Then** it appears in the rule-set library; saving under an existing name asks to confirm the overwrite; an empty name is refused.
+
+**Given** the library **When** the developer applies a set to a scope **Then** its rules are copied into that scope's active list; a non-empty list is replaced only after confirmation; later edits to the active list do not change the saved set.
+
+**Given** the library **When** the developer renames or deletes a set **Then** only that set changes; deleting asks to confirm (destructive-action confirmation, UX-DR36); no active list is affected.
+
+**Given** a stored rule whose regex no longer compiles, or a corrupt stored value **Then** the offending rule (or the whole value) is dropped with a visible warning naming the field; the Logs tab still opens.
+
+**Given** a persisted rule list for a service that is no longer registered **Then** it is kept and ignored, so re-registering the service brings the rules back.
+
+**Given** the `:settings` Logs tab **Then** it offers clearing all persisted rules of one scope and deleting the whole library as separate actions, never clearing more than what is targeted.
+
+**Given** the library and rule lists **Then** they are bounded in size (at most 20 sets, 10 rules per set) and rendered with windowed lists (AD-19); keys come from the keybinding declarations and the `?` help.
+
+**Given** the tests **Then** the state adapter is integration-tested against a temp file (round-trip, corrupt value, uncompilable regex), and the library operations (save, overwrite, apply, rename, delete) are tested in core against a fake `StatePort`.
+
+**Implementation notes:** `StatePort` gains read/write for the active rule lists (keyed by scope) and for the library; keep the same tolerant-reader approach as the filter history. EXPERIENCE.md's filter-editor row and UX-DR32 mention persistence and sets. The 5.2 "ephemeral" wording in `epics.md` gets an amendment note.
+
+**Prerequisites:** 5.9.
 
 ## Epic 6: Route Explorer
 
@@ -3285,7 +3436,7 @@ As a developer, I want to resize the panes of whichever zone I'm in with `Ctrl+W
 
 **Given** the EDTs zone **When** migrated **Then** its existing 3-boundary behavior and persisted ratios are preserved (no user-visible change).
 
-**Implementation notes:** Routes and Update already pass `listSplitterTargeted` — fold that into the primitive. The Dashboard's pane spec is defined here as a placeholder and filled by 7.5.
+**Implementation notes:** Routes and Update already pass `listSplitterTargeted` — fold that into the primitive. The Dashboard's pane spec is defined here as a placeholder and filled by Story 8.2.
 
 ### Story 7.4: Interaction Consistency Audit & Alignment (UX-DR36)
 
@@ -3323,52 +3474,6 @@ As a developer, I want the remaining UX-DR36 alignment items finished, so that t
 
 **Given** shared helpers **When** reviewed **Then** settings and registry screens reuse the shared list-cursor reducer and the shared → keybindings → zones type-import layering is clean.
 
-### Story 7.5: Dashboard — Active-EDT Services Console & Last-Update Persistence (UX-DR19)
-
-> Rewritten 2026-10-12 (Sprint Change Proposal `sprint-change-proposal-2026-10-12.md`): the Dashboard is an action console for the active EDT, not a status page. Depends on Story 7.12 (service actions) and 7.11.
-
-As a developer, I want the Dashboard to be the console of my active EDT — every service with its state and branch, and every action I can take on it — so that I can see the workspace and act on a service without leaving the first screen.
-
-**Acceptance Criteria:**
-
-**Given** the app launches **When** the Dashboard renders **Then** the banner stays (Story 2.16), followed by a cold-load spinner per section while data assembles; sections fill independently.
-
-**Given** an active EDT **When** the summary is ready **Then** it lists each member service with: container status (up/down/restarting/no container — glyph + text, FR-29), current branch, and ahead/behind vs. its `sharedBranch` (FR-9's existing computation, reused), plus the EDT name.
-
-**Given** any group update finishes (any scope, TUI or CLI) **When** it ends **Then** its outcome (finished-at timestamp, scope, updated/skipped/failed counts) is persisted through the state port; the Dashboard shows the latest one ("Last update: <relative time> — 3 updated, 1 failed"), or "No update run yet".
-
-**Given** no EDT exists **When** the Dashboard renders **Then** it prompts to create or choose an EDT instead of an empty summary; with an empty registry the Story 2.11 prompt keeps precedence.
-
-**Given** the Dashboard **When** displayed **Then** the default highlighted action is "Enter [last EDT]" (switches to the EDTs zone with that EDT selected).
-
-**Given** docker or git probes fail for a service **When** rendered **Then** that row shows an explicit error state for that field; other rows and sections are unaffected.
-
-**Implementation notes:** uses Story 7.3's layout contract. The container-status poll reuses the Update zone's health-poll slice logic rather than a third copy.
-
-**Given** the active EDT **When** the Dashboard renders **Then** the services list is the main body of the screen, one row per service: state (up / down / restarting / no container — glyph + text), active branch, ahead/behind, and a one-glyph issue marker (dirty / merge in progress, absorbed from 7.6).
-
-**Given** a service row is focused (↑/↓, Story 7.7) **When** shown **Then** its available actions are listed (key + label) from Story 7.12's registry: open in IDE, restart (simple), restart (clean) — each disabled with a reason when unavailable (no container, no recipe); further actions are added by registering them.
-
-**Given** a service action is triggered from the Dashboard **When** it runs **Then** the row shows its progress and result inline; an action that conflicts with a held operation lock (update, migration, switch) is disabled with the lock's name (Story 3.16 semantics).
-
-**Given** the service states **When** displayed **Then** they refresh live with the container-health poll (reusing the Update zone's slice logic) and a `restarting` state caused by Logs or Update shows here too.
-
-**Given** an overlay (settings, help, …) is open over the Dashboard **When** keys are pressed **Then** the services list does not react (Story 7.11).
-
-### Story 7.6: Dashboard — Alerts, Quick Actions, Registry Health & Operation Indicator
-
-As a developer, I want the Dashboard to warn me about anything needing attention and to launch common actions from it, so that it is a real starting point, not just a status page.
-
-**Acceptance Criteria:**
-
-**Given** active-EDT members **When** a member has uncommitted changes or a merge/rebase in progress **Then** the issue marker of its Story 7.5 row is set, and the focused row shows the **reason** line (amended 2026-10-12).
-
-**Given** the Dashboard **When** focused **Then** a quick-action row offers: enter last EDT, start group update (opens Story 3.7's configuration), open Logs, switch EDT (Story 2.30's quick-pick) — each with its key shown in the row and footer, keys consistent with UX-DR36. This is the **EDT-level** row, distinct from Story 7.5's per-service actions; its keys must not collide with Story 7.12's service-action keys (amended 2026-10-12).
-
-**Given** the registry **When** summarized **Then** a section shows registered-repo count and counts of invalid manifests, unreachable repos and listing issues (Story 2.34's classification), with a shortcut to `:registry`; all-clear shows a single success line.
-
-**Given** an operation holds a lock (update, migration, switch, …) **When** the Dashboard renders **Then** a line names the operation and its progress, and quick actions that would conflict are disabled with the reason.
-
 ### Story 7.7: Shared Focus-Navigation Component (FR-33)
 
 > Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Runs before Story 7.4 so the alignment phase consumes its primitive.
@@ -3385,7 +3490,7 @@ As a developer, I want one shared navigation primitive so Tab/Shift+Tab move foc
 
 ### Story 7.8: Update Per-Service Last-Run Detail (FR-32)
 
-> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Parallelizable with the 7.2 graft; session-only, independent of 7.5's persisted datum.
+> Added 2026-10-05 (Sprint Change Proposal `sprint-change-proposal-2026-10-05-2.md`). Parallelizable with the 7.2 graft; session-only.
 
 As a developer, after a group update I want the detail pane to report per service what really happened, so I trust the run without re-checking by hand.
 
@@ -3401,11 +3506,10 @@ As a developer, after a group update I want the detail pane to report per servic
 
 **Given** the CLI **When** a run ends **Then** the same details ride the JSON line.
 
-**Given** a zone has a pending background event **When** on the Dashboard **Then** its tab shows the counter badge (UX-DR19 background-event state).
 
 ### Story 7.9: Bounded-Rendering Audit, Global Fix & Regression Guard (UX-DR37)
 
-> Added 2026-10-07 (Sprint Change Proposal `sprint-change-proposal-2026-10-07.md`). Runs after 7.3/7.7 (it builds on `ZoneLayout`, `bounded-list` and the focus primitive) and before 7.4 (the alignment phase then consumes the bounded primitives) and 7.5/7.6 (the Dashboard is built bounded from day one). Generalizes Story 5.5's fix — applied then to Logs/EDTs only — to the whole tool.
+> Added 2026-10-07 (Sprint Change Proposal `sprint-change-proposal-2026-10-07.md`). Runs after 7.3/7.7 (it builds on `ZoneLayout`, `bounded-list` and the focus primitive) and before 7.4 (the alignment phase then consumes the bounded primitives) and the Dashboard (Epic 8, built bounded from day one). Generalizes Story 5.5's fix — applied then to Logs/EDTs only — to the whole tool.
 
 As a developer, I want every region of the TUI — zones, panes, dialogs, rows, error messages — to stay inside the space it is given, whatever the terminal size, pane ratios or volume of messages, and I want that rule enforced so it cannot regress, so that the tool is readable and coherent at all times and lines never silently vanish.
 
@@ -3485,7 +3589,7 @@ As a developer, I want the screen or panel I opened on top of a zone to be the o
 
 ### Story 7.12: Shared Service Actions — Open in IDE, Simple/Clean Restart (AD-21)
 
-> Added 2026-10-12. Foundation for Stories 5.7 and 7.5.
+> Added 2026-10-12. Foundation for Stories 5.7 and 8.3.
 
 As a developer, I want one definition of "what I can do to a service", so that Logs and Dashboard offer the same actions with the same behaviour and new actions are added once.
 
@@ -3503,3 +3607,533 @@ As a developer, I want one definition of "what I can do to a service", so that L
 
 **Implementation notes:** the registry lives in `core/` (pure, ports injected: container, restart, manifest); the TUI-side `ServiceActionsRow` component renders the available actions with their keys. Hexagonal rule: no `child_process` in the TUI layer — the editor launcher becomes a driven adapter behind a port (the existing launcher is moved, not rewritten).
 
+## Epic 8: Dashboard
+
+A developer lands on a Dashboard that answers "should I worry about anything?" at a glance: the active EDT's services with state, branch and divergence, the shared per-service actions, an Attention block and a registry-health summary, under the permanent banner. Visual reference: `ux-designs/ux-tui-back-2026-08-10/mockups/key-dashboard.html`.
+
+### Story 8.1: Dashboard Snapshot Use-Case & CLI
+
+As a developer, I want one pure use-case that assembles everything the Dashboard shows, so that the TUI and a standalone script read the same facts.
+
+**Acceptance Criteria:**
+
+**Given** an active EDT **When** the snapshot is requested **Then** it returns, per member service: container state (up / down / restarting / no container, FR-29), current branch, ahead/behind vs. its `sharedBranch` (Story 2.6's computation, reused — including "no upstream" and "unknown (offline)"), and working-tree issues (uncommitted changes, merge/rebase in progress).
+
+**Given** a member service **When** its branch is a manifest-protected branch (Story 2.42) or is also used by another EDT (Story 2.43) **Then** the snapshot carries those flags with the owning EDT name(s).
+
+**Given** the registry **When** summarized **Then** the snapshot carries the registered-repo count and the counts of invalid manifests, unreachable repos and listing issues (Story 2.34's classification).
+
+**Given** a docker or git probe fails for one service or field **When** the snapshot is built **Then** that field carries an explicit error state; other fields, rows and sections are unaffected.
+
+**Given** no active EDT **When** requested **Then** the snapshot says so explicitly (distinct from an empty registry, which Story 2.11 handles first).
+
+**Given** the CLI **When** `dashboard` runs **Then** the same snapshot is emitted as the standard JSON envelope (AD-3).
+
+**Implementation notes:** `core/dashboard`, pure, ports injected (container, git, registry, edt-state); no TUI imports. Container status reuses the Update zone's health logic rather than adding a third copy.
+
+### Story 8.2: Dashboard Shell — States, Fixed Banner & Refresh
+
+As a developer, I want the Dashboard to render coherent states under a permanent banner and refresh when I ask, so that it is always legible and never stale without saying so.
+
+**Acceptance Criteria:**
+
+**Given** the Dashboard renders **When** at any size **Then** the banner (Story 2.16) is fixed and is never compacted or hidden; the content below uses the remaining space through Story 7.3's layout contract and Story 7.9's bounded primitives (scroll region, "terminal too small" screen when even the banner cannot fit).
+
+**Given** the Dashboard mounts **When** the snapshot assembles **Then** each section shows its own spinner and fills independently.
+
+**Given** the registry is empty **When** the Dashboard renders **Then** Story 2.11's prompt keeps precedence; with a registry but no EDT, it prompts to create or choose one (`[e]`); otherwise the populated view shows.
+
+**Given** the Dashboard is shown **When** it loads **Then** it refreshes on mount and on `R`; a dim line shows "updated Ns ago"; a load failure shows `[R] retry` (UX-DR17 state line).
+
+**Given** a probe error **When** rendered **Then** the affected field shows its explicit error state; the rest is unaffected.
+
+**Given** an overlay (settings, help, registry, command bar) is open **When** keys are pressed **Then** the Dashboard does not react (Story 7.11).
+
+### Story 8.3: Dashboard — Active-EDT Services Table & Per-Service Actions
+
+As a developer, I want my active EDT's services listed with their state and the actions I can take on each, so that I can see the workspace and act on a service from the first screen.
+
+**Acceptance Criteria:**
+
+**Given** the active EDT **When** the Dashboard renders **Then** the EDT line (name, service count) and one row per service show: state (glyph + text), issue marker, branch, ahead/behind.
+
+**Given** a service row **When** navigated with ↑/↓ **Then** focus follows Story 7.7's component; the focused row shows a reason line for its anomaly (dirty, merge in progress, error) and the action row from Story 7.12's registry: `[Ctrl+O]` Open in IDE, `[Ctrl+R]` Restart, `[Ctrl+L]` Clean restart — each disabled with its reason when unavailable (no container, no recipe), plus `[Enter]` to open the service in its zone.
+
+**Given** a service action is triggered **When** it runs **Then** the row shows its progress and result inline (e.g. "Clean restart — recipe step 2/3"); the other actions of that row are disabled with "operation in progress"; an action conflicting with a held operation lock (update, migration, switch) is disabled with the lock's name (Story 3.16 semantics).
+
+**Given** a restart happens elsewhere (Logs, Update, switch) **When** the Dashboard is open **Then** its row is only updated on the next refresh (`R`) — no live poll.
+
+**Given** a service row **When** the keys are bound **Then** `Ctrl+R` (restart) and `R` (refresh) are distinct and do not collide, and the footer and `?` help list both from the keybinding declaration list.
+
+**Implementation notes:** actions come exclusively from Story 7.12's registry through `ServiceActionsRow`; a new registered action appears here without layout change.
+
+### Story 8.4: Dashboard — Attention Block & Registry Health
+
+As a developer, I want the Dashboard to list everything that needs my attention and the health of my registry, so that I notice problems without opening each zone.
+
+**Acceptance Criteria:**
+
+**Given** the snapshot **When** the Attention block renders **Then** it lists, ordered by severity: services on a protected branch (Story 2.42), no-upstream or unknown (offline) divergence, uncommitted changes or merge/rebase in progress, and branches also used by another EDT (Story 2.43, naming that EDT); each line names its service and reason; the block header shows the count.
+
+**Given** a shared branch **When** a member is behind it (`behind > 0`) **Then** it is listed; no configurable threshold exists.
+
+**Given** nothing needs attention **When** rendered **Then** the block shows a single success line.
+
+**Given** the registry summary **When** rendered **Then** it shows the repo count and the invalid-manifest, unreachable and listing-issue counts, with `[:registry]` as the shortcut; all clear shows a single success line.
+
+**Given** an attention line **When** `Enter` is pressed on its service **Then** the focus moves to that service's row.
+
+### Story 8.5: Dashboard — EDT Actions & Visual Finish
+
+As a developer, I want the Dashboard's EDT actions and final look to match the approved mockup, so that the first screen feels finished.
+
+**Acceptance Criteria:**
+
+**Given** an active or last-used EDT **When** the Dashboard renders **Then** the default action is "Enter [EDT]" (opens it in the EDTs zone), and `[e]` offers "Choose another EDT / create one" (Story 2.30's quick-pick).
+
+**Given** the three approved states (populated with anomalies, all clear with an action running, no EDT) **When** rendered **Then** they match `mockups/key-dashboard.html` in structure and Atelier tokens (UX-DR1+): one accent colour, status colours only for status, square corners, dim secondary text.
+
+**Given** the terminal size matrix (Story 7.9) **When** the Dashboard renders **Then** no region exceeds its bounds and the banner is intact at every size at which it can fit.
+
+**Given** the Dashboard **When** the footer renders **Then** it lists `[↑/↓] service`, `[Enter] open`, `[Ctrl+O]` `[Ctrl+R]` `[Ctrl+L]` while a service is focused, `[R] refresh`, `[e] EDTs`.
+
+**Implementation notes:** closes the deferred "banner clips on short terminals" entry by guaranteeing the minimum-size screen rather than compacting the banner.
+
+
+### Story 8.6: Branch Drift Detection — Snapshot & Attention
+
+> Added 2026-10-15 (Sprint Change Proposal `sprint-change-proposal-2026-10-15-2.md`). Adds FR-38. Extends Stories 8.1 and 8.4.
+
+As a developer, I want the tool to tell me when a repo is no longer on the branch it should be on, so that I notice a drifted workspace before building or testing on the wrong code.
+
+**Acceptance Criteria:**
+
+**Given** the active EDT **When** the snapshot is built **Then** each member service carries its *expected branch* (the branch defined for that EDT) and a `drift` flag when its current branch differs; a detached HEAD counts as drift.
+
+**Given** a managed service that is **not** a member of the active EDT **When** the snapshot is built **Then** it carries its `sharedBranch` as expected branch and the same `drift` flag when it sits on another branch (services are listed in a separate `others` collection; the existing member-only fields are unchanged).
+
+**Given** a probe fails for one service **When** drift is computed **Then** that service carries an explicit `unknown` drift state and is never reported as drifted or aligned; other services are unaffected.
+
+**Given** drift exists **When** the Attention block renders (Story 8.4) **Then** it lists one line per drifted service — naming the service, its current and expected branch, and whether it is an EDT member or an "other" service — ordered after the protected-branch line and before "behind shared branch"; the block count includes them. When any line exists, the block offers the `realign` shortcut.
+
+**Given** no active EDT **When** requested **Then** only non-member drift against `sharedBranch` cannot be defined; the snapshot says "no active EDT" as today and carries no drift data.
+
+**Given** the CLI `dashboard` **When** it runs **Then** the drift data is emitted in the same JSON envelope (AD-3).
+
+**Implementation notes:** reuse the branch/divergence computation of Story 2.6 and the EDT membership/branch data already read by the snapshot; no new git call per service beyond the current-branch read already made.
+
+### Story 8.7: `realign` Use-Case & CLI — Selective Branch Realignment
+
+> Added 2026-10-15. Adds FR-38. Builds on the Epic 2 switch core (safety gate AD-8, dirty-work preservation) and Story 2.44's restart phase (`runPool`, `ServiceActions`, `verifyService`). **Prerequisite (blocking):** 2.44 `done` and merged; otherwise HALT — never re-implement the restart phase here.
+
+As a developer, I want to realign a chosen set of repos on the branches they should be on, so that my workspace matches the active EDT's configuration in one step.
+
+**Acceptance Criteria:**
+
+**Given** the use-case **When** it is called with a selection of services **Then** each selected *member* service is checked out on the branch defined for the active EDT and each selected *non-member* service on its `sharedBranch`; services already aligned are reported `unchanged`, never touched.
+
+**Given** a selected service with uncommitted work **When** realigned **Then** the same fail-safe dirty handling as the switch (Story 2.40) applies — work is preserved or the service is skipped with its reason, never discarded silently; a merge/rebase in progress or a failing branch-scope gate (AD-8) makes that service `failed`/`skipped` with a precise message, without aborting the others.
+
+**Given** a realign run **When** it ends **Then** it returns one closed result per service (`realigned` / `unchanged` / `skipped` / `failed`) with its detail; an action-log entry (NFR-3) records the selection and every outcome; a worker that throws becomes that service's `failed` row; the run never rejects.
+
+**Given** the option `restart` (`none` | `simple` | `clean`) **When** set **Then** services whose branch actually changed and that declare a container go through Story 2.44's restart phase and verification (parallel via `runPool`, same final states); other services are `skipped` in the restart report, never `failed`; the realign is never rolled back by a restart failure.
+
+**Given** the realign run is in flight **When** an update, a switch or another realign is started **Then** it is rejected through the existing action lock (Story 3.16 semantics, both directions).
+
+**Given** the CLI `tui-back realign [--scope none|edt|all] [--service <name>…] [--restart none|simple|clean]` **When** run **Then** the selection is built from the flags (absent flags use the settings of Story 8.8), the same core runs, per-service rows are emitted in the script envelope, and the exit code is non-zero when any selected service ended `failed` or any restarted service ended `failed`, `down` or `unhealthy`. An unknown value or service is rejected before anything is touched.
+
+**Implementation notes:** `core/realign`, pure with ports injected; extract (do not duplicate) the "checkout expected branch with preservation" step from the switch core so both use one implementation. The global scopes resolve to a service list: `none` = empty, `edt` = drifted active-EDT members, `all` = every drifted service (aligned services are never candidates, in the CLI as in the dialog).
+
+### Story 8.8: Realign Dialog, Shortcut & Settings Defaults
+
+> Added 2026-10-15. Adds FR-38; amends FR-36. Mirrors the selection table of the Update configuration screen (Story 3.7/3.20).
+
+As a developer, I want a selection table to choose which repos to realign — with global presets and per-service refinement — reachable by command and shortcut, so that I fix a drifted workspace in a few keystrokes.
+
+**Acceptance Criteria:**
+
+**Given** the command bar **When** the developer types `:realign` **Then** the realign dialog opens; the same dialog opens from the Dashboard Attention block's shortcut (a key declared in the keybinding declaration list, listed in the footer and `?` help, with no collision with `R`, `Ctrl+O/R/L`, `e`).
+
+**Given** the dialog **When** it renders **Then** it shows, as in the Update configuration table, one row per **drifted** service only (aligned and `unknown` services are not listed) — drifted members first, then drifted others — with a checkbox, service name, current branch and expected branch; a member/other marker is shown by text, never by colour alone.
+
+**Given** no service is drifted **When** the dialog is opened **Then** it shows a single "all services are aligned" line and no confirm action.
+
+**Given** the global presets **When** the developer picks one **Then** they act on the listed (drifted) rows only: `Aucun` clears every selection, `Services de l'EDT` selects the drifted active-EDT members among the listed rows, `Tous` selects every listed row; the preset's initial value comes from settings (default `edt`, below); `Space` toggles one row afterwards to refine.
+
+**Given** the dialog **When** it renders **Then** it also shows the restart selector `Aucun / Redémarrage simple / Clean restart` (same control and hint as Story 2.44), pre-selected from settings; `←/→`/`Space` change it for this run only (never written back).
+
+**Given** the developer confirms **When** the run starts **Then** the selected services are realigned through Story 8.7's use-case with live per-service rows (`pending → realigning → [restarting → verifying →] final state`), glyph and colour, a responsive TUI, and a summary listing non-green services first; the Dashboard refreshes afterwards.
+
+**Given** nothing is selected **When** the developer confirms **Then** the action is disabled with the reason "no service selected".
+
+**Given** `:settings` **When** the developer opens it **Then** it offers `realign.defaultScope` (`none` | `edt` | `all`, default `edt`) and `realign.restartMode` (`none` | `simple` | `clean`, default `none`), persisted and applied live; the CLI (Story 8.7) uses the same defaults when its flags are absent (FR-36).
+
+**Given** the dialog and any new component **When** built **Then** they register in `dialog-registry.tsx`, use bounded primitives (AD-19) and gate their input on overlay ownership (Story 7.11).
+
+**Given** the docs **When** updated **Then** the user docs describe the `realign` command, its flags, the shortcut and the two settings.
+
+**Implementation notes:** build in this order, one commit each: settings group (`core/ports/settings.ts`) → store slice + action → dialog (selection table, presets, restart selector) → command-bar entry and Dashboard shortcut → results view → docs.
+
+## Epic 9: Service Terminals & Unified Service Actions
+
+> Added 2026-11-04 (Sprint Change Proposal `sprint-change-proposal-2026-11-04.md`). Adds FR-39, FR-40, FR-41; extends AD-21, adds AD-22. Extended the same day (`sprint-change-proposal-2026-11-04-2.md`): FR-42, FR-43, AD-23, Stories 9.7–9.9. Extended again (`sprint-change-proposal-2026-11-04-3.md`): FR-44, FR-45, AD-23 extension, Stories 9.10–9.11. Branch: `epic-9-service-terminals-unified-service-actions`.
+
+A developer can open a terminal on a service or on its container from the Dashboard or Logs, every service action is the same everywhere, and the Shared Types tab makes its commands and post-publish choices obvious.
+
+### Story 9.1: Shell Session Port, Driven Adapter & `core/shell` Use-Case
+
+As a developer, I want a safe command-execution seam, so that terminals are testable and `child_process` stays in adapters.
+
+**Acceptance Criteria:**
+
+**Given** a service repo path **When** a command is run **Then** stdout/stderr stream as tagged lines and the run settles with its exit code; the use-case returns `Result` and never rejects.
+
+**Given** `cd` or `cd ..` in a service shell **When** the next command runs **Then** it executes in the new cwd; a bad `cd` reports an error and keeps the previous cwd.
+
+**Given** a running command **When** cancel is requested **Then** the process (group) is terminated and the run settles `cancelled`.
+
+**Given** a container target **When** a command is run **Then** it executes through `docker exec` without a TTY; a container that is not running yields `container-not-running` before anything runs.
+
+**Given** long output **When** retained **Then** only a bounded number of lines are kept, with a "N lines dropped" marker.
+
+**Given** a command that needs a TTY **When** run **Then** it fails with a clear hint, never hangs.
+
+**Given** a blank command **Then** it is a no-op; a blank repo path is rejected.
+
+**Implementation notes:** `core/ports/shell-session.ts`, `adapters/driven/shell-session/`, `core/shell/`. AD-22. Core tested against a fake port; adapter against the real system (temp dir).
+
+### Story 9.2: Registry Entries for Service & Container Terminals
+
+As a developer, I want the terminals listed with the other service actions, so that every consumer offers them without layout changes.
+
+**Acceptance Criteria:**
+
+**Given** any service **When** `list` is called **Then** it also returns `terminal-service` and `terminal-container` with availability and reason (`no container`, `container not running`).
+
+**Given** the Dashboard focused row **When** rendered **Then** `ServiceActionsRow` shows them after Open in IDE / Restart / Clean restart with no component change.
+
+**Given** the proposed keys `Ctrl+T` and `Ctrl+E` **When** either collides with a UX-DR36 canonical key or an existing zone binding **Then** HALT and ask.
+
+**Prerequisites:** 9.1, 7.12.
+
+### Story 9.3: Shared Scrollable Output & Fullscreen Primitive
+
+As a developer, I want Logs and Terminal to share one scroll/wrap/fullscreen behaviour, so that they feel identical and stay maintainable.
+
+**Acceptance Criteria:**
+
+**Given** the Logs fullscreen pane **When** its scroll, wrap and fullscreen logic is extracted into `tui/shared/` **Then** Logs behaves exactly as before and all existing Logs tests pass.
+
+**Given** any size **When** rendered **Then** the primitive respects bounded rendering (AD-19) and is registered in the dialog/zone registries as needed.
+
+### Story 9.4: Terminal View in the TUI
+
+As a developer, I want to type commands on a service or its container and read the results without leaving the tool.
+
+**Acceptance Criteria:**
+
+**Given** a focused Dashboard service **When** the terminal action is chosen **Then** a terminal view opens on that service as an overlay owning the keys (Story 7.11), prompt at the bottom, output scrollable.
+
+**Given** a container **When** the container terminal action is chosen **Then** the same view opens targeting the container, the header naming it.
+
+**Given** the prompt focused **When** Enter is pressed **Then** the command runs; `Up/Down` recall history (Story 5.6 primitive); a key switches focus to the output for scrolling; `F` toggles fullscreen; `Ctrl+C` cancels the running command without quitting the app; `Esc` closes, asking confirmation when a command is running.
+
+**Given** the view **Then** the header shows target, cwd and a running indicator; footer and `?` help come from keybinding declarations; stdout/stderr are coloured like Logs; no unbounded `.map` (AD-19).
+
+**Prerequisites:** 9.1, 9.2, 9.3.
+
+### Story 9.5: Unified Service Actions in the Logs Tab
+
+As a developer, I want every service action from the Logs tab, so that I do not go back to the Dashboard.
+
+**Acceptance Criteria:**
+
+**Given** a Logs pane (grid or fullscreen) **When** the actions key is pressed **Then** a menu lists the registry's actions for that service (Open in IDE, Restart, Clean restart, Terminal, Container terminal) with disabled reasons; Enter runs the selected one.
+
+**Given** the existing `R` and `O` **Then** they keep working as shortcuts, routed through the registry with no duplicated availability rules in `logs-zone.tsx`.
+
+**Given** a container-less pane **Then** restart and container terminal are listed disabled with their reason.
+
+**Prerequisites:** 9.2, 9.4.
+
+### Story 9.6: Shared Types UX — Action Bar & Post-Publish Choice Screen
+
+As a developer, I want the Shared Types commands and my next steps after a publish to be obvious.
+
+**Acceptance Criteria:**
+
+**Given** the form view **Then** an action bar lists Publish, Propagate, History and Reload with keys and disabled reasons (e.g. `historyDisabledReason`), generated from keybinding declarations and shown in `?` help.
+
+**Given** a successful publish **Then** a choice screen replaces the dim hint: "Propagate <version> to consumers" (pre-fills the version), "Back to the form", "Close"; `↑/↓` + Enter select, Esc = Close; each choice has a one-line explanation.
+
+**Given** a failed publish **Then** the failure screen lists its choices (Relaunch, Back) the same way.
+
+**Given** the existing use-cases and the `q` mid-run guard **Then** they are unchanged; only the zone and its logic change.
+
+**Implementation notes:** independent of 9.1–9.5. Optional unscheduled backlog item (unnumbered): PTY adapter behind the AD-22 port.
+
+### Story 9.7: Health-First Service Status Resolution
+
+As a developer, I want a service's displayed state to reflect whether the service actually answers, not only whether its container runs, so that I spot a crashed or stuck service immediately.
+
+**Acceptance Criteria:**
+
+**Given** a manifest declaring `healthUrl` **When** the status is resolved **Then** the route is probed first (one `GET` through `HealthProbePort`, short timeout) and combined with the container state following AD-23's table: 2xx + container up → `up`; 2xx + container down/restarting → `inconsistent`; non-2xx/timeout + container up → `unhealthy`; non-2xx/timeout + container restarting/down → `restarting`/`down`.
+
+**Given** a container-less manifest declaring `healthUrl` **When** resolved **Then** the status is `up` or `down` from the probe alone (FR-29 extended).
+
+**Given** no `healthUrl` **When** resolved **Then** the status equals today's container state, `up` flagged as unverified; a container-less service stays `no-container`.
+
+**Given** the probe answers 2xx but Docker errors **When** resolved **Then** the status is `up` and the container error is carried separately, never `inconsistent`.
+
+**Given** the Dashboard snapshot, the Logs panes and list badges, the Update service list and the CLI `dashboard` **When** they read a service state **Then** they all go through the resolver; no consumer combines probe and container itself.
+
+**Given** periodic polls (Logs, Update) **When** a probe is slow **Then** a poll never overlaps the previous one for the same repo and never blocks rendering; the last-known state is kept on failure.
+
+**Given** the `unhealthy` and `inconsistent` states **When** rendered **Then** they have their own glyph + text from theme tokens; `inconsistent` appears in the Dashboard Attention block with its detail; the focused-row reason line shows the probe reason.
+
+**Given** the manifest doc and the `manifest-generator` skill **Then** both describe `healthUrl`'s widened role (steady-state status, not only post-restart verification).
+
+**Implementation notes:** `core/service-status/` (pure, ports injected, returns `Result`, never rejects). `verifyService` keeps its polling loop but uses the same per-attempt rule. Dashboard snapshot field `container` → `status` (+ raw container state); update the CLI `dashboard` envelope doc. AD-23.
+
+### Story 9.8: `heal` Use-Case & CLI — Restart Services That Are Not Up
+
+As a developer, I want one use-case that restarts every service that is not up and reports the result, so that the TUI and scripts share it.
+
+**Acceptance Criteria:**
+
+**Given** an active EDT **When** heal targets are computed **Then** members whose Story 9.7 status is `down` or `unhealthy` and that declare a container are targets; every other member is listed as skipped with its reason (`up`, `already restarting`, `inconsistent`, `no container`, `status unknown`).
+
+**Given** targets and a mode (`simple` | `clean`) **When** heal runs **Then** targets are restarted through `ServiceActions.restart` at `update.concurrency`, then verified through `verifyService`; the report rows and summary use the switch-restart vocabulary (shared machinery, not a copy); a held operation lock fails that row with the lock's name.
+
+**Given** no target **When** heal runs **Then** it succeeds with an empty run and says "every service is up".
+
+**Given** no active EDT **Then** it fails with an explicit error.
+
+**Given** the CLI **When** `tui-back heal [--restart simple|clean]` runs **Then** it emits the standard envelope (AD-3) with targets, skipped rows and the report; `--restart` defaults to `dashboard.restartMode`; exit 1 when a targeted service ends failed, down or unhealthy.
+
+**Implementation notes:** generalise `restartAfterSwitch`'s pool/report into a target-list entry point (switch/realign behaviour and tests unchanged). New setting `dashboard.restartMode` (`simple` | `clean`, default `simple`) in the settings port, schema and settings screen.
+
+**Prerequisites:** 9.7.
+
+### Story 9.9: Dashboard — Heal Action
+
+As a developer, I want to restart every service that is not up from the Dashboard in one action, so that I recover my workspace without restarting services one by one.
+
+**Acceptance Criteria:**
+
+**Given** the Dashboard with a loaded snapshot **When** the Heal key is pressed **Then** a confirm screen (overlay owning the keys, Story 7.11) lists targets and skipped services with reasons, the mode pre-selected from `dashboard.restartMode` and switchable; Enter starts, Esc cancels.
+
+**Given** no target **When** the key is pressed **Then** a notice says every service is up; no screen opens.
+
+**Given** a run **When** in progress **Then** each row shows `restarting → verifying → final state` live; the screen cannot be closed mid-run without confirmation; at the end the summary shows and the Dashboard refreshes.
+
+**Given** the proposed key `H` **When** it collides with a UX-DR36 canonical key or an existing Dashboard/shell binding **Then** HALT and ask.
+
+**Given** the footer and `?` help **Then** they list the key from the keybinding declarations; the screen is bounded (AD-19) and registered in the dialog registry.
+
+**Implementation notes:** reuse the realign dialog's restart-report rendering. The Dashboard's no-live-poll rule (Story 8.3) still holds outside the Heal screen.
+
+**Prerequisites:** 9.8.
+
+### Story 9.10: Text Filter in the Keybinding Help
+
+As a developer, I want to type a few letters in the `?` help and see only the matching keybindings, so that I find a key without scrolling the whole list.
+
+**Acceptance Criteria:**
+
+**Given** the help overlay open **When** a printable key is typed **Then** it is appended to a filter shown on a line under the title (`filter: <text>`, dim placeholder `type to filter` when empty); Backspace removes the last character.
+
+**Given** a non-empty filter **When** the list renders **Then** only the rows whose keys, description or section contain the filter (case-insensitive substring) are listed; a section heading shows only when at least one of its rows matches; the scroll offset resets to the top on every filter change.
+
+**Given** a filter matching nothing **Then** one dim line says `no keybinding matches "<text>"`; the overlay keeps its size.
+
+**Given** a non-empty filter **When** `?` is pressed **Then** it is typed into the filter; **When** Esc is pressed **Then** the filter is cleared and the help stays open. **Given** an empty filter **Then** `?` and Esc close the help as today.
+
+**Given** the arrows, Home/End and PgUp/PgDn **Then** they scroll the filtered list; the help reopens with an empty filter.
+
+**Given** any size **Then** the filter line and the filtered list respect bounded rendering (AD-19): a long filter is truncated, no unbounded `.map`; the help's own footer context lists the filter keys from the keybinding declarations.
+
+**Implementation notes:** a pure `filterKeybindings(rows, query)` next to `withSectionHeadings`, unit-tested. The `?`/Esc decision moves into `resolveHelpDispatch` (app-shell), which needs the filter state from the store or the help component. Applies wherever the help opens (zones, dialogs, terminal view output focus). Independent of other stories.
+
+### Story 9.11: Per-Service Health Check Toggle
+
+As a developer, I want to turn the `healthUrl` check off or on for chosen services, so that a slow or meaningless health route on my machine does not make a service look unhealthy or slow every poll down.
+
+**Acceptance Criteria:**
+
+**Given** the settings **Then** a new `services.healthCheckDisabled` list (manifest `service` names) exists, default empty; a missing, empty or corrupt value falls back to the default with the usual field-naming warning; unknown names are kept and ignored.
+
+**Given** a service whose name is in the list and whose manifest declares `healthUrl` **When** its status is resolved **Then** no probe is sent and the result equals the "no `healthUrl`" rows of AD-23 (container state, `up` unverified; container-less → `no-container`), marked `healthCheck: 'disabled'`.
+
+**Given** a service not in the list **Then** its resolution is unchanged (Story 9.7).
+
+**Given** a disabled service **When** it is restarted (switch/realign restart, Logs `R`, Dashboard restart, heal) **Then** `verifyService` does not probe either: a started container is reported `up-unverified`; heal (9.8) never targets it as `unhealthy`.
+
+**Given** the `:settings` screen **Then** a new **Services** tab lists every registered service, one checkbox per service ("health check"), checked = enabled; a service without `healthUrl` is listed disabled with the dim reason `no healthUrl`; a service whose manifest fails to load is listed disabled with `manifest unavailable`; toggling persists immediately and applies on the next resolution (next poll / refresh) without restart. The list is bounded (AD-19) and its keys come from the keybinding declarations.
+
+**Given** the Dashboard focused row of a disabled service **Then** the reason line shows a dim `health check off`; the CLI `dashboard` JSON carries `healthCheck: "disabled"` on that service's status.
+
+**Given** the resolver **Then** it is the only reader of the setting: no consumer (snapshot, slices, `verifyService`, CLI, heal) checks the list itself.
+
+**Implementation notes:** `ServiceStatusDeps` gets `isHealthCheckEnabled?: (manifest) => boolean` (absent = enabled), wired from the live settings so a change applies at the next call. Settings port, zod schema, defaults and `SETTINGS_TABS` (new `services` tab, last) updated with tests. `docs/tui-back-manifest.md` § `healthUrl` and the CLI `dashboard` envelope doc mention the toggle. AD-23 extension.
+
+**Prerequisites:** 9.7.
+
+## Epic 10: Distribution — npx Installer, Aliases & Shell Completion
+
+### Story 10.1: Repair the Bin — One Binary, `tui` Routing
+
+As a colleague installing the tool, I want one `tui-back` command that runs the CLI and, with `tui`, the TUI, so that a global install actually works.
+
+**Acceptance Criteria:**
+
+**Given** `package.json` **Then** `bin` is exactly `{ "tui-back": "./src/bin/tui-back.mjs" }` and `tsx` is in `dependencies`.
+
+**Given** `src/bin/tui-back.mjs` **When** `argv[2] === 'tui'` **Then** it loads `./tui.ts` (the TUI bypasses the AD-3 envelope and keeps the raw terminal); **otherwise** it loads `./main.ts`. `cli-back.mjs` is deleted.
+
+**Given** a non-TTY stdin **When** `tui-back tui` runs **Then** exit code is 1 and stderr says `tui-back tui requires an interactive terminal` (message updated in `tui.ts`).
+
+**Given** `tui-back --help` **Then** the JSON lists a static `tui` entry (it is not in the subcommand registry).
+
+**Given** the e2e suite **Then** it asserts the `bin` keys equal `['tui-back']` and that the target file exists and is executable, and `scriptPath` points at the unified shim.
+
+**Given** `AGENTS.md` (§ Commands, § Testing) and `CLAUDE.md` (tsx troubleshooting) **Then** they no longer mention `cli-back.mjs` or `tui-back-tui`.
+
+**Given** the spike **Then** `npm install -g github:…` (or an equivalent local `npm pack` + `npm i -g`) of the package with `private: true` is tried; if it fails, `private` is removed and the reason is recorded in the story file.
+
+**Implementation notes:** `tui.ts` keeps its top-level `process.exit(1)`; only the message changes. `npm run depcheck` must still pass with `.mjs` shims in the graph.
+
+### Story 10.2: `completion bash` Subcommand
+
+As a colleague, I want tab completion for `tui-back`, so that I do not have to remember subcommands and actions.
+
+**Acceptance Criteria:**
+
+**Given** `src/adapters/driving/cli/completion-spec.ts` **Then** it generates a bash script from the subcommand registry (subcommand names, `edt` and `registry` actions, flags documented in the usage strings), plus `tui` and `--help`.
+
+**Given** `tui-back completion bash` **When** stdout is a TTY **Then** the raw script is printed; **otherwise** the AD-3 JSON envelope carries it in `data.script`.
+
+**Given** the guard test (black-box, dialog-registry pattern) **Then** every subcommand name in `tui-back --help` appears in the `completion bash` output and vice versa.
+
+**Given** the generator **Then** it is a pure function callable in-process (used by Story 10.3), with `bash -n` passing on its output.
+
+**Out of scope (v1):** dynamic completion (EDT topics, repo paths).
+
+**Prerequisites:** 10.1; Epic 9 merged (subcommand list).
+
+### Story 10.3: `install` Subcommand
+
+As a colleague, I want `npx -y github:<owner>/tui-back install` to set everything up, so that I get the command, the aliases and the completion in one step.
+
+**Acceptance Criteria:**
+
+**Given** `tui-back install` **When** `process.version` is below 24 **Then** it exits 1 with the exact nvm/apt/brew instructions and changes nothing.
+
+**Given** a supported Node **Then** it runs `npm install -g github:<owner>/tui-back` (URL derived from `package.json` `repository`); on `EACCES` it prints the remedy (`npm config set prefix ~/.local`, add to `PATH`) and exits 1.
+
+**Given** a successful install **Then** `completion.bash` is written under the XDG data dir (`<XDG_DATA_HOME>/tui-back/`), generated in-process by Story 10.2's generator.
+
+**Given** `~/.bashrc` **Then** an idempotent block between `# >>> tui-back >>>` and `# <<< tui-back <<<` defines `alias tb='tui-back'`, `alias tbt='tui-back tui'` and sources the completion file if present. Running install twice leaves exactly one block. The command ends by telling the user to `source ~/.bashrc`.
+
+**Given** `$SHELL` is not bash **Then** a warning says only bash is supported; the npm install still happens.
+
+**Given** `tui-back install --uninstall` **Then** the block, the completion file and the global package are removed; a missing piece is not an error.
+
+**Given** the AD-3 contract **Then** the result is one JSON envelope when piped and human text on a TTY; exit code 0 or 1 only.
+
+**Given** the e2e tests **Then** they use a temp `HOME`/`XDG_DATA_HOME` and a stub `npm` on `PATH` (same technique as the docker stubs), covering idempotence, alias presence, envelope shape and `--uninstall`. The real `~/.bashrc` is never touched.
+
+**Prerequisites:** 10.1, 10.2.
+
+### Story 10.4: Publication, `install.sh` and Docs
+
+As the maintainer, I want the repo published with an install script and a README, so that a colleague can start from a URL.
+
+**Acceptance Criteria:**
+
+**Given** `install.sh` at the repo root **Then** it passes `bash -n`; it checks `git` and Node ≥ 24 (otherwise prints precise instructions, exit 1, modifies nothing), then runs `npx -y github:<owner>/tui-back install`.
+
+**Given** `README.md` **Then** it covers installation, the commands, the `tb`/`tbt` aliases, completion, update (re-run install) and uninstall, and notes the `build-essential` fallback if the `better-sqlite3` prebuild fails.
+
+**Given** `LICENSE` (ISC) and `package.json` `repository` and `files` **Then** `_bmad-output` and `.agents` are excluded from the installed package; if `files` is not honoured for git installs, a `.npmignore` does it.
+
+**Given** the planning artifacts **Then** the AD-14 amendment and AD-24 are in `ARCHITECTURE-SPINE.md`, with the memlog entry.
+
+**Given** a clean machine (container without Node or build tools) **When** `install.sh` then the `npx … install` run **Then** `tb`, `tbt` and `<TAB>` completion work; the result is recorded in the story file.
+
+**Manual steps (Max):** create the public GitHub repo `<owner>/tui-back`, confirm the default branch, and approve the first push. Nothing is pushed without that approval.
+
+**Prerequisites:** 10.1–10.3.
+
+## Epic 11: MCP Server
+
+### Story 11.1: MCP Skeleton and Read-Only Tools
+
+As a developer, I want `tui-back mcp` to expose the read-only commands to an AI agent, so that it can inspect my workspace.
+
+**Acceptance Criteria:**
+
+**Given** `tui-back mcp` **Then** it serves MCP over stdio; nothing but protocol messages is ever written to stdout.
+
+**Given** the MCP tool registry (`adapters/driving/mcp/`) **Then** each tool declares a name, a zod input schema, the subcommand it wraps and a safety class `read | write | destructive`; the server builds the same subcommand registry as `main.ts` in-process, from a shared composition factory.
+
+**Given** the `read` tools (at least `dashboard`, `edts`, `list-repos`, `list-routes`, `request-list`, `ping`, `registry validate`) **Then** each returns the AD-3 envelope as the tool result, with `readOnlyHint: true`.
+
+**Given** the guard test (black-box, completion-guard pattern) **Then** every subcommand in `tui-back --help` is either in the tool registry with a safety class or in an explicit exclusion list with a reason; adding a subcommand without deciding fails the test.
+
+**Given** a tool whose command would prompt on stdin (`registry clean`) **Then** the MCP path never reads stdin; its confirmation comes from Story 11.2's gate.
+
+**Spike:** record which MCP SDK version is used and whether the target client (Claude Code) supports elicitation; the result is written in the story file and decides 11.2's wording.
+
+**Prerequisites:** 10.1.
+
+### Story 11.2: Authorization Gate and Write Tools
+
+As a developer, I want every state-changing tool to ask me before it runs, so that an agent cannot change my workspace on its own.
+
+**Acceptance Criteria:**
+
+**Given** a `write` or `destructive` tool call **Then** the server first asks the human through MCP elicitation, showing the tool, its exact arguments and the repos or EDTs affected; it runs only on an explicit accept.
+
+**Given** a decline, a cancel or a timeout **Then** nothing runs and the result is an AD-3 error envelope with a kebab-case code (`authorization-denied`).
+
+**Given** a client without elicitation support **Then** every `write` and `destructive` tool is refused with `authorization-unavailable` and a message explaining why; read tools keep working (fail closed).
+
+**Given** the `write` tools (at least `register`, `scan`, `edt create`, `edt modify`, `edt switch` without discard, `realign`, `heal`, `request-fire`, `fire-request`, `request save` equivalents) **Then** each is wired through the gate; the gate lives in one place and a tool cannot be registered without a safety class.
+
+**Given** `fire-request` **Then** the dev-auth token never appears in the tool result or in the authorization prompt.
+
+**Given** tests **Then** a fake client covers accept, decline, timeout and no-elicitation for one tool of each class; an unclassified tool is a registration error.
+
+**Prerequisites:** 11.1.
+
+### Story 11.3: Destructive Tools and Long Operations
+
+As a developer, I want the destructive and long-running commands available to the agent, still behind my approval.
+
+**Acceptance Criteria:**
+
+**Given** the `destructive` tools (`edt delete`, `edt switch` with `--discard-dirty`, `reset`, `registry clean`, `request-delete`, `update`) **Then** each carries `destructiveHint: true` and passes through the gate with a prompt that names exactly what will be lost or changed.
+
+**Given** a destructive tool **Then** the approval applies to that single call and those exact arguments; it is never remembered for later calls in the session.
+
+**Given** `registry clean` **Then** the stale entries are listed in the prompt and only the confirmed ones are removed; no stdin prompt is used.
+
+**Given** `update` **Then** it reports progress through MCP progress notifications and honours cancellation (AD-20 bounded run still applies).
+
+**Given** concurrent use with the TUI **Then** the existing locks still serialize conflicting operations; a held lock returns the usual envelope error and is covered by a test.
+
+**Prerequisites:** 11.2.
+
+### Story 11.4: Install Registration and Docs
+
+As a colleague, I want the install to offer the MCP registration, so that I do not have to write the config by hand.
+
+**Acceptance Criteria:**
+
+**Given** `tui-back install` **Then** it prints the exact `claude mcp add tui-back -- tui-back mcp` command (and the JSON config for other clients) and does not edit any client config by itself; `--uninstall` mentions removing it.
+
+**Given** `README.md` **Then** it documents the tool list by safety class, the authorization behaviour, the fail-closed rule for clients without elicitation, and a warning that `fire-request` hits real endpoints.
+
+**Prerequisites:** 10.3, 11.3.

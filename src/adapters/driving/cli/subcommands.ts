@@ -8,6 +8,8 @@ import { err, ok, type Result } from '../../../core/result.js';
 import { ping } from '../../../core/ping.js';
 import { createEdt } from '../../../core/edt/create.js';
 import { type DirtyPolicy, switchActiveEdt } from '../../../core/edt/switch.js';
+import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention } from '../../../core/edt/switch-restart.js';
+import { createServiceActions } from '../../../core/service-actions/index.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
@@ -16,7 +18,14 @@ import { selectionFromEdt } from '../../../core/scripts/resolve-merge-sources.js
 import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
 import { validateRegistry } from '../../../core/scripts/validate-registry.js';
 import type { ContainerPort } from '../../../core/ports/container.js';
+import { buildDashboardSnapshot } from '../../../core/dashboard/snapshot.js';
+import { REALIGN_SCOPES, realignServices, type RealignScope } from '../../../core/realign/index.js';
+import { planHeal, runHeal } from '../../../core/heal/index.js';
+import type { RestartMode } from '../../../core/service-actions/index.js';
 import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
+import type { DockerPort } from '../../../core/ports/docker.js';
+import type { EditorPort } from '../../../core/ports/editor.js';
+import type { HealthProbePort } from '../../../core/ports/health-probe.js';
 import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import type { ManifestCarryPort } from '../../../core/ports/manifest-carry.js';
@@ -27,7 +36,7 @@ import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { LockPort } from '../../../core/ports/lock.js';
 import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
 import type { SavedRequestPort } from '../../../core/ports/saved-request.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS, SWITCH_RESTART_MODES, healthCheckEnabledFrom, type Settings, type SettingsPort, type SwitchRestartMode } from '../../../core/ports/settings.js';
 import type { StatePort } from '../../../core/ports/state.js';
 import { registerRepo } from '../../../core/scripts/register.js';
 import { resetRepo } from '../../../core/scripts/reset.js';
@@ -41,7 +50,9 @@ import type { Subcommand } from './dispatch.js';
 const EDT_CREATE_USAGE =
   'tui-back edt create --topic <topic> --member <path> [--create-branches] ' +
   '[--base <branch>] [--branch-mode grouped|individual] [--branch-name <name>|<path>=<name>]';
-const EDT_SWITCH_USAGE = 'tui-back edt switch --to <topic> [--force] [--discard-dirty | --adopt-dirty [--adopt-branch <name>]]';
+const EDT_SWITCH_USAGE =
+  'tui-back edt switch --to <topic> [--force] [--discard-dirty | --adopt-dirty [--adopt-branch <name>]] [--restart none|simple|clean]' +
+  ' (--restart defaults to settings.yaml switch.restartMode; exit 1 when a restarted service ends failed, down or unhealthy)';
 const EDT_MODIFY_USAGE =
   'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +
   ' (each --add-member requires a matching --set-branch for that same path — no current-branch default)';
@@ -76,6 +87,17 @@ function parseUpdateOverrides(
     ...(has('--clean-restart') ? { cleanRestart: true } : has('--no-clean-restart') ? { cleanRestart: false } : {}),
   };
 }
+const REALIGN_USAGE =
+  'tui-back realign [--scope none|edt|all] [--service <name>]... [--restart none|simple|clean]' +
+  ' (--scope defaults to the realign.defaultScope setting, edt out of the box: the drifted active-EDT members;' +
+  ' --service adds a service to the scope; --restart defaults to the realign.restartMode setting, none out of the box;' +
+  ' exit 1 when a service fails or a restarted service ends failed, down or unhealthy)';
+const HEAL_USAGE =
+  'tui-back heal [--restart simple|clean]' +
+  ' (restarts every active-EDT service that is down or unhealthy and declares a container, then verifies it;' +
+  ' --restart defaults to the dashboard.restartMode setting, simple out of the box;' +
+  ' exit 1 when a restarted service ends failed, down or unhealthy)';
+const HEAL_RESTART_MODES: readonly RestartMode[] = ['simple', 'clean'];
 const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
 const REGISTRY_VALIDATE_USAGE = 'tui-back registry validate';
@@ -92,11 +114,16 @@ export function buildSubcommands(deps: {
   edtRegistryResourceKey: string;
   git: GitPort;
   container: ContainerPort;
+  docker: DockerPort;
   migration: MigrationPort;
   restart: RestartPort;
   state: StatePort;
   // Source of the `update` defaults (runMigrations / cleanRestart); a load failure or warning is reported on stderr and the built-in defaults apply.
   settings: SettingsPort;
+  // The post-switch restart's verification ports (`edt switch --restart`, with `docker` above).
+  // Optional: without them a restart request is rejected up front, before anything is touched.
+  editor?: EditorPort;
+  healthProbe?: HealthProbePort;
   // Gates `registry clean`'s bare-invocation interactive list-then-confirm prompt. Defaults to
   // false (never prompts); only bin/main.ts wires it, and only when BOTH stdout and stdin are
   // real TTYs — a piped stdin must never let `rl.question()` block on or misread a
@@ -167,6 +194,28 @@ export function buildSubcommands(deps: {
               state: deps.state,
             })
           : err('invalid-argument', 'Usage: tui-back edts'),
+    },
+    {
+      name: 'dashboard',
+      usage: 'tui-back dashboard',
+      // The Dashboard's snapshot (active EDT services with their health-first status, registry
+      // health), read-only.
+      run: async (args) => {
+        if (args.length !== 0) {
+          return err('invalid-argument', 'Usage: tui-back dashboard');
+        }
+        const settings = await loadSettingsOrDefaults(deps.settings);
+        return buildDashboardSnapshot({
+          registry: deps.registry,
+          manifest: deps.manifest,
+          git: deps.git,
+          docker: deps.docker,
+          ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
+          isHealthCheckEnabled: healthCheckEnabledFrom(() => settings),
+          edtRegistry: deps.edtRegistry,
+          state: deps.state,
+        });
+      },
     },
     {
       name: 'edt',
@@ -289,6 +338,16 @@ export function buildSubcommands(deps: {
         }
         return err('invalid-argument', `Usage: ${UPDATE_USAGE}`);
       },
+    },
+    {
+      name: 'realign',
+      usage: REALIGN_USAGE,
+      run: async (args) => runRealign(deps, args),
+    },
+    {
+      name: 'heal',
+      usage: HEAL_USAGE,
+      run: async (args) => runHealCommand(deps, args),
     },
     {
       name: 'registry',
@@ -792,10 +851,17 @@ async function runEdtSwitch(
     git: GitPort;
     lock: LockPort;
     state: StatePort;
+    settings: SettingsPort;
+    container: ContainerPort;
+    restart: RestartPort;
+    editor?: EditorPort;
+    docker?: DockerPort;
+    healthProbe?: HealthProbePort;
   },
   args: string[],
 ): Promise<Result<unknown>> {
   let topic: string | undefined;
+  let restartFlag: string | undefined;
   let force = false;
   let discardDirty = false;
   let adoptDirty = false;
@@ -819,6 +885,18 @@ async function runEdtSwitch(
           return err('invalid-argument', `--adopt-branch may only be given once. Usage: ${EDT_SWITCH_USAGE}`);
         }
         adoptBranch = value;
+        i += 1;
+        break;
+      }
+      case '--restart': {
+        const value = args[i + 1]?.trim();
+        if (value === undefined || value.startsWith('--')) {
+          return err('invalid-argument', `Missing value for --restart. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        if (restartFlag !== undefined) {
+          return err('invalid-argument', `--restart may only be given once. Usage: ${EDT_SWITCH_USAGE}`);
+        }
+        restartFlag = value;
         i += 1;
         break;
       }
@@ -857,13 +935,28 @@ async function runEdtSwitch(
   if (adoptBranch !== undefined && adoptBranch.trim() === '') {
     return err('invalid-argument', '--adopt-branch must not be empty');
   }
+  // An unknown value is rejected before anything is touched; an absent flag falls back to the
+  // setting (a load failure or warning goes to stderr and the built-in default applies).
+  if (restartFlag !== undefined && !(SWITCH_RESTART_MODES as readonly string[]).includes(restartFlag)) {
+    return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected none, simple or clean. Usage: ${EDT_SWITCH_USAGE}`);
+  }
+  let restartMode = restartFlag as SwitchRestartMode | undefined;
+  // Loaded at most once: for the absent flag here, then for the restart phase below.
+  let loadedSettings: Settings | undefined;
+  if (restartMode === undefined) {
+    loadedSettings = await loadSettingsOrDefaults(deps.settings);
+    restartMode = loadedSettings.switch.restartMode;
+  }
+  if (restartMode !== 'none' && (deps.docker === undefined || deps.healthProbe === undefined)) {
+    return err('restart-unavailable', 'Post-switch restart needs the Docker and health-probe ports, which are not wired — nothing was switched');
+  }
   const dirtyPolicy: DirtyPolicy | undefined = discardDirty
     ? { kind: 'discard' }
     : adoptDirty
       ? { kind: 'adopt', branch: adoptBranch }
       : undefined;
 
-  return switchActiveEdt({
+  const switched = await switchActiveEdt({
     edtRegistry: deps.edtRegistry,
     edtRegistryResourceKey: deps.edtRegistryResourceKey,
     registry: deps.registry,
@@ -880,6 +973,298 @@ async function runEdtSwitch(
     dirtyPolicy,
     onDirtyReposBeforeSwitch: undefined,
   });
+  // Mode none (the default): exactly the switch's own output, no restart phase, no new key.
+  if (restartMode === 'none' || !switched.ok) {
+    return switched;
+  }
+
+  // The same core orchestration the TUI runs — a second call after the successful switch.
+  const repos = await listSwitchRestartRepos({ registry: deps.registry, manifest: deps.manifest });
+  if (!repos.ok) {
+    return repos;
+  }
+  const restartSettings = loadedSettings ?? (await loadSettingsOrDefaults(deps.settings));
+  const concurrency = restartSettings.update.concurrency;
+  const serviceActions = createServiceActions({
+    manifest: deps.manifest,
+    container: deps.container,
+    restart: deps.restart,
+    // Never used by restart/verify, but the registry's deps are complete.
+    editor: deps.editor ?? { launch: () => err('editor-launch-failed', 'No editor is wired in the CLI') },
+    lock: deps.lock,
+    docker: deps.docker,
+    healthProbe: deps.healthProbe,
+    isHealthCheckEnabled: healthCheckEnabledFrom(() => restartSettings),
+  });
+  const report = await restartAfterSwitch({
+    results: switched.data.results,
+    repos: repos.data,
+    mode: restartMode,
+    concurrency,
+    serviceActions,
+  });
+  if (!report.ok) {
+    return report;
+  }
+  const restart = report.data.rows.map((row) => ({
+    service: row.service,
+    mode: restartMode,
+    state: row.phase,
+    ...(row.phase === 'skipped' ? { detail: row.skipReason } : row.detail !== undefined ? { detail: row.detail } : {}),
+  }));
+  const data = { ...switched.data, restart };
+  return restartNeedsAttention(report.data.summary)
+    ? err('switch-restart-needs-attention', 'The switch succeeded, but a restarted service ended failed, down or unhealthy', data)
+    : ok(data);
+}
+
+// Hand-rolled flag parsing for `realign` (same style as runEdtSwitch): every flag, scope and
+// restart value is validated here, service names by the use-case — both before any lock is
+// taken or any repo touched.
+async function runRealign(
+  deps: {
+    registry: RegistryPort;
+    manifest: ManifestPort;
+    manifestCarry: ManifestCarryPort;
+    git: GitPort;
+    lock: LockPort;
+    state: StatePort;
+    edtRegistry: EdtRegistryPort;
+    settings: SettingsPort;
+    container: ContainerPort;
+    restart: RestartPort;
+    editor?: EditorPort;
+    docker?: DockerPort;
+    healthProbe?: HealthProbePort;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  let scopeFlag: string | undefined;
+  let restartFlag: string | undefined;
+  const services: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1]?.trim();
+    switch (flag) {
+      case '--scope':
+      case '--restart': {
+        if (value === undefined || value === '' || value.startsWith('--')) {
+          return err('invalid-argument', `Missing value for ${flag}. Usage: ${REALIGN_USAGE}`);
+        }
+        if ((flag === '--scope' ? scopeFlag : restartFlag) !== undefined) {
+          return err('invalid-argument', `${flag} may only be given once. Usage: ${REALIGN_USAGE}`);
+        }
+        if (flag === '--scope') {
+          scopeFlag = value;
+        } else {
+          restartFlag = value;
+        }
+        i += 1;
+        break;
+      }
+      case '--service':
+        if (value === undefined || value === '' || value.startsWith('--')) {
+          return err('invalid-argument', `Missing value for --service. Usage: ${REALIGN_USAGE}`);
+        }
+        if (!services.includes(value)) {
+          services.push(value);
+        }
+        i += 1;
+        break;
+      default:
+        return err('invalid-argument', `Unknown realign option: "${flag}". Usage: ${REALIGN_USAGE}`);
+    }
+  }
+
+  if (scopeFlag !== undefined && !(REALIGN_SCOPES as readonly string[]).includes(scopeFlag)) {
+    return err('invalid-argument', `Unknown --scope value "${scopeFlag}" — expected none, edt or all. Usage: ${REALIGN_USAGE}`);
+  }
+  if (restartFlag !== undefined && !(SWITCH_RESTART_MODES as readonly string[]).includes(restartFlag)) {
+    return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected none, simple or clean. Usage: ${REALIGN_USAGE}`);
+  }
+  // Settings are read only when needed: an absent flag falls back to them, and a restart takes
+  // update.concurrency from them. A load failure or warning goes to stderr and the built-in
+  // defaults apply.
+  let cached: Settings | undefined;
+  const settings = async (): Promise<Settings> => {
+    if (cached === undefined) {
+      const loaded = await deps.settings.load();
+      if (!loaded.ok) {
+        console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+      } else if (loaded.data.warning !== null) {
+        console.error(`tui-back: ${loaded.data.warning}`);
+      }
+      cached = loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
+    }
+    return cached;
+  };
+  const scope = (scopeFlag ?? (await settings()).realign.defaultScope) as RealignScope;
+  const restartMode = (restartFlag ?? (await settings()).realign.restartMode) as SwitchRestartMode;
+  if (restartMode !== 'none' && (deps.docker === undefined || deps.healthProbe === undefined)) {
+    return err('restart-unavailable', 'Post-realign restart needs the Docker and health-probe ports, which are not wired — nothing was realigned');
+  }
+
+  let restart: Parameters<typeof realignServices>[0]['restart'];
+  if (restartMode !== 'none') {
+    const realignSettings = await settings();
+    restart = {
+      mode: restartMode,
+      concurrency: realignSettings.update.concurrency,
+      serviceActions: createServiceActions({
+        manifest: deps.manifest,
+        container: deps.container,
+        restart: deps.restart,
+        // Never used by restart/verify, but the registry's deps are complete.
+        editor: deps.editor ?? { launch: () => err('editor-launch-failed', 'No editor is wired in the CLI') },
+        lock: deps.lock,
+        docker: deps.docker,
+        healthProbe: deps.healthProbe,
+        isHealthCheckEnabled: healthCheckEnabledFrom(() => realignSettings),
+      }),
+    };
+  }
+
+  const realigned = await realignServices({
+    registry: deps.registry,
+    manifest: deps.manifest,
+    manifestCarry: deps.manifestCarry,
+    git: deps.git,
+    lock: deps.lock,
+    state: deps.state,
+    edtRegistry: deps.edtRegistry,
+    scope,
+    services,
+    ...(restart !== undefined ? { restart } : {}),
+  });
+  if (!realigned.ok) {
+    return realigned;
+  }
+
+  const { rows, restart: report, restartError } = realigned.data;
+  const data = {
+    rows,
+    ...(report !== undefined
+      ? {
+          restart: report.rows.map((row) => ({
+            service: row.service,
+            mode: report.mode,
+            state: row.phase,
+            ...(row.phase === 'skipped' ? { detail: row.skipReason } : row.detail !== undefined ? { detail: row.detail } : {}),
+          })),
+        }
+      : {}),
+    ...(restartError !== undefined ? { restartError } : {}),
+  };
+  if (rows.some((row) => row.outcome === 'failed')) {
+    return err('realign-failed', 'One or more services could not be realigned', data);
+  }
+  if (restartError !== undefined || (report !== undefined && restartNeedsAttention(report.summary))) {
+    return err('realign-restart-needs-attention', 'The realign succeeded, but the restart failed or a restarted service ended failed, down or unhealthy', data);
+  }
+  return ok(data);
+}
+
+// `heal`: the flag is validated before anything is read or restarted. No confirmation prompt —
+// the CLI caller asked for it. The data lists the targets, the skipped services with their
+// reason and one restart row per target.
+async function runHealCommand(
+  deps: {
+    manifest: ManifestPort;
+    lock: LockPort;
+    state: StatePort;
+    edtRegistry: EdtRegistryPort;
+    settings: SettingsPort;
+    container: ContainerPort;
+    restart: RestartPort;
+    docker: DockerPort;
+    editor?: EditorPort;
+    healthProbe?: HealthProbePort;
+  },
+  args: string[],
+): Promise<Result<unknown>> {
+  let restartFlag: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i];
+    const value = args[i + 1]?.trim();
+    if (flag !== '--restart') {
+      return err('invalid-argument', `Unknown heal option: "${flag}". Usage: ${HEAL_USAGE}`);
+    }
+    if (value === undefined || value === '' || value.startsWith('--')) {
+      return err('invalid-argument', `Missing value for --restart. Usage: ${HEAL_USAGE}`);
+    }
+    if (restartFlag !== undefined) {
+      return err('invalid-argument', `--restart may only be given once. Usage: ${HEAL_USAGE}`);
+    }
+    restartFlag = value;
+    i += 1;
+  }
+  if (restartFlag !== undefined && !(HEAL_RESTART_MODES as readonly string[]).includes(restartFlag)) {
+    return err('invalid-argument', `Unknown --restart value "${restartFlag}" — expected simple or clean. Usage: ${HEAL_USAGE}`);
+  }
+  if (deps.healthProbe === undefined) {
+    return err('restart-unavailable', 'Heal needs the health-probe port, which is not wired — nothing was restarted');
+  }
+
+  // A load failure or warning goes to stderr and the built-in defaults apply.
+  const loaded = await deps.settings.load();
+  if (!loaded.ok) {
+    console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+  } else if (loaded.data.warning !== null) {
+    console.error(`tui-back: ${loaded.data.warning}`);
+  }
+  const settings = loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
+  const mode = (restartFlag ?? settings.dashboard.restartMode) as RestartMode;
+
+  const plan = await planHeal({
+    state: deps.state,
+    edtRegistry: deps.edtRegistry,
+    manifest: deps.manifest,
+    docker: deps.docker,
+    healthProbe: deps.healthProbe,
+    isHealthCheckEnabled: healthCheckEnabledFrom(() => settings),
+  });
+  if (!plan.ok) {
+    return plan;
+  }
+  const report = await runHeal({
+    plan: plan.data,
+    mode,
+    concurrency: settings.update.concurrency,
+    lock: deps.lock,
+    serviceActions: createServiceActions({
+      manifest: deps.manifest,
+      container: deps.container,
+      restart: deps.restart,
+      // Never used by restart/verify, but the registry's deps are complete.
+      editor: deps.editor ?? { launch: () => err('editor-launch-failed', 'No editor is wired in the CLI') },
+      lock: deps.lock,
+      docker: deps.docker,
+      healthProbe: deps.healthProbe,
+      isHealthCheckEnabled: healthCheckEnabledFrom(() => settings),
+    }),
+  });
+  if (!report.ok) {
+    return report;
+  }
+
+  const { edt, rows, summary, message } = report.data;
+  const data = {
+    edt,
+    mode: report.data.mode,
+    targets: plan.data.rows.filter((row) => row.phase === 'pending').map((row) => row.service),
+    skipped: plan.data.rows
+      .filter((row) => row.phase === 'skipped')
+      .map((row) => ({ service: row.service, reason: row.skipReason, ...(row.detail !== undefined ? { detail: row.detail } : {}) })),
+    restart: rows
+      .filter((row) => row.phase !== 'skipped')
+      .map((row) => ({ service: row.service, state: row.phase, ...(row.detail !== undefined ? { detail: row.detail } : {}) })),
+    summary,
+    ...(message !== undefined ? { message } : {}),
+  };
+  return restartNeedsAttention(summary)
+    ? err('heal-needs-attention', 'A restarted service ended failed, down or unhealthy', data)
+    : ok(data);
 }
 
 // Hand-rolled flag parsing for `edt modify`: the wrapper owns flag syntax (unknown options,
@@ -1237,4 +1622,16 @@ export function assertUniqueSubcommandNames(subcommands: Subcommand[]): void {
     }
     seen.add(subcommand.name);
   }
+}
+
+// Loads settings.yaml for a command; a load failure or a corrupt-file warning goes to stderr
+// (separate from the stdout JSON envelope) and the built-in defaults apply.
+async function loadSettingsOrDefaults(port: SettingsPort): Promise<Settings> {
+  const loaded = await port.load();
+  if (!loaded.ok) {
+    console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
+  } else if (loaded.data.warning !== null) {
+    console.error(`tui-back: ${loaded.data.warning}`);
+  }
+  return loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
 }

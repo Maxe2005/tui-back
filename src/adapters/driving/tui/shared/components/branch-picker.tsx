@@ -9,6 +9,7 @@ import { resolveFocusStep, stepFocus, type FocusNavDirection } from '../keys/foc
 import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
 import { DimAnnotation } from './dim-annotation.js';
+import { ownerAnnotations, ownerRefusalForBranch, type BranchOwners } from '../branch-owners-text.js';
 import { BranchAutocompleteInput, clampAutocompletePickCursor, handleBranchAutocompleteKey, isBranchAutocompleteExactMatch, matchBranchesBySubstring } from './branch-autocomplete-input.js';
 import { StateLine } from './state-line.js';
 
@@ -208,6 +209,20 @@ function applyTextInput(current: TextEditState, input: string, key: TextEditKey)
   return { value: value.slice(0, cursor) + input + value.slice(cursor), cursor: cursor + input.length };
 }
 
+// the first of `names` another EDT owns -> the inline refusal, else null. `owners`
+// already excludes the edited EDT's own branches (the host builds it that way), so a branch
+// owned by that EDT itself is never refused. Applies to every "take/rename this existing
+// branch" submit — never to a create-new base (base-only usage is annotated, allowed).
+function ownedRefusal(names: readonly string[], owners: BranchOwners | undefined): string | null {
+  for (const name of names) {
+    const topics = owners !== undefined && Object.hasOwn(owners, name) ? owners[name] : undefined;
+    if (topics !== undefined && topics.length > 0) {
+      return ownerRefusalForBranch(name, topics);
+    }
+  }
+  return null;
+}
+
 export type BranchPickerKeyResult =
   | { type: 'update'; state: BranchPickerState }
   | { type: 'submit'; outcome: BranchPickerOutcome }
@@ -226,6 +241,8 @@ export function handleBranchPickerKey(
   input: string,
   key: TextEditKey,
   branchesStatus: 'loading' | 'ready' | 'error' = 'ready',
+  // Branch -> owner topics (other EDTs only) for this repo; undefined = no gate.
+  owners?: BranchOwners,
 ): BranchPickerKeyResult {
   if (key.escape) {
     if (state.mode === 'pick-existing' && state.renameSub !== null) {
@@ -273,9 +290,9 @@ export function handleBranchPickerKey(
     return handleCreateNewKey(state, branches, otherMemberBranches, input, key, branchesStatus);
   }
   if (state.mode === 'pick-existing') {
-    return handlePickExistingKey(state, branches, input, key);
+    return handlePickExistingKey(state, branches, input, key, owners);
   }
-  return handleRenameCurrentKey(state, input, key);
+  return handleRenameCurrentKey(state, input, key, owners);
 }
 
 function handleCreateNewKey(
@@ -359,6 +376,7 @@ function handlePickExistingKey(
   branches: readonly string[],
   input: string,
   key: TextEditKey,
+  owners?: BranchOwners,
 ): BranchPickerKeyResult {
   // The row-rename sub-view stays on the picker's own local text interpreter (create-new /
   // rename-current untouched — same for this nested rename field): the shared autocomplete
@@ -368,6 +386,10 @@ function handlePickExistingKey(
       const trimmed = state.renameSub.value.trim();
       if (trimmed === '') {
         return { type: 'update', state: { ...state, renameSub: { ...state.renameSub, error: 'Branch name must not be empty' } } };
+      }
+      const refusal = ownedRefusal([state.renameSub.oldName, trimmed], owners);
+      if (refusal !== null) {
+        return { type: 'update', state: { ...state, renameSub: { ...state.renameSub, error: refusal } } };
       }
       return { type: 'submit', outcome: { kind: 'rename', oldName: state.renameSub.oldName, newName: trimmed } };
     }
@@ -407,6 +429,10 @@ function handlePickExistingKey(
       return { type: 'update', state: { ...state, error: 'No branch selected' } };
     }
     if (isBranchAutocompleteExactMatch(state.pickQuery, branches)) {
+      const refusal = ownedRefusal([state.pickQuery.trim()], owners);
+      if (refusal !== null) {
+        return { type: 'update', state: { ...state, error: refusal } };
+      }
       return { type: 'submit', outcome: { kind: 'set', branch: state.pickQuery.trim() } };
     }
     const highlighted = sharedMatches[clampAutocompletePickCursor(state.pickCursor, sharedMatches.length)]!;
@@ -436,12 +462,16 @@ function handlePickExistingKey(
   };
 }
 
-function handleRenameCurrentKey(state: BranchPickerState, input: string, key: TextEditKey): BranchPickerKeyResult {
+function handleRenameCurrentKey(state: BranchPickerState, input: string, key: TextEditKey, owners?: BranchOwners): BranchPickerKeyResult {
   const sub = state.renameSub ?? { oldName: state.currentBranch, value: state.currentBranch, cursor: state.currentBranch.length, error: null };
   if (key.return) {
     const trimmed = sub.value.trim();
     if (trimmed === '') {
       return { type: 'update', state: { ...state, renameSub: { ...sub, error: 'Branch name must not be empty' } } };
+    }
+    const refusal = ownedRefusal([sub.oldName, trimmed], owners);
+    if (refusal !== null) {
+      return { type: 'update', state: { ...state, renameSub: { ...sub, error: refusal } } };
     }
     return { type: 'submit', outcome: { kind: 'rename', oldName: sub.oldName, newName: trimmed } };
   }
@@ -474,9 +504,13 @@ export type BranchPickerProps = {
   // it isn't focused, so the Tab-cycle (baseFocused resets to true) still falls back to the
   // full two-field render rather than a focus with nothing shown.
   hideNestedBaseField?: boolean;
+  // branch -> owner topics (other EDTs) — annotates every listed candidate
+  // `⚠ EDT « topic »` in the base-branch and pick-existing lists.
+  owners?: BranchOwners;
 };
 
-export function BranchPicker({ state, branches, branchesStatus, otherMemberBranches, maxRows, hideNestedBaseField = false }: BranchPickerProps) {
+export function BranchPicker({ state, branches, branchesStatus, otherMemberBranches, maxRows, hideNestedBaseField = false, owners }: BranchPickerProps) {
+  const annotations = ownerAnnotations(owners);
   const modes: BranchPickerMode[] = state.hasCurrentBranch
     ? ['pick-existing', 'create-new', 'rename-current']
     : ['pick-existing', 'create-new'];
@@ -509,6 +543,7 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
               branchesStatus={branchesStatus}
               maxLines={maxRows}
               editing={state.baseFocused}
+              annotations={annotations}
             />
           ) : null}
           <TextInputLine
@@ -550,6 +585,7 @@ export function BranchPicker({ state, branches, branchesStatus, otherMemberBranc
               branchesStatus={branchesStatus}
               maxLines={maxRows}
               focused
+              annotations={annotations}
             />
           </Box>
         )
