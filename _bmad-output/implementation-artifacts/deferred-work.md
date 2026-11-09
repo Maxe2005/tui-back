@@ -898,3 +898,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-9-dashboard-heal-action.md`
   summary: The app-shell Ctrl+W resize-mode gate on `realignScreenOpen` has no test asserting `resizeMode` stays null while the realign overlay is open.
   evidence: `app-shell.interaction.test.tsx` only tests Ctrl+W under the command bar overlay (≈L2248); removing `!realignScreenOpen` from the resize-mode condition in `app-shell.tsx` leaves every test green (found by the 9.9 verification-gap review, pre-existing).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-3-install-subcommand.md`
+  summary: `app-shell.interaction.test.tsx` "opens only through the `reset` command, and Esc closes it with zero writes" fails (expects 'RESET TOOL DATA').
+  evidence: Fails identically on baseline commit d75b734f, before any story 10.3 change.
