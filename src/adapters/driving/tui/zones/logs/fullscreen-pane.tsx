@@ -11,14 +11,14 @@ import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { LogsPaneData } from '../../store/app-store.js';
 import {
   formatHealthLabel,
-  formatLogFilterSpec,
+  formatLogFilterScope,
   formatLogLine,
   healthBadgeState,
-  isDefaultLogFilterSpec,
+  isDefaultLogFilterScope,
   isRestartingDisplay,
   resolveEffectiveLines,
   restartHintVerb,
-  type LogFilterSpec,
+  type LogFilterScope,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
@@ -47,9 +47,9 @@ export function FullscreenPane({
   wrapLines: boolean;
   visibleLines: number;
   contentWidth: number;
-  globalFilter: LogFilterSpec;
+  globalFilter: LogFilterScope;
   engaged: boolean;
-  ownFilter: LogFilterSpec | null;
+  ownFilter: LogFilterScope | null;
   restartMode?: RestartMode;
 }) {
   const lines = resolveEffectiveLines(pane, visibility, globalFilter, engaged, ownFilter);
@@ -86,10 +86,10 @@ export function FullscreenPane({
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
       {!engaged ? (
         <DimAnnotation text="global filter: off" />
-      ) : !isDefaultLogFilterSpec(globalFilter) ? (
-        <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
+      ) : !isDefaultLogFilterScope(globalFilter) ? (
+        <DimAnnotation text={`global filter: ${formatLogFilterScope(globalFilter)}`} />
       ) : null}
-      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
+      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterScope(ownFilter)}`} /> : null}
       <ScrollableOutput
         lines={lines}
         offset={pane?.scrollOffset ?? 0}

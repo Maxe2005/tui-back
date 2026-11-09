@@ -11,7 +11,7 @@ import {
   isPaneEngagedInGlobalFilter,
   isPaneWrapped,
   type GridLayout,
-  type LogFilterSpec,
+  type LogFilterScope,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
 
@@ -40,9 +40,9 @@ export function LogsGrid({
   visibility: VisibilityFlags;
   paneWrap: Record<string, boolean>;
   subFocused: number;
-  globalFilter: LogFilterSpec;
+  globalFilter: LogFilterScope;
   paneFilterEngaged: Record<string, boolean>;
-  paneFilters: Record<string, LogFilterSpec>;
+  paneFilters: Record<string, LogFilterScope>;
   restartMode?: RestartMode;
 }) {
   const cols = Math.max(layout.cols, 1);
