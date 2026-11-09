@@ -94,9 +94,9 @@ development_status:
   10-4-publication-install-sh-and-docs: backlog
   epic-10-retrospective: optional
 
-  epic-11: backlog
+  epic-11: in-progress
   # MCP server (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 11-1 -> 11-2 -> 11-3 -> 11-4. Starts after 10-1; 11-4 needs 10-3.
-  11-1-mcp-skeleton-and-read-only-tools: backlog
+  11-1-mcp-skeleton-and-read-only-tools: in-progress
   11-2-authorization-gate-and-write-tools: backlog
   11-3-destructive-tools-and-long-operations: backlog
   11-4-install-registration-and-docs: backlog

@@ -902,3 +902,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-3-install-subcommand.md`
   summary: `app-shell.interaction.test.tsx` "opens only through the `reset` command, and Esc closes it with zero writes" fails (expects 'RESET TOOL DATA').
   evidence: Fails identically on baseline commit d75b734f, before any story 10.3 change.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-1-mcp-skeleton-and-read-only-tools.md`
+  summary: `app-shell.interaction.test.tsx` "opens only through the `reset` command, and Esc closes it with zero writes" fails (`RESET TOOL DATA` not in output).
+  evidence: Reproduced on the epic-10 worktree without any story 11.1 change (1 failed / 114 passed in that file).
