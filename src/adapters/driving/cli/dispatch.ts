@@ -10,6 +10,8 @@ export interface Subcommand {
   /** One-line usage string shown by `--help`, e.g. "tui-back register <path>". */
   usage: string;
   run: (args: string[]) => Promise<Result<unknown>>;
+  /** Optional raw text printed instead of the pretty-printed JSON on a TTY (success only). */
+  humanText?: (data: unknown) => string | undefined;
 }
 
 export interface HelpData {
@@ -63,7 +65,7 @@ export async function runCli(
   // reference or a BigInt inside a use-case's returned data. That must never escape as an
   // uncaught exception, so it gets the same try/catch treatment as subcommand.run above.
   try {
-    return renderResult(result, isTTY);
+    return renderResult(result, isTTY, subcommand.humanText);
   } catch (error) {
     console.error(error);
     const errorMsg = error instanceof Error ? error.message : String(error);

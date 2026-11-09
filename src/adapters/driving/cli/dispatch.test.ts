@@ -156,6 +156,20 @@ describe('runCli', () => {
   });
 });
 
+describe('runCli humanText hook', () => {
+  const sub: Subcommand = {
+    name: 'raw',
+    usage: 'tui-back raw',
+    run: async () => ok({ script: 'echo raw\n' }),
+    humanText: (data) => (data as { script: string }).script,
+  };
+
+  it('prints the raw text on a TTY and the envelope when piped', async () => {
+    expect((await runCli(['raw'], [sub], true)).output).toBe('echo raw\n');
+    expect((await runCli(['raw'], [sub], false)).output).toBe('{"ok":true,"data":{"script":"echo raw\\n"}}\n');
+  });
+});
+
 describe('subcommand registry guards', () => {
   it('assertUniqueSubcommandNames throws when two subcommands share a name', () => {
     const duplicated: Subcommand[] = [
@@ -302,8 +316,27 @@ describe('subcommand registry guards', () => {
       'request-list',
       'request-fire',
       'request-delete',
+      'completion',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
+  });
+
+  it('completion bash returns the script (raw on a TTY, enveloped when piped) and rejects other args', async () => {
+    const subcommands = buildTestSubcommands();
+    const piped = await runCli(['completion', 'bash'], subcommands, false);
+    const parsed = JSON.parse(piped.output);
+    expect(piped.exitCode).toBe(0);
+    expect(parsed.data.script).toContain('complete -F _tui_back tui-back tb');
+    expect(parsed.data.script).toContain('completion');
+
+    const tty = await runCli(['completion', 'bash'], subcommands, true);
+    expect(tty.output).toBe(parsed.data.script);
+
+    for (const argv of [['completion'], ['completion', 'zsh'], ['completion', 'bash', 'x']]) {
+      const bad = await runCli(argv, subcommands, false);
+      expect(bad.exitCode).toBe(1);
+      expect(JSON.parse(bad.output).error).toEqual({ code: 'invalid-argument', message: 'Usage: tui-back completion bash' });
+    }
   });
 
   it('edts rejects excess arguments and otherwise runs the divergence use-case', async () => {
