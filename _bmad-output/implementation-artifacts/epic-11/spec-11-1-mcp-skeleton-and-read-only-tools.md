@@ -2,7 +2,7 @@
 title: 'Story 11.1: MCP Skeleton and Read-Only Tools'
 type: 'feature'
 created: '2026-11-09'
-status: 'in-review'
+status: 'done'
 baseline_commit: '4545bdf94f87b3c1099bd367cc68b73f7dccbfd5'
 review_loop_iteration: 0
 context:
@@ -82,3 +82,37 @@ context:
 - `npm run typecheck` -- expected: no errors
 - `npm test` -- expected: all green
 - `npm run depcheck` -- expected: no violations
+
+## Suggested Review Order
+
+**Tool registry (design entry point)**
+
+- Declarative definitions: mandatory safety class, read tools only, flag-injection guard on `repoPath`.
+  [`tool-registry.ts:58`](../../../src/adapters/driving/mcp/tool-registry.ts#L58)
+
+- Registration fails fast on missing class, duplicate name or unknown subcommand.
+  [`tool-registry.ts:113`](../../../src/adapters/driving/mcp/tool-registry.ts#L113)
+
+- Explicit exclusions with reasons, enforced by the guard test.
+  [`tool-registry.ts:32`](../../../src/adapters/driving/mcp/tool-registry.ts#L32)
+
+**MCP server**
+
+- Envelope-as-text results, `readOnlyHint`, safe degradation to `internal-error`.
+  [`server.ts:8`](../../../src/adapters/driving/mcp/server.ts#L8)
+
+**Shared composition and routing**
+
+- Port wiring extracted so CLI and MCP build the same registry.
+  [`composition.ts:33`](../../../src/bin/composition.ts#L33)
+
+- Shim routes `mcp` like `tui`, using an own-property lookup.
+  [`tui-back.mjs:6`](../../../src/bin/tui-back.mjs#L6)
+
+- `mcp` stays visible in `--help` and completion.
+  [`completion-spec.ts:14`](../../../src/adapters/driving/cli/completion-spec.ts#L14)
+
+**Tests**
+
+- Black-box guard and stdout-purity test over a real stdio session.
+  [`tui-back.e2e.test.ts:2646`](../../../src/bin/tui-back.e2e.test.ts#L2646)
