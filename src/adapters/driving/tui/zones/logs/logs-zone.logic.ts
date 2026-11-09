@@ -154,6 +154,9 @@ const HISTORY_GRID_MIN_WIDTH = 10;
 // so the budget stays slightly generous rather than short while a regex draft is invalid.
 const HISTORY_GRID_CHROME_ROWS = 9;
 const HISTORY_GRID_MIN_VISIBLE_ROWS = 3;
+// The rule list view's fixed rows: ModalDialog's chrome (6) plus its header line, the
+// clear-all confirmation line and the notice line (1 each, counted even when not shown).
+const RULES_LIST_CHROME_ROWS = 9;
 // Rough total-rows budget for the Logs zone's list column (top bar, zone-tab bar, footer, and the
 // "LOGS" title row) — the list column and the pane grid are row siblings sharing the same
 // vertical extent, so this reuses CHROME_ROWS' estimate.
@@ -169,6 +172,9 @@ export type LogsLayoutInput = {
   filterEditorOpen: boolean;
   historyGridOpen: boolean;
   filterHistoryGridMaxRows: number;
+  // The open editor's view and, for the list view, how many rules it lists.
+  filterEditorView?: 'list' | 'rule';
+  filterRuleCount?: number;
   // The rows the `a` actions menu renders (0 or absent while closed) — a sibling below the
   // block like the filter editor (never both open). See logsActionsMenuRows.
   actionsMenuRows?: number;
@@ -183,6 +189,7 @@ export type LogsLayout = {
   fullscreenContentWidth: number;
   historyGridAvailableWidth: number;
   historyGridAvailableHeight: number;
+  rulesListMaxVisibleRows: number;
   edtListMaxVisibleRows: number;
   otherListMaxVisibleRows: number;
   hintsMaxVisibleRows: number;
@@ -215,9 +222,14 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
   // column's BoundedLists use. The hints panel hides while the editor is open, but the two service
   // lists don't, so this reserves the editor's own footprint (its fixed rows, plus the history
   // grid's rows when open) off the list column's budget so the two never exceed the terminal.
+  // The rule list view is bounded to the same height budget as the history grid; an empty list
+  // still renders one placeholder row.
+  const rulesListMaxVisibleRows = Math.max(1, historyGridAvailableHeight);
   const filterEditorReservedRows = !input.filterEditorOpen
     ? 0
-    : HISTORY_GRID_CHROME_ROWS + (!input.historyGridOpen ? 0 : Math.min(input.filterHistoryGridMaxRows, historyGridAvailableHeight));
+    : input.filterEditorView === 'list'
+      ? RULES_LIST_CHROME_ROWS + Math.min(Math.max(input.filterRuleCount ?? 0, 1), rulesListMaxVisibleRows)
+      : HISTORY_GRID_CHROME_ROWS + (!input.historyGridOpen ? 0 : Math.min(input.filterHistoryGridMaxRows, historyGridAvailableHeight));
   // The list column's own total row budget — a row sibling of the pane grid, so it reuses
   // gridAvailableHeight. Handed out top-down (EDT list, then OTHER list, then the hints panel) so
   // a section shorter than its share leaves more room for the ones after it; each BoundedList
@@ -242,6 +254,7 @@ export function computeLogsLayout(input: LogsLayoutInput): LogsLayout {
     fullscreenContentWidth,
     historyGridAvailableWidth,
     historyGridAvailableHeight,
+    rulesListMaxVisibleRows,
     edtListMaxVisibleRows,
     otherListMaxVisibleRows,
     hintsMaxVisibleRows,
@@ -403,9 +416,13 @@ export function logsFooterContext(
   fullscreen: { open: boolean; restartable: boolean },
   restartMode: RestartMode = 'simple',
   actionsMenuOpen = false,
+  rules: { listOpen: boolean; confirmingClear: boolean } = { listOpen: false, confirmingClear: false },
 ): FooterContextId | null {
   if (actionsMenuOpen) {
     return 'logs-actions-menu';
+  }
+  if (filterEditorOpen && rules.listOpen) {
+    return rules.confirmingClear ? 'logs-filter-rules-confirm' : 'logs-filter-rules';
   }
   if (filterEditorOpen) {
     return historyGridOpen ? 'logs-filter-history' : 'logs-filter-edit';
@@ -454,7 +471,6 @@ export function filterVisibleLines(lines: readonly LogLine[], flags: VisibilityF
 
 // The two-tier text/regex/level filter over already-buffered lines — a pure, render-time
 // transform layered on top of filterVisibleLines above (never touches the subscription).
-// compileLogFilter runs on every editor keystroke, so the inline regex error appears/clears live.
 export type LogFilterMode = 'text' | 'regex';
 export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
 
@@ -463,28 +479,32 @@ export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
 export type LogFilterAction = 'show' | 'hide';
 export type LogFilterTarget = 'line' | 'match';
 
-export type LogFilterSpec = {
+// One rule of a scope's pipeline: `enabled` rules run top to bottom, each one filtering or
+// rewriting the output of the previous one; a disabled rule is skipped as if absent.
+export type LogFilterRule = {
   mode: LogFilterMode;
   query: string;
-  level: LogLevel | null;
   action: LogFilterAction;
   target: LogFilterTarget;
+  enabled: boolean;
 };
 
-export const DEFAULT_LOG_FILTER: LogFilterSpec = { mode: 'text', query: '', level: null, action: 'show', target: 'line' };
+// A scope (the global one, or one service's pane) holds an ordered rule list plus one level
+// restriction that is ANDed with the pipeline and judged on the original, unrewritten text.
+export type LogFilterScope = {
+  level: LogLevel | null;
+  rules: readonly LogFilterRule[];
+};
 
-// Shared by the filter-editor commit/cancel paths and every pane's "pane filter: on" annotation —
-// a spec deep-equal to DEFAULT_LOG_FILTER (empty query, no level restriction, either mode) is a
-// no-op filter and must never be stored as an explicit paneFilters[repoPath] entry (the
-// annotation/hasOwnFilter check would see a filter that isn't filtering anything).
-export function isDefaultLogFilterSpec(spec: LogFilterSpec): boolean {
-  return (
-    spec.mode === DEFAULT_LOG_FILTER.mode &&
-    spec.query === DEFAULT_LOG_FILTER.query &&
-    spec.level === DEFAULT_LOG_FILTER.level &&
-    spec.action === DEFAULT_LOG_FILTER.action &&
-    spec.target === DEFAULT_LOG_FILTER.target
-  );
+export const DEFAULT_LOG_FILTER: LogFilterScope = { level: null, rules: [] };
+
+export const MAX_LOG_FILTER_RULES = 10;
+
+// Shared by every editor change and every pane's "pane filter: on" annotation — a scope with no
+// rule and no level restriction is a no-op filter and must never be stored as an explicit
+// paneFilters[repoPath] entry (the annotation/hasOwnFilter check keys off entry presence).
+export function isDefaultLogFilterScope(scope: LogFilterScope): boolean {
+  return scope.level === null && scope.rules.length === 0;
 }
 
 // Level filtering has no source field (LogLine has no level), so it uses a text heuristic
@@ -502,11 +522,9 @@ export function detectLogLevel(text: string): LogLevel | null {
 // the render tree — `compileLogFilter` is the one place a malformed pattern may throw (RegExp's
 // constructor), caught here and turned into a typed failure the editor surfaces as text.
 // `apply` returns the line as it should be displayed (a new object when the text was rewritten,
-// the stored line untouched otherwise) or `null` when the line must not be displayed. The level
-// restriction is always judged on `levelText` (the stored, unrewritten text) so a rewrite by an
-// earlier filter never hides the level token.
+// the stored line untouched otherwise) or `null` when the line must not be displayed.
 export type CompiledLogFilter =
-  | { ok: true; apply: (line: LogLine, levelText?: string) => LogLine | null }
+  | { ok: true; apply: (line: LogLine) => LogLine | null }
   | { ok: false; error: string };
 
 // Every non-empty match of `query` in `text`, as [start, end) ranges. Empty matches (e.g. `a*`)
@@ -540,7 +558,7 @@ function removeRanges(text: string, ranges: Array<[number, number]>): string {
   return result + text.slice(cursor);
 }
 
-export function compileLogFilter(spec: LogFilterSpec): CompiledLogFilter {
+export function compileLogFilter(spec: Pick<LogFilterRule, 'mode' | 'query' | 'action' | 'target'>): CompiledLogFilter {
   let matcher: RegExp | null = null;
   if (spec.query !== '') {
     if (spec.mode === 'regex') {
@@ -555,13 +573,10 @@ export function compileLogFilter(spec: LogFilterSpec): CompiledLogFilter {
       matcher = new RegExp(spec.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     }
   }
-  const { level, action, target } = spec;
+  const { action, target } = spec;
   return {
     ok: true,
-    apply: (line, levelText = line.text) => {
-      if (level !== null && detectLogLevel(levelText) !== level) {
-        return null;
-      }
+    apply: (line) => {
       if (matcher === null) {
         return line;
       }
@@ -581,58 +596,39 @@ export function compileLogFilter(spec: LogFilterSpec): CompiledLogFilter {
   };
 }
 
-// The filter editor's commit decision, shared by every draft-mutating keystroke (Tab, Ctrl+←/→,
-// ↑/↓ history browse, Backspace/Delete, typed characters, and the grid recall). The draft always
-// advances (typed characters/level cycles are never lost); at most one of
-// `globalFilter`/`paneFilterUpdate` is non-null, telling the caller which committed state to
-// update — and neither is when the draft fails to compile, so the previously-active filter stays.
-export type FilterEditorDraftResult = {
-  editor: FilterEditorState;
-  globalFilter: LogFilterSpec | null;
-  paneFilterUpdate: { repoPath: string; spec: LogFilterSpec | null } | null;
-};
-
-export function resolveFilterEditorDraft(next: FilterEditorState): FilterEditorDraftResult {
-  const spec: LogFilterSpec = { mode: next.mode, query: next.query, level: next.level, action: next.action, target: next.target };
-  const compiled = compileLogFilter(spec);
-  if (!compiled.ok) {
-    return { editor: { ...next, error: compiled.error }, globalFilter: null, paneFilterUpdate: null };
-  }
-  if (next.scope === 'global') {
-    return { editor: { ...next, error: null }, globalFilter: spec, paneFilterUpdate: null };
-  }
-  const repoPath = next.repoPath;
-  if (repoPath === null) {
-    // `scope === 'pane' && repoPath === null` is unreachable today (openPaneFilterEditor always
-    // sets repoPath) but the type permits it — surface it as an editor error rather than silently
-    // discarding a compiled spec.
-    return { editor: { ...next, error: 'no pane targeted' }, globalFilter: null, paneFilterUpdate: null };
-  }
-  // A vacuous spec (deep-equal to DEFAULT_LOG_FILTER, e.g. after backspacing the query to empty)
-  // removes the key, exactly like the explicit-clear path: the "pane filter: on" annotation and
-  // resolveFilterClearTarget's `hasOwnFilter` check key off entry *presence*, not content.
-  return {
-    editor: { ...next, error: null },
-    globalFilter: null,
-    paneFilterUpdate: { repoPath, spec: isDefaultLogFilterSpec(spec) ? null : spec },
-  };
+// The inline error for a rule draft that does not compile, or null. Whether the query is
+// non-empty is checked separately, on commit.
+export function validateRuleDraft(draft: Pick<LogFilterRule, 'mode' | 'query' | 'action' | 'target'>): string | null {
+  const compiled = compileLogFilter(draft);
+  return compiled.ok ? null : compiled.error;
 }
 
-// A pane's effective filter is (engaged ? global : pass) AND (own ?? pass) — `global`/`own` are
-// already resolved by the caller to `null` for whichever half should pass everything. A spec that
-// fails to compile is treated as pass-through rather than thrown or silently hiding every line —
-// defensive only, since the zone never commits an uncompilable spec.
-export function applyLogFilters(lines: readonly LogLine[], global: LogFilterSpec | null, own: LogFilterSpec | null): LogLine[] {
-  const globalFilter = global !== null ? compileLogFilter(global) : null;
-  const ownFilter = own !== null ? compileLogFilter(own) : null;
+// The rule pipeline over already-visible lines. Each scope's level restriction is judged on the
+// original text; then the global scope's enabled rules run (when given), then the pane's own, each
+// rule seeing the previous rule's output. A rule that fails to compile is treated as pass-through
+// rather than thrown or silently hiding every line — defensive only, since the editor never
+// commits an uncompilable rule.
+export function applyLogRules(lines: readonly LogLine[], global: LogFilterScope | null, own: LogFilterScope | null): LogLine[] {
+  const levels = [global?.level ?? null, own?.level ?? null].filter((level): level is LogLevel => level !== null);
+  const pipeline = [...(global?.rules ?? []), ...(own?.rules ?? [])]
+    .filter((rule) => rule.enabled)
+    .map((rule) => compileLogFilter(rule));
   const result: LogLine[] = [];
   for (const original of lines) {
-    let line: LogLine | null = original;
-    if (globalFilter !== null && globalFilter.ok) {
-      line = globalFilter.apply(line, original.text);
+    if (levels.length > 0) {
+      const detected = detectLogLevel(original.text);
+      if (levels.some((level) => level !== detected)) {
+        continue;
+      }
     }
-    if (line !== null && ownFilter !== null && ownFilter.ok) {
-      line = ownFilter.apply(line, original.text);
+    let line: LogLine | null = original;
+    for (const compiled of pipeline) {
+      if (line === null) {
+        break;
+      }
+      if (compiled.ok) {
+        line = compiled.apply(line);
+      }
     }
     if (line !== null) {
       result.push(line);
@@ -641,20 +637,20 @@ export function applyLogFilters(lines: readonly LogLine[], global: LogFilterSpec
   return result;
 }
 
-// Shared by LogsPaneView and FullscreenPane (both call applyLogFilters right after
-// filterVisibleLines, the layer the stdout/stderr toggle lives on). A pane's effective filter is
-// (engaged ? global : pass) AND (own ?? pass).
+// Shared by LogsPaneView and FullscreenPane (both call applyLogRules right after
+// filterVisibleLines, the layer the stdout/stderr toggle lives on). A pane's effective pipeline is
+// (engaged ? global : nothing) followed by (own ?? nothing).
 export function resolveEffectiveLines(
   pane: { lines: readonly LogLine[] } | undefined,
   visibility: VisibilityFlags,
-  globalFilter: LogFilterSpec,
+  globalFilter: LogFilterScope,
   engaged: boolean,
-  ownFilter: LogFilterSpec | null,
+  ownFilter: LogFilterScope | null,
 ): LogLine[] {
   if (!pane) {
     return [];
   }
-  return applyLogFilters(filterVisibleLines(pane.lines, visibility), engaged ? globalFilter : null, ownFilter);
+  return applyLogRules(filterVisibleLines(pane.lines, visibility), engaged ? globalFilter : null, ownFilter);
 }
 
 // Per-pane engagement with the global filter, keyed by repoPath — mirrors isPaneWrapped/
@@ -685,19 +681,56 @@ export function setPaneGlobalFilterEngagement(
 }
 
 export function setPaneLogFilter(
-  paneFilters: Readonly<Record<string, LogFilterSpec>>,
+  paneFilters: Readonly<Record<string, LogFilterScope>>,
   repoPath: string,
-  spec: LogFilterSpec | null,
-): Record<string, LogFilterSpec> {
-  if (spec === null) {
+  scope: LogFilterScope | null,
+): Record<string, LogFilterScope> {
+  if (scope === null || isDefaultLogFilterScope(scope)) {
     const next = { ...paneFilters };
     delete next[repoPath];
     return next;
   }
-  return { ...paneFilters, [repoPath]: spec };
+  return { ...paneFilters, [repoPath]: scope };
 }
 
-// The filter editor's Left/Right keys cycle a filter's level restriction through "no
+// Pure rule-list operations. Each returns the new scope (the input is never mutated); the ones
+// that can be refused or are out of range return it unchanged / null as documented.
+export function addLogRule(scope: LogFilterScope, rule: LogFilterRule): LogFilterScope | null {
+  return scope.rules.length >= MAX_LOG_FILTER_RULES ? null : { ...scope, rules: [...scope.rules, rule] };
+}
+
+export function replaceLogRule(scope: LogFilterScope, index: number, rule: LogFilterRule): LogFilterScope {
+  return index < 0 || index >= scope.rules.length ? scope : { ...scope, rules: scope.rules.map((current, i) => (i === index ? rule : current)) };
+}
+
+export function toggleLogRule(scope: LogFilterScope, index: number): LogFilterScope {
+  const rule = scope.rules[index];
+  return rule === undefined ? scope : replaceLogRule(scope, index, { ...rule, enabled: !rule.enabled });
+}
+
+export function deleteLogRule(scope: LogFilterScope, index: number): LogFilterScope {
+  return index < 0 || index >= scope.rules.length ? scope : { ...scope, rules: scope.rules.filter((_, i) => i !== index) };
+}
+
+// Swaps a rule with its neighbour; at either end it is a no-op.
+export function moveLogRule(scope: LogFilterScope, index: number, direction: 'up' | 'down'): LogFilterScope {
+  const target = direction === 'up' ? index - 1 : index + 1;
+  if (index < 0 || index >= scope.rules.length || target < 0 || target >= scope.rules.length) {
+    return scope;
+  }
+  const rules = [...scope.rules];
+  [rules[index], rules[target]] = [rules[target], rules[index]];
+  return { ...scope, rules };
+}
+
+// The draft the rule editor opens on: an existing rule, or a fresh show+line text rule.
+export function ruleDraftOf(rule: LogFilterRule | null): Pick<LogFilterRule, 'mode' | 'query' | 'action' | 'target'> {
+  return rule === null
+    ? { mode: 'text', query: '', action: 'show', target: 'line' }
+    : { mode: rule.mode, query: rule.query, action: rule.action, target: rule.target };
+}
+
+// The rule list's Ctrl+Left/Right keys cycle a scope's level restriction through "no
 // restriction" and each of the four detectable levels.
 export const LOG_FILTER_LEVEL_CYCLE: readonly (LogLevel | null)[] = [null, 'ERROR', 'WARN', 'INFO', 'DEBUG'];
 
@@ -730,14 +763,25 @@ export function formatFilterActionTarget(action: LogFilterAction, target: LogFil
   return `${action} ${target}`;
 }
 
-// A short human-readable rendering of a filter spec, e.g. `text "boom"`, `regex (any) [ERROR]` —
-// used on the pane/fullscreen annotations so a user can tell *what* is filtering a pane without
-// reopening its editor.
-export function formatLogFilterSpec(spec: LogFilterSpec): string {
-  const queryPart = spec.query === '' ? '(any)' : `"${spec.query}"`;
-  const levelPart = spec.level !== null ? ` [${spec.level}]` : '';
-  const actionPart = isDefaultActionTarget(spec.action, spec.target) ? '' : ` {${formatFilterActionTarget(spec.action, spec.target)}}`;
-  return `${spec.mode} ${queryPart}${levelPart}${actionPart}`;
+// One rule as a list row, e.g. `[x] hide match text "Aucun service"` (`[ ]` when disabled).
+export function formatLogRule(rule: LogFilterRule): string {
+  // Whitespace and control characters (newlines included) collapse so a row stays on one line.
+  const query = rule.query.replace(/[\s\u0000-\u001f\u007f]+/g, ' ');
+  return `${rule.enabled ? '[x]' : '[ ]'} ${formatFilterActionTarget(rule.action, rule.target)} ${rule.mode} "${query}"`;
+}
+
+// A short human-readable rendering of a scope, e.g. `3 rules (1 off) [ERROR]` — used on the
+// pane/fullscreen annotations so a user can tell *what* is filtering a pane without reopening its
+// editor.
+export function formatLogFilterScope(scope: LogFilterScope): string {
+  const levelPart = scope.level !== null ? ` [${scope.level}]` : '';
+  const total = scope.rules.length;
+  if (total === 0) {
+    return `(any)${levelPart}`;
+  }
+  const off = scope.rules.filter((rule) => !rule.enabled).length;
+  const rulesPart = `${total} ${total === 1 ? 'rule' : 'rules'}${off > 0 ? ` (${off} off)` : ''}`;
+  return `${rulesPart}${levelPart}`;
 }
 
 // Escape, when no editor is open: on a sub-focused grid pane (not fullscreen), clears that pane's
@@ -811,31 +855,58 @@ export {
   type HistoryBrowseState as FilterHistoryBrowseState,
 } from '../../shared/input-history/index.js';
 
-// The filter editor's in-progress draft — `/` opens one with scope 'global', `f` with scope
-// 'pane' (repoPath set to the owning pane). `error` mirrors compileLogFilter's last result for
-// this exact draft (recomputed on every keystroke) — it never blocks further editing, only
-// committing that (mode, query, level) into `globalFilter`/`paneFilters`.
+// The filter editor — `/` opens one with scope 'global', `f` with scope 'pane' (repoPath set to
+// the owning pane). It has two views: the scope's rule `list` (every change there is applied to
+// the scope immediately) and the `rule` editor, whose draft only enters the list on Enter.
+// `error` mirrors compileLogFilter's last result for the draft (recomputed on every keystroke).
 export type FilterEditorState = {
   scope: 'global' | 'pane';
   repoPath: string | null;
+  view: 'list' | 'rule';
+  // The highlighted row of the rule list.
+  listCursor: number;
+  // The rule the draft replaces on commit; null while adding a new one.
+  ruleIndex: number | null;
   mode: LogFilterMode;
   query: string;
   // The caret position within `query`, threaded to TextInputLine like edts-zone.logic.ts's
   // `nextTextInputValue`/`TextInputState`. Every programmatic overwrite of `query` (open, history
   // recall, arrow-browse) resets this to `query.length`.
   cursor: number;
-  level: LogLevel | null;
   action: LogFilterAction;
   target: LogFilterTarget;
   error: string | null;
-  // The spec in effect for this scope when the editor opened — restored verbatim on Escape, so the
-  // "[Enter] confirm  [Esc] cancel" hint behaves as a true cancel.
-  preOpen: LogFilterSpec;
+  // A refusal shown in the list view (rule cap reached); cleared by the next key.
+  notice: string | null;
+  // True while the list view waits for the "clear all rules" confirmation.
+  confirmClear: boolean;
   // Non-null while `↑`/`↓` are browsing this scope+mode's history — null on a fresh open and
   // whenever browsing has ended (snapped back to the draft, or walked past the most-recent entry).
   // See resolveHistoryBrowseUp/Down in tui/shared/input-history.
   browsing: HistoryBrowseState | null;
 };
+
+export function openFilterEditorState(scope: 'global' | 'pane', repoPath: string | null): FilterEditorState {
+  return {
+    scope,
+    repoPath,
+    view: 'list',
+    listCursor: 0,
+    ruleIndex: null,
+    ...ruleDraftOf(null),
+    cursor: 0,
+    error: null,
+    notice: null,
+    confirmClear: false,
+    browsing: null,
+  };
+}
+
+// Moves the editor to the rule view on `rule` (null = a new rule at the end of the list).
+export function openRuleEditorState(editor: FilterEditorState, index: number | null, rule: LogFilterRule | null): FilterEditorState {
+  const draft = ruleDraftOf(rule);
+  return { ...editor, ...draft, view: 'rule', ruleIndex: index, cursor: draft.query.length, error: null, notice: null, confirmClear: false, browsing: null };
+}
 
 // The filter-history grid's `getLabel` for command-bar.tsx's generic grid primitives — the bare
 // query for a show+line entry, prefixed with its action/target otherwise. Shared by LogsZone's

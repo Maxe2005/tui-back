@@ -638,7 +638,7 @@ describe('logs slice: health-first status', () => {
 });
 
 describe('logs display settings (session-only)', () => {
-  const spec = { mode: 'text' as const, query: 'boom', level: null, action: 'show' as const, target: 'line' as const };
+  const spec = { level: null, rules: [{ mode: 'text' as const, query: 'boom', action: 'show' as const, target: 'line' as const, enabled: true }] };
 
   function seed() {
     const store = createAppStore();

@@ -2,11 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import {
-  applyLogFilters,
+  addLogRule,
+  applyLogRules,
+  deleteLogRule,
+  formatLogRule,
+  MAX_LOG_FILTER_RULES,
+  moveLogRule,
+  toggleLogRule,
+  replaceLogRule,
+  validateRuleDraft,
   decodeFilterHistoryEntry,
   encodeFilterHistoryEntry,
   historyEntryLabel,
-  isDefaultLogFilterSpec,
+  isDefaultLogFilterScope,
   compileLogFilter,
   cycleFilterLevel,
   DEFAULT_LOG_FILTER,
@@ -21,7 +29,7 @@ import {
   detectLogLevel,
   filterVisibleLines,
   formatHealthLabel,
-  formatLogFilterSpec,
+  formatLogFilterScope,
   formatLogLine,
   healthBadgeState,
   isAtOldestLine,
@@ -56,7 +64,8 @@ import {
   resolveHistoryBrowseDown,
   resolveHistoryBrowseUp,
   type FilterHistoryKey,
-  type LogFilterSpec,
+  type LogFilterRule,
+  type LogFilterScope,
 } from './logs-zone.logic.js';
 
 describe('healthBadgeState / formatHealthLabel', () => {
@@ -521,17 +530,27 @@ describe('detectLogLevel', () => {
   });
 });
 
+const rule = (query: string, over: Partial<LogFilterRule> = {}): LogFilterRule => ({
+  mode: 'text',
+  query,
+  action: 'show',
+  target: 'line',
+  enabled: true,
+  ...over,
+});
+const scopeOf = (rules: LogFilterRule[], level: LogFilterScope['level'] = null): LogFilterScope => ({ level, rules });
+
 describe('compileLogFilter', () => {
   const line = (text: string): LogLine => ({ timestamp: 't', stream: 'stdout', text });
 
   it('text mode: case-insensitive substring match; an empty query passes everything', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: 'boom', level: null, action: 'show', target: 'line' });
+    const compiled = compileLogFilter(rule('boom'));
     expect(compiled.ok).toBe(true);
     if (compiled.ok) {
       expect((compiled.apply(line('a BOOM happened')) !== null)).toBe(true);
       expect((compiled.apply(line('all quiet')) !== null)).toBe(false);
     }
-    const emptyQuery = compileLogFilter(DEFAULT_LOG_FILTER);
+    const emptyQuery = compileLogFilter(rule(''));
     expect(emptyQuery.ok).toBe(true);
     if (emptyQuery.ok) {
       expect((emptyQuery.apply(line('anything')) !== null)).toBe(true);
@@ -539,7 +558,7 @@ describe('compileLogFilter', () => {
   });
 
   it('regex mode: compiles and matches a valid pattern', () => {
-    const compiled = compileLogFilter({ mode: 'regex', query: '^\\d+ms$', level: null, action: 'show', target: 'line' });
+    const compiled = compileLogFilter(rule('^\\d+ms$', { mode: 'regex' }));
     expect(compiled.ok).toBe(true);
     if (compiled.ok) {
       expect((compiled.apply(line('120ms')) !== null)).toBe(true);
@@ -548,63 +567,58 @@ describe('compileLogFilter', () => {
   });
 
   it('regex mode: an invalid pattern fails to compile with an inline error, never throws', () => {
-    expect(() => compileLogFilter({ mode: 'regex', query: '(unterminated', level: null, action: 'show', target: 'line' })).not.toThrow();
-    const compiled = compileLogFilter({ mode: 'regex', query: '(unterminated', level: null, action: 'show', target: 'line' });
+    expect(() => compileLogFilter(rule('(unterminated', { mode: 'regex' }))).not.toThrow();
+    const compiled = compileLogFilter(rule('(unterminated', { mode: 'regex' }));
     expect(compiled.ok).toBe(false);
     if (!compiled.ok) {
       expect(compiled.error.length).toBeGreaterThan(0);
     }
-  });
-
-  it('level restriction: a line with no detectable level is excluded once any level restriction is active', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: '', level: 'ERROR', action: 'show', target: 'line' });
-    expect(compiled.ok).toBe(true);
-    if (compiled.ok) {
-      expect((compiled.apply(line('ERROR disk full')) !== null)).toBe(true);
-      expect((compiled.apply(line('WARN low disk')) !== null)).toBe(false);
-      expect((compiled.apply(line('no level tag at all')) !== null)).toBe(false);
-    }
-  });
-
-  it('combines text and level restrictions with AND', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: 'disk', level: 'ERROR', action: 'show', target: 'line' });
-    expect(compiled.ok).toBe(true);
-    if (compiled.ok) {
-      expect((compiled.apply(line('ERROR disk full')) !== null)).toBe(true);
-      expect((compiled.apply(line('ERROR network down')) !== null)).toBe(false);
-      expect((compiled.apply(line('WARN disk almost full')) !== null)).toBe(false);
-    }
+    expect(validateRuleDraft(rule('(', { mode: 'regex' }))).not.toBeNull();
+    expect(validateRuleDraft(rule('('))).toBeNull();
   });
 });
 
-describe('applyLogFilters', () => {
+describe('applyLogRules', () => {
   const lines: LogLine[] = [
     { timestamp: 't1', stream: 'stdout', text: 'ERROR disk full' },
     { timestamp: 't2', stream: 'stdout', text: 'INFO all fine' },
     { timestamp: 't3', stream: 'stderr', text: 'WARN disk almost full' },
   ];
 
-  it('passes everything when both global and own are null', () => {
-    expect(applyLogFilters(lines, null, null)).toEqual(lines);
+  it('passes everything when both global and own are null, or the rule list is empty', () => {
+    expect(applyLogRules(lines, null, null)).toEqual(lines);
+    expect(applyLogRules(lines, scopeOf([]), scopeOf([]))).toEqual(lines);
   });
 
-  it('a disengaged pane (global passed as null) ignores the global filter entirely', () => {
-    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null, action: 'show', target: 'line' };
-    // Engaged: only "disk" lines survive.
-    expect(applyLogFilters(lines, global, null)).toEqual([lines[0], lines[2]]);
-    // Disengaged (caller passes null in global's place): every line survives regardless.
-    expect(applyLogFilters(lines, null, null)).toEqual(lines);
+  it('a disengaged pane (global passed as null) ignores the global rules entirely', () => {
+    const global = scopeOf([rule('disk')]);
+    expect(applyLogRules(lines, global, null)).toEqual([lines[0], lines[2]]);
+    expect(applyLogRules(lines, null, null)).toEqual(lines);
   });
 
-  it('a global text filter and an own level filter both apply — a line must satisfy both', () => {
-    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null, action: 'show', target: 'line' };
-    const own: LogFilterSpec = { mode: 'text', query: '', level: 'ERROR', action: 'show', target: 'line' };
-    expect(applyLogFilters(lines, global, own)).toEqual([lines[0]]);
+  it('a level restriction ANDs with the rule pipeline, across scopes', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk')]), scopeOf([], 'ERROR'))).toEqual([lines[0]]);
+    expect(applyLogRules(lines, null, scopeOf([], 'WARN'))).toEqual([lines[2]]);
+    expect(applyLogRules([{ timestamp: 't', stream: 'stdout', text: 'no level tag' }], null, scopeOf([], 'ERROR'))).toEqual([]);
   });
 
-  it('an own filter alone (no global) still applies', () => {
-    const own: LogFilterSpec = { mode: 'text', query: '', level: 'WARN', action: 'show', target: 'line' };
-    expect(applyLogFilters(lines, null, own)).toEqual([lines[2]]);
+  it('two show rules are an AND', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk'), rule('almost')]), null)).toEqual([lines[2]]);
+  });
+
+  it('a disabled rule is skipped as if absent', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk'), rule('almost', { enabled: false })]), null)).toEqual([lines[0], lines[2]]);
+  });
+
+  it('global rules run before the pane\'s own', () => {
+    const global = scopeOf([rule('disk', { action: 'hide', target: 'match' })]);
+    const own = scopeOf([rule('ERROR')]);
+    // The global rewrite leaves "ERROR  full", which the own rule still matches.
+    expect(applyLogRules(lines, global, own).map((l) => l.text)).toEqual(['ERROR  full']);
+  });
+
+  it('an uncompilable rule is pass-through', () => {
+    expect(applyLogRules(lines, scopeOf([rule('(', { mode: 'regex' })]), null)).toEqual(lines);
   });
 });
 
@@ -633,18 +647,49 @@ describe('isPaneEngagedInGlobalFilter / toggleGlobalFilterEngagement / setPaneGl
 });
 
 describe('setPaneLogFilter', () => {
-  it('sets a spec for the targeted repoPath, independent of others', () => {
-    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null, action: 'show', target: 'line' };
-    const next = setPaneLogFilter({}, '/repo/a', spec);
-    expect(next).toEqual({ '/repo/a': spec });
+  it('sets a scope for the targeted repoPath, independent of others', () => {
+    const scope = scopeOf([rule('x')]);
+    expect(setPaneLogFilter({}, '/repo/a', scope)).toEqual({ '/repo/a': scope });
   });
 
-  it('clears (removes the key) when given null', () => {
-    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null, action: 'show', target: 'line' };
-    const withFilter = setPaneLogFilter({}, '/repo/a', spec);
-    const cleared = setPaneLogFilter(withFilter, '/repo/a', null);
-    expect(cleared).toEqual({});
+  it('clears (removes the key) when given null or a default scope', () => {
+    const withFilter = setPaneLogFilter({}, '/repo/a', scopeOf([rule('x')]));
+    expect(setPaneLogFilter(withFilter, '/repo/a', null)).toEqual({});
+    const cleared = setPaneLogFilter(withFilter, '/repo/a', DEFAULT_LOG_FILTER);
     expect(Object.prototype.hasOwnProperty.call(cleared, '/repo/a')).toBe(false);
+  });
+});
+
+describe('rule list operations', () => {
+  const three = scopeOf([rule('a'), rule('b'), rule('c')]);
+  const queries = (scope: LogFilterScope | null) => scope?.rules.map((r) => r.query);
+
+  it('adds at the end and refuses beyond the cap', () => {
+    expect(queries(addLogRule(three, rule('d')))).toEqual(['a', 'b', 'c', 'd']);
+    const full = scopeOf(Array.from({ length: MAX_LOG_FILTER_RULES }, (_, i) => rule(`r${i}`)));
+    expect(addLogRule(full, rule('x'))).toBeNull();
+    expect(full.rules).toHaveLength(MAX_LOG_FILTER_RULES);
+  });
+
+  it('replaces, toggles and deletes by index without mutating the input', () => {
+    expect(queries(replaceLogRule(three, 1, rule('B')))).toEqual(['a', 'B', 'c']);
+    expect(toggleLogRule(three, 0).rules[0].enabled).toBe(false);
+    expect(three.rules[0].enabled).toBe(true);
+    expect(queries(deleteLogRule(three, 1))).toEqual(['a', 'c']);
+    expect(deleteLogRule(three, 9)).toBe(three);
+  });
+
+  it('moves a rule one step and is a no-op at either end', () => {
+    expect(queries(moveLogRule(three, 1, 'up'))).toEqual(['b', 'a', 'c']);
+    expect(queries(moveLogRule(three, 1, 'down'))).toEqual(['a', 'c', 'b']);
+    expect(moveLogRule(three, 0, 'up')).toBe(three);
+    expect(moveLogRule(three, 2, 'down')).toBe(three);
+  });
+
+  it('a scope with no rule and no level is the default', () => {
+    expect(isDefaultLogFilterScope(DEFAULT_LOG_FILTER)).toBe(true);
+    expect(isDefaultLogFilterScope(scopeOf([], 'WARN'))).toBe(false);
+    expect(isDefaultLogFilterScope(scopeOf([rule('x', { enabled: false })]))).toBe(false);
   });
 });
 
@@ -671,19 +716,17 @@ describe('cycleFilterLevel / toggleFilterMode', () => {
   });
 });
 
-describe('formatLogFilterSpec', () => {
-  it('renders mode, a quoted query, and no level suffix by default', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: null, action: 'show', target: 'line' })).toBe('text "boom"');
-    expect(formatLogFilterSpec({ mode: 'regex', query: '^ERR', level: null, action: 'show', target: 'line' })).toBe('regex "^ERR"');
+describe('formatLogFilterScope / formatLogRule', () => {
+  it('renders a count of rules, with the disabled ones and the level', () => {
+    expect(formatLogFilterScope(scopeOf([]))).toBe('(any)');
+    expect(formatLogFilterScope(scopeOf([], 'WARN'))).toBe('(any) [WARN]');
+    expect(formatLogFilterScope(scopeOf([rule('a')]))).toBe('1 rule');
+    expect(formatLogFilterScope(scopeOf([rule('a'), rule('b', { enabled: false })], 'ERROR'))).toBe('2 rules (1 off) [ERROR]');
   });
 
-  it('renders an empty query as "(any)"', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: '', level: null, action: 'show', target: 'line' })).toBe('text (any)');
-  });
-
-  it('appends the level restriction, when set, as a trailing bracketed suffix', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: 'ERROR', action: 'show', target: 'line' })).toBe('text "boom" [ERROR]');
-    expect(formatLogFilterSpec({ mode: 'text', query: '', level: 'WARN', action: 'show', target: 'line' })).toBe('text (any) [WARN]');
+  it('renders a rule row with its state, action, target, mode and query', () => {
+    expect(formatLogRule(rule('boom'))).toBe('[x] show line text "boom"');
+    expect(formatLogRule(rule('b', { enabled: false, action: 'hide', target: 'match', mode: 'regex' }))).toBe('[ ] hide match regex "b"');
   });
 });
 
@@ -879,6 +922,8 @@ describe('logsFooterContext', () => {
     expect(logsFooterContext(false, false, full)).toBe('logs-fullscreen');
     expect(logsFooterContext(true, false, full)).toBe('logs-filter-edit');
     expect(logsFooterContext(true, true, full)).toBe('logs-filter-history');
+    expect(logsFooterContext(true, false, full, 'simple', false, { listOpen: true, confirmingClear: false })).toBe('logs-filter-rules');
+    expect(logsFooterContext(true, false, full, 'simple', false, { listOpen: true, confirmingClear: true })).toBe('logs-filter-rules-confirm');
   });
 
   it('never advertises a restart for a pane without a container', () => {
@@ -935,6 +980,40 @@ describe('actions menu', () => {
     expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 8 }).edtListMaxVisibleRows).toBe(8);
     expect(computeLogsLayout({ ...base, actionsMenuRows: 0 }).edtListMaxVisibleRows).toBe(closed.edtListMaxVisibleRows);
   });
+
+  it.each([
+    { rules: 0, reserved: 10 },
+    { rules: 1, reserved: 10 },
+    { rules: 4, reserved: 13 },
+    { rules: 10, reserved: 19 },
+  ])('reserves the rule list view rows off the list column budget ($rules rules)', ({ rules, reserved }) => {
+    const base = {
+      windowColumns: 120,
+      listRatio: 0.3,
+      windowRows: 60,
+      activePaneCount: 1,
+      edtServiceCount: 80,
+      otherServiceCount: 0,
+      filterEditorOpen: false,
+      historyGridOpen: false,
+      filterHistoryGridMaxRows: 8,
+    };
+    const closed = computeLogsLayout(base);
+    const open = computeLogsLayout({ ...base, filterEditorOpen: true, filterEditorView: 'list', filterRuleCount: rules });
+    expect(closed.edtListMaxVisibleRows - open.edtListMaxVisibleRows).toBe(reserved);
+  });
+
+  it('never gives the rule list a zero-row budget', () => {
+    const tiny = computeLogsLayout({
+      windowColumns: 80, listRatio: 0.3, windowRows: 4, activePaneCount: 0, edtServiceCount: 0, otherServiceCount: 0,
+      filterEditorOpen: true, filterEditorView: 'list', filterRuleCount: 5, historyGridOpen: false, filterHistoryGridMaxRows: 8,
+    });
+    expect(tiny.rulesListMaxVisibleRows).toBeGreaterThanOrEqual(1);
+  });
+
+  it('collapses newlines and control characters in a rule row', () => {
+    expect(formatLogRule(rule('a\nb\t\tc'))).toBe('[x] show line text "a b c"');
+  });
 });
 
 describe('hide / show-only filters (action x target)', () => {
@@ -944,15 +1023,8 @@ describe('hide / show-only filters (action x target)', () => {
     { timestamp: 't2', stream: 'stdout', text: '[Nest] 12  - 09/11/2026 LOG [Other] fine' },
     { timestamp: 't3', stream: 'stdout', text: 'Aucun service' },
   ];
-  const spec = (over: Partial<LogFilterSpec>): LogFilterSpec => ({
-    mode: 'text',
-    query: 'Aucun service',
-    level: null,
-    action: 'show',
-    target: 'line',
-    ...over,
-  });
-  const texts = (s: LogFilterSpec) => applyLogFilters(lines, s, null).map((l) => l.text);
+  const spec = (over: Partial<LogFilterRule>): LogFilterRule => rule('Aucun service', over);
+  const texts = (r: LogFilterRule) => applyLogRules(lines, scopeOf([r]), null).map((l) => l.text);
 
   it('show+line keeps matching lines unchanged', () => {
     expect(texts(spec({}))).toEqual([NEST, 'Aucun service']);
@@ -992,22 +1064,24 @@ describe('hide / show-only filters (action x target)', () => {
     }
   });
 
-  it('judges the level on the stored text even after another filter rewrote it', () => {
-    const rewritten = applyLogFilters(lines, spec({ target: 'match', query: 'Aucun service' }), spec({ query: '', level: 'WARN' }));
+  it('judges the level on the stored text even after an earlier rule rewrote it', () => {
+    const rewritten = applyLogRules(lines, scopeOf([spec({ target: 'match' })]), scopeOf([], 'WARN'));
     expect(rewritten.map((l) => l.text)).toEqual(['Aucun service']);
-    const own = applyLogFilters(lines, spec({ action: 'hide', target: 'match', query: 'Aucun service' }), spec({ query: '', level: 'WARN' }));
-    expect(own).toHaveLength(1);
+    const hidden = applyLogRules(lines, scopeOf([spec({ action: 'hide', target: 'match' })]), scopeOf([], 'WARN'));
+    expect(hidden).toHaveLength(1);
   });
 
-  it('counts a non-default action/target as a non-default spec', () => {
-    expect(isDefaultLogFilterSpec(spec({ query: '' }))).toBe(true);
-    expect(isDefaultLogFilterSpec(spec({ query: '', action: 'hide' }))).toBe(false);
-    expect(isDefaultLogFilterSpec(spec({ query: '', target: 'match' }))).toBe(false);
+  it('a hide+match rule above a show rule feeds it the rewritten line; moving it below changes the result', () => {
+    const hide = spec({ action: 'hide', target: 'match' });
+    const show = rule('Aucun');
+    expect(applyLogRules(lines, scopeOf([hide, show]), null)).toEqual([]);
+    expect(applyLogRules(lines, scopeOf([show, hide]), null).map((l) => l.text)).toEqual([
+      '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase]  de restauration trouvé pour le 12',
+    ]);
   });
 
-  it('annotates a non-default action/target', () => {
-    expect(formatLogFilterSpec(spec({ action: 'hide', target: 'match' }))).toContain('hide match');
-    expect(formatLogFilterSpec(spec({}))).not.toContain('{');
+  it('AND of shows over the Nest fixtures', () => {
+    expect(applyLogRules(lines, scopeOf([rule('WARN'), rule('Affectation')]), null).map((l) => l.text)).toEqual([NEST]);
   });
 
   it('history entries: legacy plain string reads as show+line; encoding round-trips and keeps entries distinct', () => {
@@ -1022,7 +1096,7 @@ describe('hide / show-only filters (action x target)', () => {
 
   it('keeps match ranges aligned when lowercasing would change the text length', () => {
     const line: LogLine = { timestamp: 't', stream: 'stdout', text: 'İİ boom end' };
-    const out = applyLogFilters([line], spec({ query: 'boom', action: 'hide', target: 'match' }), null);
+    const out = applyLogRules([line], scopeOf([spec({ query: 'boom', action: 'hide', target: 'match' })]), null);
     expect(out.map((l) => l.text)).toEqual(['İİ  end']);
   });
 

@@ -600,7 +600,7 @@ it('shouldQuit returns true for q', () => {
         logsFullscreenServiceName: null,
         logsPanes: {},
         logsVisibility: { showTimestamps: true, showStdout: true, showStderr: true },
-        logsGlobalFilter: { mode: 'text', query: '', level: null, action: 'show', target: 'line' },
+        logsGlobalFilter: { level: null, rules: [] },
         logsPaneWrap: {},
         logsPaneFilterEngaged: {},
         logsPaneFilters: {},

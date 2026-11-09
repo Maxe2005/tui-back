@@ -31,7 +31,7 @@ import {
   filterHistoryKeyString,
   resolvePostLoadScrollOffset,
   type FilterHistoryKey,
-  type LogFilterSpec,
+  type LogFilterScope,
   type VisibilityFlags,
 } from '../../zones/logs/logs-zone.logic.js';
 
@@ -126,15 +126,15 @@ export type LogsSlice = {
   // repoPath: wrap, global-filter engagement, own filter — all dropped when the service is
   // deselected, so re-selecting it starts fresh while the global ones stay applied.
   logsVisibility: VisibilityFlags;
-  logsGlobalFilter: LogFilterSpec;
+  logsGlobalFilter: LogFilterScope;
   logsPaneWrap: Record<string, boolean>;
   logsPaneFilterEngaged: Record<string, boolean>;
-  logsPaneFilters: Record<string, LogFilterSpec>;
+  logsPaneFilters: Record<string, LogFilterScope>;
   setLogsVisibility: (update: (current: VisibilityFlags) => VisibilityFlags) => void;
-  setLogsGlobalFilter: (filter: LogFilterSpec) => void;
+  setLogsGlobalFilter: (filter: LogFilterScope | ((current: LogFilterScope) => LogFilterScope)) => void;
   setLogsPaneWrap: (update: (current: Record<string, boolean>) => Record<string, boolean>) => void;
   setLogsPaneFilterEngaged: (update: (current: Record<string, boolean>) => Record<string, boolean>) => void;
-  setLogsPaneFilters: (update: (current: Record<string, LogFilterSpec>) => Record<string, LogFilterSpec>) => void;
+  setLogsPaneFilters: (update: (current: Record<string, LogFilterScope>) => Record<string, LogFilterScope>) => void;
   toggleLogsEdtSelection: (repoPath: string) => void;
   toggleLogsOtherSelection: (repoPath: string) => void;
   selectAllLogsEdtServices: (repoPaths: readonly string[]) => void;
@@ -633,7 +633,8 @@ export function createLogsSlice(deps?: AppStoreDeps): StateCreator<AppState, [],
       logsPaneFilters: {},
 
       setLogsVisibility: (update) => set((state) => ({ logsVisibility: update(state.logsVisibility) })),
-      setLogsGlobalFilter: (filter) => set({ logsGlobalFilter: filter }),
+      setLogsGlobalFilter: (filter) =>
+        set((state) => ({ logsGlobalFilter: typeof filter === 'function' ? filter(state.logsGlobalFilter) : filter })),
       setLogsPaneWrap: (update) => set((state) => ({ logsPaneWrap: update(state.logsPaneWrap) })),
       setLogsPaneFilterEngaged: (update) => set((state) => ({ logsPaneFilterEngaged: update(state.logsPaneFilterEngaged) })),
       setLogsPaneFilters: (update) => set((state) => ({ logsPaneFilters: update(state.logsPaneFilters) })),
