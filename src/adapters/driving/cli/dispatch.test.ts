@@ -326,7 +326,7 @@ describe('subcommand registry guards', () => {
     const piped = await runCli(['completion', 'bash'], subcommands, false);
     const parsed = JSON.parse(piped.output);
     expect(piped.exitCode).toBe(0);
-    expect(parsed.data.script).toContain('complete -F _tui_back tui-back tb');
+    expect(parsed.data.script).toContain('complete -o default -F _tui_back tui-back tb');
     expect(parsed.data.script).toContain('completion');
 
     const tty = await runCli(['completion', 'bash'], subcommands, true);
@@ -337,6 +337,20 @@ describe('subcommand registry guards', () => {
       expect(bad.exitCode).toBe(1);
       expect(JSON.parse(bad.output).error).toEqual({ code: 'invalid-argument', message: 'Usage: tui-back completion bash' });
     }
+  });
+
+  it('completion script derives the real edt/registry verbs and flags from the live registry', async () => {
+    const piped = await runCli(['completion', 'bash'], buildTestSubcommands(), false);
+    const script: string = JSON.parse(piped.output).data.script;
+    expect(script).toContain('edt) words="create switch modify delete" ;;');
+    expect(script).toContain('registry) words="clean validate" ;;');
+    expect(script).toContain('completion) words="bash" ;;');
+    expect(script).toMatch(/"edt switch"\) words="[^"]*--to[^"]*--force/);
+    expect(script).toMatch(/"edt create"\) words="[^"]*--topic[^"]*--member/);
+    expect(script).toMatch(/"registry clean"\) words="[^"]*--yes[^"]*--path/);
+    // Flag-only usages (e.g. update, register) stay flat, never verb-style.
+    expect(script).not.toMatch(/\n\s+(update|register|realign|heal)\) words=/);
+    expect(script).toMatch(/"update"\) words="[^"]*--migrations/);
   });
 
   it('edts rejects excess arguments and otherwise runs the divergence use-case', async () => {

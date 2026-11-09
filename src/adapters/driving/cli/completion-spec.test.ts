@@ -38,6 +38,6 @@ describe('generateBashCompletion', () => {
   });
 
   it('registers the function for tui-back and tb', () => {
-    expect(script).toContain('complete -F _tui_back tui-back tb');
+    expect(script).toContain('complete -o default -F _tui_back tui-back tb');
   });
 });

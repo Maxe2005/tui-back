@@ -11,8 +11,6 @@ export interface CompletionSpec {
   commands: CompletionCommand[];
 }
 
-// Commands whose usage declares `tui-back <name> <verb> ...` lines worth completing.
-const VERB_COMMANDS = new Set(['edt', 'registry']);
 const STATIC_WORDS = ['tui', '--help', '-h'];
 const FLAG_PATTERN = /--[a-z][a-z-]*/g;
 const ALIASES = ['tui-back', 'tb'];
@@ -42,7 +40,8 @@ export function generateBashCompletion(spec: CompletionSpec): string {
   const commandFlagCases: string[] = [];
 
   for (const command of spec.commands) {
-    const verbs = VERB_COMMANDS.has(command.name) ? scrapeVerbs(command) : new Map<string, string[]>();
+    // A command is verb-style when its usage has `tui-back <name> <verb>` lines (derived, not listed).
+    const verbs = scrapeVerbs(command);
     if (verbs.size > 0) {
       verbCases.push(`    ${command.name}) words="${[...verbs.keys()].join(' ')}" ;;`);
       for (const [verb, flags] of verbs) {
@@ -79,9 +78,9 @@ export function generateBashCompletion(spec: CompletionSpec): string {
     '        ;;',
     '    esac',
     '  fi',
-    '  COMPREPLY=($(compgen -W "$words" -- "$cur"))',
+    '  mapfile -t COMPREPLY < <(compgen -W "$words" -- "$cur")',
     '}',
-    `complete -F _tui_back ${ALIASES.join(' ')}`,
+    `complete -o default -F _tui_back ${ALIASES.join(' ')}`,
     '',
   ];
   return lines.join('\n');
