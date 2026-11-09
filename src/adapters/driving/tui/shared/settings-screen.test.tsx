@@ -324,7 +324,7 @@ describe('SettingsScreen branch-dropdown-rows group (branch autocomplete shared 
 });
 
 describe('LOGS_SETTINGS_GROUPS', () => {
-  it('lists exactly the seven Logs-tab groups, in this order', () => {
+  it('lists exactly the eight Logs-tab groups, in this order', () => {
     expect(LOGS_SETTINGS_GROUPS.map((group) => group.id)).toEqual([
       'buffer-size',
       'start-with-history',
@@ -333,6 +333,7 @@ describe('LOGS_SETTINGS_GROUPS', () => {
       'filter-history-dedup',
       'restart-mode',
       'clear-history',
+      'filter-rules',
     ]);
     expect(LOGS_SETTINGS_GROUPS.map((group) => group.label)).toEqual([
       'Buffer size',
@@ -342,6 +343,7 @@ describe('LOGS_SETTINGS_GROUPS', () => {
       'Filter history dedup',
       'Restart mode',
       'Clear history',
+      'Persisted filter rules',
     ]);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
+import { MAX_RULES_PER_LIST } from '../../../../../core/logs/rule-sets.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import {
   addLogRule,
@@ -39,6 +40,12 @@ import {
   isRestartingDisplay,
   isSelectAllKey,
   logsFooterContext,
+  backToRuleListState,
+  formatRuleSetConfirm,
+  formatRuleSetRow,
+  openFilterEditorState,
+  openRuleSetNameState,
+  ruleSetsFooterContext,
   logsLegendHints,
   isPaneRestartAdvertised,
   isWrapAllLogsKey,
@@ -1104,5 +1111,80 @@ describe('hide / show-only filters (action x target)', () => {
     const query = '\u001fhide:match\u001frest';
     const encoded = encodeFilterHistoryEntry({ query, action: 'show', target: 'line' });
     expect(decodeFilterHistoryEntry(encoded)).toEqual({ query, action: 'show', target: 'line' });
+  });
+});
+
+describe('rule-set editor views', () => {
+  const closed = { open: false, restartable: true };
+
+  it('picks the library footer contexts over the rule list while an editor is open', () => {
+    const open = openFilterEditorState('global', null);
+    expect(ruleSetsFooterContext(open)).toBeNull();
+    const library = { ...open, view: 'library' as const };
+    expect(ruleSetsFooterContext(library)).toBe('logs-filter-sets');
+    expect(ruleSetsFooterContext({ ...library, setConfirm: { kind: 'delete', index: 0 } })).toBe('logs-filter-sets-confirm');
+    const naming = openRuleSetNameState(open, null, '');
+    expect(ruleSetsFooterContext(naming)).toBe('logs-filter-set-name');
+    expect(ruleSetsFooterContext({ ...naming, setConfirm: { kind: 'overwrite', name: 'x' } })).toBe('logs-filter-sets-confirm');
+    expect(logsFooterContext(true, false, closed, 'simple', false, { listOpen: false, confirmingClear: false }, 'logs-filter-sets')).toBe(
+      'logs-filter-sets',
+    );
+  });
+
+  it('declares every key of the new views in the footer contexts', () => {
+    expect(FOOTER_CONTEXTS['logs-filter-rules'].hints.map(([key]) => key)).toEqual(expect.arrayContaining(['s', 'l']));
+    expect(FOOTER_CONTEXTS['logs-filter-sets'].hints.map(([key]) => key)).toEqual(expect.arrayContaining(['Enter', 'r', 'd']));
+  });
+
+  it('openRuleSetNameState seeds the name and caret; backToRuleListState resets the transient state', () => {
+    const open = openFilterEditorState('pane', '/repo');
+    const renaming = openRuleSetNameState(open, 2, 'noise');
+    expect(renaming).toMatchObject({ view: 'name', nameMode: 'rename', nameIndex: 2, name: 'noise', nameCursor: 5 });
+    expect(backToRuleListState({ ...renaming, error: 'x', setConfirm: { kind: 'apply', index: 0 } }, 'done')).toMatchObject({
+      view: 'list',
+      error: null,
+      notice: 'done',
+      setConfirm: null,
+    });
+  });
+
+  it('formats rows and confirmation questions on one line', () => {
+    expect(formatRuleSetRow({ name: 'a\nb', rules: [1] })).toBe('a b (1 rule)');
+    expect(formatRuleSetRow({ name: 'n', rules: [1, 2] })).toBe('n (2 rules)');
+    expect(formatRuleSetConfirm({ kind: 'delete', index: 0 }, [{ name: 'n' }], 3)).toContain('Delete set "n"');
+    expect(formatRuleSetConfirm({ kind: 'apply', index: 0 }, [{ name: 'n' }], 3)).toContain('Replace the 3 active rules');
+  });
+});
+
+describe('rule-set views layout budget', () => {
+  const base = {
+    windowColumns: 100,
+    listRatio: 0.4,
+    windowRows: 40,
+    activePaneCount: 0,
+    edtServiceCount: 3,
+    otherServiceCount: 3,
+    filterEditorOpen: true,
+    historyGridOpen: false,
+    filterHistoryGridMaxRows: 8,
+  };
+
+  it('shares one rule cap between core and the editor', () => {
+    expect(MAX_LOG_FILTER_RULES).toBe(MAX_RULES_PER_LIST);
+  });
+
+  it('reserves one row more for the library than for the rule list, with the same item rows', () => {
+    const list = computeLogsLayout({ ...base, filterEditorView: 'list', filterRuleCount: 4 });
+    const library = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 4 });
+    expect(list.edtListMaxVisibleRows - library.edtListMaxVisibleRows).toBe(1);
+  });
+
+  it('an empty library still reserves its placeholder row, and a long one is bounded by the window', () => {
+    const empty = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 0 });
+    const one = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 1 });
+    expect(empty.edtListMaxVisibleRows).toBe(one.edtListMaxVisibleRows);
+    const many = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 20 });
+    expect(many.rulesListMaxVisibleRows).toBeGreaterThanOrEqual(1);
+    expect(many.edtListMaxVisibleRows).toBeGreaterThanOrEqual(3);
   });
 });

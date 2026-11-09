@@ -2723,7 +2723,7 @@ As a developer, I want the st zone's option checkboxes to start the way I like, 
 
 A developer can view a live, filterable, aggregated log stream across multiple services, with inline health status and a developer-triggered restart control.
 
-> Reopened 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`) for Stories 5.8, 5.9 and 5.10 (hide/show-only filters, stackable rules, persisted rules and named sets). Story 5.2's "ephemeral" boundary is amended by 5.10: the stream and buffer are never persisted; filter rules are.
+> Reopened 2026-11-05 (Sprint Change Proposal `sprint-change-proposal-2026-11-05.md`) for Stories 5.8, 5.9 and 5.10 (hide/show-only filters, stackable rules, persisted rules and named sets). Story 5.2's "ephemeral" boundary is amended by 5.10: the stream and buffer are never persisted; filter rules (active lists and named sets) are, and the level restriction stays ephemeral.
 
 ### Story 5.1: Aggregated Live Log Stream
 
@@ -2810,7 +2810,7 @@ So that I never need a separate health check step and a failing service is never
 
 ### Story 5.4: Filter History Recall
 
-> Added 2026-09-18 (Sprint Change Proposal): new capability for the filter editor (Story 5.2) — recall the last N text/regex filters used, per scope (global / per-service), instead of retyping them. Introduces the first *persisted* data tied to filters — Story 5.2's "ephemeral, never persisted" boundary continues to apply to the live/active filter state; history is a distinct concept (a record of past commits) and is explicitly exempted. Also reworks the Logs tab of `:settings` to a row-cursor navigation model to accommodate the new fields and history-clear actions.
+> Added 2026-09-18 (Sprint Change Proposal): new capability for the filter editor (Story 5.2) — recall the last N text/regex filters used, per scope (global / per-service), instead of retyping them. Introduces the first *persisted* data tied to filters — Story 5.2's "ephemeral, never persisted" boundary continues to apply to the live/active filter state (amended by Story 5.10: the active rule lists and named rule sets are now persisted too; the level restriction and the stream stay ephemeral); history is a distinct concept (a record of past commits) and is explicitly exempted. Also reworks the Logs tab of `:settings` to a row-cursor navigation model to accommodate the new fields and history-clear actions.
 
 As a developer,
 I want the filter editor to remember and let me recall the recent text/regex filters I've used,
@@ -2860,7 +2860,7 @@ So that I don't have to retype filters I've already used, across services and ac
 
 **Given** the app is restarted
 **When** the filter editor is reopened
-**Then** previously recorded history is still available — persisted to disk (unlike the live filter state itself, which stays ephemeral per Story 5.2's boundary)
+**Then** previously recorded history is still available — persisted to disk (unlike the live filter state itself, which stays ephemeral per Story 5.2's boundary — amended by Story 5.10, which also persists rule lists)
 
 ### Story 5.5: Bound List & Filter-Editor Height to the Terminal Window
 

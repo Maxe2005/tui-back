@@ -66,6 +66,7 @@ function storeFor(state: State): AppStore {
     loadSettings: async () => {},
     loadSplitterRatios: async () => {},
     loadFilterHistory: async () => {},
+    loadLogsRules: async () => {},
     edts: state === 'no-edt' ? [] : [{ ulid: 'e', topic: LONG } as never],
     dashboardServicesStatus: 'ready',
     dashboardRegistryStatus: 'ready',

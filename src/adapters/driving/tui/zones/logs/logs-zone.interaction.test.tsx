@@ -1633,6 +1633,163 @@ describe('LogsZone real-keypress interactions', () => {
       }
     });
 
+    it('shows the stored-rules warning on the title row and drops it once a filter editor opens (/ or f)', async () => {
+      for (const key of ['/', 'f']) {
+        const store = seedStore({
+          logsRulesWarning: 'Saved filter rules: logRules.global[1]: bad — rule dropped',
+          ...(key === 'f' ? { logsFullscreenTarget: '/repos/api-gateway', logsFullscreenServiceName: 'api-gateway' } : {}),
+        });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          if (key === '/') {
+            expect(stdout.output).toContain('logRules.global[1]');
+          }
+          expect(store.getState().logsRulesWarning).not.toBeNull();
+          await press(instance, stdin, key);
+          expect(store.getState().logsRulesWarning).toBeNull();
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      }
+    });
+
+    describe('named rule sets', () => {
+      const lastView = (stdout: FakeTtyStdout) => stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      const setNames = (store: ReturnType<typeof createAppStore>) => store.getState().logsRuleSets.map((set) => set.name);
+
+      it('s asks for a name: empty is refused, a new name saves a snapshot, an existing one asks before overwriting', async () => {
+        const store = seedStore();
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await addRules(instance, stdin, ['a', 'b']);
+          await press(instance, stdin, 's');
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('Enter a name for this set.');
+          expect(setNames(store)).toEqual([]);
+
+          await press(instance, stdin, 'n');
+          await press(instance, stdin, 'x');
+          await press(instance, stdin, KEYS.enter);
+          expect(setNames(store)).toEqual(['nx']);
+          expect(lastView(stdout)).toContain('Saved set "nx".');
+
+          // The set is a snapshot: later edits to the active list never reach it.
+          await press(instance, stdin, 'd');
+          expect(store.getState().logsRuleSets[0].rules.map((r) => r.query)).toEqual(['a', 'b']);
+
+          await press(instance, stdin, 's');
+          for (const ch of 'nx') {
+            await press(instance, stdin, ch);
+          }
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('Overwrite set "nx"?');
+          await pressEscape(instance, stdin);
+          expect(store.getState().logsRuleSets[0].rules).toHaveLength(2);
+          await press(instance, stdin, KEYS.enter);
+          await press(instance, stdin, 'y');
+          expect(store.getState().logsRuleSets[0].rules.map((r) => r.query)).toEqual(['a']);
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      });
+
+      it('refuses a new set visibly once the library holds 20', async () => {
+        const store = seedStore();
+        store.setState({ logsRuleSets: Array.from({ length: 20 }, (_, i) => ({ name: `s${i}`, rules: [] })) });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await addRules(instance, stdin, ['a']);
+          await press(instance, stdin, 's');
+          await press(instance, stdin, 'z');
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('library is full');
+          expect(store.getState().logsRuleSets).toHaveLength(20);
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      });
+
+      it('l opens the library: Enter applies directly on an empty list, replaces after confirmation otherwise', async () => {
+        const rules = [{ mode: 'text' as const, query: 'from-set', action: 'hide' as const, target: 'line' as const, enabled: true }];
+        const store = seedStore();
+        store.setState({ logsRuleSets: [{ name: 'noise', rules }] });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await press(instance, stdin, '/');
+          await press(instance, stdin, 'l');
+          expect(lastView(stdout)).toContain('noise (1 rule)');
+          await press(instance, stdin, KEYS.enter);
+          expect(queries(store)).toEqual(['from-set']);
+          // Applied as a copy: toggling the active rule never alters the stored set.
+          await press(instance, stdin, ' ');
+          expect(store.getState().logsGlobalFilter.rules[0].enabled).toBe(false);
+          expect(store.getState().logsRuleSets[0].rules[0].enabled).toBe(true);
+
+          await press(instance, stdin, 'l');
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('Replace the 1 active rule with set "noise"?');
+          await pressEscape(instance, stdin);
+          expect(store.getState().logsGlobalFilter.rules[0].enabled).toBe(false);
+          await press(instance, stdin, KEYS.enter);
+          await press(instance, stdin, 'y');
+          expect(store.getState().logsGlobalFilter.rules[0].enabled).toBe(true);
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      });
+
+      it('renames and deletes only the targeted set (delete confirmed), never touching the active list', async () => {
+        const rule = (query: string) => ({ mode: 'text' as const, query, action: 'hide' as const, target: 'line' as const, enabled: true });
+        const store = seedStore();
+        store.setState({
+          logsRuleSets: [{ name: 'one', rules: [rule('1')] }, { name: 'two', rules: [rule('2')] }],
+          logsGlobalFilter: { level: null, rules: [rule('active')] },
+        });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await press(instance, stdin, '/');
+          await press(instance, stdin, 'l');
+          await press(instance, stdin, 'r');
+          await press(instance, stdin, '!');
+          await press(instance, stdin, KEYS.enter);
+          expect(setNames(store)).toEqual(['one!', 'two']);
+          // A name already used by another set is refused.
+          await press(instance, stdin, 'r');
+          await press(instance, stdin, KEYS.backspace);
+          await press(instance, stdin, KEYS.backspace);
+          await press(instance, stdin, KEYS.backspace);
+          await press(instance, stdin, KEYS.backspace);
+          for (const ch of 'two') {
+            await press(instance, stdin, ch);
+          }
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('already exists');
+          await pressEscape(instance, stdin);
+
+          await press(instance, stdin, 'd');
+          expect(lastView(stdout)).toContain('Delete set "one!"?');
+          await pressEscape(instance, stdin);
+          expect(setNames(store)).toEqual(['one!', 'two']);
+          await press(instance, stdin, 'd');
+          await press(instance, stdin, 'y');
+          expect(setNames(store)).toEqual(['two']);
+          expect(queries(store)).toEqual(['active']);
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      });
+    });
+
     it('Esc from the list closes the editor and keeps every rule', async () => {
       const store = seedStore();
       const { instance, stdin } = mount(store);
