@@ -53,12 +53,12 @@ development_status:
   epic-4: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  epic-5: done
   # Reopened 2026-11-05 (sprint-change-proposal-2026-11-05.md): hide/show-only filters, stackable rules, persisted rules and named sets. Order: 5-8 -> 5-9 -> 5-10.
   5-8-hide-show-only-log-filters: done
-  5-9-stackable-log-filter-rules: review
-  5-10-persisted-filter-rules-and-named-rule-sets: review
-  5-11-ansi-aware-log-filter-rules: review
+  5-9-stackable-log-filter-rules: done
+  5-10-persisted-filter-rules-and-named-rule-sets: done
+  5-11-ansi-aware-log-filter-rules: done
   epic-5-retrospective: optional
 
   epic-6: in-progress
