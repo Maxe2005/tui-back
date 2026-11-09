@@ -6,6 +6,7 @@
 - `npm run typecheck` — `tsc --noEmit` (no build step exists; TS runs via `tsx`).
 - `npm run depcheck` — dependency-cruiser over `src/**/*.{ts,tsx,mjs}`, enforces the AD-1 `core → adapters` boundary rule.
 - Run the CLI: `node src/bin/tui-back.mjs <subcommand>` (needs Node ≥24). No `npm run` wrapper for it. The TUI is `node src/bin/tui-back.mjs tui` (requires an interactive terminal, exits 1 otherwise).
+- Bash completion: `tui-back completion bash` (raw script on a TTY, `data.script` when piped). Load it with `eval "$(tui-back completion bash | jq -r .data.script)"`; the installer will wire it up automatically later. It is generated from the subcommand registry, never hand-maintained.
 - Order when changing code: `npm test && npm run typecheck && npm run depcheck`.
 
 ## Architecture (hexagonal, AD-1..AD-15)

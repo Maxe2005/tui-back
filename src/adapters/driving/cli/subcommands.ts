@@ -46,6 +46,7 @@ import { listRoutes } from '../../../core/routes/list-routes.js';
 import { fireRequest, type FireRequestOptions } from '../../../core/routes/fire-request.js';
 import { deleteSavedRequest, fireSavedRequest, listSavedRequests, saveRequest } from '../../../core/routes/saved-requests.js';
 import type { Subcommand } from './dispatch.js';
+import { generateBashCompletion } from './completion-spec.js';
 
 const EDT_CREATE_USAGE =
   'tui-back edt create --topic <topic> --member <path> [--create-branches] ' +
@@ -102,6 +103,7 @@ const REGISTRY_CLEAN_USAGE =
   'tui-back registry clean (interactive on a TTY) | tui-back registry clean --yes --path <path>...';
 const REGISTRY_VALIDATE_USAGE = 'tui-back registry validate';
 const REGISTRY_USAGE = `${REGISTRY_CLEAN_USAGE}\n${REGISTRY_VALIDATE_USAGE}`;
+const COMPLETION_USAGE = 'tui-back completion bash';
 
 export function buildSubcommands(deps: {
   registry: RegistryPort;
@@ -523,6 +525,18 @@ export function buildSubcommands(deps: {
       },
     },
   ];
+  // Registered last and closing over the final list, so the generated script includes itself.
+  subcommands.push({
+    name: 'completion',
+    usage: COMPLETION_USAGE,
+    run: async (args) => {
+      if (args.length !== 1 || args[0] !== 'bash') {
+        return err('invalid-argument', `Usage: ${COMPLETION_USAGE}`);
+      }
+      return ok({ script: generateBashCompletion({ commands: subcommands }) });
+    },
+    humanText: (data) => (data as { script: string }).script,
+  });
   assertUniqueSubcommandNames(subcommands);
   return subcommands;
 }

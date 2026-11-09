@@ -11,6 +11,7 @@ import { delimiter, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
+import { generateBashCompletion } from '../adapters/driving/cli/completion-spec.js';
 import { lockPathFor } from '../adapters/driven/lock/helpers.js';
 
 const scriptPath = fileURLToPath(new URL('./tui-back.mjs', import.meta.url));
@@ -800,7 +801,7 @@ describe('tui-back --help (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'heal', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete', 'tui']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'heal', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete', 'completion', 'tui']);
   });
 });
 
@@ -2582,5 +2583,61 @@ describe('tui-back registry clean (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.error.code).toBe('confirmation-required');
     expect(parsed.error.details.candidates).toEqual([{ path: repo, reason: 'unreachable', memberOfEdts: ['demo'] }]);
+  });
+});
+
+describe('tui-back completion bash (black-box)', () => {
+  it('piped: one JSON line carrying a bash-valid script, exit 0', () => {
+    const { status, stdout } = runCli(['completion', 'bash']);
+    expect(status).toBe(0);
+    expect(stdout.trim().split('\n')).toHaveLength(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.data.script.length).toBeGreaterThan(0);
+    expect(spawnSync('bash', ['-n'], { input: parsed.data.script }).status).toBe(0);
+  });
+
+  it('generated script completes verbs and flags when sourced by bash', () => {
+    const script = generateBashCompletion({
+      commands: [
+        { name: 'register', usage: 'tui-back register [--reset] <path>' },
+        { name: 'registry', usage: 'tui-back registry clean --yes\ntui-back registry validate' },
+        { name: 'edt', usage: 'tui-back edt create --topic <t>\ntui-back edt switch --to <t> [--force]' },
+      ],
+    });
+    expect(spawnSync('bash', ['-n'], { input: script }).status).toBe(0);
+    const probe = (words: string[], cword: number): string =>
+      spawnSync(
+        'bash',
+        ['-c', `${script}\nCOMP_WORDS=(${words.map((w) => `'${w}'`).join(' ')}); COMP_CWORD=${cword}; _tui_back; echo "\${COMPREPLY[*]}"`],
+        { encoding: 'utf8' },
+      ).stdout.trim();
+    expect(probe(['tui-back', 'edt', ''], 2)).toBe('create switch');
+    expect(probe(['tui-back', 'edt', 'switch', '--'], 3)).toBe('--to --force');
+    expect(probe(['tui-back', 'reg'], 1)).toBe('register registry');
+  });
+
+  it('rejects a missing or unsupported shell with invalid-argument, exit 1', () => {
+    for (const args of [['completion'], ['completion', 'zsh']]) {
+      const { status, stdout } = runCli(args);
+      expect(status).toBe(1);
+      const parsed = JSON.parse(stdout.trim());
+      expect(parsed.error.code).toBe('invalid-argument');
+      expect(parsed.error.message).toBe('Usage: tui-back completion bash');
+    }
+  });
+
+  it('guard: command names in --help and in the completion script match both ways', () => {
+    const help = JSON.parse(runCli(['--help']).stdout.trim());
+    const helpNames = (help.data.commands as Array<{ name: string }>).map((c) => c.name).sort();
+    const script: string = JSON.parse(runCli(['completion', 'bash']).stdout.trim()).data.script;
+    const line = script.split('\n').find((l) => l.trim().startsWith('words="') && l.includes('--help'));
+    const scriptNames = line!
+      .trim()
+      .slice('words="'.length, -1)
+      .split(' ')
+      .filter((w) => w !== '--help' && w !== '-h')
+      .sort();
+    expect(scriptNames).toEqual(helpNames);
   });
 });
