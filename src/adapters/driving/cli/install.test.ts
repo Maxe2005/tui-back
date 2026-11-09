@@ -127,3 +127,127 @@ describe('install subcommand', () => {
     expect(files.size).toBe(0);
   });
 });
+
+describe('github host anchoring', () => {
+  it('accepts only the exact github.com host', () => {
+    expect(githubSpecFromRepository('ssh://git@github.com/a/b.git')).toBe('github:a/b');
+    expect(githubSpecFromRepository('git+ssh://git@github.com/a/b.git')).toBe('github:a/b');
+    expect(githubSpecFromRepository('git+https://github.com/a/b.git')).toBe('github:a/b');
+    expect(githubSpecFromRepository('https://notgithub.com/a/b')).toBeNull();
+    expect(githubSpecFromRepository('https://github.com.evil.tld/a/b')).toBeNull();
+    expect(githubSpecFromRepository('https://evil.tld/github.com/a/b')).toBeNull();
+  });
+});
+
+describe('renderRcBlock escaping', () => {
+  it('escapes characters special inside double quotes', () => {
+    const line = renderRcBlock('/d/a"b$c`d\\e/completion.bash').split('\n')[3];
+    expect(line).toBe('[ -f "/d/a\\"b\\$c\\`d\\\\e/completion.bash" ] && source "/d/a\\"b\\$c\\`d\\\\e/completion.bash"');
+  });
+});
+
+describe('install subcommand edge cases', () => {
+  const RC = '/home/u/.bashrc';
+  function harness(opts: { npm?: NpmOutcome; repo?: string | null; files?: Record<string, string>; throwOn?: string } = {}) {
+    const files = new Map<string, string>(Object.entries(opts.files ?? {}));
+    const npmCalls: string[] = [];
+    const installer: InstallerPort = {
+      repositoryUrl: async () => (opts.repo === undefined ? 'https://github.com/o/r.git' : opts.repo),
+      npmGlobal: async (action, target) => {
+        npmCalls.push(`${action} ${target}`);
+        return opts.npm ?? { ok: true };
+      },
+      readFile: async (path) => {
+        if (opts.throwOn === 'read') throw new Error('EIO read');
+        return files.get(path) ?? null;
+      },
+      writeFile: async (path, content) => {
+        if (opts.throwOn === 'write') throw new Error('EROFS write');
+        files.set(path, content);
+      },
+      removeFile: async (path) => {
+        if (opts.throwOn === 'remove') throw new Error('EBUSY remove');
+        return files.delete(path);
+      },
+    };
+    const sub = createInstallSubcommand({
+      installer,
+      nodeVersion: 'v24.0.0',
+      env: { SHELL: '/bin/bash' },
+      homedir: '/home/u',
+      dataDir: '/data/tui-back',
+      commands: () => [],
+    });
+    return { sub, files, npmCalls };
+  }
+  const block = renderRcBlock('/data/tui-back/completion.bash');
+
+  it('maps npm-not-found and generic npm failure on install, leaving files alone', async () => {
+    for (const [kind, code] of [['npm-not-found', 'npm-not-found'], ['failed', 'npm-failed']] as const) {
+      const { sub, files } = harness({ npm: { ok: false, kind, message: 'boom' } });
+      expect(await sub.run([])).toMatchObject({ ok: false, error: { code } });
+      expect(files.size).toBe(0);
+    }
+  });
+
+  it('reports repository-unresolved without calling npm', async () => {
+    for (const repo of [null, 'https://gitlab.com/a/b.git']) {
+      const { sub, npmCalls } = harness({ repo });
+      expect(await sub.run([])).toMatchObject({ ok: false, error: { code: 'repository-unresolved' } });
+      expect(npmCalls).toEqual([]);
+    }
+  });
+
+  it('uninstall: npm failure keeps rc block and completion file', async () => {
+    const files = { [RC]: `${block}\n`, '/data/tui-back/completion.bash': 'x' };
+    const { sub, files: after } = harness({ npm: { ok: false, kind: 'failed', message: 'boom' }, files });
+    expect(await sub.run(['--uninstall'])).toMatchObject({ ok: false, error: { code: 'npm-failed' } });
+    expect(after.get(RC)).toBe(`${block}\n`);
+    expect(after.has('/data/tui-back/completion.bash')).toBe(true);
+  });
+
+  it('uninstall: npm-not-found is skipped and local pieces are still removed', async () => {
+    const files = { [RC]: `${block}\n`, '/data/tui-back/completion.bash': 'x' };
+    const { sub, files: after } = harness({ npm: { ok: false, kind: 'npm-not-found', message: 'x' }, files });
+    expect(await sub.run(['--uninstall'])).toMatchObject({ ok: true, data: { npmRemoved: false, rcBlockRemoved: true, completionRemoved: true } });
+    expect(after.get(RC)).toBe('');
+  });
+
+  it('turns port rejections into io-failed', async () => {
+    for (const throwOn of ['read', 'write', 'remove']) {
+      for (const args of [[], ['--uninstall']]) {
+        const { sub } = harness({ throwOn, files: { [RC]: `${block}\n`, '/data/tui-back/completion.bash': 'x' } });
+        const result = await sub.run(args);
+        if (!result.ok) {
+          expect(result.error.code).toBe('io-failed');
+        } else {
+          expect(throwOn === 'remove' && args.length === 0).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('refuses a start marker without an end marker on install and uninstall', async () => {
+    const files = { [RC]: 'a\n# >>> tui-back >>>\nalias x=y\n' };
+    for (const args of [[], ['--uninstall']]) {
+      const { sub, files: after, npmCalls } = harness({ files });
+      const result = await sub.run(args);
+      expect(result).toMatchObject({ ok: false, error: { code: 'rc-block-corrupt' } });
+      expect(!result.ok && result.error.message).toContain(RC);
+      expect(after.get(RC)).toBe(files[RC]);
+      expect(npmCalls).toEqual([]);
+    }
+  });
+
+  it('renders human text for install, uninstall and the shell warning', async () => {
+    const { sub } = harness();
+    const text = sub.humanText!;
+    expect(text({ npmInstalled: true, completionFile: '/c', rcFile: '/r', shellWarning: null, nextStep: 'Run `source ~/.bashrc`' })).toContain('source ~/.bashrc');
+    const warned = text({ npmInstalled: true, completionFile: '/c', rcFile: '/r', shellWarning: 'not bash', nextStep: 'n' });
+    expect(warned).toContain('Warning: not bash');
+    expect(text({ npmInstalled: true, completionFile: '/c', rcFile: '/r', shellWarning: null, nextStep: 'n' })).not.toContain('Warning');
+    const removed = text({ npmRemoved: true, completionRemoved: true, rcBlockRemoved: false, nextStep: 'n' });
+    expect(removed).toContain('Removed tui-back');
+    expect(removed).toContain('rc block absent');
+  });
+});

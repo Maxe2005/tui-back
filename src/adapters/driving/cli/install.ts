@@ -58,7 +58,7 @@ export function nodeUpgradeInstructions(version: string): string {
 
 /** `github:<owner>/<repo>` from a package.json `repository` URL, or null if it is not a GitHub URL. */
 export function githubSpecFromRepository(url: string): string | null {
-  const match = /github\.com[/:]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(url.trim());
+  const match = /^(?:git\+)?(?:(?:https?|ssh|git):\/\/(?:[^@/\s]+@)?|git@)github\.com[/:]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(url.trim());
   if (match !== null) {
     return `github:${match[1]}/${match[2]}`;
   }
@@ -66,12 +66,18 @@ export function githubSpecFromRepository(url: string): string | null {
   return shorthand === null ? null : `github:${shorthand[1]}`;
 }
 
+// Escapes the characters that stay special inside a double-quoted shell string.
+function escapeDoubleQuoted(value: string): string {
+  return value.replace(/[\\"$`]/g, '\\$&');
+}
+
 export function renderRcBlock(completionFile: string): string {
+  const quoted = escapeDoubleQuoted(completionFile);
   return [
     RC_START_MARKER,
     "alias tb='tui-back'",
     "alias tbt='tui-back tui'",
-    `[ -f "${completionFile}" ] && source "${completionFile}"`,
+    `[ -f "${quoted}" ] && source "${quoted}"`,
     RC_END_MARKER,
   ].join('\n');
 }
@@ -80,6 +86,8 @@ interface BlockSpan {
   start: number;
   end: number;
 }
+
+class CorruptRcBlockError extends Error {}
 
 function findBlocks(content: string): BlockSpan[] {
   const spans: BlockSpan[] = [];
@@ -91,7 +99,7 @@ function findBlocks(content: string): BlockSpan[] {
     }
     const endMarker = content.indexOf(RC_END_MARKER, start + RC_START_MARKER.length);
     if (endMarker === -1) {
-      return spans;
+      throw new CorruptRcBlockError('start marker without end marker');
     }
     let end = endMarker + RC_END_MARKER.length;
     if (content[end] === '\n') {
@@ -99,6 +107,19 @@ function findBlocks(content: string): BlockSpan[] {
     }
     spans.push({ start, end });
     from = end;
+  }
+}
+
+/** True when a start marker has no matching end marker (the block cannot be edited safely). */
+export function isRcBlockCorrupt(content: string): boolean {
+  try {
+    findBlocks(content);
+    return false;
+  } catch (error) {
+    if (error instanceof CorruptRcBlockError) {
+      return true;
+    }
+    throw error;
   }
 }
 
@@ -175,6 +196,10 @@ export function createInstallSubcommand(deps: InstallDeps): Subcommand {
   const completionFile = `${deps.dataDir}/completion.bash`;
   const rcFile = `${deps.homedir}/.bashrc`;
 
+  function corrupt(): Result<never> {
+    return err('rc-block-corrupt', `${rcFile} has a "${RC_START_MARKER}" marker without a matching "${RC_END_MARKER}". Fix or remove it by hand, then re-run.`, { rcFile });
+  }
+
   async function install(): Promise<Result<InstallData>> {
     if (!isSupportedNode(deps.nodeVersion)) {
       return err('unsupported-node', nodeUpgradeInstructions(deps.nodeVersion), { nodeVersion: deps.nodeVersion });
@@ -184,13 +209,16 @@ export function createInstallSubcommand(deps: InstallDeps): Subcommand {
     if (spec === null) {
       return err('repository-unresolved', 'package.json has no GitHub "repository" URL to install from.');
     }
+    const existing = await deps.installer.readFile(rcFile);
+    if (isRcBlockCorrupt(existing ?? '')) {
+      return corrupt();
+    }
     const npm = await deps.installer.npmGlobal('install', spec);
     if (!npm.ok) {
       return npmFailure(npm);
     }
     await deps.installer.writeFile(completionFile, generateBashCompletion({ commands: deps.commands() }));
-    const existing = (await deps.installer.readFile(rcFile)) ?? '';
-    await deps.installer.writeFile(rcFile, upsertRcBlock(existing, renderRcBlock(completionFile)));
+    await deps.installer.writeFile(rcFile, upsertRcBlock(existing ?? '', renderRcBlock(completionFile)));
     const shell = deps.env.SHELL ?? '';
     const shellWarning = /(^|\/)bash$/.test(shell)
       ? null
@@ -200,23 +228,34 @@ export function createInstallSubcommand(deps: InstallDeps): Subcommand {
 
   async function uninstall(): Promise<Result<UninstallData>> {
     const rc = await deps.installer.readFile(rcFile);
+    if (rc !== null && isRcBlockCorrupt(rc)) {
+      return corrupt();
+    }
+    const npm = await deps.installer.npmGlobal('uninstall', PACKAGE_NAME);
+    if (!npm.ok && npm.kind !== 'npm-not-found') {
+      return npmFailure(npm);
+    }
     const stripped = rc === null ? null : removeRcBlock(rc);
     if (stripped !== null) {
       await deps.installer.writeFile(rcFile, stripped);
     }
     const completionRemoved = await deps.installer.removeFile(completionFile);
-    const npm = await deps.installer.npmGlobal('uninstall', PACKAGE_NAME);
-    if (!npm.ok) {
-      return npmFailure(npm);
-    }
     return ok({
-      npmRemoved: true,
+      npmRemoved: npm.ok,
       completionRemoved,
       rcBlockRemoved: stripped !== null,
       completionFile,
       rcFile,
       nextStep: RELOAD_HINT,
     });
+  }
+
+  async function guarded(action: () => Promise<Result<unknown>>): Promise<Result<unknown>> {
+    try {
+      return await action();
+    } catch (error) {
+      return err('io-failed', `File operation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   return {
@@ -226,7 +265,7 @@ export function createInstallSubcommand(deps: InstallDeps): Subcommand {
       if (args.length > 1 || (args.length === 1 && args[0] !== '--uninstall')) {
         return err('invalid-argument', `Usage: ${INSTALL_USAGE}`);
       }
-      return args.length === 1 ? uninstall() : install();
+      return guarded(args.length === 1 ? uninstall : install);
     },
     humanText: (data) => {
       const d = data as Partial<InstallData & UninstallData>;
@@ -239,7 +278,7 @@ export function createInstallSubcommand(deps: InstallDeps): Subcommand {
               ...(d.shellWarning ? [`Warning: ${d.shellWarning}`] : []),
             ]
           : [
-              `Removed ${PACKAGE_NAME} (global package, completion file ${d.completionRemoved === true ? 'removed' : 'absent'}, rc block ${d.rcBlockRemoved === true ? 'removed' : 'absent'}).`,
+              `Removed ${PACKAGE_NAME} (global package ${d.npmRemoved === true ? 'removed' : 'skipped: npm not found'}, completion file ${d.completionRemoved === true ? 'removed' : 'absent'}, rc block ${d.rcBlockRemoved === true ? 'removed' : 'absent'}).`,
             ];
       return [...lines, d.nextStep ?? RELOAD_HINT].join('\n');
     },

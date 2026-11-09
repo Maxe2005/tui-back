@@ -25,3 +25,9 @@ Only bash is supported. With another `$SHELL` the npm install still runs and the
 `--uninstall` removes the rc block, the completion file and the global package. A missing piece is skipped, never an error.
 
 Piped output is one JSON line: `{ npmInstalled, completionFile, rcFile, shellWarning, nextStep }` (uninstall: `{ npmRemoved, completionRemoved, rcBlockRemoved, completionFile, rcFile, nextStep }`).
+
+## Error codes
+
+`unsupported-node`, `permission-denied`, `npm-not-found`, `npm-failed`, `repository-unresolved`, `io-failed`, `rc-block-corrupt` (a start marker without its end marker in `~/.bashrc`: fix it by hand), `invalid-argument`. All exit 1.
+
+`--uninstall` runs `npm uninstall -g` first; if that fails, the rc block and completion file are left untouched so a retry works. If `npm` is not found, the package removal is skipped and the local pieces are still removed. Only the completion file is deleted: the rest of the data directory is left in place.

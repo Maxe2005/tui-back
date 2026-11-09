@@ -2700,6 +2700,18 @@ describe('tui-back install (black-box)', () => {
     expect(await readdir(data)).toEqual([]);
   });
 
+  it('--uninstall keeps the rc block and completion file when npm fails', async () => {
+    const { env, home, data } = await makeInstallEnv();
+    expect(runCli(['install'], env).status).toBe(0);
+    const failing = await makeInstallEnv({}, 'echo "npm ERR! boom" >&2; exit 1');
+    const failEnv = { ...env, PATH: failing.env.PATH };
+    const { status, stdout } = runCli(['install', '--uninstall'], failEnv);
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout.trim()).error.code).toBe('npm-failed');
+    expect(await readFile(join(home, '.bashrc'), 'utf8')).toContain('# >>> tui-back >>>');
+    await access(join(data, 'tui-back', 'completion.bash'), constants.F_OK);
+  });
+
   it('reports EACCES with the prefix remedy and changes no file', async () => {
     const { env, home, data } = await makeInstallEnv({}, 'echo "npm ERR! code EACCES" >&2; exit 243');
     const { status, stdout } = runCli(['install'], env);

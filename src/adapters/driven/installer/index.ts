@@ -38,7 +38,8 @@ export function createInstallerPort(): InstallerPort {
       if (/EACCES|EPERM/.test(output)) {
         return { ok: false, kind: 'permission-denied', message: output.trim() };
       }
-      return { ok: false, kind: 'failed', message: output.trim().split('\n').slice(-5).join('\n') };
+      const tail = output.trim().split('\n').slice(-5).join('\n');
+      return { ok: false, kind: 'failed', message: tail === '' ? `npm exited with status ${String(result.status)}` : tail };
     },
     async readFile(path) {
       try {
