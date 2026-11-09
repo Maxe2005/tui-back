@@ -2,6 +2,10 @@
   "name": "tui-back",
   "version": "1.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Maxe2005/tui-back.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"
