@@ -3,7 +3,7 @@ title: 'Story 5.8 — Hide / Show-Only Log Filters'
 type: 'feature'
 created: '2026-11-09'
 baseline_commit: 'f3f95b86b692beb15991d8e704dd7f9022e2a47d'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-5/epic-5-context.md'
@@ -91,3 +91,43 @@ Key choice and history encoding are left to the implementer within constraints: 
 - `npm test` -- expected: all pass
 - `npm run typecheck` -- expected: no errors (use the script names in package.json)
 - `npm run lint` -- expected: clean (includes comment hygiene and dependency-cruiser tests)
+
+## Suggested Review Order
+
+**Filter model and matching**
+
+- Spec gains action/target; default detection must include both.
+  [`logs-zone.logic.ts:466`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L466)
+
+- Compile returns `apply`: line, rewritten copy, or null; empty matches skipped.
+  [`logs-zone.logic.ts:543`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L543)
+
+- Global then pane filter chained; originals never mutated.
+  [`logs-zone.logic.ts:625`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L625)
+
+**History encoding**
+
+- Non-default entries carry a header; bare strings stay show+line.
+  [`logs-zone.logic.ts:790`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L790)
+
+**Editor and keys**
+
+- Ctrl+X / Ctrl+T toggles; close grid, end browse.
+  [`logs-zone.tsx:620`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L620)
+
+- Snap-back restores the draft's action/target too.
+  [`logs-zone.tsx:473`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L473)
+
+- Indicator shares the Level row, truncated, no extra height.
+  [`log-filter-editor.tsx:68`](../../../src/adapters/driving/tui/zones/logs/log-filter-editor.tsx#L68)
+
+- Keys declared once for footer and help.
+  [`footer-contexts.ts:152`](../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L152)
+
+**Tests**
+
+- Four combos, empty match, Unicode, encoding round-trip.
+  [`logs-zone.logic.test.ts`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.test.ts)
+
+- Real-keystroke recall, snap-back, grid, pane editor, Esc.
+  [`logs-zone.interaction.test.tsx`](../../../src/adapters/driving/tui/zones/logs/logs-zone.interaction.test.tsx)
