@@ -18,6 +18,7 @@ A developer can view a live, filterable, aggregated log stream across multiple s
 - Story 5.8: Hide / Show-Only Log Filters (reopened)
 - Story 5.9: Stackable Log Filter Rules (reopened)
 - Story 5.10: Persisted Filter Rules and Named Rule Sets (reopened)
+- Story 5.11: ANSI-Aware Log Filter Rules (reopened)
 
 ## Requirements & Constraints
 
