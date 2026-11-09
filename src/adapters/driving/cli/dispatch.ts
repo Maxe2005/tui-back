@@ -20,7 +20,11 @@ export interface HelpData {
 function buildHelp(subcommands: Subcommand[]): HelpData {
   return {
     usage: 'tui-back <command> [args]',
-    commands: subcommands.map((candidate) => ({ name: candidate.name, usage: candidate.usage })),
+    commands: [
+      ...subcommands.map((candidate) => ({ name: candidate.name, usage: candidate.usage })),
+      // `tui` is routed by the bin shim, not the subcommand registry, so it is listed statically.
+      { name: 'tui', usage: 'tui-back tui' },
+    ],
   };
 }
 

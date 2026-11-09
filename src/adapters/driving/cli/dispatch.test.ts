@@ -115,7 +115,10 @@ describe('runCli', () => {
       ok: true,
       data: {
         usage: 'tui-back <command> [args]',
-        commands: fakeSubcommands.map((subcommand) => ({ name: subcommand.name, usage: subcommand.usage })),
+        commands: [
+          ...fakeSubcommands.map((subcommand) => ({ name: subcommand.name, usage: subcommand.usage })),
+          { name: 'tui', usage: 'tui-back tui' },
+        ],
       },
     });
   });
