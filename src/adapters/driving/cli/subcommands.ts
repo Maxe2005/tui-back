@@ -47,6 +47,7 @@ import { fireRequest, type FireRequestOptions } from '../../../core/routes/fire-
 import { deleteSavedRequest, fireSavedRequest, listSavedRequests, saveRequest } from '../../../core/routes/saved-requests.js';
 import type { Subcommand } from './dispatch.js';
 import { generateBashCompletion } from './completion-spec.js';
+import { createInstallSubcommand, type InstallerPort } from './install.js';
 
 const EDT_CREATE_USAGE =
   'tui-back edt create --topic <topic> --member <path> [--create-branches] ' +
@@ -134,6 +135,8 @@ export function buildSubcommands(deps: {
   scanner: RouteScannerPort;
   auth: DevAuthPort;
   savedRequests: SavedRequestPort;
+  // `install` wiring: the real installer plus the runtime facts it checks (Node version, SHELL, home, XDG data dir).
+  install: { installer: InstallerPort; nodeVersion: string; env: NodeJS.ProcessEnv; homedir: string; dataDir: string };
 }): Subcommand[] {
   const subcommands: Subcommand[] = [
     {
@@ -525,6 +528,7 @@ export function buildSubcommands(deps: {
       },
     },
   ];
+  subcommands.push(createInstallSubcommand({ ...deps.install, commands: () => subcommands }));
   // Registered last and closing over the final list, so the generated script includes itself.
   subcommands.push({
     name: 'completion',

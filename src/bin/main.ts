@@ -2,6 +2,7 @@
 // registry from the driven ports and hands argv to the dispatcher. No explicit process.exit():
 // calling it right after stdout.write() does not guarantee the write is flushed when stdout
 // is a pipe, so exitCode is set and the script ends naturally.
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { runCli } from '../adapters/driving/cli/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
@@ -20,6 +21,7 @@ import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/drive
 import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
 import { createSavedRequestPort, resolveGlobalDbFile } from '../adapters/driven/saved-requests/index.js';
 import { createSettingsPort, resolveSettingsFile } from '../adapters/driven/settings/index.js';
+import { createInstallerPort } from '../adapters/driven/installer/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
 import { moduleRegistry, resolveModule } from '../adapters/driven/modules/module-registry.js';
 import { ROUTES_MODULE_ID } from '../core/edt/resolve-tab-visibility.js';
@@ -94,6 +96,7 @@ const subcommands = buildSubcommands({
   scanner: routeExplorer.scanner,
   auth: routeExplorer.auth,
   savedRequests,
+  install: { installer: createInstallerPort(), nodeVersion: process.version, env: process.env, homedir: homedir(), dataDir: xdg.dataDir },
 });
 
 const { output, exitCode } = await runCli(process.argv.slice(2), subcommands, isTTY);

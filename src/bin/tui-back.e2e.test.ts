@@ -801,7 +801,7 @@ describe('tui-back --help (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'heal', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete', 'completion', 'tui']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'heal', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete', 'install', 'completion', 'tui']);
   });
 });
 
@@ -2639,5 +2639,106 @@ describe('tui-back completion bash (black-box)', () => {
       .filter((w) => w !== '--help' && w !== '-h')
       .sort();
     expect(scriptNames).toEqual(helpNames);
+  });
+});
+
+describe('tui-back install (black-box)', () => {
+  async function makeInstallEnv(extra: NodeJS.ProcessEnv = {}, npmScript = 'exit 0'): Promise<{ env: NodeJS.ProcessEnv; home: string; data: string; log: string }> {
+    const home = await makeTempDir();
+    const data = await makeTempDir();
+    const stubDir = await makeTempDir();
+    const log = join(stubDir, 'npm.log');
+    await writeFile(join(stubDir, 'npm'), `#!/bin/sh\necho "$@" >> "${log}"\n${npmScript}\n`, { mode: 0o755 });
+    const env = { HOME: home, XDG_DATA_HOME: data, SHELL: '/bin/bash', PATH: `${stubDir}${delimiter}${process.env.PATH}`, ...extra };
+    return { env, home, data, log };
+  }
+
+  it('installs globally, writes the completion file and one idempotent rc block', async () => {
+    const { env, home, data, log } = await makeInstallEnv();
+    await writeFile(join(home, '.bashrc'), 'export KEEP=1\n');
+    for (let run = 0; run < 2; run++) {
+      const { status, stdout } = runCli(['install'], env);
+      expect(status).toBe(0);
+      const parsed = JSON.parse(stdout.trim());
+      expect(parsed.ok).toBe(true);
+      expect(parsed.data).toMatchObject({
+        npmInstalled: true,
+        completionFile: join(data, 'tui-back', 'completion.bash'),
+        rcFile: join(home, '.bashrc'),
+        shellWarning: null,
+      });
+    }
+    expect((await readFile(log, 'utf8')).trim().split('\n')).toEqual(['install -g github:Maxe2005/tui-back', 'install -g github:Maxe2005/tui-back']);
+    const rc = await readFile(join(home, '.bashrc'), 'utf8');
+    expect(rc.startsWith('export KEEP=1\n')).toBe(true);
+    expect(rc.match(/# >>> tui-back >>>/g)).toHaveLength(1);
+    expect(rc).toContain("alias tb='tui-back'");
+    expect(rc).toContain("alias tbt='tui-back tui'");
+    const completion = await readFile(join(data, 'tui-back', 'completion.bash'), 'utf8');
+    expect(completion).toContain('install');
+    expect(spawnSync('bash', ['-n'], { input: completion }).status).toBe(0);
+    expect(spawnSync('bash', ['-n'], { input: rc }).status).toBe(0);
+  });
+
+  it('--uninstall reverses all three pieces and leaves the rest of the rc file', async () => {
+    const { env, home, data, log } = await makeInstallEnv();
+    await writeFile(join(home, '.bashrc'), 'export KEEP=1\n');
+    expect(runCli(['install'], env).status).toBe(0);
+    const { status, stdout } = runCli(['install', '--uninstall'], env);
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout.trim()).data).toMatchObject({ npmRemoved: true, completionRemoved: true, rcBlockRemoved: true });
+    expect(await readFile(join(home, '.bashrc'), 'utf8')).toBe('export KEEP=1\n');
+    await expect(access(join(data, 'tui-back', 'completion.bash'), constants.F_OK)).rejects.toThrow();
+    expect((await readFile(log, 'utf8')).trim().split('\n').pop()).toBe('uninstall -g tui-back');
+  });
+
+  it('--uninstall on a clean machine exits 0 and creates nothing', async () => {
+    const { env, home, data } = await makeInstallEnv();
+    const { status } = runCli(['install', '--uninstall'], env);
+    expect(status).toBe(0);
+    expect(await readdir(home)).toEqual([]);
+    expect(await readdir(data)).toEqual([]);
+  });
+
+  it('--uninstall keeps the rc block and completion file when npm fails', async () => {
+    const { env, home, data } = await makeInstallEnv();
+    expect(runCli(['install'], env).status).toBe(0);
+    const failing = await makeInstallEnv({}, 'echo "npm ERR! boom" >&2; exit 1');
+    const failEnv = { ...env, PATH: failing.env.PATH };
+    const { status, stdout } = runCli(['install', '--uninstall'], failEnv);
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout.trim()).error.code).toBe('npm-failed');
+    expect(await readFile(join(home, '.bashrc'), 'utf8')).toContain('# >>> tui-back >>>');
+    await access(join(data, 'tui-back', 'completion.bash'), constants.F_OK);
+  });
+
+  it('reports EACCES with the prefix remedy and changes no file', async () => {
+    const { env, home, data } = await makeInstallEnv({}, 'echo "npm ERR! code EACCES" >&2; exit 243');
+    const { status, stdout } = runCli(['install'], env);
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.error.code).toBe('permission-denied');
+    expect(parsed.error.message).toContain('npm config set prefix ~/.local');
+    expect(parsed.error.message).toContain('PATH');
+    expect(await readdir(home)).toEqual([]);
+    expect(await readdir(data)).toEqual([]);
+  });
+
+  it('warns on a non-bash shell but still installs', async () => {
+    const { env } = await makeInstallEnv({ SHELL: '/usr/bin/zsh' });
+    const { status, stdout } = runCli(['install'], env);
+    expect(status).toBe(0);
+    const parsed = JSON.parse(stdout.trim());
+    expect(parsed.data.npmInstalled).toBe(true);
+    expect(parsed.data.shellWarning).toContain('zsh');
+  });
+
+  it('rejects unknown flags and extra arguments with invalid-argument', async () => {
+    const { env } = await makeInstallEnv();
+    for (const args of [['install', '--bogus'], ['install', 'extra']]) {
+      const { status, stdout } = runCli(args, env);
+      expect(status).toBe(1);
+      expect(JSON.parse(stdout.trim()).error.code).toBe('invalid-argument');
+    }
   });
 });

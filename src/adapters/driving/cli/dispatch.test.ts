@@ -292,6 +292,19 @@ describe('subcommand registry guards', () => {
       scanner,
       auth,
       savedRequests: fakeSavedRequests(),
+      install: {
+        installer: {
+          repositoryUrl: async () => null,
+          npmGlobal: async () => ({ ok: true as const }),
+          readFile: async () => null,
+          writeFile: async () => undefined,
+          removeFile: async () => false,
+        },
+        nodeVersion: 'v24.0.0',
+        env: {},
+        homedir: '/home/test',
+        dataDir: '/data',
+      },
       ...overrides,
     });
   }
@@ -316,6 +329,7 @@ describe('subcommand registry guards', () => {
       'request-list',
       'request-fire',
       'request-delete',
+      'install',
       'completion',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
