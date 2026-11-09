@@ -2,7 +2,8 @@
 title: 'Story 5.9 — Stackable Log Filter Rules'
 type: 'feature'
 created: '2026-11-09'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: '401fb8a4ed07ea48aacb1ea8f0038b65a7b27176'
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md'
@@ -87,3 +88,26 @@ Level stays per scope (not per rule) to honour "level ANDs with the pipeline". L
 - `npm test` -- expected: all pass
 - `npm run typecheck` -- expected: no errors
 - `npm run lint` -- expected: clean
+
+## Suggested Review Order
+
+**Pipeline and rule model**
+
+- Rules, scope type, cap and `applyLogRules` pipeline.
+  [`logs-zone.logic.ts`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts)
+
+**List view and editor contract**
+
+- List keys, rule commit, Esc semantics, clear-all confirmation.
+  [`logs-zone.tsx`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx)
+
+- Bounded rule list rendering.
+  [`log-filter-editor.tsx`](../../../src/adapters/driving/tui/zones/logs/log-filter-editor.tsx)
+
+**State and keys**
+
+- Scope shape in the store.
+  [`logs-slice.ts`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts)
+
+- Declared keys for footer and help.
+  [`footer-contexts.ts`](../../../src/adapters/driving/tui/keybindings/footer-contexts.ts)
