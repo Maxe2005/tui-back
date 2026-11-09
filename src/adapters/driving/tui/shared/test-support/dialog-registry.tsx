@@ -261,7 +261,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
     file: 'zones/logs/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
-        editor: { scope: 'global', repoPath: null, mode: 'text', query: '', cursor: 0, level: null, error: MULTILINE_ERROR } as never,
+        editor: { scope: 'global', repoPath: null, mode: 'text', query: '', cursor: 0, level: null, action: 'show', target: 'line', error: MULTILINE_ERROR } as never,
         serviceName: 's'.repeat(500),
         history: Array.from({ length: 300 }, (_, i) => `history-entry-${i}-${'h'.repeat(100)}`),
         gridMaxRows: 8,
