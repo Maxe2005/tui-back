@@ -2,7 +2,7 @@
 title: 'Extract Pure Logic from json-tree and the Command Bar'
 type: 'refactor'
 created: '2026-11-12'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'f4111a059e479ce0ea72bba03e73d1e7ee01f54e'
 review_loop_iteration: 0
 context:
@@ -42,10 +42,10 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `json-tree/tree-build.ts` -- extract build/flatten/fold + shared types; re-export from `model.ts`
-- [ ] `json-tree/tree-filter.ts`, `tree-keys.ts`, `tree-selection.ts` -- one per commit
-- [ ] `json-tree/body-edit-path.ts`, `body-draft.ts` -- one per commit; `model.ts` reduced to header + `export *`
-- [ ] `shared/command-grid.logic.ts` -- move tab/grid logic out of `command-bar.tsx`; re-export from it
+- [x] `json-tree/tree-build.ts` -- extract build/flatten/fold + shared types; re-export from `model.ts`
+- [x] `json-tree/tree-filter.ts`, `tree-keys.ts`, `tree-selection.ts` -- one per commit
+- [x] `json-tree/body-edit-path.ts`, `body-draft.ts` -- one per commit; `model.ts` reduced to header + `export *`
+- [x] `shared/command-grid.logic.ts` -- move tab/grid logic out of `command-bar.tsx`; re-export from it
 
 **Acceptance Criteria:**
 - Given the split, when `model.test.ts`, `json-tree.test.tsx`, `command-bar.test.tsx` and `command-bar.history.interaction.test.tsx` run unchanged, then they pass.
@@ -59,3 +59,38 @@ context:
 **Commands:**
 - `npm test && npm run typecheck && npm run depcheck` -- expected: all green
 - `wc -l src/adapters/driving/tui/shared/components/json-tree/*.ts src/adapters/driving/tui/shared/command-*.ts*` -- expected: ≤ ~400 per source file
+
+## Suggested Review Order
+
+**Public surface kept stable**
+
+- `model.ts` is now only `export *` from six modules; importers are untouched.
+  [`model.ts:1`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L1)
+
+- `command-bar.tsx` re-exports the moved grid logic and keeps rendering and input wiring.
+  [`command-bar.tsx:1`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L1)
+
+**json-tree split**
+
+- Tree building, flattening and fold reducers; owns shared types.
+  [`tree-build.ts:1`](../../../../src/adapters/driving/tui/shared/components/json-tree/tree-build.ts#L1)
+
+- Filter rule reducers.
+  [`tree-filter.ts:1`](../../../../src/adapters/driving/tui/shared/components/json-tree/tree-filter.ts#L1)
+
+- Key dispatch resolution.
+  [`tree-keys.ts:1`](../../../../src/adapters/driving/tui/shared/components/json-tree/tree-keys.ts#L1)
+
+- Selection, body classification and viewport budgets.
+  [`tree-selection.ts:1`](../../../../src/adapters/driving/tui/shared/components/json-tree/tree-selection.ts#L1)
+
+- Path-based body edit ops (425 lines, slightly over the ~400 target).
+  [`body-edit-path.ts:1`](../../../../src/adapters/driving/tui/shared/components/json-tree/body-edit-path.ts#L1)
+
+- Draft helpers and edit-status formatting.
+  [`body-draft.ts:1`](../../../../src/adapters/driving/tui/shared/components/json-tree/body-draft.ts#L1)
+
+**Command bar split**
+
+- Tab-autocomplete and grid layout/cursor logic moved out of the component.
+  [`command-grid.logic.ts:1`](../../../../src/adapters/driving/tui/shared/command-grid.logic.ts#L1)
