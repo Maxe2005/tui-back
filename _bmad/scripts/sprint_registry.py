@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Multi-sprint registry for BMAD: resolve / list / new / activate / close.
+"""Multi-sprint registry for BMAD: resolve / list / new / activate / close / check.
 
 Registry: {project-root}/_bmad-output/sprints/registry.json (stdlib only).
 Layout (one folder per sprint, same name in both trees):
@@ -57,6 +57,47 @@ def view(s, active):
     }
 
 
+def check(reg):
+    """Validate the on-disk layout against the registry; returns a list of problems."""
+    ia, sp, pa = ROOT / "_bmad-output" / "implementation-artifacts", ROOT / "_bmad-output" / "sprints", ROOT / "_bmad-output" / "planning-artifacts"
+    probs, sprint_dirs = [], set()
+    for s in reg["sprints"]:
+        e, a, st = ROOT / s["epics_file"], ROOT / s["artifacts_dir"], ROOT / s["status_file"]
+        sprint_dirs.add(e.parent.name)
+        if e.parent.name != a.name:
+            probs.append(f"{s['id']}: sprint folder names differ ({e.parent.name} vs {a.name})")
+        if e.parent.parent != sp or a.parent != ia:
+            probs.append(f"{s['id']}: epics_file/artifacts_dir not at _bmad-output/sprints/<sprint>/ and implementation-artifacts/<sprint>/")
+        if st.parent != a:
+            probs.append(f"{s['id']}: status_file must live in artifacts_dir")
+        for f, label in ((e, "epics_file"), (st, "status_file")):
+            if not f.exists():
+                probs.append(f"{s['id']}: missing {label} {f.relative_to(ROOT)}")
+        for c in a.glob("epic-*") if a.exists() else []:
+            if not re.fullmatch(r"epic-\d+(-context\.md)?", c.name):
+                probs.append(f"{c.relative_to(ROOT)}: unexpected name (expected epic-N/ or epic-N-context.md)")
+        for c in sorted(a.glob("epic-*/*")) if a.exists() else []:
+            pass
+    for c in sorted(ia.iterdir()) if ia.exists() else []:
+        if c.name != "deferred-work.md" and c.name not in sprint_dirs:
+            probs.append(f"{c.relative_to(ROOT)}: not allowed at implementation-artifacts root (only deferred-work.md + one folder per sprint)")
+    for c in sorted(sp.iterdir()) if sp.exists() else []:
+        if c.name != "registry.json" and c.name not in sprint_dirs:
+            probs.append(f"{c.relative_to(ROOT)}: not allowed at sprints root (only registry.json + one folder per sprint)")
+    for s in reg["sprints"]:
+        d = (ROOT / s["epics_file"]).parent
+        for c in sorted(d.iterdir()) if d.exists() else []:
+            if c.name != "epics.md" and not re.fullmatch(r"sprint-change-proposal-.+\.md", c.name):
+                probs.append(f"{c.relative_to(ROOT)}: sprint folder holds only epics.md + sprint-change-proposal-*.md")
+        a = ROOT / s["artifacts_dir"]
+        for c in sorted(a.iterdir()) if a.exists() else []:
+            if not (c.name in ("sprint-status.yaml", "sprint-status-archive.yaml", "no-epic") or re.fullmatch(r"epic-\d+(-context\.md)?", c.name)):
+                probs.append(f"{c.relative_to(ROOT)}: unexpected entry in a sprint's implementation folder")
+    for stray in sorted(pa.glob("sprint-change-proposal-*.md")) + sorted(pa.glob("epics*.md")):
+        probs.append(f"{stray.relative_to(ROOT)}: belongs in its sprint folder under _bmad-output/sprints/")
+    return probs
+
+
 def max_epic(reg):
     n = 0
     for s in reg["sprints"]:
@@ -76,6 +117,7 @@ def main():
     a = sub.add_parser("activate"); a.add_argument("sprint")
     c = sub.add_parser("close"); c.add_argument("sprint")
     sub.add_parser("next-epic")
+    sub.add_parser("check")
     args = ap.parse_args()
     reg = load()
 
@@ -83,6 +125,9 @@ def main():
         out(view(find(reg, args.sprint or reg["active"]), reg["active"]))
     if args.cmd == "list":
         out({"ok": True, "active": reg["active"], "sprints": [view(s, reg["active"]) for s in reg["sprints"]]})
+    if args.cmd == "check":
+        probs = check(reg)
+        out({"ok": not probs, "problems": probs}, 1 if probs else 0)
     if args.cmd == "next-epic":
         out({"ok": True, "next_epic_number": max_epic(reg) + 1})
     if args.cmd == "new":
