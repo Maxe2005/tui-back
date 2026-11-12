@@ -43,6 +43,7 @@ import {
   type UpdateMergeSourceDefault,
 } from '../../../../core/ports/settings.js';
 import { StateLine } from './components/state-line.js';
+import { GLOBAL_RULES_KEY } from '../../../../core/logs/rule-sets.js';
 import { BoundedList } from './components/bounded-list.js';
 import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../core/edt/list.js';
 
@@ -484,7 +485,8 @@ export type LogsSettingsGroupId =
   | 'filter-history-grid'
   | 'filter-history-dedup'
   | 'restart-mode'
-  | 'clear-history';
+  | 'clear-history'
+  | 'filter-rules';
 
 export type LogsSettingsGroup = { id: LogsSettingsGroupId; label: string };
 
@@ -496,6 +498,7 @@ export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
   { id: 'filter-history-dedup', label: 'Filter history dedup' },
   { id: 'restart-mode', label: 'Restart mode' },
   { id: 'clear-history', label: 'Clear history' },
+  { id: 'filter-rules', label: 'Persisted filter rules' },
 ];
 
 // The Command Palette tab's group list, same two-level shape as the Logs tab: the grid height
@@ -529,6 +532,7 @@ const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | Pale
   'filter-history-dedup': 'settings-toggle',
   'restart-mode': 'settings-toggle',
   'clear-history': 'settings-run',
+  'filter-rules': 'settings-rules',
 };
 
 // The footer context of the current tab and drill-down level: a text edit is a plain
@@ -540,6 +544,8 @@ export function settingsFooterContext(
     edtsGroup: SettingsGroupId | null;
     logsGroup: LogsSettingsGroupId | null;
     paletteGroup?: PaletteSettingsGroupId | null;
+    // True while a Logs "persisted filter rules" action waits for its confirmation.
+    logsRulesConfirming?: boolean;
   },
 ): FooterContextId {
   switch (tab) {
@@ -556,6 +562,9 @@ export function settingsFooterContext(
     case 'services':
       return 'settings-services';
     case 'logs':
+      if (state.logsGroup === 'filter-rules' && state.logsRulesConfirming === true) {
+        return 'settings-rules-confirm';
+      }
       return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
   }
 }
@@ -571,6 +580,20 @@ export const LOGS_CLEAR_ROW_LABELS: Record<LogsClearRowId, string> = {
   'clear-global': 'Clear global filter history',
   'clear-service': "Clear a service's filter history",
 };
+
+// "Persisted filter rules" holds two separate, confirmed actions: clearing one scope's persisted
+// rule list (a scope picker one level below) and deleting the whole named-set library.
+export type LogsRulesRowId = 'clear-scope' | 'delete-library';
+
+export const LOGS_RULES_ROWS: readonly LogsRulesRowId[] = ['clear-scope', 'delete-library'];
+
+export const LOGS_RULES_ROW_LABELS: Record<LogsRulesRowId, string> = {
+  'clear-scope': "Clear one scope's persisted rules",
+  'delete-library': 'Delete the whole rule-set library',
+};
+
+// What a pending confirmation will do once accepted.
+export type LogsRulesConfirm = { kind: 'scope'; key: string; label: string } | { kind: 'library' };
 
 // Self-contained Esc handling (like command-bar.tsx's `onClose`): the drill-down state is local
 // to this component, so only it can decide whether Esc steps back a level or closes the whole
@@ -618,6 +641,11 @@ export function SettingsScreen({
   const clearGlobalFilterHistory = useStore((state) => state.clearGlobalFilterHistory);
   const clearServiceFilterHistory = useStore((state) => state.clearServiceFilterHistory);
   const clearCommandHistory = useStore((state) => state.clearCommandHistory);
+  const clearLogsScopeRules = useStore((state) => state.clearLogsScopeRules);
+  const clearLogsRuleSets = useStore((state) => state.clearLogsRuleSets);
+  const logsRuleSets = useStore((state) => state.logsRuleSets);
+  const logsGlobalFilter = useStore((state) => state.logsGlobalFilter);
+  const logsPaneFilters = useStore((state) => state.logsPaneFilters);
   const edtsBranches = useStore((state) => state.edtsBranches);
   const edtsErrors = useStore((state) => state.edtsErrors);
   const loadEdtsBranches = useStore((state) => state.loadEdtsBranches);
@@ -646,6 +674,23 @@ export function SettingsScreen({
   const [logsClearServiceOpen, setLogsClearServiceOpen] = useState(initialLogsClearServiceOpen);
   const [logsClearServiceCursor, setLogsClearServiceCursor] = useState(0);
   const logsServices = edtsBranches ?? [];
+  // The "persisted filter rules" group: its two-row list, the scope picker below the first row,
+  // and the confirmation every action waits for.
+  const [logsRulesRowCursor, setLogsRulesRowCursor] = useState(0);
+  const [logsRulesScopeOpen, setLogsRulesScopeOpen] = useState(false);
+  const [logsRulesScopeCursor, setLogsRulesScopeCursor] = useState(0);
+  const [logsRulesConfirm, setLogsRulesConfirm] = useState<LogsRulesConfirm | null>(null);
+  // Every scope with a persisted list: global, each listed service, and (so they can still be
+  // cleared) services that are no longer listed.
+  const listedPaths = new Set(logsServices.map((service) => service.path));
+  const logsRulesScopes = [
+    { key: GLOBAL_RULES_KEY, label: 'Global filter', count: logsGlobalFilter.rules.length },
+    ...logsServices.map((service) => ({ key: service.path, label: service.service, count: logsPaneFilters[service.path]?.rules.length ?? 0 })),
+    ...Object.entries(logsPaneFilters)
+      .filter(([path, scope]) => !listedPaths.has(path) && scope.rules.length > 0)
+      .map(([path, scope]) => ({ key: path, label: `${path} (not listed)`, count: scope.rules.length })),
+  ];
+  const logsRulesScopeIndex = Math.min(logsRulesScopeCursor, Math.max(logsRulesScopes.length - 1, 0));
   // The Command Palette tab's group list (same shape as the Logs tab's).
   const [paletteGroup, setPaletteGroup] = useState<PaletteSettingsGroupId | null>(initialPaletteGroup);
   const [paletteGroupCursor, setPaletteGroupCursor] = useState(0);
@@ -672,7 +717,13 @@ export function SettingsScreen({
 
   useFooterContext(
     'settings',
-    settingsFooterContext(tab, { generalEditing: generalEditing !== null, edtsGroup, logsGroup, paletteGroup }),
+    settingsFooterContext(tab, {
+      generalEditing: generalEditing !== null,
+      edtsGroup,
+      logsGroup,
+      paletteGroup,
+      logsRulesConfirming: logsRulesConfirm !== null,
+    }),
     useStore,
   );
 
@@ -690,6 +741,14 @@ export function SettingsScreen({
       }
       if (tab === 'command-palette' && paletteGroup !== null) {
         setPaletteGroup(null);
+        return;
+      }
+      if (tab === 'logs' && logsRulesConfirm !== null) {
+        setLogsRulesConfirm(null);
+        return;
+      }
+      if (tab === 'logs' && logsRulesScopeOpen) {
+        setLogsRulesScopeOpen(false);
         return;
       }
       if (tab === 'logs' && logsClearServiceOpen) {
@@ -716,6 +775,8 @@ export function SettingsScreen({
       setLogsGroup(null);
       setLogsGroupCursor(0);
       setLogsClearServiceOpen(false);
+      setLogsRulesScopeOpen(false);
+      setLogsRulesConfirm(null);
       setPaletteGroup(null);
       setPaletteGroupCursor(0);
       setTab((current) => nextSettingsTab(current, tabStep === 'back' ? -1 : 1));
@@ -869,6 +930,48 @@ export function SettingsScreen({
           if (service) {
             clearServiceFilterHistory(service.path);
           }
+        }
+        return;
+      }
+
+      // "Persisted filter rules": every action asks first (y/Enter accepts, anything else cancels),
+      // and each clears only what it targets — one scope's list, or the library.
+      if (logsGroup === 'filter-rules') {
+        if (logsRulesConfirm !== null) {
+          if (input === 'y' || input === 'Y' || key.return) {
+            if (logsRulesConfirm.kind === 'scope') {
+              clearLogsScopeRules(logsRulesConfirm.key);
+              setLogsRulesScopeOpen(false);
+            } else {
+              clearLogsRuleSets();
+            }
+          }
+          setLogsRulesConfirm(null);
+          return;
+        }
+        if (logsRulesScopeOpen) {
+          const moved = nextCursorForKey(key, logsRulesScopeIndex, logsRulesScopes.length);
+          if (moved !== null) {
+            setLogsRulesScopeCursor(moved);
+            return;
+          }
+          const scope = logsRulesScopes[logsRulesScopeIndex];
+          if (key.return && scope !== undefined && scope.count > 0) {
+            setLogsRulesConfirm({ kind: 'scope', key: scope.key, label: scope.label });
+          }
+          return;
+        }
+        const moved = nextCursorForKey(key, logsRulesRowCursor, LOGS_RULES_ROWS.length);
+        if (moved !== null) {
+          setLogsRulesRowCursor(moved);
+          return;
+        }
+        const row = LOGS_RULES_ROWS[logsRulesRowCursor];
+        if (row === 'clear-scope' && key.return) {
+          setLogsRulesScopeOpen(true);
+          setLogsRulesScopeCursor(0);
+        } else if (row === 'delete-library' && key.return && logsRuleSets.length > 0) {
+          setLogsRulesConfirm({ kind: 'library' });
         }
         return;
       }
@@ -1385,6 +1488,54 @@ export function SettingsScreen({
             />
             <DimAnnotation text="Clears that service's filter history (text + regex)." />
           </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'filter-rules' && !logsRulesScopeOpen ? (
+          <Box flexDirection="column">
+            {LOGS_RULES_ROWS.map((row, index) => {
+              const highlighted = index === logsRulesRowCursor;
+              return (
+                <Box key={row} flexDirection="row">
+                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">
+                    {LOGS_RULES_ROW_LABELS[row]}
+                    {row === 'delete-library' ? ` (${logsRuleSets.length} ${logsRuleSets.length === 1 ? 'set' : 'sets'})` : ''}
+                  </Text>
+                </Box>
+              );
+            })}
+            <DimAnnotation text="Active rule lists and the library are cleared separately; each asks first." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'filter-rules' && logsRulesScopeOpen ? (
+          <Box flexDirection="column">
+            <BoundedList
+              items={logsRulesScopes}
+              chromeRows={SETTINGS_LIST_CHROME_ROWS}
+              cursorIndex={logsRulesScopeIndex}
+              renderItem={(scope, index) => {
+                const highlighted = index === logsRulesScopeIndex;
+                return (
+                  <Box key={scope.key} flexDirection="row">
+                    <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
+                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">
+                      {scope.label} ({scope.count} {scope.count === 1 ? 'rule' : 'rules'})
+                    </Text>
+                  </Box>
+                );
+              }}
+            />
+            <DimAnnotation text="Clears that scope's persisted rules; its level restriction and every other scope are untouched." />
+          </Box>
+        ) : null}
+
+        {tab === 'logs' && logsGroup === 'filter-rules' && logsRulesConfirm !== null ? (
+          <Text color={colors.warning} wrap="truncate-end">
+            {logsRulesConfirm.kind === 'scope'
+              ? `Clear the persisted rules of ${logsRulesConfirm.label}? (y/Enter = yes, Esc = no)`
+              : `Delete all ${logsRuleSets.length} saved rule sets? (y/Enter = yes, Esc = no)`}
+          </Text>
         ) : null}
 
         {tab === 'edts' && !drilledIn ? (

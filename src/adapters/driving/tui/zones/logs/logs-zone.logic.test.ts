@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
+import { MAX_RULES_PER_LIST } from '../../../../../core/logs/rule-sets.js';
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import {
-  applyLogFilters,
+  addLogRule,
+  applyLogRules,
+  deleteLogRule,
+  formatLogRule,
+  MAX_LOG_FILTER_RULES,
+  moveLogRule,
+  toggleLogRule,
+  replaceLogRule,
+  validateRuleDraft,
+  decodeFilterHistoryEntry,
+  encodeFilterHistoryEntry,
+  historyEntryLabel,
+  isDefaultLogFilterScope,
   compileLogFilter,
   cycleFilterLevel,
   DEFAULT_LOG_FILTER,
@@ -17,7 +30,7 @@ import {
   detectLogLevel,
   filterVisibleLines,
   formatHealthLabel,
-  formatLogFilterSpec,
+  formatLogFilterScope,
   formatLogLine,
   healthBadgeState,
   isAtOldestLine,
@@ -27,6 +40,12 @@ import {
   isRestartingDisplay,
   isSelectAllKey,
   logsFooterContext,
+  backToRuleListState,
+  formatRuleSetConfirm,
+  formatRuleSetRow,
+  openFilterEditorState,
+  openRuleSetNameState,
+  ruleSetsFooterContext,
   logsLegendHints,
   isPaneRestartAdvertised,
   isWrapAllLogsKey,
@@ -52,7 +71,8 @@ import {
   resolveHistoryBrowseDown,
   resolveHistoryBrowseUp,
   type FilterHistoryKey,
-  type LogFilterSpec,
+  type LogFilterRule,
+  type LogFilterScope,
 } from './logs-zone.logic.js';
 
 describe('healthBadgeState / formatHealthLabel', () => {
@@ -517,90 +537,95 @@ describe('detectLogLevel', () => {
   });
 });
 
+const rule = (query: string, over: Partial<LogFilterRule> = {}): LogFilterRule => ({
+  mode: 'text',
+  query,
+  action: 'show',
+  target: 'line',
+  enabled: true,
+  ...over,
+});
+const scopeOf = (rules: LogFilterRule[], level: LogFilterScope['level'] = null): LogFilterScope => ({ level, rules });
+
 describe('compileLogFilter', () => {
   const line = (text: string): LogLine => ({ timestamp: 't', stream: 'stdout', text });
 
   it('text mode: case-insensitive substring match; an empty query passes everything', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: 'boom', level: null });
+    const compiled = compileLogFilter(rule('boom'));
     expect(compiled.ok).toBe(true);
     if (compiled.ok) {
-      expect(compiled.test(line('a BOOM happened'))).toBe(true);
-      expect(compiled.test(line('all quiet'))).toBe(false);
+      expect((compiled.apply(line('a BOOM happened')) !== null)).toBe(true);
+      expect((compiled.apply(line('all quiet')) !== null)).toBe(false);
     }
-    const emptyQuery = compileLogFilter(DEFAULT_LOG_FILTER);
+    const emptyQuery = compileLogFilter(rule(''));
     expect(emptyQuery.ok).toBe(true);
     if (emptyQuery.ok) {
-      expect(emptyQuery.test(line('anything'))).toBe(true);
+      expect((emptyQuery.apply(line('anything')) !== null)).toBe(true);
     }
   });
 
   it('regex mode: compiles and matches a valid pattern', () => {
-    const compiled = compileLogFilter({ mode: 'regex', query: '^\\d+ms$', level: null });
+    const compiled = compileLogFilter(rule('^\\d+ms$', { mode: 'regex' }));
     expect(compiled.ok).toBe(true);
     if (compiled.ok) {
-      expect(compiled.test(line('120ms'))).toBe(true);
-      expect(compiled.test(line('120 ms'))).toBe(false);
+      expect((compiled.apply(line('120ms')) !== null)).toBe(true);
+      expect((compiled.apply(line('120 ms')) !== null)).toBe(false);
     }
   });
 
   it('regex mode: an invalid pattern fails to compile with an inline error, never throws', () => {
-    expect(() => compileLogFilter({ mode: 'regex', query: '(unterminated', level: null })).not.toThrow();
-    const compiled = compileLogFilter({ mode: 'regex', query: '(unterminated', level: null });
+    expect(() => compileLogFilter(rule('(unterminated', { mode: 'regex' }))).not.toThrow();
+    const compiled = compileLogFilter(rule('(unterminated', { mode: 'regex' }));
     expect(compiled.ok).toBe(false);
     if (!compiled.ok) {
       expect(compiled.error.length).toBeGreaterThan(0);
     }
-  });
-
-  it('level restriction: a line with no detectable level is excluded once any level restriction is active', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: '', level: 'ERROR' });
-    expect(compiled.ok).toBe(true);
-    if (compiled.ok) {
-      expect(compiled.test(line('ERROR disk full'))).toBe(true);
-      expect(compiled.test(line('WARN low disk'))).toBe(false);
-      expect(compiled.test(line('no level tag at all'))).toBe(false);
-    }
-  });
-
-  it('combines text and level restrictions with AND', () => {
-    const compiled = compileLogFilter({ mode: 'text', query: 'disk', level: 'ERROR' });
-    expect(compiled.ok).toBe(true);
-    if (compiled.ok) {
-      expect(compiled.test(line('ERROR disk full'))).toBe(true);
-      expect(compiled.test(line('ERROR network down'))).toBe(false);
-      expect(compiled.test(line('WARN disk almost full'))).toBe(false);
-    }
+    expect(validateRuleDraft(rule('(', { mode: 'regex' }))).not.toBeNull();
+    expect(validateRuleDraft(rule('('))).toBeNull();
   });
 });
 
-describe('applyLogFilters', () => {
+describe('applyLogRules', () => {
   const lines: LogLine[] = [
     { timestamp: 't1', stream: 'stdout', text: 'ERROR disk full' },
     { timestamp: 't2', stream: 'stdout', text: 'INFO all fine' },
     { timestamp: 't3', stream: 'stderr', text: 'WARN disk almost full' },
   ];
 
-  it('passes everything when both global and own are null', () => {
-    expect(applyLogFilters(lines, null, null)).toEqual(lines);
+  it('passes everything when both global and own are null, or the rule list is empty', () => {
+    expect(applyLogRules(lines, null, null)).toEqual(lines);
+    expect(applyLogRules(lines, scopeOf([]), scopeOf([]))).toEqual(lines);
   });
 
-  it('a disengaged pane (global passed as null) ignores the global filter entirely', () => {
-    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null };
-    // Engaged: only "disk" lines survive.
-    expect(applyLogFilters(lines, global, null)).toEqual([lines[0], lines[2]]);
-    // Disengaged (caller passes null in global's place): every line survives regardless.
-    expect(applyLogFilters(lines, null, null)).toEqual(lines);
+  it('a disengaged pane (global passed as null) ignores the global rules entirely', () => {
+    const global = scopeOf([rule('disk')]);
+    expect(applyLogRules(lines, global, null)).toEqual([lines[0], lines[2]]);
+    expect(applyLogRules(lines, null, null)).toEqual(lines);
   });
 
-  it('a global text filter and an own level filter both apply — a line must satisfy both', () => {
-    const global: LogFilterSpec = { mode: 'text', query: 'disk', level: null };
-    const own: LogFilterSpec = { mode: 'text', query: '', level: 'ERROR' };
-    expect(applyLogFilters(lines, global, own)).toEqual([lines[0]]);
+  it('a level restriction ANDs with the rule pipeline, across scopes', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk')]), scopeOf([], 'ERROR'))).toEqual([lines[0]]);
+    expect(applyLogRules(lines, null, scopeOf([], 'WARN'))).toEqual([lines[2]]);
+    expect(applyLogRules([{ timestamp: 't', stream: 'stdout', text: 'no level tag' }], null, scopeOf([], 'ERROR'))).toEqual([]);
   });
 
-  it('an own filter alone (no global) still applies', () => {
-    const own: LogFilterSpec = { mode: 'text', query: '', level: 'WARN' };
-    expect(applyLogFilters(lines, null, own)).toEqual([lines[2]]);
+  it('two show rules are an AND', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk'), rule('almost')]), null)).toEqual([lines[2]]);
+  });
+
+  it('a disabled rule is skipped as if absent', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk'), rule('almost', { enabled: false })]), null)).toEqual([lines[0], lines[2]]);
+  });
+
+  it('global rules run before the pane\'s own', () => {
+    const global = scopeOf([rule('disk', { action: 'hide', target: 'match' })]);
+    const own = scopeOf([rule('ERROR')]);
+    // The global rewrite leaves "ERROR  full", which the own rule still matches.
+    expect(applyLogRules(lines, global, own).map((l) => l.text)).toEqual(['ERROR  full']);
+  });
+
+  it('an uncompilable rule is pass-through', () => {
+    expect(applyLogRules(lines, scopeOf([rule('(', { mode: 'regex' })]), null)).toEqual(lines);
   });
 });
 
@@ -629,18 +654,49 @@ describe('isPaneEngagedInGlobalFilter / toggleGlobalFilterEngagement / setPaneGl
 });
 
 describe('setPaneLogFilter', () => {
-  it('sets a spec for the targeted repoPath, independent of others', () => {
-    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null };
-    const next = setPaneLogFilter({}, '/repo/a', spec);
-    expect(next).toEqual({ '/repo/a': spec });
+  it('sets a scope for the targeted repoPath, independent of others', () => {
+    const scope = scopeOf([rule('x')]);
+    expect(setPaneLogFilter({}, '/repo/a', scope)).toEqual({ '/repo/a': scope });
   });
 
-  it('clears (removes the key) when given null', () => {
-    const spec: LogFilterSpec = { mode: 'text', query: 'x', level: null };
-    const withFilter = setPaneLogFilter({}, '/repo/a', spec);
-    const cleared = setPaneLogFilter(withFilter, '/repo/a', null);
-    expect(cleared).toEqual({});
+  it('clears (removes the key) when given null or a default scope', () => {
+    const withFilter = setPaneLogFilter({}, '/repo/a', scopeOf([rule('x')]));
+    expect(setPaneLogFilter(withFilter, '/repo/a', null)).toEqual({});
+    const cleared = setPaneLogFilter(withFilter, '/repo/a', DEFAULT_LOG_FILTER);
     expect(Object.prototype.hasOwnProperty.call(cleared, '/repo/a')).toBe(false);
+  });
+});
+
+describe('rule list operations', () => {
+  const three = scopeOf([rule('a'), rule('b'), rule('c')]);
+  const queries = (scope: LogFilterScope | null) => scope?.rules.map((r) => r.query);
+
+  it('adds at the end and refuses beyond the cap', () => {
+    expect(queries(addLogRule(three, rule('d')))).toEqual(['a', 'b', 'c', 'd']);
+    const full = scopeOf(Array.from({ length: MAX_LOG_FILTER_RULES }, (_, i) => rule(`r${i}`)));
+    expect(addLogRule(full, rule('x'))).toBeNull();
+    expect(full.rules).toHaveLength(MAX_LOG_FILTER_RULES);
+  });
+
+  it('replaces, toggles and deletes by index without mutating the input', () => {
+    expect(queries(replaceLogRule(three, 1, rule('B')))).toEqual(['a', 'B', 'c']);
+    expect(toggleLogRule(three, 0).rules[0].enabled).toBe(false);
+    expect(three.rules[0].enabled).toBe(true);
+    expect(queries(deleteLogRule(three, 1))).toEqual(['a', 'c']);
+    expect(deleteLogRule(three, 9)).toBe(three);
+  });
+
+  it('moves a rule one step and is a no-op at either end', () => {
+    expect(queries(moveLogRule(three, 1, 'up'))).toEqual(['b', 'a', 'c']);
+    expect(queries(moveLogRule(three, 1, 'down'))).toEqual(['a', 'c', 'b']);
+    expect(moveLogRule(three, 0, 'up')).toBe(three);
+    expect(moveLogRule(three, 2, 'down')).toBe(three);
+  });
+
+  it('a scope with no rule and no level is the default', () => {
+    expect(isDefaultLogFilterScope(DEFAULT_LOG_FILTER)).toBe(true);
+    expect(isDefaultLogFilterScope(scopeOf([], 'WARN'))).toBe(false);
+    expect(isDefaultLogFilterScope(scopeOf([rule('x', { enabled: false })]))).toBe(false);
   });
 });
 
@@ -667,19 +723,17 @@ describe('cycleFilterLevel / toggleFilterMode', () => {
   });
 });
 
-describe('formatLogFilterSpec', () => {
-  it('renders mode, a quoted query, and no level suffix by default', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: null })).toBe('text "boom"');
-    expect(formatLogFilterSpec({ mode: 'regex', query: '^ERR', level: null })).toBe('regex "^ERR"');
+describe('formatLogFilterScope / formatLogRule', () => {
+  it('renders a count of rules, with the disabled ones and the level', () => {
+    expect(formatLogFilterScope(scopeOf([]))).toBe('(any)');
+    expect(formatLogFilterScope(scopeOf([], 'WARN'))).toBe('(any) [WARN]');
+    expect(formatLogFilterScope(scopeOf([rule('a')]))).toBe('1 rule');
+    expect(formatLogFilterScope(scopeOf([rule('a'), rule('b', { enabled: false })], 'ERROR'))).toBe('2 rules (1 off) [ERROR]');
   });
 
-  it('renders an empty query as "(any)"', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: '', level: null })).toBe('text (any)');
-  });
-
-  it('appends the level restriction, when set, as a trailing bracketed suffix', () => {
-    expect(formatLogFilterSpec({ mode: 'text', query: 'boom', level: 'ERROR' })).toBe('text "boom" [ERROR]');
-    expect(formatLogFilterSpec({ mode: 'text', query: '', level: 'WARN' })).toBe('text (any) [WARN]');
+  it('renders a rule row with its state, action, target, mode and query', () => {
+    expect(formatLogRule(rule('boom'))).toBe('[x] show line text "boom"');
+    expect(formatLogRule(rule('b', { enabled: false, action: 'hide', target: 'match', mode: 'regex' }))).toBe('[ ] hide match regex "b"');
   });
 });
 
@@ -875,6 +929,8 @@ describe('logsFooterContext', () => {
     expect(logsFooterContext(false, false, full)).toBe('logs-fullscreen');
     expect(logsFooterContext(true, false, full)).toBe('logs-filter-edit');
     expect(logsFooterContext(true, true, full)).toBe('logs-filter-history');
+    expect(logsFooterContext(true, false, full, 'simple', false, { listOpen: true, confirmingClear: false })).toBe('logs-filter-rules');
+    expect(logsFooterContext(true, false, full, 'simple', false, { listOpen: true, confirmingClear: true })).toBe('logs-filter-rules-confirm');
   });
 
   it('never advertises a restart for a pane without a container', () => {
@@ -930,5 +986,281 @@ describe('actions menu', () => {
     expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 12 }).edtListMaxVisibleRows).toBe(12);
     expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 8 }).edtListMaxVisibleRows).toBe(8);
     expect(computeLogsLayout({ ...base, actionsMenuRows: 0 }).edtListMaxVisibleRows).toBe(closed.edtListMaxVisibleRows);
+  });
+
+  it.each([
+    { rules: 0, reserved: 10 },
+    { rules: 1, reserved: 10 },
+    { rules: 4, reserved: 13 },
+    { rules: 10, reserved: 19 },
+  ])('reserves the rule list view rows off the list column budget ($rules rules)', ({ rules, reserved }) => {
+    const base = {
+      windowColumns: 120,
+      listRatio: 0.3,
+      windowRows: 60,
+      activePaneCount: 1,
+      edtServiceCount: 80,
+      otherServiceCount: 0,
+      filterEditorOpen: false,
+      historyGridOpen: false,
+      filterHistoryGridMaxRows: 8,
+    };
+    const closed = computeLogsLayout(base);
+    const open = computeLogsLayout({ ...base, filterEditorOpen: true, filterEditorView: 'list', filterRuleCount: rules });
+    expect(closed.edtListMaxVisibleRows - open.edtListMaxVisibleRows).toBe(reserved);
+  });
+
+  it('never gives the rule list a zero-row budget', () => {
+    const tiny = computeLogsLayout({
+      windowColumns: 80, listRatio: 0.3, windowRows: 4, activePaneCount: 0, edtServiceCount: 0, otherServiceCount: 0,
+      filterEditorOpen: true, filterEditorView: 'list', filterRuleCount: 5, historyGridOpen: false, filterHistoryGridMaxRows: 8,
+    });
+    expect(tiny.rulesListMaxVisibleRows).toBeGreaterThanOrEqual(1);
+  });
+
+  it('collapses newlines and control characters in a rule row', () => {
+    expect(formatLogRule(rule('a\nb\t\tc'))).toBe('[x] show line text "a b c"');
+  });
+});
+
+describe('hide / show-only filters (action x target)', () => {
+  const NEST = '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase] Aucun service de restauration trouvé pour le 12';
+  const lines: LogLine[] = [
+    { timestamp: 't1', stream: 'stdout', text: NEST },
+    { timestamp: 't2', stream: 'stdout', text: '[Nest] 12  - 09/11/2026 LOG [Other] fine' },
+    { timestamp: 't3', stream: 'stdout', text: 'Aucun service' },
+  ];
+  const spec = (over: Partial<LogFilterRule>): LogFilterRule => rule('Aucun service', over);
+  const texts = (r: LogFilterRule) => applyLogRules(lines, scopeOf([r]), null).map((l) => l.text);
+
+  it('show+line keeps matching lines unchanged', () => {
+    expect(texts(spec({}))).toEqual([NEST, 'Aucun service']);
+  });
+
+  it('hide+line drops matching lines', () => {
+    expect(texts(spec({ action: 'hide' }))).toEqual(['[Nest] 12  - 09/11/2026 LOG [Other] fine']);
+  });
+
+  it('hide+match removes matched text, keeps the rest and drops emptied lines', () => {
+    expect(texts(spec({ action: 'hide', target: 'match' }))).toEqual([
+      '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase]  de restauration trouvé pour le 12',
+      '[Nest] 12  - 09/11/2026 LOG [Other] fine',
+    ]);
+  });
+
+  it('show+match displays only matched text and hides non-matching lines', () => {
+    expect(texts(spec({ target: 'match', mode: 'regex', query: 'WARN|\\d+$' }))).toEqual(['WARN 12']);
+  });
+
+  it('never mutates the stored lines', () => {
+    const before = JSON.stringify(lines);
+    texts(spec({ action: 'hide', target: 'match' }));
+    expect(JSON.stringify(lines)).toBe(before);
+  });
+
+  it('ignores empty regex matches', () => {
+    expect(texts(spec({ mode: 'regex', query: 'a*', action: 'hide', target: 'match' }))).toHaveLength(3);
+    expect(texts(spec({ mode: 'regex', query: 'x*', target: 'match' }))).toEqual([]);
+  });
+
+  it('rejects an invalid regex for every action/target', () => {
+    for (const action of ['show', 'hide'] as const) {
+      for (const target of ['line', 'match'] as const) {
+        expect(compileLogFilter(spec({ mode: 'regex', query: '(', action, target })).ok).toBe(false);
+      }
+    }
+  });
+
+  it('judges the level on the stored text even after an earlier rule rewrote it', () => {
+    const rewritten = applyLogRules(lines, scopeOf([spec({ target: 'match' })]), scopeOf([], 'WARN'));
+    expect(rewritten.map((l) => l.text)).toEqual(['Aucun service']);
+    const hidden = applyLogRules(lines, scopeOf([spec({ action: 'hide', target: 'match' })]), scopeOf([], 'WARN'));
+    expect(hidden).toHaveLength(1);
+  });
+
+  it('a hide+match rule above a show rule feeds it the rewritten line; moving it below changes the result', () => {
+    const hide = spec({ action: 'hide', target: 'match' });
+    const show = rule('Aucun');
+    expect(applyLogRules(lines, scopeOf([hide, show]), null)).toEqual([]);
+    expect(applyLogRules(lines, scopeOf([show, hide]), null).map((l) => l.text)).toEqual([
+      '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase]  de restauration trouvé pour le 12',
+    ]);
+  });
+
+  it('AND of shows over the Nest fixtures', () => {
+    expect(applyLogRules(lines, scopeOf([rule('WARN'), rule('Affectation')]), null).map((l) => l.text)).toEqual([NEST]);
+  });
+
+  it('history entries: legacy plain string reads as show+line; encoding round-trips and keeps entries distinct', () => {
+    expect(decodeFilterHistoryEntry('plain')).toEqual({ query: 'plain', action: 'show', target: 'line' });
+    expect(encodeFilterHistoryEntry({ query: 'plain', action: 'show', target: 'line' })).toBe('plain');
+    const hidden = encodeFilterHistoryEntry({ query: 'plain', action: 'hide', target: 'match' });
+    expect(hidden).not.toBe('plain');
+    expect(decodeFilterHistoryEntry(hidden)).toEqual({ query: 'plain', action: 'hide', target: 'match' });
+    expect(historyEntryLabel(hidden)).toBe('[hide match] plain');
+    expect(historyEntryLabel('plain')).toBe('plain');
+  });
+
+  it('keeps match ranges aligned when lowercasing would change the text length', () => {
+    const line: LogLine = { timestamp: 't', stream: 'stdout', text: 'İİ boom end' };
+    const out = applyLogRules([line], scopeOf([spec({ query: 'boom', action: 'hide', target: 'match' })]), null);
+    expect(out.map((l) => l.text)).toEqual(['İİ  end']);
+  });
+
+  it('never misdecodes a show+line query that starts with the header pattern', () => {
+    const query = '\u001fhide:match\u001frest';
+    const encoded = encodeFilterHistoryEntry({ query, action: 'show', target: 'line' });
+    expect(decodeFilterHistoryEntry(encoded)).toEqual({ query, action: 'show', target: 'line' });
+  });
+});
+
+describe('rule-set editor views', () => {
+  const closed = { open: false, restartable: true };
+
+  it('picks the library footer contexts over the rule list while an editor is open', () => {
+    const open = openFilterEditorState('global', null);
+    expect(ruleSetsFooterContext(open)).toBeNull();
+    const library = { ...open, view: 'library' as const };
+    expect(ruleSetsFooterContext(library)).toBe('logs-filter-sets');
+    expect(ruleSetsFooterContext({ ...library, setConfirm: { kind: 'delete', index: 0 } })).toBe('logs-filter-sets-confirm');
+    const naming = openRuleSetNameState(open, null, '');
+    expect(ruleSetsFooterContext(naming)).toBe('logs-filter-set-name');
+    expect(ruleSetsFooterContext({ ...naming, setConfirm: { kind: 'overwrite', name: 'x' } })).toBe('logs-filter-sets-confirm');
+    expect(logsFooterContext(true, false, closed, 'simple', false, { listOpen: false, confirmingClear: false }, 'logs-filter-sets')).toBe(
+      'logs-filter-sets',
+    );
+  });
+
+  it('declares every key of the new views in the footer contexts', () => {
+    expect(FOOTER_CONTEXTS['logs-filter-rules'].hints.map(([key]) => key)).toEqual(expect.arrayContaining(['s', 'l']));
+    expect(FOOTER_CONTEXTS['logs-filter-sets'].hints.map(([key]) => key)).toEqual(expect.arrayContaining(['Enter', 'r', 'd']));
+  });
+
+  it('openRuleSetNameState seeds the name and caret; backToRuleListState resets the transient state', () => {
+    const open = openFilterEditorState('pane', '/repo');
+    const renaming = openRuleSetNameState(open, 2, 'noise');
+    expect(renaming).toMatchObject({ view: 'name', nameMode: 'rename', nameIndex: 2, name: 'noise', nameCursor: 5 });
+    expect(backToRuleListState({ ...renaming, error: 'x', setConfirm: { kind: 'apply', index: 0 } }, 'done')).toMatchObject({
+      view: 'list',
+      error: null,
+      notice: 'done',
+      setConfirm: null,
+    });
+  });
+
+  it('formats rows and confirmation questions on one line', () => {
+    expect(formatRuleSetRow({ name: 'a\nb', rules: [1] })).toBe('a b (1 rule)');
+    expect(formatRuleSetRow({ name: 'n', rules: [1, 2] })).toBe('n (2 rules)');
+    expect(formatRuleSetConfirm({ kind: 'delete', index: 0 }, [{ name: 'n' }], 3)).toContain('Delete set "n"');
+    expect(formatRuleSetConfirm({ kind: 'apply', index: 0 }, [{ name: 'n' }], 3)).toContain('Replace the 3 active rules');
+  });
+});
+
+describe('rule-set views layout budget', () => {
+  const base = {
+    windowColumns: 100,
+    listRatio: 0.4,
+    windowRows: 40,
+    activePaneCount: 0,
+    edtServiceCount: 3,
+    otherServiceCount: 3,
+    filterEditorOpen: true,
+    historyGridOpen: false,
+    filterHistoryGridMaxRows: 8,
+  };
+
+  it('shares one rule cap between core and the editor', () => {
+    expect(MAX_LOG_FILTER_RULES).toBe(MAX_RULES_PER_LIST);
+  });
+
+  it('reserves one row more for the library than for the rule list, with the same item rows', () => {
+    const list = computeLogsLayout({ ...base, filterEditorView: 'list', filterRuleCount: 4 });
+    const library = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 4 });
+    expect(list.edtListMaxVisibleRows - library.edtListMaxVisibleRows).toBe(1);
+  });
+
+  it('an empty library still reserves its placeholder row, and a long one is bounded by the window', () => {
+    const empty = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 0 });
+    const one = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 1 });
+    expect(empty.edtListMaxVisibleRows).toBe(one.edtListMaxVisibleRows);
+    const many = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 20 });
+    expect(many.rulesListMaxVisibleRows).toBeGreaterThanOrEqual(1);
+    expect(many.edtListMaxVisibleRows).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('ANSI-aware rules', () => {
+  const line = (text: string): LogLine => ({ timestamp: 't', stream: 'stdout', text });
+  const stripAnsi = (text: string): string => text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
+  const nest =
+    '\u001b[32m[Nest] 32  - \u001b[39m11/09/2026, 9:20:21 AM \u001b[32m    LOG\u001b[39m \u001b[33m[Ctx]\u001b[39m hello';
+  const prefix = String.raw`^\[[\w-]+\]\s+\d+\s+(?:-\s+)?\d{1,2}\/\d{1,2}\/\d{4},\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\s*`;
+  const hideRule = (query: string): LogFilterRule => ({ ...rule(query), mode: 'regex', action: 'hide', target: 'match' });
+
+  const applyOne = (r: LogFilterRule, l: LogLine): LogLine | null => {
+    const compiled = compileLogFilter(r);
+    if (!compiled.ok) {
+      throw new Error(compiled.error);
+    }
+    return compiled.apply(l);
+  };
+
+  it('hides the Nest prefix across colour changes and keeps the remainder colours', () => {
+    const result = applyOne(hideRule(prefix), line(nest));
+    expect(result).not.toBeNull();
+    // Every escape is kept in order (the two leading ones are an empty pair, harmless on screen).
+    expect(result).toEqual({
+      ...line(nest),
+      text: '\u001b[32m\u001b[39m\u001b[32mLOG\u001b[39m \u001b[33m[Ctx]\u001b[39m hello',
+    });
+  });
+
+  it('show+match with several matches keeps each range with its own escapes', () => {
+    const r: LogFilterRule = { ...rule('\\d+'), mode: 'regex', action: 'show', target: 'match' };
+    const result = applyOne(r, line('\u001b[32m12\u001b[39m ab \u001b[33m34\u001b[39m'));
+    expect(result?.text).toBe('\u001b[32m12 \u001b[39m\u001b[33m34\u001b[39m');
+  });
+
+  it('keeps a trailing escape after the last kept character and the line metadata', () => {
+    const result = applyOne(hideRule('b'), { timestamp: 'ts', stream: 'stderr', text: '\u001b[32mab\u001b[39m' });
+    expect(result).toEqual({ timestamp: 'ts', stream: 'stderr', text: '\u001b[32ma\u001b[39m' });
+  });
+
+  it('removes the prefix of an uncoloured api-gateway line', () => {
+    const result = applyOne(hideRule(prefix), line('[api-gateway] 32 11/9/2026, 1:34:52 PM  LOG [FAST] GET /health'));
+    expect(result?.text).toBe('LOG [FAST] GET /health');
+  });
+
+  it('removes a span across a colour change and keeps all escapes', () => {
+    const result = applyOne(hideRule(String.raw`Nest\] 32`), line(nest));
+    expect(stripAnsi(result!.text)).toContain('[  - 11/09/2026');
+    expect(result!.text.match(/\u001b\[/g)).toHaveLength(nest.match(/\u001b\[/g)!.length);
+  });
+
+  it('returns null when every visible char is hidden', () => {
+    expect(applyOne(hideRule('.+'), line('\u001b[32mabc\u001b[39m'))).toBeNull();
+  });
+
+  it('show+match keeps matched visible chars with escapes', () => {
+    const r: LogFilterRule = { ...rule('LOG'), action: 'show', target: 'match' };
+    const result = applyOne(r, line(nest));
+    expect(stripAnsi(result!.text)).toBe('LOG');
+    expect(result!.text).toContain('\u001b[32m');
+  });
+
+  it('line target tests the stripped text and returns the original line', () => {
+    const r: LogFilterRule = { ...rule('^\\[Nest\\]'), mode: 'regex', action: 'show', target: 'line' };
+    const original = line(nest);
+    expect(applyOne(r, original)).toBe(original);
+  });
+
+  it('detects the level next to an escape code', () => {
+    expect(detectLogLevel('\u001b[32mDEBUG\u001b[39m')).toBe('DEBUG');
+  });
+
+  it('pipes two rules over a coloured line', () => {
+    const out = applyLogRules([line(nest)], scopeOf([hideRule(prefix), { ...rule('hello'), action: 'show', target: 'line' }]), null);
+    expect(out).toHaveLength(1);
+    expect(stripAnsi(out[0].text)).toBe('LOG [Ctx] hello');
   });
 });

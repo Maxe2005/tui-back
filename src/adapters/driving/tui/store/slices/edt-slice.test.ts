@@ -118,6 +118,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),

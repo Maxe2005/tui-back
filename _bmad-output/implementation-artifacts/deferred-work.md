@@ -898,3 +898,26 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/spec-9-9-dashboard-heal-action.md`
   summary: The app-shell Ctrl+W resize-mode gate on `realignScreenOpen` has no test asserting `resizeMode` stays null while the realign overlay is open.
   evidence: `app-shell.interaction.test.tsx` only tests Ctrl+W under the command bar overlay (≈L2248); removing `!realignScreenOpen` from the resize-mode condition in `app-shell.tsx` leaves every test green (found by the 9.9 verification-gap review, pre-existing).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-10-persisted-filter-rules-and-named-rule-sets.md`
+  summary: Failed writes of persisted filter rules and rule sets are never surfaced to the user (the UI reports "Saved" regardless).
+  evidence: `writeLogRules`/`writeLogRuleSets` return a `Result` that the logs slice ignores; filter history has the same behaviour, so a shared write-failure notice is a cross-cutting follow-up.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-10-persisted-filter-rules-and-named-rule-sets.md`
+  summary: Bare `Esc` with no editor open clears a scope's rules and now also silently erases their persisted copy.
+  evidence: The 5.9 Esc cascade is unchanged (Ask First in the 5.9/5.10 specs); persistence turns an ephemeral clear into a destructive one, so the gesture may need a confirmation.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-10-persisted-filter-rules-and-named-rule-sets.md`
+  summary: `resetHistories` can clear command history and then fail on the rules write, leaving a partial reset.
+  evidence: `src/core/scripts/reset-tool.ts` writes the fields sequentially and aborts on the first error (edge-case review).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-3-install-subcommand.md`
+  summary: `app-shell.interaction.test.tsx` "opens only through the `reset` command, and Esc closes it with zero writes" fails (expects 'RESET TOOL DATA').
+  evidence: Fails identically on baseline commit d75b734f, before any story 10.3 change.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
+  summary: Pre-existing failure of `app-shell.interaction.test.tsx` ("opens only through the `reset` command, and Esc closes it with zero writes"), plus one other test that failed in a single full run (flaky, not identified).
+  evidence: Fails identically on the story baseline per the implementation subagent's stash run; unrelated to install.sh/README/package.json.
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
+  summary: Distribution hardening not in 10.4 scope: pinning `install.sh`/npx to a tag or `TUI_BACK_REF`, and macOS/zsh note (login shells read `~/.bash_profile`, not `~/.bashrc`).
+  evidence: README curl one-liner uses `HEAD`; the installer only edits `~/.bashrc` (Blind Hunter / Edge Case Hunter findings).

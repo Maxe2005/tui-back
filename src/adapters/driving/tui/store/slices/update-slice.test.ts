@@ -114,6 +114,10 @@ function fakeDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
@@ -282,6 +286,10 @@ describe('update slice', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -1058,6 +1066,10 @@ describe('update slice: pre-run configuration screen', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -1090,6 +1102,10 @@ describe('update slice: pre-run configuration screen', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
 
@@ -1138,6 +1154,10 @@ describe('update slice: pre-run configuration screen', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ edtRegistry, state }));
 
@@ -2030,6 +2050,10 @@ describe('live per-service run tracking', () => {
       writeFilterHistory: vi.fn(async () => ok(undefined)),
       readCommandHistory: vi.fn(async () => ok(null)),
       writeCommandHistory: vi.fn(async () => ok(undefined)),
+      readLogRules: vi.fn(async () => ok(null)),
+      writeLogRules: vi.fn(async () => ok(undefined)),
+      readLogRuleSets: vi.fn(async () => ok(null)),
+      writeLogRuleSets: vi.fn(async () => ok(undefined)),
     };
     const store = createAppStore(fakeDeps({ state }));
     store.setState({ liveServicePhase: { 'svc-a': 'pulling' }, liveServiceIssues: { 'svc-a': [] } });

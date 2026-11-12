@@ -5,7 +5,10 @@
 - `npm test` — Vitest, all tests (colocated `*.test.ts`). Single file: `npx vitest run src/core/result.test.ts`.
 - `npm run typecheck` — `tsc --noEmit` (no build step exists; TS runs via `tsx`).
 - `npm run depcheck` — dependency-cruiser over `src/**/*.{ts,tsx,mjs}`, enforces the AD-1 `core → adapters` boundary rule.
-- Run the CLI: `node src/bin/cli-back.mjs <subcommand>` (needs Node ≥24). No `npm run` wrapper for it. The TUI is `node src/bin/tui-back.mjs` (requires an interactive terminal, exits 1 otherwise).
+- Run the CLI: `node src/bin/tui-back.mjs <subcommand>` (needs Node ≥24). No `npm run` wrapper for it. The TUI is `node src/bin/tui-back.mjs tui` (requires an interactive terminal, exits 1 otherwise).
+- Bash completion: `tui-back completion bash` (raw script on a TTY, `data.script` when piped). Load it with `eval "$(tui-back completion bash | jq -r .data.script)"`; `tui-back install` wires it up automatically. It is generated from the subcommand registry, never hand-maintained.
+- Install: `tui-back install` checks Node ≥24, runs `npm install -g github:<owner>/tui-back` (URL derived from `package.json` `repository`), writes `<dataDir>/completion.bash` and keeps one marked `# >>> tui-back >>>` block (aliases `tb`, `tbt`, completion) in `~/.bashrc`; re-running replaces the block. `tui-back install --uninstall` removes block, completion file and global package (absent pieces are skipped). Errors: `unsupported-node`, `permission-denied` (EACCES), `npm-not-found`, `npm-failed`, `repository-unresolved`, `io-failed`, `rc-block-corrupt`, `invalid-argument`. Uninstall runs npm first and leaves the rest of the data directory in place. Spawning/file I/O live in `adapters/driven/installer` behind `InstallerPort` (declared in `adapters/driving/cli/install.ts`); e2e tests use a temp `HOME` and a stub `npm` on `PATH`.
+- Distribution: `install.sh` (repo root) only prechecks `git` + Node ≥24 then `exec npx -y github:Maxe2005/tui-back install "$@"`; `README.md` is the public entry point. `package.json` `files` is an allow-list (`src` minus tests) so planning/agent folders never ship; check with `npm pack --dry-run`. `src/bin/install-sh.e2e.test.ts` runs the script under a stub-only `PATH`.
 - Order when changing code: `npm test && npm run typecheck && npm run depcheck`.
 
 ## Architecture (hexagonal, AD-1..AD-15)
@@ -30,7 +33,7 @@ Full invariants: `_bmad-output/planning-artifacts/architecture/architecture-tui-
 
 - `core/` unit-tested against fake ports, no real git/docker/sqlite.
 - `adapters/driven/*` integration-tested against the real system (e.g. XDG uses a temp-dir fixture).
-- `adapters/driving/cli` tested black-box: `src/bin/tui-back.e2e.test.ts` spawns the shipped `cli-back.mjs` as a child process and asserts the AD-3 envelope. No pty lib exists, so e2e only exercises the non-TTY JSON branch; TTY/human rendering is covered directly in `envelope.test.ts`.
+- `adapters/driving/cli` tested black-box: `src/bin/tui-back.e2e.test.ts` spawns the shipped `tui-back.mjs` as a child process and asserts the AD-3 envelope. No pty lib exists, so e2e only exercises the non-TTY JSON branch; TTY/human rendering is covered directly in `envelope.test.ts`.
 
 ## Workflow & planning artifacts
 

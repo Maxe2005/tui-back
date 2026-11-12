@@ -140,3 +140,22 @@ development_status:
   8-6-branch-drift-detection-snapshot-attention: done
   8-7-realign-use-case-and-cli-selective-branch-realignment: done
   8-8-realign-dialog-shortcut-settings-defaults: done
+
+  # Archived 2026-11-09 (third trim; epics 5 reopening and 9 closed).
+
+  5-8-hide-show-only-log-filters: done
+  5-9-stackable-log-filter-rules: done
+  5-10-persisted-filter-rules-and-named-rule-sets: done
+  5-11-ansi-aware-log-filter-rules: done
+
+  9-1-shell-session-port-driven-adapter-core-shell-use-case: done
+  9-2-registry-entries-for-service-and-container-terminals: done
+  9-3-shared-scrollable-output-and-fullscreen-primitive: done
+  9-4-terminal-view-in-the-tui: done
+  9-5-unified-service-actions-in-the-logs-tab: done
+  9-6-shared-types-ux-action-bar-and-post-publish-choice-screen: done
+  9-7-health-first-service-status-resolution: done
+  9-8-heal-use-case-and-cli: done
+  9-9-dashboard-heal-action: done
+  9-10-text-filter-in-the-keybinding-help: done
+  9-11-per-service-health-check-toggle: done
