@@ -932,3 +932,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
   summary: registry-clean does not re-verify at removal time that approved paths are still stale (window between preview and human approval).
   evidence: Approved argv passes explicit --path values; removal trusts the earlier snapshot.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
+  summary: Pre-existing failure of `app-shell.interaction.test.tsx` ("opens only through the `reset` command, and Esc closes it with zero writes"), plus one other test that failed in a single full run (flaky, not identified).
+  evidence: Fails identically on the story baseline per the implementation subagent's stash run; unrelated to install.sh/README/package.json.
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
+  summary: Distribution hardening not in 10.4 scope: pinning `install.sh`/npx to a tag or `TUI_BACK_REF`, and macOS/zsh note (login shells read `~/.bash_profile`, not `~/.bashrc`).
+  evidence: README curl one-liner uses `HEAD`; the installer only edits `~/.bashrc` (Blind Hunter / Edge Case Hunter findings).
