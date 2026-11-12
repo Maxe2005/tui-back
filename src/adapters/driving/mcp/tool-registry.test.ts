@@ -9,11 +9,12 @@ function fake(name: string, seen: string[][] = []): Subcommand {
 }
 
 describe('buildToolRegistry', () => {
-  it('registers every read tool, all classed read', () => {
-    const subs = ['dashboard', 'edts', 'list-repos', 'list-routes', 'request-list', 'ping', 'registry'].map((n) => fake(n));
+  it('registers every tool with its class', () => {
+    const subs = [...new Set(TOOL_DEFINITIONS.map((d) => d.subcommand))].map((n) => fake(n));
     const tools = buildToolRegistry(subs);
     expect(tools.map((t) => t.name).sort()).toEqual(TOOL_DEFINITIONS.map((d) => d.name).sort());
-    expect(tools.every((t) => t.safety === 'read')).toBe(true);
+    expect(tools.every((t) => ['read', 'write'].includes(t.safety))).toBe(true);
+    expect(tools.filter((t) => t.safety === 'read')).toHaveLength(TOOL_DEFINITIONS.filter((d) => d.safety === 'read').length);
   });
 
   it('throws when a tool has no safety class', () => {

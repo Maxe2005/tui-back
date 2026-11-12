@@ -906,3 +906,16 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-1-mcp-skeleton-and-read-only-tools.md`
   summary: `app-shell.interaction.test.tsx` "opens only through the `reset` command, and Esc closes it with zero writes" fails (`RESET TOOL DATA` not in output).
   evidence: Reproduced on the epic-10 worktree without any story 11.1 change (1 failed / 114 passed in that file).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
+  summary: Treat `restart: clean` (edt-switch, realign, heal) as destructive in the MCP gate, or exclude it from the enum.
+  evidence: A clean restart may wipe container state yet only gets the `write` prompt; story 11.3 owns destructive classification.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
+  summary: Show the stored method, path and target of a saved request in the `request-fire` approval prompt.
+  evidence: The prompt names only the saved request, so the human cannot see which real endpoint will be hit.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
+  summary: Pass the MCP abort signal to elicitInput and serialize concurrent write approvals.
+  evidence: A client-cancelled call leaves its prompt open until timeout, and concurrent write calls open overlapping prompts.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
+  summary: Document the gate (elicitation requirement, 5-minute timeout) and make the timeout configurable; consider an approval audit log.
+  evidence: No CLI/env knob for authorizationTimeoutMs and no docs yet; story 11.4 owns docs.
