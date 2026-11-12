@@ -1,0 +1,68 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 11-12-2026 15:07
+last_updated: 11-12-2026 15:07
+project: tui-back
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+development_status:
+  epic-12: backlog
+  12-1-split-the-git-adapter-by-operation-family: backlog
+  12-2-extract-pure-logic-from-json-tree-and-the-command-bar: backlog
+  12-3-split-the-settings-screen-by-tab: backlog
+  12-4-split-the-cli-subcommands-by-family: backlog
+  12-5-split-the-group-update-core: backlog
+  12-6-split-edt-switch: backlog
+  12-7-split-the-zone-logic-modules: backlog
+  12-8-split-the-update-and-logs-slices: backlog
+  12-9-split-routeszone-into-hooks-and-subcomponents: backlog
+  12-10-split-logszone-into-hooks-and-subcomponents: backlog
+  12-11-split-edtszone-into-hooks-and-subcomponents: backlog
+  12-12-split-updatezone-into-hooks-and-subcomponents: backlog
+  epic-12-retrospective: optional
+
+  epic-13: backlog
+  13-1-test-split-conventions-and-shared-fixtures: backlog
+  13-2-split-the-edts-zone-interaction-tests: backlog
+  13-3-split-group-update-and-switch-tests: backlog
+  13-4-split-app-shell-and-store-tests: backlog
+  13-5-split-logs-zone-and-update-zone-tests: backlog
+  13-6-split-cli-e2e-and-git-tests: backlog
+  epic-13-retrospective: optional
+
+  epic-14: backlog
+  14-1-directory-audit-and-target-tree: backlog
+  14-2-reorganize-shared-components-and-shared: backlog
+  14-3-reorganize-store-slices-and-zone-folders: backlog
+  14-4-reorganize-core-folders: backlog
+  14-5-reorganize-wizard-dialogs-and-top-level-layout: backlog
+  epic-14-retrospective: optional

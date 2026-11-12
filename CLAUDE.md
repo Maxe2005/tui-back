@@ -18,3 +18,9 @@
 - `Cannot find package 'tsx'` when running `node src/bin/tui-back.mjs tui` means `node_modules` is missing or incomplete in this worktree → run `npm ci`.
 - Vitest/Ink failures like `Cannot read properties of null (reading 'useRef')` mean two copies of React are loaded. Look for a stray `node_modules/node_modules` symlink (typically created by an `ln -s ... node_modules` run while the directory already existed) and delete it, plus `node_modules/.vite`; if in doubt, `rm -rf node_modules && npm ci`.
 - Never leave a worktree without `node_modules` after a verification run: if one was linked temporarily, remove the link and run `npm ci`.
+
+## Multi-sprint BMAD workflow
+
+- The project has several distinct sprints, each with its own `epics.md` and `sprint-status.yaml` (registry: `_bmad-output/sprints/registry.json`; sprint 1 = legacy paths, sprint 2+ = `_bmad-output/sprints/<id>-<slug>/`). Convention and resolution rules: `_bmad/custom/sprints.md`; lifecycle: skill `bmad-sprint-manage`.
+- Epic numbers are **global** across sprints (sprint 2 starts at epic 12), so epic/story branch names and story keys never collide. Epic and story branch rules above are unchanged.
+- The wiring lives in `_bmad/custom/*.toml` (survives BMAD updates). After a BMAD upgrade, re-check that the overrides are still loaded with `uv run _bmad/scripts/resolve_customization.py --skill .claude/skills/bmad-build --key workflow`.
