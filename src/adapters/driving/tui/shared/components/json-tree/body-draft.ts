@@ -1,6 +1,6 @@
 // tui/shared/components/json-tree/body-draft: body draft seeding/gating/pruning, the editor status
 // line and error-path remapping after a delete.
-import { BodyEditError, JsonPathSegment, MAX_BODY_DRAFTS, parseJsonPath } from './body-edit-path.js';
+import { BodyEditError, JsonPathSegment, MAX_BODY_DRAFTS, parseJsonPath, rebuildConcretePath } from './body-edit-path.js';
 
 export type EditableRoute = { bodyExample?: unknown; bodyContentType?: string };
 

@@ -393,7 +393,7 @@ function escapeRebuild(key: string): string {
   return key.replace(/\\/g, '\\\\').replace(/\./g, '\\.').replace(/\[/g, '\\[').replace(/\]/g, '\\]');
 }
 
-function rebuildConcretePath(segments: readonly JsonPathSegment[]): string {
+export function rebuildConcretePath(segments: readonly JsonPathSegment[]): string {
   let out = '';
   for (const segment of segments) {
     if (segment.type === 'index') {
