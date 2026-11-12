@@ -99,5 +99,5 @@ development_status:
   11-1-mcp-skeleton-and-read-only-tools: done
   11-2-authorization-gate-and-write-tools: review
   11-3-destructive-tools-and-long-operations: review
-  11-4-install-registration-and-docs: backlog
+  11-4-install-registration-and-docs: review
   epic-11-retrospective: optional
