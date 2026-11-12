@@ -915,9 +915,42 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: `app-shell.interaction.test.tsx` "opens only through the `reset` command, and Esc closes it with zero writes" fails (expects 'RESET TOOL DATA').
   evidence: Fails identically on baseline commit d75b734f, before any story 10.3 change.
 
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-1-mcp-skeleton-and-read-only-tools.md`
+  summary: `app-shell.interaction.test.tsx` "opens only through the `reset` command, and Esc closes it with zero writes" fails (`RESET TOOL DATA` not in output).
+  evidence: Reproduced on the epic-10 worktree without any story 11.1 change (1 failed / 114 passed in that file).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
+  summary: Treat `restart: clean` (edt-switch, realign, heal) as destructive in the MCP gate, or exclude it from the enum.
+  evidence: A clean restart may wipe container state yet only gets the `write` prompt; story 11.3 owns destructive classification.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
+  summary: Show the stored method, path and target of a saved request in the `request-fire` approval prompt.
+  evidence: The prompt names only the saved request, so the human cannot see which real endpoint will be hit.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
+  summary: Pass the MCP abort signal to elicitInput and serialize concurrent write approvals.
+  evidence: A client-cancelled call leaves its prompt open until timeout, and concurrent write calls open overlapping prompts.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
+  summary: Document the gate (elicitation requirement, 5-minute timeout) and make the timeout configurable; consider an approval audit log.
+  evidence: No CLI/env knob for authorizationTimeoutMs and no docs yet; story 11.4 owns docs.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
+  summary: TUI test "opens only through the reset command" (app-shell.interaction.test.tsx:2678) fails, expecting "RESET TOOL DATA" but rendering "SET TOOL DATA".
+  evidence: Reported by the 11.3 implementation run and the full suite; the story diff touches no TUI file.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
+  summary: The tool `run` wrapper in tool-registry.ts returns String(error) in an internal-error envelope, leaking raw error text to MCP clients.
+  evidence: Pre-existing since 11.1/11.2; runToEnvelope uses a generic message instead, so the two paths disagree.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
+  summary: A cooperatively cancelled MCP `update` returns a plain success envelope with no explicit cancelled marker for the agent.
+  evidence: Core returns ok with rows skipped as run-cancelled; the server does not flag it.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
+  summary: registry-clean does not re-verify at removal time that approved paths are still stale (window between preview and human approval).
+  evidence: Approved argv passes explicit --path values; removal trusts the earlier snapshot.
+
 - source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
   summary: Pre-existing failure of `app-shell.interaction.test.tsx` ("opens only through the `reset` command, and Esc closes it with zero writes"), plus one other test that failed in a single full run (flaky, not identified).
   evidence: Fails identically on the story baseline per the implementation subagent's stash run; unrelated to install.sh/README/package.json.
 - source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
   summary: Distribution hardening not in 10.4 scope: pinning `install.sh`/npx to a tag or `TUI_BACK_REF`, and macOS/zsh note (login shells read `~/.bash_profile`, not `~/.bashrc`).
   evidence: README curl one-liner uses `HEAD`; the installer only edits `~/.bashrc` (Blind Hunter / Edge Case Hunter findings).
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-4-install-registration-and-docs.md`
+  summary: README Authorization section names gate error codes and cancellation/progress behaviour of destructive tools without a test pinning the codes to the gate's exports.
+  evidence: Verification-gap review; the README test only checks tool names per safety class, so a renamed `authorization-denied` would not fail any docs test.

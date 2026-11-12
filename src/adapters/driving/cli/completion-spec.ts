@@ -11,7 +11,7 @@ export interface CompletionSpec {
   commands: CompletionCommand[];
 }
 
-const STATIC_WORDS = ['tui', '--help', '-h'];
+const STATIC_WORDS = ['tui', 'mcp', '--help', '-h'];
 const FLAG_PATTERN = /--[a-z][a-z-]*/g;
 const ALIASES = ['tui-back', 'tb'];
 

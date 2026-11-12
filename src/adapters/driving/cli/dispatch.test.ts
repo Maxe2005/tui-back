@@ -122,6 +122,7 @@ describe('runCli', () => {
         commands: [
           ...fakeSubcommands.map((subcommand) => ({ name: subcommand.name, usage: subcommand.usage })),
           { name: 'tui', usage: 'tui-back tui' },
+          { name: 'mcp', usage: 'tui-back mcp' },
         ],
       },
     });
@@ -1726,6 +1727,38 @@ describe('subcommand registry guards', () => {
       if (!run) throw new Error('expected update subcommand');
       return { run, migrationRun };
     }
+
+    it('real update with a ctx forwards phases to onPhase and stops on an aborted signal', async () => {
+      const registry: RegistryPort = {
+        list: async () => ok(['/repo/a', '/repo/b']),
+        add: async () => ok(undefined),
+        exists: async () => ok(false),
+        scan: async () => ok({ candidates: [], skipped: [] }),
+        reset: async () => ok({ path: '/p', backupPath: null }),
+        remove: async () => ok(undefined),
+      };
+      const manifest: ManifestPort = {
+        load: async (repoPath) => {
+          const service = repoPath.split('/').pop() ?? repoPath;
+          return ok({ service, container: `ctr-${service}`, migrationCommand: 'npm run m', sharedBranch: 'main', modules: {} });
+        },
+      };
+      const controller = new AbortController();
+      const migration: MigrationPort = {
+        run: async () => {
+          controller.abort();
+          return ok({ output: '' });
+        },
+      };
+      const run = buildTestSubcommands({ registry, manifest, migration }).find((s) => s.name === 'update')!.run;
+      const phases: string[] = [];
+      const result = await run(['--all', '--yes'], { signal: controller.signal, onPhase: (service, phase) => phases.push(`${service}:${phase}`) });
+      expect(phases).toContain('a:migrating');
+      expect(result).toMatchObject({ ok: true });
+      const rows = (result as { data: { results: Array<{ service: string; outcome: string; detail?: { code: string } }> } }).data.results;
+      expect(rows.find((r) => r.service === 'b')).toMatchObject({ outcome: 'skipped', detail: { code: 'run-cancelled' } });
+      expect(phases.some((p) => p.startsWith('b:'))).toBe(false);
+    });
 
     it('runs migrations by default and skips them when settings turn them off', async () => {
       const on = wiredUpdate({});

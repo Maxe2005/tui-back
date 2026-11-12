@@ -24,7 +24,13 @@ Only bash is supported. With another `$SHELL` the npm install still runs and the
 
 `--uninstall` removes the rc block, the completion file and the global package. A missing piece is skipped, never an error.
 
-Piped output is one JSON line: `{ npmInstalled, completionFile, rcFile, shellWarning, nextStep }` (uninstall: `{ npmRemoved, completionRemoved, rcBlockRemoved, completionFile, rcFile, nextStep }`).
+Piped output is one JSON line: `{ npmInstalled, completionFile, rcFile, shellWarning, nextStep, mcp }` (uninstall: `{ npmRemoved, completionRemoved, rcBlockRemoved, completionFile, rcFile, nextStep, mcpNote }`).
+
+## MCP registration
+
+On success, `install` adds `mcp: { command, config }` to its result: `command` is `claude mcp add tui-back -- tui-back mcp` and `config` is `{"mcpServers":{"tui-back":{"command":"tui-back","args":["mcp"]}}}` for other clients. Human text prints both, labelled "not applied". The installer never runs the command and never edits `~/.claude.json`, `.mcp.json` or any client config; it writes only the files listed above. On any error no registration text is returned.
+
+`--uninstall` adds `mcpNote`, naming `claude mcp remove tui-back` and removing the `tui-back` entry from other clients' config by hand.
 
 ## Error codes
 

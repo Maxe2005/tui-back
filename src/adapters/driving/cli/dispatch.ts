@@ -5,11 +5,17 @@
 import { ok, err, type Result } from '../../../core/result.js';
 import { renderResult, type RenderedResult } from './envelope.js';
 
+/** Optional execution context supplied by non-CLI drivers (MCP): cooperative cancel + progress. */
+export interface SubcommandContext {
+  signal?: AbortSignal;
+  onPhase?: (service: string, phase: string) => void;
+}
+
 export interface Subcommand {
   name: string;
   /** One-line usage string shown by `--help`, e.g. "tui-back register <path>". */
   usage: string;
-  run: (args: string[]) => Promise<Result<unknown>>;
+  run: (args: string[], ctx?: SubcommandContext) => Promise<Result<unknown>>;
   /** Optional raw text printed instead of the pretty-printed JSON on a TTY (success only). */
   humanText?: (data: unknown) => string | undefined;
 }
@@ -26,6 +32,8 @@ function buildHelp(subcommands: Subcommand[]): HelpData {
       ...subcommands.map((candidate) => ({ name: candidate.name, usage: candidate.usage })),
       // `tui` is routed by the bin shim, not the subcommand registry, so it is listed statically.
       { name: 'tui', usage: 'tui-back tui' },
+      // `mcp` is likewise routed by the bin shim (MCP over stdio, no AD-3 envelope on stdout).
+      { name: 'mcp', usage: 'tui-back mcp' },
     ],
   };
 }

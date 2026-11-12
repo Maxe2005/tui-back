@@ -21,7 +21,7 @@ describe('generateBashCompletion', () => {
   const script = generateBashCompletion({ commands: completionFixture });
 
   it('lists registry names plus the static entries at word 1', () => {
-    expect(script).toContain('words="ping register edt registry tui --help -h"');
+    expect(script).toContain('words="ping register edt registry tui mcp --help -h"');
   });
 
   it('completes verbs for edt and registry only', () => {

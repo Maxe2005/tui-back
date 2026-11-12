@@ -47,6 +47,52 @@ Aliases: `tb` is `tui-back`, `tbt` is `tui-back tui`.
 
 Completion: `tui-back completion bash` prints the bash completion script; `install` wires it up for you.
 
+## MCP server
+
+`tui-back mcp` runs an MCP server over stdio so an AI agent can drive tui-back. Register it with your client (the installer prints these but never edits any client config):
+
+```bash
+claude mcp add tui-back -- tui-back mcp
+```
+
+```json
+{ "mcpServers": { "tui-back": { "command": "tui-back", "args": ["mcp"] } } }
+```
+
+The command registers the server at Claude Code's default (local) scope; add `--scope user` to make it available from every directory. `tui-back` must be on the `PATH` of the client's environment (the global npm install provides it). `tui-back mcp` is stdio-only and takes no flags.
+
+To remove it: `claude mcp remove tui-back`, or delete the `tui-back` entry from the other client's config.
+
+### Tools by safety class
+
+#### read
+
+Run freely, no approval.
+
+`dashboard`, `edts`, `list-repos`, `list-routes`, `request-list`, `ping`, `registry-validate`
+
+#### write
+
+Change workspace state; each call needs your approval.
+
+`register`, `scan`, `edt-create`, `edt-modify`, `edt-switch`, `realign`, `heal`, `fire-request`, `request-fire`
+
+#### destructive
+
+Can delete or overwrite data; each call needs your approval, and the prompt names what will be lost.
+
+`edt-delete`, `edt-switch-discard`, `register-reset`, `request-delete`, `update`, `registry-clean`
+
+### Authorization
+
+- Every write and destructive call triggers an approval prompt (MCP elicitation) showing the tool, its exact arguments and the repos or EDTs affected.
+- Approvals are per call and never cached: the next call asks again.
+- Decline, cancel or timeout runs nothing and returns an error (`authorization-denied`).
+- Fail closed: if the client does not support elicitation, write and destructive tools are refused with `authorization-unavailable`. Read tools keep working.
+- Secrets such as dev-auth tokens never appear in tool results or prompts.
+
+Warning: `fire-request` and `request-fire` send requests to real endpoints. Approve them only for targets you intend to hit.
+
 ## Update
 
 Re-run the install command. The `~/.bashrc` block is replaced in place, never duplicated.
