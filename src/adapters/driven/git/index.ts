@@ -28,6 +28,8 @@ import { discardPaths, discardPathsToHead, discardAll } from './discard.js';
 export { discardPaths, discardPathsToHead, discardAll } from './discard.js';
 import { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge.js';
 export { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge.js';
+import { stagePaths, commitPaths } from './commit.js';
+export { stagePaths, commitPaths } from './commit.js';
 
 export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryPort): GitPort {
   return {
@@ -454,45 +456,6 @@ export async function createTrackingBranch(
   return ok(undefined);
 }
 
-// `git add -- <paths>`: stages exactly the listed paths, nothing else. Gated on the current
-// branch before any git call.
-export async function stagePaths(manifest: ManifestPort, repoPath: string, paths: string[]): Promise<Result<void>> {
-  const allowed = await assertCurrentBranchAllowed(manifest, repoPath);
-  if (!allowed.ok) {
-    return allowed;
-  }
-  if (paths.length === 0) {
-    return ok(undefined);
-  }
-  const result = await runProcess('git', ['add', '--', ...paths], { cwd: repoPath });
-  if (result.status !== 0) {
-    return err('git-add-error', `git add failed in ${repoPath}: ${spawnFailureDetail(result)}`);
-  }
-  return ok(undefined);
-}
-
-// `git commit -m <message> --only -- <paths>`: `--only` records exactly the listed paths even
-// when other files are staged. Gated on the current branch. Never pushes.
-export async function commitPaths(
-  manifest: ManifestPort,
-  repoPath: string,
-  message: string,
-  paths: string[],
-): Promise<Result<void>> {
-  const allowed = await assertCurrentBranchAllowed(manifest, repoPath);
-  if (!allowed.ok) {
-    return allowed;
-  }
-  if (paths.length === 0) {
-    return err('git-commit-error', `Nothing to commit in ${repoPath}: no paths given`);
-  }
-  const result = await runProcess('git', ['commit', '-m', message, '--only', '--', ...paths], { cwd: repoPath });
-  if (result.status !== 0) {
-    return err('git-commit-error', `git commit failed in ${repoPath}: ${spawnFailureDetail(result)}`);
-  }
-  return ok(undefined);
-}
-
 const BUMP_HEADER = '@@bump@@';
 // Any indentation and spacing around the colon, or a whole minified one-line file.
 const ADDED_VERSION_LINE = /^\+.*?"version"\s*:\s*"([^"]+)"/;
@@ -611,6 +574,7 @@ export async function listBranchesContaining(repoPath: string, commit: string, s
   }
   return ok(names);
 }
+
 
 
 
