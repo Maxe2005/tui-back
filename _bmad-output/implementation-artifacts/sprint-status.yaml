@@ -98,6 +98,6 @@ development_status:
   # MCP server (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 11-1 -> 11-2 -> 11-3 -> 11-4. Starts after 10-1; 11-4 needs 10-3.
   11-1-mcp-skeleton-and-read-only-tools: done
   11-2-authorization-gate-and-write-tools: review
-  11-3-destructive-tools-and-long-operations: backlog
+  11-3-destructive-tools-and-long-operations: review
   11-4-install-registration-and-docs: backlog
   epic-11-retrospective: optional

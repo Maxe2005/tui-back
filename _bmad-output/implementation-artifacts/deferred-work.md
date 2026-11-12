@@ -919,3 +919,16 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-2-authorization-gate-and-write-tools.md`
   summary: Document the gate (elicitation requirement, 5-minute timeout) and make the timeout configurable; consider an approval audit log.
   evidence: No CLI/env knob for authorizationTimeoutMs and no docs yet; story 11.4 owns docs.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
+  summary: TUI test "opens only through the reset command" (app-shell.interaction.test.tsx:2678) fails, expecting "RESET TOOL DATA" but rendering "SET TOOL DATA".
+  evidence: Reported by the 11.3 implementation run and the full suite; the story diff touches no TUI file.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
+  summary: The tool `run` wrapper in tool-registry.ts returns String(error) in an internal-error envelope, leaking raw error text to MCP clients.
+  evidence: Pre-existing since 11.1/11.2; runToEnvelope uses a generic message instead, so the two paths disagree.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
+  summary: A cooperatively cancelled MCP `update` returns a plain success envelope with no explicit cancelled marker for the agent.
+  evidence: Core returns ok with rows skipped as run-cancelled; the server does not flag it.
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-3-destructive-tools-and-long-operations.md`
+  summary: registry-clean does not re-verify at removal time that approved paths are still stale (window between preview and human approval).
+  evidence: Approved argv passes explicit --path values; removal trusts the earlier snapshot.

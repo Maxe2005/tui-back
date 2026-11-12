@@ -3,8 +3,8 @@
 // one throws at startup (fail fast). The class here is authoritative — MCP annotations derived
 // from it are advisory hints for clients only.
 import { z } from 'zod';
-import { err, type Result } from '../../../core/result.js';
-import type { Subcommand } from '../cli/dispatch.js';
+import { err, ok, type Result } from '../../../core/result.js';
+import type { Subcommand, SubcommandContext } from '../cli/dispatch.js';
 
 export type SafetyClass = 'read' | 'write' | 'destructive';
 const SAFETY_CLASSES: readonly string[] = ['read', 'write', 'destructive'];
@@ -16,20 +16,41 @@ export interface ToolDefinition {
   inputSchema: z.ZodRawShape;
   /** Name of the wrapped registry subcommand. */
   subcommand: string;
-  /** Fixed argv prefix placed before the mapped input args (e.g. ['registry', 'validate']). */
+  /** Fixed argv placed before the mapped input args, as the subcommand's own args (e.g. ['validate'] for `registry`; the subcommand name is not repeated). */
   baseArgs?: string[];
   /** Maps the validated input to argv for the wrapped subcommand. */
   toArgs?: (input: Record<string, unknown>) => string[];
   safety?: SafetyClass;
+  /** Cross-field input check; returns an error message when the input is invalid (the server rejects before any prompt). */
+  validateInput?: (input: Record<string, unknown>) => string | undefined;
   /** Repos / EDTs this call affects, shown in the authorization prompt. */
   describeTargets?: (input: Record<string, unknown>) => string[];
   /** Returns the input as shown to the human: secrets (header values) removed. */
   redact?: (input: Record<string, unknown>) => Record<string, unknown>;
+  /**
+   * Read-only step run BEFORE the authorization gate (e.g. previewing what would be removed).
+   * `exec` runs a wrapped-subcommand argv. It may finish the call early or fix the exact argv
+   * and targets that the human approves.
+   */
+  prepare?: (input: Record<string, unknown>, exec: (argv: string[]) => Promise<Result<unknown>>) => Promise<Result<PreparedCall>>;
 }
 
-export interface RegisteredTool extends ToolDefinition {
+/** Per-call context supplied by the MCP server. */
+export interface ToolRunContext {
+  signal?: AbortSignal;
+  /** Progress message sink (the server turns it into notifications/progress). */
+  onProgress?: (message: string) => void;
+  /** Overrides the argv built from the input (set by `prepare`). */
+  argv?: string[];
+}
+
+/** What `prepare` decided before the gate: either an early result, or the exact call to approve. */
+export type PreparedCall = { done: Result<unknown> } | { targets: string[]; argv: string[] };
+
+export interface RegisteredTool extends Omit<ToolDefinition, 'prepare'> {
   safety: SafetyClass;
-  run: (input: Record<string, unknown>) => Promise<Result<unknown>>;
+  run: (input: Record<string, unknown>, ctx?: ToolRunContext) => Promise<Result<unknown>>;
+  prepare?: (input: Record<string, unknown>, ctx?: ToolRunContext) => Promise<Result<PreparedCall>>;
 }
 
 /** Subcommands deliberately not exposed as tools, with the reason (checked by the e2e guard). */
@@ -38,12 +59,7 @@ export const EXCLUDED_SUBCOMMANDS: Record<string, string> = {
   mcp: 'the MCP server itself',
   completion: 'shell completion script, meaningless to an agent',
   install: 'installer; handled outside MCP (registration commands are printed, not served)',
-  // `edt` is wrapped by edt-create / edt-modify / edt-switch; `edt delete` (destructive) is not a tool yet.
-  // Destructive tools and the long-running update arrive later, behind the same gate.
-  update: 'long-running destructive tool, deferred',
-  'request-delete': 'destructive tool, deferred',
-  // `registry` is exposed only through its read verb `registry-validate`; `registry clean`
-  // prompts on stdin and writes, so it is never a tool.
+  // `edt` is wrapped by edt-create / edt-modify / edt-switch / edt-switch-discard / edt-delete.
 };
 
 // A leading '-' would be parsed as a flag by the wrapped CLI (argument injection).
@@ -111,7 +127,7 @@ const WRITE_DEFINITIONS: ToolDefinition[] = [
       branchNames: z.array(safeString('<name> or <path>=<name>')).optional(),
     },
     subcommand: 'edt',
-    baseArgs: ['edt', 'create'],
+    baseArgs: ['create'],
     toArgs: (i) => [
       '--topic', String(i.topic),
       ...strings(i.members).flatMap((m) => ['--member', m]),
@@ -134,7 +150,7 @@ const WRITE_DEFINITIONS: ToolDefinition[] = [
       renameTo: safeString('New topic.').optional(),
     },
     subcommand: 'edt',
-    baseArgs: ['edt', 'modify'],
+    baseArgs: ['modify'],
     toArgs: (i) => [
       '--topic', String(i.topic),
       ...strings(i.addMembers).flatMap((m) => ['--add-member', m]),
@@ -156,7 +172,7 @@ const WRITE_DEFINITIONS: ToolDefinition[] = [
       restart: restartArg.optional(),
     },
     subcommand: 'edt',
-    baseArgs: ['edt', 'switch'],
+    baseArgs: ['switch'],
     toArgs: (i) => [
       '--to', String(i.to),
       ...(i.force === true ? ['--force'] : []),
@@ -240,6 +256,149 @@ const WRITE_DEFINITIONS: ToolDefinition[] = [
   },
 ];
 
+interface StaleCandidate { path: string; reason: string; memberOfEdts: string[] }
+
+// Validates the candidates of a `confirmation-required` preview; null when any is malformed
+// (never silently dropped, since the human would approve an incomplete list). Paths are deduped.
+function staleCandidates(details: unknown): StaleCandidate[] | null {
+  const list = (details as { candidates?: unknown } | undefined)?.candidates;
+  if (!Array.isArray(list)) return null;
+  const seen = new Set<string>();
+  const out: StaleCandidate[] = [];
+  for (const raw of list) {
+    if (typeof raw !== 'object' || raw === null) return null;
+    const c = raw as { path?: unknown; reason?: unknown; memberOfEdts?: unknown };
+    if (typeof c.path !== 'string' || c.path === '' || typeof c.reason !== 'string') return null;
+    if (c.memberOfEdts !== undefined && (!Array.isArray(c.memberOfEdts) || !c.memberOfEdts.every((m) => typeof m === 'string'))) return null;
+    if (seen.has(c.path)) continue;
+    seen.add(c.path);
+    out.push({ path: c.path, reason: c.reason, memberOfEdts: (c.memberOfEdts as string[] | undefined) ?? [] });
+  }
+  return out;
+}
+
+const DESTRUCTIVE_DEFINITIONS: ToolDefinition[] = [
+  {
+    name: 'edt-delete',
+    description: 'Delete an EDT and its stored state; per member repo, leave or delete its branch.',
+    inputSchema: {
+      topic: safeString('EDT topic.'),
+      branches: z.array(safeString('<repoPath>=<leave|delete>').refine((v) => /^.+=(leave|delete)$/.test(v) && v.slice(0, v.lastIndexOf('=')).trim() !== '', 'must be <repoPath>=leave or <repoPath>=delete with a non-empty repoPath')).optional(),
+    },
+    subcommand: 'edt',
+    baseArgs: ['delete'],
+    toArgs: (i) => [String(i.topic), ...strings(i.branches).flatMap((b) => ['--branches', b])],
+    describeTargets: (i) => [
+      `DELETES EDT ${String(i.topic)} and its stored state`,
+      ...(strings(i.branches).length > 0 ? [`branch dispositions: ${strings(i.branches).join(', ')} (=delete DELETES that branch)`] : ['branches: left in place unless specified']),
+    ],
+    safety: 'destructive',
+  },
+  {
+    name: 'edt-switch-discard',
+    description: 'Switch the active EDT and DISCARD uncommitted changes in every member repo.',
+    inputSchema: {
+      to: safeString('Target EDT topic.'),
+      force: z.boolean().optional(),
+      restart: restartArg.optional(),
+    },
+    subcommand: 'edt',
+    baseArgs: ['switch'],
+    toArgs: (i) => [
+      '--to', String(i.to),
+      '--discard-dirty',
+      ...(i.force === true ? ['--force'] : []),
+      ...(typeof i.restart === 'string' ? ['--restart', i.restart] : []),
+    ],
+    describeTargets: (i) => [`DISCARDS uncommitted changes in every member repo of EDT ${String(i.to)} (and the one being left)`],
+    safety: 'destructive',
+  },
+  {
+    name: 'register-reset',
+    description: 'Reset a repository registration (discards its registry state).',
+    inputSchema: { repoPath: repoPathArg },
+    subcommand: 'register',
+    baseArgs: ['--reset'],
+    toArgs: (i) => [String(i.repoPath)],
+    describeTargets: (i) => [`RESETS the registration of ${String(i.repoPath)}`],
+    safety: 'destructive',
+  },
+  {
+    name: 'request-delete',
+    description: 'Delete a saved request by name.',
+    inputSchema: { name: safeString('Saved request name.') },
+    subcommand: 'request-delete',
+    toArgs: (i) => [String(i.name)],
+    describeTargets: (i) => [`DELETES saved request ${String(i.name)}`],
+    safety: 'destructive',
+  },
+  {
+    name: 'update',
+    description:
+      'Pull/merge/migrate/restart services (long-running; reports progress, stops cooperatively on cancel). mode "all" updates every managed repo.',
+    inputSchema: {
+      mode: z.enum(['edt', 'all', 'from-edt']).optional(),
+      fromEdt: safeString('EDT topic to take the selection from (mode from-edt).').optional(),
+      runMigrations: z.boolean().optional(),
+      cleanRestart: z.boolean().optional(),
+    },
+    // fromEdt is required for (and only valid with) mode "from-edt".
+    validateInput: (i) => {
+      if (i.mode === 'from-edt' && (typeof i.fromEdt !== 'string' || i.fromEdt.trim() === '')) return 'fromEdt is required when mode is "from-edt"';
+      if (i.mode !== 'from-edt' && i.fromEdt !== undefined) return 'fromEdt is only allowed when mode is "from-edt"';
+      return undefined;
+    },
+    subcommand: 'update',
+    toArgs: (i) => [
+      ...(i.mode === 'all' ? ['--all', '--yes'] : []),
+      ...(i.mode === 'from-edt' ? ['--from-edt', typeof i.fromEdt === 'string' ? i.fromEdt : ''] : []),
+      ...(i.runMigrations === undefined ? [] : [i.runMigrations === true ? '--migrations' : '--no-migrations']),
+      ...(i.cleanRestart === undefined ? [] : [i.cleanRestart === true ? '--clean-restart' : '--no-clean-restart']),
+    ],
+    describeTargets: (i) => [
+      i.mode === 'all'
+        ? 'UPDATES EVERY managed repo (merges upstream, may run migrations and restart services)'
+        : i.mode === 'from-edt'
+          ? `UPDATES the services of EDT ${String(i.fromEdt)} (merges upstream, may run migrations and restart services)`
+          : 'UPDATES the active EDT services (merges upstream, may run migrations and restart services)',
+      ...(i.runMigrations === false ? ['migrations skipped'] : []),
+      ...(i.cleanRestart === true ? ['clean restart'] : []),
+    ],
+    safety: 'destructive',
+  },
+  {
+    name: 'registry-clean',
+    description: 'Remove stale registry entries. The stale entries are previewed in the approval prompt; only those are removed.',
+    inputSchema: {},
+    subcommand: 'registry',
+    baseArgs: ['clean'],
+    prepare: async (_input, exec) => {
+      const preview = await exec(['clean']);
+      if (preview.ok) {
+        // No stale entries: the usual envelope, nothing to approve.
+        return ok({ done: preview });
+      }
+      if (preview.error.code !== 'confirmation-required') {
+        return ok({ done: preview });
+      }
+      const candidates = staleCandidates(preview.error.details);
+      if (candidates === null) {
+        return err('internal-error', 'registry clean returned malformed stale-entry candidates; nothing was removed.');
+      }
+      if (candidates.length === 0) {
+        return ok({ done: preview });
+      }
+      return ok({
+        targets: candidates.map(
+          (c) => `REMOVES registry entry ${c.path} — ${c.reason}${c.memberOfEdts.length > 0 ? ` [member of EDT: ${c.memberOfEdts.join(', ')}]` : ''}`,
+        ),
+        argv: ['clean', '--yes', ...candidates.flatMap((c) => ['--path', c.path])],
+      });
+    },
+    safety: 'destructive',
+  },
+];
+
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'dashboard',
@@ -290,10 +449,11 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: 'Validate the repository registry (read-only).',
     inputSchema: {},
     subcommand: 'registry',
-    baseArgs: ['registry', 'validate'],
+    baseArgs: ['validate'],
     safety: 'read',
   },
   ...WRITE_DEFINITIONS,
+  ...DESTRUCTIVE_DEFINITIONS,
 ];
 
 export function buildToolRegistry(
@@ -314,12 +474,32 @@ export function buildToolRegistry(
       throw new Error(`MCP tool "${definition.name}" wraps unknown subcommand "${definition.subcommand}"`);
     }
     const safety = definition.safety;
+    const exec = (argv: string[], ctx?: ToolRunContext): Promise<Result<unknown>> => {
+      const subCtx: SubcommandContext = {
+        ...(ctx?.signal === undefined ? {} : { signal: ctx.signal }),
+        ...(ctx?.onProgress === undefined ? {} : { onPhase: (service: string, phase: string) => ctx.onProgress?.(`${service}: ${phase}`) }),
+      };
+      return Object.keys(subCtx).length === 0 ? target.run(argv) : target.run(argv, subCtx);
+    };
+    const { prepare: definitionPrepare, ...rest } = definition;
     return {
-      ...definition,
+      ...rest,
       safety,
-      run: async (input) => {
+      ...(definitionPrepare === undefined
+        ? {}
+        : {
+            prepare: async (input: Record<string, unknown>, ctx?: ToolRunContext) => {
+              try {
+                return await definitionPrepare(input, (argv) => exec(argv, ctx));
+              } catch (error) {
+                console.error(error);
+                return err('internal-error', String(error));
+              }
+            },
+          }),
+      run: async (input, ctx) => {
         try {
-          return await target.run([...(definition.baseArgs ?? []), ...(definition.toArgs?.(input) ?? [])]);
+          return await exec(ctx?.argv ?? [...(definition.baseArgs ?? []), ...(definition.toArgs?.(input) ?? [])], ctx);
         } catch (error) {
           console.error(error);
           return err('internal-error', String(error));

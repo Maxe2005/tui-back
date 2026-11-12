@@ -197,17 +197,17 @@ describe('authorization gate', () => {
     [
       'edt-create',
       { topic: 't', members: ['/a', '/b'], createBranches: true, base: 'main', branchMode: 'individual', branchNames: ['/a=x'] },
-      ['edt', 'edt', 'create', '--topic', 't', '--member', '/a', '--member', '/b', '--create-branches', '--base', 'main', '--branch-mode', 'individual', '--branch-name', '/a=x'],
+      ['edt', 'create', '--topic', 't', '--member', '/a', '--member', '/b', '--create-branches', '--base', 'main', '--branch-mode', 'individual', '--branch-name', '/a=x'],
     ],
     [
       'edt-modify',
       { topic: 't', addMembers: ['/a'], removeMembers: ['/b'], setBranches: ['/a=x'], renameTo: 'n' },
-      ['edt', 'edt', 'modify', '--topic', 't', '--add-member', '/a', '--remove-member', '/b', '--set-branch', '/a=x', '--rename-to', 'n'],
+      ['edt', 'modify', '--topic', 't', '--add-member', '/a', '--remove-member', '/b', '--set-branch', '/a=x', '--rename-to', 'n'],
     ],
     [
       'edt-switch',
       { to: 't', force: true, adoptDirty: true, adoptBranch: 'b', restart: 'none' },
-      ['edt', 'edt', 'switch', '--to', 't', '--force', '--adopt-dirty', '--adopt-branch', 'b', '--restart', 'none'],
+      ['edt', 'switch', '--to', 't', '--force', '--adopt-dirty', '--adopt-branch', 'b', '--restart', 'none'],
     ],
     [
       'fire-request',

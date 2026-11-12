@@ -13,7 +13,7 @@ describe('buildToolRegistry', () => {
     const subs = [...new Set(TOOL_DEFINITIONS.map((d) => d.subcommand))].map((n) => fake(n));
     const tools = buildToolRegistry(subs);
     expect(tools.map((t) => t.name).sort()).toEqual(TOOL_DEFINITIONS.map((d) => d.name).sort());
-    expect(tools.every((t) => ['read', 'write'].includes(t.safety))).toBe(true);
+    expect(tools.every((t) => ['read', 'write', 'destructive'].includes(t.safety))).toBe(true);
     expect(tools.filter((t) => t.safety === 'read')).toHaveLength(TOOL_DEFINITIONS.filter((d) => d.safety === 'read').length);
   });
 
@@ -55,7 +55,7 @@ describe('buildToolRegistry', () => {
     await byName('request-list').run({ repoPath: '/r' });
     await byName('request-list').run({});
     await byName('registry-validate').run({});
-    expect(seen).toEqual([['/r'], ['--repo', '/r'], [], ['registry', 'validate']]);
+    expect(seen).toEqual([['/r'], ['--repo', '/r'], [], ['validate']]);
   });
 
   it('turns a throwing run into an internal-error result', async () => {

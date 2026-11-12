@@ -186,6 +186,10 @@ export interface GroupUpdateParams {
   // restarting), never allowed to throw into the pipeline — a throwing observer is swallowed
   // per emission.
   onPhase?: OnUpdatePhase;
+  // Cooperative external cancellation (e.g. an aborted MCP request). Polled at the same step
+  // boundaries as the pool's own cancel flag; once true the run is cancelled and remaining
+  // services are reported as cancelled/skipped. Nothing is killed.
+  shouldCancel?: () => boolean;
   // Fires once per service as soon as its row is final (before the run ends), so a driving
   // side can show a finished service while others still run. Observer-only, like onPhase.
   onServiceResult?: OnServiceResult;
@@ -243,6 +247,27 @@ export type OnUpdateBlocker = (blocker: UpdateBlocker) => Promise<UpdateBlockerC
 // The live per-service step vocabulary. One optional callback, set by the store, no-op by
 // default — no event bus.
 export type UpdatePhase = 'pulling' | 'merging' | 'migrating' | 'restarting';
+
+// The stop predicate handed to the per-service steps: the pool's flag, or the external one
+// (which also cancels the pool so unstarted services resolve through `onCancelled`).
+function foldCancel(control: { cancelled(): boolean; cancel(): void }, shouldCancel: (() => boolean) | undefined): () => boolean {
+  return () => {
+    if (control.cancelled()) {
+      return true;
+    }
+    let external = false;
+    try {
+      external = shouldCancel?.() === true;
+    } catch (error) {
+      console.error(error);
+      external = true;
+    }
+    if (external) {
+      control.cancel();
+    }
+    return external;
+  };
+}
 
 export type OnUpdatePhase = (service: string, phase: UpdatePhase) => void;
 
@@ -441,7 +466,7 @@ async function groupUpdateAll(params: GroupUpdateParams): Promise<Result<GroupUp
           target.runMigrations ?? runMigrations,
           target.cleanRestart ?? cleanRestart,
           params.onPhase,
-          control.cancelled,
+          foldCancel(control, params.shouldCancel),
           params.autoResolveConflict,
         );
         if (outcome.cancelRun) {
@@ -653,7 +678,7 @@ async function groupUpdateEdt(params: GroupUpdateParams): Promise<Result<GroupUp
             memberMigrations ?? runMigrations,
             memberCleanRestart ?? cleanRestart,
             params.onPhase,
-            control.cancelled,
+            foldCancel(control, params.shouldCancel),
             params.autoResolveConflict,
           );
           if (outcome.cancelRun) {
