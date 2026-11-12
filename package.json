@@ -12,6 +12,7 @@
   },
   "files": [
     "src",
+    "tsconfig.json",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
     "!src/**/test-support"
