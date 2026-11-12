@@ -70,18 +70,18 @@ development_status:
   epic-9: done
   epic-9-retrospective: optional
 
-  epic-10: in-progress
+  epic-10: done
   # Distribution (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 10-1 -> 10-2 -> 10-3 -> 10-4. Epic 9 already merged into devlopment (8ad7b011).
   10-1-repair-the-bin-one-binary-tui-routing: done
   10-2-completion-bash-subcommand: done
-  10-3-install-subcommand: review
-  10-4-publication-install-sh-and-docs: review
+  10-3-install-subcommand: done
+  10-4-publication-install-sh-and-docs: done
   epic-10-retrospective: optional
 
-  epic-11: in-progress
+  epic-11: done
   # MCP server (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 11-1 -> 11-2 -> 11-3 -> 11-4. Starts after 10-1; 11-4 needs 10-3.
   11-1-mcp-skeleton-and-read-only-tools: done
-  11-2-authorization-gate-and-write-tools: review
-  11-3-destructive-tools-and-long-operations: review
-  11-4-install-registration-and-docs: review
+  11-2-authorization-gate-and-write-tools: done
+  11-3-destructive-tools-and-long-operations: done
+  11-4-install-registration-and-docs: done
   epic-11-retrospective: optional
