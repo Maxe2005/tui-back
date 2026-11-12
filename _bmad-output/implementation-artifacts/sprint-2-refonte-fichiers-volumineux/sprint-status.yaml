@@ -36,8 +36,8 @@ tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux
 development_status:
   epic-12: in-progress
-  12-1-split-the-git-adapter-by-operation-family: review
-  12-2-extract-pure-logic-from-json-tree-and-the-command-bar: backlog
+  12-1-split-the-git-adapter-by-operation-family: done
+  12-2-extract-pure-logic-from-json-tree-and-the-command-bar: in-progress
   12-3-split-the-settings-screen-by-tab: backlog
   12-4-split-the-cli-subcommands-by-family: backlog
   12-5-split-the-group-update-core: backlog
