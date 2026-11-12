@@ -3,10 +3,25 @@
 // diagnostic goes to stderr. Annotations are advisory — the registry's safety class rules.
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { err, type Result } from '../../../core/result.js';
+import { createAuthorizationGate, DEFAULT_AUTHORIZATION_TIMEOUT_MS, type AuthorizationGate } from './authorization-gate.js';
 import type { RegisteredTool } from './tool-registry.js';
 
-export function createMcpServer(tools: RegisteredTool[], version: string): McpServer {
+export function createMcpServer(
+  tools: RegisteredTool[],
+  version: string,
+  options: { authorizationTimeoutMs?: number; gate?: AuthorizationGate } = {},
+): McpServer {
   const server = new McpServer({ name: 'tui-back', version });
+  const gate =
+    options.gate ??
+    createAuthorizationGate({
+      getCapabilities: () => server.server.getClientCapabilities(),
+      elicit: async (request, requestOptions) => {
+        const response = await server.server.elicitInput(request, requestOptions);
+        return { action: response.action };
+      },
+      timeoutMs: options.authorizationTimeoutMs ?? DEFAULT_AUTHORIZATION_TIMEOUT_MS,
+    });
   for (const tool of tools) {
     server.registerTool(
       tool.name,
@@ -20,6 +35,17 @@ export function createMcpServer(tools: RegisteredTool[], version: string): McpSe
         _meta: { safety: tool.safety },
       },
       async (input: Record<string, unknown>) => {
+        if (tool.safety !== 'read') {
+          const verdict = await gate.authorize({
+            tool: tool.name,
+            safety: tool.safety,
+            args: tool.redact === undefined ? input : tool.redact(input),
+            targets: tool.describeTargets?.(input) ?? [],
+          });
+          if (!verdict.ok) {
+            return { content: [{ type: 'text' as const, text: JSON.stringify(verdict) }], isError: true };
+          }
+        }
         const { text, isError } = await runToEnvelope(tool, input);
         return { content: [{ type: 'text' as const, text }], isError };
       },
