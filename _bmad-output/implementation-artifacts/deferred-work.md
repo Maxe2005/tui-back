@@ -939,3 +939,6 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
   summary: Distribution hardening not in 10.4 scope: pinning `install.sh`/npx to a tag or `TUI_BACK_REF`, and macOS/zsh note (login shells read `~/.bash_profile`, not `~/.bashrc`).
   evidence: README curl one-liner uses `HEAD`; the installer only edits `~/.bashrc` (Blind Hunter / Edge Case Hunter findings).
+- source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-4-install-registration-and-docs.md`
+  summary: README Authorization section names gate error codes and cancellation/progress behaviour of destructive tools without a test pinning the codes to the gate's exports.
+  evidence: Verification-gap review; the README test only checks tool names per safety class, so a renamed `authorization-denied` would not fail any docs test.
