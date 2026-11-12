@@ -2657,12 +2657,15 @@ describe('tui-back mcp (black-box)', () => {
       if (name !== 'mcp') expect(helpNames).toContain(name);
       expect(wrapped.has(name)).toBe(false);
     }
-    // Every write tool is advertised as non-read-only; destructive tools are not registered yet.
+    // Every write tool is advertised as non-read-only; destructive tools are checked below.
     const writes = TOOL_DEFINITIONS.filter((d) => d.safety === 'write').map((d) => d.name);
     expect(writes).toEqual(expect.arrayContaining(['register', 'scan', 'edt-create', 'edt-modify', 'edt-switch', 'realign', 'heal', 'fire-request', 'request-fire']));
-    expect(TOOL_DEFINITIONS.filter((d) => d.safety === 'destructive')).toEqual([]);
-    // registry clean is never a tool: only the validate verb is exposed.
-    expect(TOOL_DEFINITIONS.filter((d) => d.subcommand === 'registry').every((d) => d.baseArgs?.join(' ') === 'registry validate')).toBe(true);
+    expect(TOOL_DEFINITIONS.filter((d) => d.safety === 'destructive').map((d) => d.name).sort()).toEqual(
+      ['edt-delete', 'edt-switch-discard', 'register-reset', 'registry-clean', 'request-delete', 'update'],
+    );
+    // `--discard-dirty` is reachable only through edt-switch-discard.
+    const discard = TOOL_DEFINITIONS.filter((d) => d.toArgs?.({ to: 'x' }).includes('--discard-dirty'));
+    expect(discard.map((d) => d.name)).toEqual(['edt-switch-discard']);
   });
 
   it('serves tools over stdio with protocol-only stdout', async () => {

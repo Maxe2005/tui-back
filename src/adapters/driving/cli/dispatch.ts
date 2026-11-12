@@ -5,11 +5,17 @@
 import { ok, err, type Result } from '../../../core/result.js';
 import { renderResult, type RenderedResult } from './envelope.js';
 
+/** Optional execution context supplied by non-CLI drivers (MCP): cooperative cancel + progress. */
+export interface SubcommandContext {
+  signal?: AbortSignal;
+  onPhase?: (service: string, phase: string) => void;
+}
+
 export interface Subcommand {
   name: string;
   /** One-line usage string shown by `--help`, e.g. "tui-back register <path>". */
   usage: string;
-  run: (args: string[]) => Promise<Result<unknown>>;
+  run: (args: string[], ctx?: SubcommandContext) => Promise<Result<unknown>>;
   /** Optional raw text printed instead of the pretty-printed JSON on a TTY (success only). */
   humanText?: (data: unknown) => string | undefined;
 }

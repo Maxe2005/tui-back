@@ -13,7 +13,7 @@ import { createServiceActions } from '../../../core/service-actions/index.js';
 import { modifyEdt } from '../../../core/edt/modify.js';
 import { deleteEdt, type MemberDisposition } from '../../../core/edt/delete.js';
 import { listEdtBranchesDivergence } from '../../../core/edt/list.js';
-import { groupUpdate } from '../../../core/scripts/group-update.js';
+import { groupUpdate, type OnUpdatePhase, type UpdatePhase } from '../../../core/scripts/group-update.js';
 import { selectionFromEdt } from '../../../core/scripts/resolve-merge-sources.js';
 import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../core/scripts/clean-registry.js';
 import { validateRegistry } from '../../../core/scripts/validate-registry.js';
@@ -45,7 +45,7 @@ import { scanRepos } from '../../../core/scripts/scan.js';
 import { listRoutes } from '../../../core/routes/list-routes.js';
 import { fireRequest, type FireRequestOptions } from '../../../core/routes/fire-request.js';
 import { deleteSavedRequest, fireSavedRequest, listSavedRequests, saveRequest } from '../../../core/routes/saved-requests.js';
-import type { Subcommand } from './dispatch.js';
+import type { Subcommand, SubcommandContext } from './dispatch.js';
 import { generateBashCompletion } from './completion-spec.js';
 import { createInstallSubcommand, type InstallerPort } from './install.js';
 
@@ -249,7 +249,7 @@ export function buildSubcommands(deps: {
       // (order-insensitive) runs the same per-service flow against every managed repo; `--all`
       // alone is a `confirmation-required` rejection naming `--yes` (confirmation stays out of
       // core — a driving concern). Any other flag is an explicit invalid-argument rejection.
-      run: async (rawArgs) => {
+      run: async (rawArgs, ctx) => {
         const overrides = parseUpdateOverrides(rawArgs);
         if (!overrides.ok) {
           return err('invalid-argument', `${overrides.message}. Usage: ${UPDATE_USAGE}`);
@@ -287,8 +287,7 @@ export function buildSubcommands(deps: {
             runMigrations,
             cleanRestart,
             onUpdateBlocker: undefined,
-            // No live observer either: the output stays a single JSON line.
-            onPhase: undefined,
+            ...updateContext(ctx),
           });
         }
         const sorted = [...args].sort();
@@ -308,8 +307,7 @@ export function buildSubcommands(deps: {
             runMigrations,
             cleanRestart,
             onUpdateBlocker: undefined,
-            // Same no-observer wiring as above.
-            onPhase: undefined,
+            ...updateContext(ctx),
           });
         }
         if (args.length === 2 && args[0] === '--from-edt' && args[1].trim() !== '') {
@@ -332,7 +330,7 @@ export function buildSubcommands(deps: {
             runMigrations,
             cleanRestart,
             onUpdateBlocker: undefined,
-            onPhase: undefined,
+            ...updateContext(ctx),
           });
         }
         if (args.length === 1 && args[0] === '--all') {
@@ -1652,4 +1650,16 @@ async function loadSettingsOrDefaults(port: SettingsPort): Promise<Settings> {
     console.error(`tui-back: ${loaded.data.warning}`);
   }
   return loaded.ok ? loaded.data.settings : DEFAULT_SETTINGS;
+}
+
+// Maps the optional driver context to groupUpdate's observer/cancel seams; empty on the CLI path.
+function updateContext(ctx: SubcommandContext | undefined): { onPhase?: OnUpdatePhase; shouldCancel?: () => boolean } {
+  if (ctx === undefined) {
+    return {};
+  }
+  const { signal, onPhase } = ctx;
+  return {
+    ...(onPhase === undefined ? {} : { onPhase: (service: string, phase: UpdatePhase) => onPhase(service, phase) }),
+    ...(signal === undefined ? {} : { shouldCancel: () => signal.aborted }),
+  };
 }
