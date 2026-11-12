@@ -2,7 +2,7 @@
 title: 'Story 11.2: Authorization Gate and Write Tools'
 type: 'feature'
 created: '2026-11-12'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '821a1d4b17743e9d9180ca8c894d9750308dbaad'
 review_loop_iteration: 0
 context:
@@ -76,3 +76,37 @@ Live elicitation in a real Claude Code session was not checked (no interactive c
 - `npm run typecheck` -- expected: no errors
 - `npm test` -- expected: all green
 - `npm run depcheck` -- expected: no violations
+
+## Suggested Review Order
+
+**Authorization gate (design entry point)**
+
+- Single enforcement point: fail closed on anything but an explicit accept.
+  [`authorization-gate.ts:54`](../../../src/adapters/driving/mcp/authorization-gate.ts#L54)
+
+- Prompt shows tool, redacted args and targets, sanitized and size-capped.
+  [`authorization-gate.ts:42`](../../../src/adapters/driving/mcp/authorization-gate.ts#L42)
+
+**Server wiring**
+
+- Every non-read tool is gated before running; prompt-build errors also fail closed.
+  [`server.ts:38`](../../../src/adapters/driving/mcp/server.ts#L38)
+
+**Write tools**
+
+- Declarative write definitions with typed inputs and per-tool targets.
+  [`tool-registry.ts:83`](../../../src/adapters/driving/mcp/tool-registry.ts#L83)
+
+- Header names/values validated against injection.
+  [`tool-registry.ts:59`](../../../src/adapters/driving/mcp/tool-registry.ts#L59)
+
+- Header values redacted in the prompt; fire-request is the secret-sensitive tool.
+  [`tool-registry.ts:75`](../../../src/adapters/driving/mcp/tool-registry.ts#L75)
+
+- `edt-switch` deliberately omits the discard-dirty flag.
+  [`tool-registry.ts:149`](../../../src/adapters/driving/mcp/tool-registry.ts#L149)
+
+**Tests**
+
+- Fake-client coverage of accept, decline, cancel, timeout, no-elicitation, argv and injection.
+  [`authorization.test.ts:46`](../../../src/adapters/driving/mcp/authorization.test.ts#L46)
