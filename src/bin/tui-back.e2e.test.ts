@@ -2657,6 +2657,10 @@ describe('tui-back mcp (black-box)', () => {
       if (name !== 'mcp') expect(helpNames).toContain(name);
       expect(wrapped.has(name)).toBe(false);
     }
+    // Every write tool is advertised as non-read-only; destructive tools are not registered yet.
+    const writes = TOOL_DEFINITIONS.filter((d) => d.safety === 'write').map((d) => d.name);
+    expect(writes).toEqual(expect.arrayContaining(['register', 'scan', 'edt-create', 'edt-modify', 'edt-switch', 'realign', 'heal', 'fire-request', 'request-fire']));
+    expect(TOOL_DEFINITIONS.filter((d) => d.safety === 'destructive')).toEqual([]);
     // registry clean is never a tool: only the validate verb is exposed.
     expect(TOOL_DEFINITIONS.filter((d) => d.subcommand === 'registry').every((d) => d.baseArgs?.join(' ') === 'registry validate')).toBe(true);
   });
@@ -2683,7 +2687,12 @@ describe('tui-back mcp (black-box)', () => {
       }
       const messages = out.split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l));
       expect(messages.every((m) => m.jsonrpc === '2.0')).toBe(true);
-      expect(messages.find((m) => m.id === 2).result.tools).toHaveLength(TOOL_DEFINITIONS.length);
+      const listed = messages.find((m) => m.id === 2).result.tools as Array<{ name: string; annotations: { readOnlyHint: boolean }; _meta: { safety: string } }>;
+      expect(listed).toHaveLength(TOOL_DEFINITIONS.length);
+      for (const tool of listed) {
+        expect(tool.annotations.readOnlyHint).toBe(tool._meta.safety === 'read');
+        expect(tool._meta.safety).toBe(TOOL_DEFINITIONS.find((d) => d.name === tool.name)?.safety);
+      }
       const text = (id: number) => JSON.parse(messages.find((m) => m.id === id).result.content[0].text);
       expect(text(3).ok).toBe(true);
       expect(typeof text(4).ok).toBe('boolean');

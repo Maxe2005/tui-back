@@ -14,17 +14,19 @@ async function connect(subs: Subcommand[]) {
   return client;
 }
 
-const names = ['dashboard', 'edts', 'list-repos', 'ping', 'registry'];
+const names = TOOL_DEFINITIONS.map((d) => d.subcommand).filter((n, i, a) => a.indexOf(n) === i);
 
 describe('createMcpServer', () => {
   it('lists the read tools with readOnlyHint and a safety class', async () => {
-    const client = await connect([...names.map((n) => ({ name: n, usage: n, run: async () => ok({}) })), { name: 'list-routes', usage: '', run: async () => ok({}) }, { name: 'request-list', usage: '', run: async () => ok({}) }]);
+    const client = await connect(names.map((n) => ({ name: n, usage: n, run: async () => ok({}) })));
     const { tools } = await client.listTools();
     expect(tools).toHaveLength(TOOL_DEFINITIONS.length);
     for (const tool of tools) {
-      expect(tool.annotations?.readOnlyHint).toBe(true);
-      expect(tool._meta?.safety).toBe('read');
+      const safety = TOOL_DEFINITIONS.find((d) => d.name === tool.name)?.safety;
+      expect(tool._meta?.safety).toBe(safety);
+      expect(tool.annotations?.readOnlyHint).toBe(safety === 'read');
     }
+    expect(tools.some((t) => t._meta?.safety === 'write')).toBe(true);
   });
 
   it('returns the envelope as JSON text, isError false on success', async () => {
@@ -77,7 +79,7 @@ describe('createMcpServer robustness', () => {
 });
 
 function allSubs(overrides: Record<string, Subcommand['run']>): Subcommand[] {
-  return ['dashboard', 'edts', 'list-repos', 'list-routes', 'request-list', 'ping', 'registry'].map((n) => ({
+  return names.map((n) => ({
     name: n,
     usage: n,
     run: overrides[n] ?? (async () => ok({})),
