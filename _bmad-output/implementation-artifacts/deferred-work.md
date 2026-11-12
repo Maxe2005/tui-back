@@ -954,3 +954,19 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-11/spec-11-4-install-registration-and-docs.md`
   summary: README Authorization section names gate error codes and cancellation/progress behaviour of destructive tools without a test pinning the codes to the gate's exports.
   evidence: Verification-gap review; the README test only checks tool names per safety class, so a renamed `authorization-denied` would not fail any docs test.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-12/spec-12-1-split-the-git-adapter-by-operation-family.md`
+  summary: `isInside` (git/merge.ts) uses a hard-coded '/' and `startsWith` with no realpath, so `readWorktreeFile`/`writeResolvedFile` can escape the repo via a symlink and break on Windows paths.
+  evidence: Pre-existing logic moved unchanged by the split (Blind Hunter finding).
+- source_spec: `_bmad-output/implementation-artifacts/epic-12/spec-12-1-split-the-git-adapter-by-operation-family.md`
+  summary: `fetchBranch`/`fetchRemoteBranch` (git/remote.ts) do not set GIT_TERMINAL_PROMPT=0 (only `pullBranch` does) and hard-code the `origin` remote, so a fetch can hang on a credential prompt.
+  evidence: Pre-existing; the `pullBranch` comment claims no git call here can prompt.
+- source_spec: `_bmad-output/implementation-artifacts/epic-12/spec-12-1-split-the-git-adapter-by-operation-family.md`
+  summary: `listDirtyPaths` (git/diff.ts) parses `--porcelain` without `-z`, so quoted, non-ASCII or arrow-containing paths are mis-decoded.
+  evidence: Pre-existing; `diffNameOnly` already uses -z.
+- source_spec: `_bmad-output/implementation-artifacts/epic-12/spec-12-1-split-the-git-adapter-by-operation-family.md`
+  summary: Duplication and error-code conflation left for a behaviour-changing story: 'unknown-offline' reused for unrelated errors, repeated showRef/branch-exists sequences in create/rename/tracking branch, identical fetch failure messages.
+  evidence: Blind Hunter review of the moved code; out of scope under the behaviour-preserving refactor contract.
+- source_spec: `_bmad-output/implementation-artifacts/epic-12/spec-12-1-split-the-git-adapter-by-operation-family.md`
+  summary: Full suite has 2 failures unrelated to the split: `app-shell.interaction.test.tsx` reset-screen test (fails on baseline 8ee2a7cd) and a flaky 5s timeout in `tui-back.e2e.test.ts`; also `npm test` cannot load the vitest config here (rolldown sourcemapPathTransform), `--configLoader native` is needed.
+  evidence: Implementation subagent runs, re-confirmed on baseline.
