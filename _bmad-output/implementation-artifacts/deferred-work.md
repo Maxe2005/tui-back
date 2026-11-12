@@ -970,3 +970,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-1-split-the-git-adapter-by-operation-family.md`
   summary: Full suite has 2 failures unrelated to the split: `app-shell.interaction.test.tsx` reset-screen test (fails on baseline 8ee2a7cd) and a flaky 5s timeout in `tui-back.e2e.test.ts`; also `npm test` cannot load the vitest config here (rolldown sourcemapPathTransform), `--configLoader native` is needed.
   evidence: Implementation subagent runs, re-confirmed on baseline.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-2-extract-pure-logic-from-json-tree-and-the-command-bar.md`
+  summary: Deduplicate `escapeRebuild` (body-edit-path.ts) and `escapePathSegment` (tree-build.ts), and the twin `pruneBodyDrafts` / `pruneJsonTreeStates` algorithms.
+  evidence: Identical bodies/algorithms that already existed in the original model.ts; the split makes them visible but a refactor-only story must not merge them.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-2-extract-pure-logic-from-json-tree-and-the-command-bar.md`
+  summary: Rehome generic grid helpers (used by logs-zone) out of `command-grid.logic.ts`, and move constants (MAX_BODY_CHARS, MAX_BODY_DRAFTS) next to their only consumers.
+  evidence: Reviewer noted logs-zone reuses layoutCommandGrid via command-bar re-export; naming/placement debt that epic 14 (reorganization) can absorb.
