@@ -10,6 +10,8 @@ export interface Subcommand {
   /** One-line usage string shown by `--help`, e.g. "tui-back register <path>". */
   usage: string;
   run: (args: string[]) => Promise<Result<unknown>>;
+  /** Optional raw text printed instead of the pretty-printed JSON on a TTY (success only). */
+  humanText?: (data: unknown) => string | undefined;
 }
 
 export interface HelpData {
@@ -20,7 +22,11 @@ export interface HelpData {
 function buildHelp(subcommands: Subcommand[]): HelpData {
   return {
     usage: 'tui-back <command> [args]',
-    commands: subcommands.map((candidate) => ({ name: candidate.name, usage: candidate.usage })),
+    commands: [
+      ...subcommands.map((candidate) => ({ name: candidate.name, usage: candidate.usage })),
+      // `tui` is routed by the bin shim, not the subcommand registry, so it is listed statically.
+      { name: 'tui', usage: 'tui-back tui' },
+    ],
   };
 }
 
@@ -59,7 +65,7 @@ export async function runCli(
   // reference or a BigInt inside a use-case's returned data. That must never escape as an
   // uncaught exception, so it gets the same try/catch treatment as subcommand.run above.
   try {
-    return renderResult(result, isTTY);
+    return renderResult(result, isTTY, subcommand.humanText);
   } catch (error) {
     console.error(error);
     const errorMsg = error instanceof Error ? error.message : String(error);

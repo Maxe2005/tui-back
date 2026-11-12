@@ -70,12 +70,12 @@ development_status:
   epic-9: done
   epic-9-retrospective: optional
 
-  epic-10: backlog
+  epic-10: in-progress
   # Distribution (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 10-1 -> 10-2 -> 10-3 -> 10-4. Epic 9 already merged into devlopment (8ad7b011).
-  10-1-repair-the-bin-one-binary-tui-routing: backlog
-  10-2-completion-bash-subcommand: backlog
-  10-3-install-subcommand: backlog
-  10-4-publication-install-sh-and-docs: backlog
+  10-1-repair-the-bin-one-binary-tui-routing: done
+  10-2-completion-bash-subcommand: done
+  10-3-install-subcommand: review
+  10-4-publication-install-sh-and-docs: review
   epic-10-retrospective: optional
 
   epic-11: backlog

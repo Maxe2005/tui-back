@@ -910,3 +910,14 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/epic-5/spec-5-10-persisted-filter-rules-and-named-rule-sets.md`
   summary: `resetHistories` can clear command history and then fail on the rules write, leaving a partial reset.
   evidence: `src/core/scripts/reset-tool.ts` writes the fields sequentially and aborts on the first error (edge-case review).
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-3-install-subcommand.md`
+  summary: `app-shell.interaction.test.tsx` "opens only through the `reset` command, and Esc closes it with zero writes" fails (expects 'RESET TOOL DATA').
+  evidence: Fails identically on baseline commit d75b734f, before any story 10.3 change.
+
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
+  summary: Pre-existing failure of `app-shell.interaction.test.tsx` ("opens only through the `reset` command, and Esc closes it with zero writes"), plus one other test that failed in a single full run (flaky, not identified).
+  evidence: Fails identically on the story baseline per the implementation subagent's stash run; unrelated to install.sh/README/package.json.
+- source_spec: `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md`
+  summary: Distribution hardening not in 10.4 scope: pinning `install.sh`/npx to a tag or `TUI_BACK_REF`, and macOS/zsh note (login shells read `~/.bash_profile`, not `~/.bashrc`).
+  evidence: README curl one-liner uses `HEAD`; the installer only edits `~/.bashrc` (Blind Hunter / Edge Case Hunter findings).

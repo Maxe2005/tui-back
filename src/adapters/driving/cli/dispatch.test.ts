@@ -119,7 +119,10 @@ describe('runCli', () => {
       ok: true,
       data: {
         usage: 'tui-back <command> [args]',
-        commands: fakeSubcommands.map((subcommand) => ({ name: subcommand.name, usage: subcommand.usage })),
+        commands: [
+          ...fakeSubcommands.map((subcommand) => ({ name: subcommand.name, usage: subcommand.usage })),
+          { name: 'tui', usage: 'tui-back tui' },
+        ],
       },
     });
   });
@@ -154,6 +157,20 @@ describe('runCli', () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe('internal-error');
     expect(exitCode).toBe(1);
+  });
+});
+
+describe('runCli humanText hook', () => {
+  const sub: Subcommand = {
+    name: 'raw',
+    usage: 'tui-back raw',
+    run: async () => ok({ script: 'echo raw\n' }),
+    humanText: (data) => (data as { script: string }).script,
+  };
+
+  it('prints the raw text on a TTY and the envelope when piped', async () => {
+    expect((await runCli(['raw'], [sub], true)).output).toBe('echo raw\n');
+    expect((await runCli(['raw'], [sub], false)).output).toBe('{"ok":true,"data":{"script":"echo raw\\n"}}\n');
   });
 });
 
@@ -279,6 +296,19 @@ describe('subcommand registry guards', () => {
       scanner,
       auth,
       savedRequests: fakeSavedRequests(),
+      install: {
+        installer: {
+          repositoryUrl: async () => null,
+          npmGlobal: async () => ({ ok: true as const }),
+          readFile: async () => null,
+          writeFile: async () => undefined,
+          removeFile: async () => false,
+        },
+        nodeVersion: 'v24.0.0',
+        env: {},
+        homedir: '/home/test',
+        dataDir: '/data',
+      },
       ...overrides,
     });
   }
@@ -303,8 +333,42 @@ describe('subcommand registry guards', () => {
       'request-list',
       'request-fire',
       'request-delete',
+      'install',
+      'completion',
     ]);
     expect(() => assertUniqueSubcommandNames(subcommands)).not.toThrow();
+  });
+
+  it('completion bash returns the script (raw on a TTY, enveloped when piped) and rejects other args', async () => {
+    const subcommands = buildTestSubcommands();
+    const piped = await runCli(['completion', 'bash'], subcommands, false);
+    const parsed = JSON.parse(piped.output);
+    expect(piped.exitCode).toBe(0);
+    expect(parsed.data.script).toContain('complete -o default -F _tui_back tui-back tb');
+    expect(parsed.data.script).toContain('completion');
+
+    const tty = await runCli(['completion', 'bash'], subcommands, true);
+    expect(tty.output).toBe(parsed.data.script);
+
+    for (const argv of [['completion'], ['completion', 'zsh'], ['completion', 'bash', 'x']]) {
+      const bad = await runCli(argv, subcommands, false);
+      expect(bad.exitCode).toBe(1);
+      expect(JSON.parse(bad.output).error).toEqual({ code: 'invalid-argument', message: 'Usage: tui-back completion bash' });
+    }
+  });
+
+  it('completion script derives the real edt/registry verbs and flags from the live registry', async () => {
+    const piped = await runCli(['completion', 'bash'], buildTestSubcommands(), false);
+    const script: string = JSON.parse(piped.output).data.script;
+    expect(script).toContain('edt) words="create switch modify delete" ;;');
+    expect(script).toContain('registry) words="clean validate" ;;');
+    expect(script).toContain('completion) words="bash" ;;');
+    expect(script).toMatch(/"edt switch"\) words="[^"]*--to[^"]*--force/);
+    expect(script).toMatch(/"edt create"\) words="[^"]*--topic[^"]*--member/);
+    expect(script).toMatch(/"registry clean"\) words="[^"]*--yes[^"]*--path/);
+    // Flag-only usages (e.g. update, register) stay flat, never verb-style.
+    expect(script).not.toMatch(/\n\s+(update|register|realign|heal)\) words=/);
+    expect(script).toMatch(/"update"\) words="[^"]*--migrations/);
   });
 
   it('edts rejects excess arguments and otherwise runs the divergence use-case', async () => {

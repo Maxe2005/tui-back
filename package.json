@@ -2,13 +2,22 @@
   "name": "tui-back",
   "version": "1.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Maxe2005/tui-back.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"
   },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "!src/**/test-support"
+  ],
   "bin": {
-    "tui-back": "./src/bin/tui-back.mjs",
-    "tui-back-tui": "./src/bin/tui-back-tui.mjs"
+    "tui-back": "./src/bin/tui-back.mjs"
   },
   "scripts": {
     "test": "vitest run",
@@ -22,7 +31,6 @@
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "dependency-cruiser": "^18.2.0",
-    "tsx": "4.23.12",
     "typescript": "7.0.2",
     "vitest": "4.1.10"
   },
@@ -30,6 +38,7 @@
     "better-sqlite3": "13.0.3",
     "ink": "7.1.1",
     "react": "19.2.8",
+    "tsx": "4.23.12",
     "ulid": "3.0.2",
     "wrap-ansi": "^10.0.1",
     "yaml": "2.9.0",
