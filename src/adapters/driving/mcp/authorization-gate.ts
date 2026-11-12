@@ -2,6 +2,7 @@
 // MCP tool calls. Every non-`read` tool passes through `authorize` before it runs; anything
 // other than an explicit "accept" (decline, cancel, timeout, elicitation error, client without
 // the elicitation capability) fails closed. Approvals are per call and never cached.
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { err, ok, type Result } from '../../../core/result.js';
 import type { SafetyClass } from './tool-registry.js';
 
@@ -34,16 +35,25 @@ export interface GateDeps {
 
 export const DEFAULT_AUTHORIZATION_TIMEOUT_MS = 5 * 60 * 1000;
 
+const MAX_ARGS_CHARS = 2000;
+const MAX_TIMER_MS = 2147483647;
+const clean = (value: string): string => value.replace(/[\r\n\u0000-\u001f]/g, ' ');
+
 export function buildPrompt(request: AuthorizationRequest): string {
+  let args = JSON.stringify(request.args ?? {});
+  if (args.length > MAX_ARGS_CHARS) args = `${args.slice(0, MAX_ARGS_CHARS)}…[truncated]`;
+  const targets = request.targets.map(clean);
   const lines = [
     `Approve ${request.safety === 'destructive' ? 'DESTRUCTIVE ' : ''}tui-back tool "${request.tool}"?`,
-    `Arguments: ${JSON.stringify(request.args ?? {})}`,
-    `Affects: ${request.targets.length === 0 ? '(the tui-back workspace)' : request.targets.join(', ')}`,
+    `Arguments: ${args}`,
+    `Affects: ${targets.length === 0 ? '(the tui-back workspace)' : targets.join(', ')}`,
   ];
   return lines.join('\n');
 }
 
 export function createAuthorizationGate(deps: GateDeps): AuthorizationGate {
+  const timeoutMs =
+    Number.isFinite(deps.timeoutMs) && deps.timeoutMs > 0 ? Math.min(deps.timeoutMs, MAX_TIMER_MS) : DEFAULT_AUTHORIZATION_TIMEOUT_MS;
   return {
     async authorize(request) {
       if (request.safety === 'read') {
@@ -55,20 +65,23 @@ export function createAuthorizationGate(deps: GateDeps): AuthorizationGate {
       } catch {
         capabilities = undefined;
       }
-      if (capabilities?.elicitation === undefined || capabilities.elicitation === null) {
+      const elicitation = capabilities?.elicitation;
+      const urlOnly =
+        typeof elicitation === 'object' && elicitation !== null && 'url' in elicitation && !('form' in elicitation);
+      if (elicitation === undefined || elicitation === null || urlOnly) {
         return err(
           'authorization-unavailable',
           `Tool "${request.tool}" changes the workspace and needs human approval, but the connected MCP client does not support elicitation. Nothing was run.`,
-          { reason: 'client-lacks-elicitation' },
+          { reason: urlOnly ? 'url-only-elicitation' : 'client-lacks-elicitation' },
         );
       }
       let timer: NodeJS.Timeout | undefined;
       try {
         const timeout = new Promise<'timeout'>((resolve) => {
-          timer = setTimeout(() => resolve('timeout'), deps.timeoutMs);
+          timer = setTimeout(() => resolve('timeout'), timeoutMs);
         });
         const answer = await Promise.race([
-          deps.elicit({ message: buildPrompt(request), requestedSchema: { type: 'object', properties: {} } }, { timeout: deps.timeoutMs }),
+          deps.elicit({ message: buildPrompt(request), requestedSchema: { type: 'object', properties: {} } }, { timeout: timeoutMs }),
           timeout,
         ]);
         if (answer === 'timeout') {
@@ -80,7 +93,7 @@ export function createAuthorizationGate(deps: GateDeps): AuthorizationGate {
         return err('authorization-denied', `The human ${answer.action === 'cancel' ? 'cancelled' : 'declined'} "${request.tool}"; nothing was run.`, { reason: answer.action });
       } catch (error) {
         console.error(error);
-        const timedOut = /timed? ?out/i.test(String(error));
+        const timedOut = error instanceof McpError && error.code === ErrorCode.RequestTimeout;
         return err(
           'authorization-denied',
           timedOut

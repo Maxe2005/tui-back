@@ -36,12 +36,20 @@ export function createMcpServer(
       },
       async (input: Record<string, unknown>) => {
         if (tool.safety !== 'read') {
-          const verdict = await gate.authorize({
-            tool: tool.name,
-            safety: tool.safety,
-            args: tool.redact === undefined ? input : tool.redact(input),
-            targets: tool.describeTargets?.(input) ?? [],
-          });
+          let verdict: Result<void>;
+          try {
+            verdict = await gate.authorize({
+              tool: tool.name,
+              safety: tool.safety,
+              args: tool.redact === undefined ? input : tool.redact(input),
+              targets: tool.describeTargets?.(input) ?? [],
+            });
+          } catch (error) {
+            console.error(error);
+            verdict = err('authorization-denied', `Authorization for "${tool.name}" could not be prepared; nothing was run.`, {
+              reason: 'prompt-build-failed',
+            });
+          }
           if (!verdict.ok) {
             return { content: [{ type: 'text' as const, text: JSON.stringify(verdict) }], isError: true };
           }
