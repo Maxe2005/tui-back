@@ -14,7 +14,7 @@ describe('buildToolRegistry', () => {
     const tools = buildToolRegistry(subs);
     expect(tools.map((t) => t.name).sort()).toEqual(TOOL_DEFINITIONS.map((d) => d.name).sort());
     expect(tools.every((t) => ['read', 'write'].includes(t.safety))).toBe(true);
-    expect(tools.filter((t) => t.safety === 'read')).toHaveLength(7);
+    expect(tools.filter((t) => t.safety === 'read')).toHaveLength(TOOL_DEFINITIONS.filter((d) => d.safety === 'read').length);
   });
 
   it('throws when a tool has no safety class', () => {
