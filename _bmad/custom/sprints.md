@@ -35,4 +35,5 @@ _bmad-output/
 - Epic numbers are GLOBAL across sprints (a new sprint continues after the highest epic number: `sprint_registry.py next-epic`).
   Story keys, epic branches and retro keys therefore never collide.
 - Sprint 1 (epics 1-11) is `sprint-1-delivery-of-tui-back`; it follows the same layout as every other sprint.
+- **Layout guard**: `python3 {project-root}/_bmad/scripts/sprint_registry.py check` validates this layout (exit 1 + list of problems). Run it after creating or moving sprint files, and after `new`/`close`.
 - Sprint lifecycle (new / activate / close / list): skill `bmad-sprint-manage`.

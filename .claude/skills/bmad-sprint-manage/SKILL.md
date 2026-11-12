@@ -12,7 +12,7 @@ Communicate in the project's `communication_language`.
 ## Intents
 
 - **list / which is active** — `sprint_registry.py list`; show id, name, status, active marker, epic range, and per sprint the `bmad-sprint-planning` status summary if its status file exists.
-- **new** — ask for the sprint name and its epics (or take them from the user's message). Run `sprint_registry.py new --name "<name>"` (it allocates `sprint-N`, creates both folders, activates it, and returns `next_epic_number`). Then hand over to `bmad-create-epics-and-stories` to write the sprint's `epics_file`, numbering epics from `next_epic_number` (global numbering, never restart at 1). Finally run `bmad-sprint-planning` (generate) so the sprint's `sprint-status.yaml` exists.
+- **new** — ask for the sprint name and its epics (or take them from the user's message). Run `sprint_registry.py new --name "<name>"` (it allocates `sprint-N`, creates both folders, activates it, and returns `next_epic_number`). Then hand over to `bmad-create-epics-and-stories` to write the sprint's `epics_file`, numbering epics from `next_epic_number` (global numbering, never restart at 1). Finally run `bmad-sprint-planning` (generate) so the sprint's `sprint-status.yaml` exists, then `sprint_registry.py check` to validate the layout.
 - **activate <id>** — `sprint_registry.py activate <id>`; this is the default target of every BMAD skill.
 - **close <id>** — verify every epic of that sprint is `done` in its status file (use `bmad-sprint-planning` status view); if not, list the open items and ask before closing. Then `sprint_registry.py close <id>` and propose activating another sprint.
 
