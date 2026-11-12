@@ -56,7 +56,10 @@ export const repoPathArg = z
 // Every free-form string argument is checked for a leading '-' (flag injection into the CLI).
 const safeString = (description: string) =>
   z.string().min(1).refine((value) => !value.startsWith('-'), 'must not start with "-"').describe(description);
-const headersArg = z.record(z.string().min(1).refine((n) => !n.startsWith('-') && !n.includes(':'), 'invalid header name'), z.string())
+const headersArg = z.record(
+  z.string().regex(/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/, 'invalid header name'),
+  z.string().refine((v) => !/[\r\n\u0000]/.test(v), 'header value must not contain CR, LF or NUL'),
+)
   .describe('HTTP headers as name -> value. Values are never shown in the approval prompt.');
 const queryArg = z.record(safeString('query name').refine((n) => !n.includes('='), 'must not contain "="'), z.string()).describe('Query parameters as name -> value.');
 const bodyArg = z.unknown().describe('JSON request body.');
@@ -197,7 +200,7 @@ const WRITE_DEFINITIONS: ToolDefinition[] = [
     inputSchema: {
       repoPath: repoPathArg,
       method: safeString('HTTP method.'),
-      path: safeString('Route path.'),
+      path: safeString('Route path.').refine((v) => v.startsWith('/'), 'path must start with "/"'),
       body: bodyArg.optional(),
       query: queryArg.optional(),
       headers: headersArg.optional(),
