@@ -1,60 +1,10 @@
 // tui/shared/components/json-tree/model: the JsonTree's pure core (no Ink/React), split across
 // tree-build, tree-filter, tree-keys, tree-selection, body-edit-path and body-draft. This file only
 // re-exports them so every historical import path keeps resolving.
-import { JsonTreeState, MAX_BODY_CHARS, MAX_JSON_TREE_STATES, TreeFilterRules, kindOf } from './tree-build.js';
+import { JsonTreeState, MAX_BODY_CHARS, MAX_JSON_TREE_STATES, kindOf } from './tree-build.js';
 
 export * from './tree-build.js';
-
-export type ActiveRule = { kind: 'hide' | 'only'; key: string };
-
-export function listActiveRules(rules: TreeFilterRules): ActiveRule[] {
-  return [
-    ...rules.hiddenKeys.map((key): ActiveRule => ({ kind: 'hide', key })),
-    ...rules.onlyKeys.map((key): ActiveRule => ({ kind: 'only', key })),
-  ];
-}
-
-export function countActiveRules(rules: TreeFilterRules): number {
-  return rules.hiddenKeys.length + rules.onlyKeys.length + (rules.hideNulls ? 1 : 0);
-}
-
-// Every reducer below returns null when the keypress would change nothing, so the zone
-// can skip the store update (and the prune-order touch) entirely.
-export function addHiddenKey(rules: TreeFilterRules, key: string | null): TreeFilterRules | null {
-  if (key === null || key === '' || rules.hiddenKeys.includes(key)) {
-    return null;
-  }
-  return { hiddenKeys: [...rules.hiddenKeys, key], onlyKeys: [...rules.onlyKeys], hideNulls: rules.hideNulls };
-}
-
-export function addOnlyKey(rules: TreeFilterRules, key: string | null): TreeFilterRules | null {
-  if (key === null || key === '' || rules.onlyKeys.includes(key)) {
-    return null;
-  }
-  return { hiddenKeys: [...rules.hiddenKeys], onlyKeys: [...rules.onlyKeys, key], hideNulls: rules.hideNulls };
-}
-
-export function removeActiveRule(rules: TreeFilterRules, index: number): TreeFilterRules | null {
-  const active = listActiveRules(rules);
-  const target = active[index];
-  if (target === undefined) {
-    return null;
-  }
-  return target.kind === 'hide'
-    ? { hiddenKeys: rules.hiddenKeys.filter((key) => key !== target.key), onlyKeys: [...rules.onlyKeys], hideNulls: rules.hideNulls }
-    : { hiddenKeys: [...rules.hiddenKeys], onlyKeys: rules.onlyKeys.filter((key) => key !== target.key), hideNulls: rules.hideNulls };
-}
-
-export function toggleHideNulls(rules: TreeFilterRules): TreeFilterRules {
-  return { hiddenKeys: [...rules.hiddenKeys], onlyKeys: [...rules.onlyKeys], hideNulls: !rules.hideNulls };
-}
-
-export function clearTreeRules(rules: TreeFilterRules): TreeFilterRules | null {
-  if (rules.hiddenKeys.length === 0 && rules.onlyKeys.length === 0 && !rules.hideNulls) {
-    return null;
-  }
-  return { hiddenKeys: [], onlyKeys: [], hideNulls: false };
-}
+export * from './tree-filter.js';
 
 export function clampTreeSelection(selected: number, rowCount: number): number {
   if (!Number.isFinite(selected) || rowCount <= 0) {
