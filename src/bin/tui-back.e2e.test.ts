@@ -12,6 +12,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { generateBashCompletion } from '../adapters/driving/cli/completion-spec.js';
+import { EXCLUDED_SUBCOMMANDS, TOOL_DEFINITIONS } from '../adapters/driving/mcp/tool-registry.js';
 import { lockPathFor } from '../adapters/driven/lock/helpers.js';
 
 const scriptPath = fileURLToPath(new URL('./tui-back.mjs', import.meta.url));
@@ -801,7 +802,7 @@ describe('tui-back --help (black-box)', () => {
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
     const names = (parsed.data.commands as Array<{ name: string }>).map((c) => c.name);
-    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'heal', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete', 'install', 'completion', 'tui']);
+    expect(names).toEqual(['register', 'list-repos', 'scan', 'ping', 'edts', 'dashboard', 'edt', 'update', 'realign', 'heal', 'registry', 'list-routes', 'fire-request', 'request-list', 'request-fire', 'request-delete', 'install', 'completion', 'tui', 'mcp']);
   });
 });
 
@@ -2640,6 +2641,59 @@ describe('tui-back completion bash (black-box)', () => {
       .sort();
     expect(scriptNames).toEqual(helpNames);
   });
+});
+
+describe('tui-back mcp (black-box)', () => {
+  it('guard: every --help subcommand is an MCP tool or in the exclusion list with a reason', () => {
+    const help = JSON.parse(runCli(['--help']).stdout.trim());
+    const helpNames = (help.data.commands as Array<{ name: string }>).map((c) => c.name);
+    const wrapped = new Set(TOOL_DEFINITIONS.map((d) => d.subcommand));
+    const unclassified = helpNames.filter((n) => !wrapped.has(n) && !(n in EXCLUDED_SUBCOMMANDS));
+    expect(unclassified).toEqual([]);
+    for (const reason of Object.values(EXCLUDED_SUBCOMMANDS)) {
+      expect(reason.length).toBeGreaterThan(0);
+    }
+    for (const name of Object.keys(EXCLUDED_SUBCOMMANDS)) {
+      if (name !== 'mcp') expect(helpNames).toContain(name);
+      expect(wrapped.has(name)).toBe(false);
+    }
+    // registry clean is never a tool: only the validate verb is exposed.
+    expect(TOOL_DEFINITIONS.filter((d) => d.subcommand === 'registry').every((d) => d.baseArgs?.join(' ') === 'registry validate')).toBe(true);
+  });
+
+  it('serves tools over stdio with protocol-only stdout', async () => {
+    const xdg = await makeTempDir();
+    const child = spawn('node', [scriptPath, 'mcp'], { env: { ...process.env, XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg, XDG_DATA_HOME: xdg } });
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
+    try {
+      const send = (m: object) => child.stdin.write(`${JSON.stringify(m)}\n`);
+      send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '0' } } });
+      send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+      send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+      send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'list-repos', arguments: {} } });
+      send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'registry-validate', arguments: {} } });
+      send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'list-routes', arguments: {} } });
+      const deadline = Date.now() + 20000;
+      while (!(out.includes('"id":3') && out.includes('"id":4') && out.includes('"id":5')) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!(out.includes('"id":3') && out.includes('"id":4') && out.includes('"id":5'))) {
+        throw new Error(`timed out waiting for MCP replies 3-5; stdout so far: ${out}`);
+      }
+      const messages = out.split('\n').filter((l) => l.trim() !== '').map((l) => JSON.parse(l));
+      expect(messages.every((m) => m.jsonrpc === '2.0')).toBe(true);
+      expect(messages.find((m) => m.id === 2).result.tools).toHaveLength(TOOL_DEFINITIONS.length);
+      const text = (id: number) => JSON.parse(messages.find((m) => m.id === id).result.content[0].text);
+      expect(text(3).ok).toBe(true);
+      expect(typeof text(4).ok).toBe('boolean');
+      const missing = messages.find((m) => m.id === 5).result;
+      expect(missing.isError).toBe(true);
+      expect(JSON.parse(missing.content[0].text).error.code).toBe('missing-argument');
+    } finally {
+      child.kill();
+    }
+  }, 30000);
 });
 
 describe('tui-back install (black-box)', () => {
