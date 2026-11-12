@@ -2,10 +2,6 @@
 // draft (set/add/remove/change-type at a path), scalar validators, concrete-path parsing and
 // raw-buffer parsing with line/column.
 import { kindOf } from './tree-build.js';
-
-// The edit layer: immutable ops over a JSON body draft (`setValue`/`addEntry`/`removeEntry`/
-// `changeType`), scalar validators, concrete-path parsing, raw-buffer parsing with line/column,
-// draft seeding/gating, and the editor status line. Per-path scalar errors keep the scalar kind
 // the value had before the error, so fixing the text re-validates against the original kind.
 
 export const MAX_BODY_DRAFTS = 50;

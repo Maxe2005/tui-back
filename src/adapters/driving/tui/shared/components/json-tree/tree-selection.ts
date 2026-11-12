@@ -30,6 +30,7 @@ export function moveTreeSelection(selected: number, rowCount: number, viewport: 
       return clampTreeSelection(current + step, rowCount);
   }
 }
+
 export type BodyClassification =
   | { kind: 'empty'; emptyKind: 'empty-body' | 'empty-json' }
   | { kind: 'json'; value: unknown }

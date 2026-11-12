@@ -2,7 +2,7 @@
 title: 'Extract Pure Logic from json-tree and the Command Bar'
 type: 'refactor'
 created: '2026-11-12'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'f4111a059e479ce0ea72bba03e73d1e7ee01f54e'
 review_loop_iteration: 0
 context:
