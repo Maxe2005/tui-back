@@ -3,36 +3,31 @@
 // repo's own manifest, never the caller) before any `git` invocation, and with an `edtId` a
 // branch owned by another EDT. Shells git via child_process; `--` terminates options for
 // `git branch`/`git stash`, and `git checkout <branch> --` forces a revision, never a pathspec.
-import { runProcess, streamProcess } from '../process.js';
-import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { err, ok, type Result } from '../../../core/result.js';
+// This file only composes `createGitPort`; every operation lives in a per-family module and is
+// re-exported here so `git/index.js` keeps its public surface.
 import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import { GIT_DETACHED_HEAD, type GitPort, type VersionBumpWalkOptions, type VersionBumpWalkSummary, type VersionWalkEnd } from '../../../core/ports/git.js';
+import type { GitPort } from '../../../core/ports/git.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
-import { branchOwners } from '../../../core/edt/branch-owners.js';
-// The FR-7 protected-branch rule lives in core, shared with the TUI's advisory check.
-import { isProtectedBranch } from '../../../core/edt/shared-branches.js';
-import { spawnFailureDetail, showRef, showFullRef, currentBranch } from './refs.js';
-export { currentBranch } from './refs.js';
-import { assertAllowedBranch, assertCurrentBranchAllowed } from './gate.js';
-export { assertAllowedBranch } from './gate.js';
+import { currentBranch } from './refs.js';
+import { assertAllowedBranch } from './gate.js';
 import { stashSave, restoreStash, hasStash } from './stash.js';
-export { stashSave, restoreStash, findStashRef, hasStash } from './stash.js';
 import { fetchBranch, fetchRemoteBranch, listUnpushedCommits, pullBranch } from './remote.js';
-export { fetchBranch, fetchRemoteBranch, listUnpushedCommits, pullBranch } from './remote.js';
-import { LARGE_OUTPUT_BUFFER, hasUncommittedChanges, listDirtyPaths, diffNameOnly, headRevision, diffStat } from './diff.js';
-export { hasUncommittedChanges, listDirtyPaths, diffNameOnly, headRevision, diffStat } from './diff.js';
+import { hasUncommittedChanges, listDirtyPaths, diffNameOnly, headRevision, diffStat } from './diff.js';
 import { discardPaths, discardPathsToHead, discardAll } from './discard.js';
-export { discardPaths, discardPathsToHead, discardAll } from './discard.js';
 import { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge.js';
-export { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge.js';
 import { stagePaths, commitPaths } from './commit.js';
-export { stagePaths, commitPaths } from './commit.js';
 import { listVersionBumpCommits, listBranchesContaining } from './version-history.js';
-export { listVersionBumpCommits, listBranchesContaining } from './version-history.js';
 import { createBranch, deleteBranch, isBranchMerged, aheadBehind, checkoutBranch, branchExistsLocally, listBranches, renameBranch, listRemoteBranches, createTrackingBranch } from './branches.js';
+
+export { currentBranch } from './refs.js';
+export { assertAllowedBranch } from './gate.js';
+export { stashSave, restoreStash, findStashRef, hasStash } from './stash.js';
+export { fetchBranch, fetchRemoteBranch, listUnpushedCommits, pullBranch } from './remote.js';
+export { hasUncommittedChanges, listDirtyPaths, diffNameOnly, headRevision, diffStat } from './diff.js';
+export { discardPaths, discardPathsToHead, discardAll } from './discard.js';
+export { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge.js';
+export { stagePaths, commitPaths } from './commit.js';
+export { listVersionBumpCommits, listBranchesContaining } from './version-history.js';
 export { createBranch, deleteBranch, isBranchMerged, aheadBehind, checkoutBranch, branchExistsLocally, listBranches, renameBranch, listRemoteBranches, createTrackingBranch } from './branches.js';
 
 export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryPort): GitPort {
