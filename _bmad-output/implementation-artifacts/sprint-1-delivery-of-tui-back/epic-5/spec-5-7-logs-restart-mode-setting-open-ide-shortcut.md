@@ -6,8 +6,8 @@ status: 'done'
 baseline_commit: '6a6bb433f6e317b416e94fa933d6a6ac1189a737'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md'
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-7/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-5-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/spec-7-12-shared-service-actions-open-in-ide-simple-clean-restart.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">

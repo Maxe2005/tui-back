@@ -108,13 +108,13 @@ baseline_commit: '4a5bf43dacac7191623efa1d516a921cadd0533d'
 
 ### References
 
-- [Source: `_bmad-output/planning-artifacts/epics.md#Story-1.6` (lines 310-333)] — user story, AC1-AC4 verbatim.
+- [Source: `_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story-1.6` (lines 310-333)] — user story, AC1-AC4 verbatim.
 - [Source: `_bmad-output/planning-artifacts/architecture/.../ARCHITECTURE-SPINE.md#AD-5`] — "module implementations are statically registered, never dynamically loaded"; manifest selects a key; kebab-case module ids.
 - [Source: `ARCHITECTURE-SPINE.md` AD-4] — modules is a map, every entry a config object never a bare boolean; repo/module absent → invisible.
 - [Source: `_bmad-output/implementation-artifacts/1-4-manifest-schema-loader-validation.md`] — manifest loader + `manifest-not-found` contract; deferred item "bare `modules:` (null) fails validation; only explicit `{}` expresses empty map — decide whether to accept null as empty."
 - [Source: `_bmad-output/implementation-artifacts/deferred-work.md`] — acorn-fallback landmine (imports first), `manifestSchema` widened to `z.ZodType<Manifest>` (zod 4.4.3 has no runtime `.satisfies()`), the `no-core-to-adapters` boundary rule and its unanchored `adapters(/|$)` matching.
 - [Source: `_bmad-output/implementation-artifacts/1-5-explicit-repo-registry.md`] — prior-story patterns: `ManagedRepo` (path/service/container/sharedBranch), adapter-owns-filesystem, error-matrix conventions, Review Triage Log format.
-- [Source: `_bmad-output/implementation-artifacts/epic-1-context.md`] — Epic 1 goal, cross-story deps (1.4 underpins 1.6 module resolution/validation; unknown-id failure rides on 1.4's validation).
+- [Source: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1-context.md`] — Epic 1 goal, cross-story deps (1.4 underpins 1.6 module resolution/validation; unknown-id failure rides on 1.4's validation).
 
 ## Task / Acceptance Traceability
 
@@ -151,7 +151,7 @@ baseline_commit: '4a5bf43dacac7191623efa1d516a921cadd0533d'
 - UPDATE: `src/core/scripts/list-repos.ts`, `src/core/scripts/list-repos.test.ts`
 - REVIEW: `src/adapters/driving/cli/envelope.ts`, `envelope.test.ts` — reviewed, no change required (`moduleIds` flows through the generic rendering).
 - UPDATE: `src/bin/tui-back.e2e.test.ts` (list-repos `moduleIds` + unknown-module error cases)
-- ARTIFACT: `_bmad-output/implementation-artifacts/1-6-static-module-registry.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- ARTIFACT: `_bmad-output/implementation-artifacts/1-6-static-module-registry.md`, `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml`
 
 ### Change Log
 

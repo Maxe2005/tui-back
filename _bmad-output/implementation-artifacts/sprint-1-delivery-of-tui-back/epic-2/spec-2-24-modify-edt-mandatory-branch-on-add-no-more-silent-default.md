@@ -89,47 +89,47 @@ Written ahead of Stories 2.22/2.23/2.25 (all still `backlog`/`ready-for-dev` at 
 **No more silent `currentBranch` default (core)**
 
 - Entry point: an `addMembers` entry with a matching `setBranches` entry defers entirely to step 3; unmatched ones fail fast with `branch-required`.
-  [`modify.ts:107`](../../../src/core/edt/modify.ts#L107)
+  [`modify.ts:107`](../../../../src/core/edt/modify.ts#L107)
 
 - Step 3 skips a `setBranches` entry whose path step 1 already rejected (invalid/duplicate) — no double-processing.
-  [`modify.ts:190`](../../../src/core/edt/modify.ts#L190)
+  [`modify.ts:190`](../../../../src/core/edt/modify.ts#L190)
 
 - A successful checkout for a `pendingAdds` repo promotes into `addedMembers`, not just `branchChanges` — the new member actually lands.
-  [`modify.ts:251`](../../../src/core/edt/modify.ts#L251)
+  [`modify.ts:251`](../../../../src/core/edt/modify.ts#L251)
 
 - CLI usage strings spell out the new mandatory `--add-member`/`--set-branch` pairing.
-  [`modify.ts:67`](../../../src/core/edt/modify.ts#L67)
-  [`subcommands.ts:30`](../../../src/adapters/driving/cli/subcommands.ts#L30)
+  [`modify.ts:67`](../../../../src/core/edt/modify.ts#L67)
+  [`subcommands.ts:30`](../../../../src/adapters/driving/cli/subcommands.ts#L30)
 
 **Modify checklist: auto-staged branch on a new candidate (TUI)**
 
 - `suggestBranchForNewMember` — unanimous existing branch, else the topic slug — the suggestion source for a freshly-checked candidate.
-  [`edts-zone.tsx:251`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L251)
+  [`edts-zone.tsx:251`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L251)
 
 - Space-toggle auto-stages that suggestion into `branchEdits` the moment a not-yet-member row is checked, never overwriting an existing stage.
-  [`edts-zone.tsx:1497`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1497)
+  [`edts-zone.tsx:1497`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1497)
 
 - `canEditMemberBranch` now opens the branch-edit sub-dialog for any checked row, not just existing members — dead `target` param dropped.
-  [`edts-zone.tsx:588`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L588)
+  [`edts-zone.tsx:588`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L588)
 
 - `resolveModifyOps` always emits a `setBranches` entry for a checked non-member instead of silently omitting one.
-  [`edts-zone.tsx:620`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L620)
+  [`edts-zone.tsx:620`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L620)
 
 - Confirm blocks inline (no core call) when a newly-checked member's staged branch is empty.
-  [`edts-zone.tsx:1168`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1168)
+  [`edts-zone.tsx:1168`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1168)
 
 - Success-log message only counts a real branch change toward "changed N branch(es)", never a plain add.
-  [`edts-zone.tsx:1209`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1209)
+  [`edts-zone.tsx:1209`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1209)
 
 **Tests**
 
 - Mixed-batch proof of per-repo isolation: one add succeeds, one hits `shared-branch-rejected`, both independent.
-  [`modify.test.ts:191`](../../../src/core/edt/modify.test.ts#L191)
+  [`modify.test.ts:191`](../../../../src/core/edt/modify.test.ts#L191)
 
 - Matched-add and unmatched-add (`branch-required`) cases, strengthened to assert the git gate itself is never called.
-  [`modify.test.ts:94`](../../../src/core/edt/modify.test.ts#L94)
-  [`modify.test.ts:146`](../../../src/core/edt/modify.test.ts#L146)
+  [`modify.test.ts:94`](../../../../src/core/edt/modify.test.ts#L94)
+  [`modify.test.ts:146`](../../../../src/core/edt/modify.test.ts#L146)
 
 - Real-keypress coverage: suggestion flows through to `modifyEdt`, and an emptied auto-staged branch blocks submit.
-  [`edts-zone.interaction.test.tsx:303`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L303)
-  [`edts-zone.interaction.test.tsx:353`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L353)
+  [`edts-zone.interaction.test.tsx:303`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L303)
+  [`edts-zone.interaction.test.tsx:353`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L353)

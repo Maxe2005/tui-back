@@ -5,7 +5,7 @@ created: '2026-09-23'
 status: 'done'
 review_loop_iteration: 0
 baseline_commit: 'e560a34ba6876d1433069192d027d5358ba2bed6'
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -75,49 +75,49 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 **Core selection model**
 
 - Start here: the confirmed-configuration contract every layer threads through
-  [`group-update.ts:116`](../../../src/core/scripts/group-update.ts#L116)
+  [`group-update.ts:116`](../../../../src/core/scripts/group-update.ts#L116)
 
 - Trimmed branch override wins over `sharedBranch`, single normalization point
-  [`group-update.ts:63`](../../../src/core/scripts/group-update.ts#L63)
+  [`group-update.ts:63`](../../../../src/core/scripts/group-update.ts#L63)
 
 - Pre-lock local branch validation rejects unknown branches before any write
-  [`group-update.ts:73`](../../../src/core/scripts/group-update.ts#L73)
+  [`group-update.ts:73`](../../../../src/core/scripts/group-update.ts#L73)
 
 - All-repos narrowing drops deselected services entirely, never silently
-  [`group-update.ts:327`](../../../src/core/scripts/group-update.ts#L327)
+  [`group-update.ts:327`](../../../../src/core/scripts/group-update.ts#L327)
 
 - Per-service merge source flows into the unchanged pull-or-merge flow
-  [`group-update.ts:587`](../../../src/core/scripts/group-update.ts#L587)
+  [`group-update.ts:587`](../../../../src/core/scripts/group-update.ts#L587)
 
 **Store draft lifecycle**
 
 - One helper opens every pre-scoped draft and clears stale run banners
-  [`update-slice.ts:189`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L189)
+  [`update-slice.ts:189`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L189)
 
 - Confirm restores the draft inline on pre-lock rejections, no lost edits
-  [`update-slice.ts:521`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L521)
+  [`update-slice.ts:521`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L521)
 
 - Scope resolution propagates failures instead of silently downgrading gates
-  [`update-slice.ts:356`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L356)
+  [`update-slice.ts:356`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L356)
 
 **Zone wiring**
 
 - Pure trigger resolver keeps unconfigured runs impossible and tested
-  [`update-zone.tsx:146`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L146)
+  [`update-zone.tsx:146`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L146)
 
 - Cursor reset fires on open-transition only, never on draft edits
-  [`update-zone.tsx:380`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L380)
+  [`update-zone.tsx:380`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L380)
 
 - Dispatch opens config first, nothing runs before confirm
-  [`update-zone.tsx:477`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L477)
+  [`update-zone.tsx:477`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L477)
 
 **Peripherals**
 
 - CLI takes full defaults with no new flags, both scopes
-  [`subcommands.ts:153`](../../../src/adapters/driving/cli/subcommands.ts#L153)
+  [`subcommands.ts:153`](../../../../src/adapters/driving/cli/subcommands.ts#L153)
 
 - Full selection/toggle matrix against fake ports, strict ordering
-  [`group-update.test.ts:1734`](../../../src/core/scripts/group-update.test.ts#L1734)
+  [`group-update.test.ts:1734`](../../../../src/core/scripts/group-update.test.ts#L1734)
 
 - Black-box defaults anchors for bare and `--all --yes` invocations
-  [`tui-back.e2e.test.ts:1824`](../../../src/bin/tui-back.e2e.test.ts#L1824)
+  [`tui-back.e2e.test.ts:1824`](../../../../src/bin/tui-back.e2e.test.ts#L1824)

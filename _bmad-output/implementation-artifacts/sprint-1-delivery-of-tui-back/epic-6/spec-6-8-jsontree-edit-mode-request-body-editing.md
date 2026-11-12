@@ -6,7 +6,7 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '156e1958631e3d7f3ac01ac5a781facc481d728e'
 context:
-  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/epic-6-context.md'
+  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -93,37 +93,37 @@ context:
 **Pure edit model (start here)**
 
 - Immutable ops plus kind-preserving validation live here, Ink-free and unit-tested
-  [`model.ts:649`](../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L649)
+  [`model.ts:649`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L649)
 
 - Error entries carry the pre-error kind so fixes never flip number to string
-  [`model.ts:634`](../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L634)
+  [`model.ts:634`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L634)
 
 - Delete remaps sibling error indices instead of leaving stale paths
-  [`model.ts:1118`](../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L1118)
+  [`model.ts:1118`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L1118)
 
 - Raw buffer parse reports 1-based line/column for the stay-in-raw error
-  [`model.ts:1030`](../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L1030)
+  [`model.ts:1030`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L1030)
 
 **Session state**
 
 - Per-route drafts plus kinded error maps, same 50-entry LRU prune as tree states
-  [`routes-slice.ts:69`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L69)
+  [`routes-slice.ts:69`](../../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L69)
 
 **Zone wiring**
 
 - Editor owns keys while open; Esc unwinds raw, inline, panel, then editor
-  [`routes-zone.tsx:410`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L410)
+  [`routes-zone.tsx:410`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L410)
 
 - Scalar confirm validates against the stored kind; empty raw buffer cancels
-  [`routes-zone.tsx:337`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L337)
+  [`routes-zone.tsx:337`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L337)
 
 - `e` opener gated on bodyExample/content-type; list Enter-fire untouched
-  [`routes-zone.tsx:1010`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1010)
+  [`routes-zone.tsx:1010`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1010)
 
 **Peripherals**
 
 - Stateless editor and raw views with honest footer hints
-  [`json-tree.tsx:207`](../../../src/adapters/driving/tui/shared/components/json-tree/json-tree.tsx#L207)
+  [`json-tree.tsx:207`](../../../../src/adapters/driving/tui/shared/components/json-tree/json-tree.tsx#L207)
 
 - Consumer tests: invalid-scalar, add/delete/remap, raw round-trips, revisit restore
-  [`routes-zone.interaction.test.tsx:415`](../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L415)
+  [`routes-zone.interaction.test.tsx:415`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L415)

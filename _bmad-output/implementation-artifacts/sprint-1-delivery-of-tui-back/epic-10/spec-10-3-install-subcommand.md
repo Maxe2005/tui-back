@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: 'd75b734f6b5d3d09952ee5ddef4c89aea8bf8c06'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-10-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-10-context.md'
   - '{project-root}/AGENTS.md'
 ---
 
@@ -90,31 +90,31 @@ Replace/remove touches only text between the markers; the rest of the rc file is
 **Install flow**
 
 - Entry point: Node gate, rc pre-read, npm, completion file, rc block, uninstall in reverse.
-  [`install.ts:195`](../../../src/adapters/driving/cli/install.ts#L195)
+  [`install.ts:195`](../../../../src/adapters/driving/cli/install.ts#L195)
 
 - Idempotent marked block: upsert replaces in place, corrupt markers refuse.
-  [`install.ts:127`](../../../src/adapters/driving/cli/install.ts#L127)
+  [`install.ts:127`](../../../../src/adapters/driving/cli/install.ts#L127)
 
 - Repository host anchored to github.com before it reaches npm.
-  [`install.ts:60`](../../../src/adapters/driving/cli/install.ts#L60)
+  [`install.ts:60`](../../../../src/adapters/driving/cli/install.ts#L60)
 
 **Side effects (driven adapter)**
 
 - Real port: npm via shared process runner, EACCES detection, file I/O.
-  [`index.ts:12`](../../../src/adapters/driven/installer/index.ts#L12)
+  [`index.ts:12`](../../../../src/adapters/driven/installer/index.ts#L12)
 
 **Wiring**
 
 - Registered before `completion` so the generated script lists `install`.
-  [`subcommands.ts:531`](../../../src/adapters/driving/cli/subcommands.ts#L531)
+  [`subcommands.ts:531`](../../../../src/adapters/driving/cli/subcommands.ts#L531)
 
 - Composition root injects installer, Node version, env, home and data dir.
-  [`main.ts:99`](../../../src/bin/main.ts#L99)
+  [`main.ts:99`](../../../../src/bin/main.ts#L99)
 
 **Tests**
 
 - Unit: helpers, partial failures, corrupt blocks, TTY text.
-  [`install.test.ts:77`](../../../src/adapters/driving/cli/install.test.ts#L77)
+  [`install.test.ts:77`](../../../../src/adapters/driving/cli/install.test.ts#L77)
 
 - Black-box with temp HOME and stub npm.
-  [`tui-back.e2e.test.ts:2645`](../../../src/bin/tui-back.e2e.test.ts#L2645)
+  [`tui-back.e2e.test.ts:2645`](../../../../src/bin/tui-back.e2e.test.ts#L2645)

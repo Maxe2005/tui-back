@@ -5,7 +5,7 @@ created: '2026-09-28'
 status: 'done'
 review_loop_iteration: 0
 baseline_commit: '96e2fc9ec8573390931ae69add7aae859043f45f'
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -79,46 +79,46 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 **Command dispatch (entry point)**
 
 - First-token dispatch with zone auto-switch — the epic-2 pattern built locally
-  [`command-bar.tsx:407`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L407)
+  [`command-bar.tsx:407`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L407)
 
 - The three registered commands, store-only dispatch, query forwarded
-  [`commands.ts:70`](../../../src/adapters/driving/tui/commands/commands.ts#L70)
+  [`commands.ts:70`](../../../../src/adapters/driving/tui/commands/commands.ts#L70)
 
 **Store openers**
 
 - `openUpdateServiceDialog`: guards, stale-request clear, arg-or-request split
-  [`update-slice.ts:703`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L703)
+  [`update-slice.ts:703`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L703)
 
 - `openUpdateServicePick`: generation guard against stale async enumeration
-  [`update-slice.ts:745`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L745)
+  [`update-slice.ts:745`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L745)
 
 - Case-insensitive arg parsing shared by both paths
-  [`update-slice.ts:35`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L35)
+  [`update-slice.ts:35`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L35)
 
 **Zone wiring**
 
 - `g`/`p` triggers pre-scoped to EDT / highlighted row, silent without row
-  [`update-zone.tsx:683`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L683)
+  [`update-zone.tsx:683`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L683)
 
 - No-arg request consumption: pinned row versus quick-pick fallback
-  [`update-zone.tsx:469`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L469)
+  [`update-zone.tsx:469`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L469)
 
 - Quick-pick modal with live filter and empty-state Esc hint
-  [`update-zone.tsx:877`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L877)
+  [`update-zone.tsx:877`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L877)
 
 - Substring matcher now covering repoPath as well
-  [`update-zone.logic.ts:123`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L123)
+  [`update-zone.logic.ts:123`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L123)
 
 **Peripherals**
 
 - Registry dispatch, autocomplete, and runCommand unit tests
-  [`commands.test.ts:87`](../../../src/adapters/driving/tui/commands/commands.test.ts#L87)
+  [`commands.test.ts:87`](../../../../src/adapters/driving/tui/commands/commands.test.ts#L87)
 
 - Slice scope/guard/pick matrix against fake ports
-  [`update-slice.test.ts:1665`](../../../src/adapters/driving/tui/store/slices/update-slice.test.ts#L1665)
+  [`update-slice.test.ts:1665`](../../../../src/adapters/driving/tui/store/slices/update-slice.test.ts#L1665)
 
 - Trigger mapping plus pick smoke tests
-  [`update-zone.test.tsx:291`](../../../src/adapters/driving/tui/zones/update/update-zone.test.tsx#L291)
+  [`update-zone.test.tsx:291`](../../../../src/adapters/driving/tui/zones/update/update-zone.test.tsx#L291)
 
 - Real-keypress wiring: triggers, pick keys, wired dispatch args
-  [`update-zone.interaction.test.tsx:298`](../../../src/adapters/driving/tui/zones/update/update-zone.interaction.test.tsx#L298)
+  [`update-zone.interaction.test.tsx:298`](../../../../src/adapters/driving/tui/zones/update/update-zone.interaction.test.tsx#L298)

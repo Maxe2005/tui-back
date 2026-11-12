@@ -6,10 +6,10 @@ status: 'in-progress'
 review_loop_iteration: 0
 baseline_commit: 2c1b4e46adcb8148d2f56fe6082d3b986b31b658
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
   - '_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md'
-  - '_bmad-output/implementation-artifacts/epic-2/epic-2-context.md'
-  - '_bmad-output/implementation-artifacts/epic-2/2-4-switch-the-active-edt-without-data-loss.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/2-4-switch-the-active-edt-without-data-loss.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -66,7 +66,7 @@ context:
 - `src/core/edt/modify.test.ts` (new) -- unit tests against the same fakes as `switch.test.ts` (fakeGit at line 75, fakeRegistry/fakeManifest/fakeEdtRegistry) covering the full I/O matrix.
 - `src/adapters/driving/cli/subcommands.ts` -- `edt modify` dispatch beside `create`/`switch` (lines 91-96); hand-rolled flag parsing in `runEdtModify` (`--topic <topic>`, repeated `--add-member <path>` / `--remove-member <path>` / `--set-branch <path>=<name>`, `--rename-to <topic>`, ≥1 op required), usage string `EDT_MODIFY_USAGE` added to `EDT_USAGE`.
 - `src/bin/tui-back.e2e.test.ts` -- e2e case(s) for `edt modify` (add/remove/branch-change/rename + shared-branch rejection + zero-member removal), following the `edt switch` describe block (line 971).
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip `2-5` to `in-progress` then `review` (code review gates `done`).
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- flip `2-5` to `in-progress` then `review` (code review gates `done`).
 - `_bmad-output/implementation-artifacts/deferred-work.md` -- no new entry expected; the zero-member/`allFailed` visibility track (line 48) is unaffected by this story.
 
 ## Tasks & Acceptance
@@ -77,7 +77,7 @@ context:
 - [ ] `src/core/edt/modify.ts` + `modify.test.ts` -- use-case + unit tests covering the I/O matrix
 - [ ] `src/adapters/driving/cli/subcommands.ts` -- `edt modify` wiring
 - [ ] `src/bin/tui-back.e2e.test.ts` -- e2e case(s) for modify
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip `2-5` to `in-progress` then `review`
+- [ ] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- flip `2-5` to `in-progress` then `review`
 
 **Acceptance Criteria:**
 - Given an existing EDT, when a developer adds a member, then the member is added with its current (gated) branch and every other member's recorded state is unchanged.
@@ -135,20 +135,20 @@ context:
 **Entry point — the modify use-case**
 
 - Start here: the pre-lock fast-fails, the per-op git sequence, then the single locked registry write.
-  [`modify.ts`](../../../src/core/edt/modify.ts)
+  [`modify.ts`](../../../../src/core/edt/modify.ts)
 
 **Port + adapter**
 
 - The one new port method every modification funnels through.
-  [`edt-registry.ts:37`](../../../src/core/ports/edt-registry.ts#L37)
+  [`edt-registry.ts:37`](../../../../src/core/ports/edt-registry.ts#L37)
 
 - The read/find/replace/write implementation, mirroring `setEdtStatus`.
-  [`edt-registry/index.ts:99`](../../../src/adapters/driven/edt-registry/index.ts#L99)
+  [`edt-registry/index.ts:99`](../../../../src/adapters/driven/edt-registry/index.ts#L99)
 
 **CLI + e2e**
 
 - `edt modify` flag parsing and dispatch, beside `create`/`switch`.
-  [`subcommands.ts:91`](../../../src/adapters/driving/cli/subcommands.ts#L91)
+  [`subcommands.ts:91`](../../../../src/adapters/driving/cli/subcommands.ts#L91)
 
 - Black-box proof through the real CLI + a real git repo.
-  [`tui-back.e2e.test.ts:971`](../../../src/bin/tui-back.e2e.test.ts#L971)
+  [`tui-back.e2e.test.ts:971`](../../../../src/bin/tui-back.e2e.test.ts#L971)

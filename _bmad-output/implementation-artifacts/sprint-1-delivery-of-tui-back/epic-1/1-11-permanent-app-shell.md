@@ -180,7 +180,7 @@ The following insights were extracted from the git history relevant to this stor
 - **User Skill Level:** (not specified)
 - **Planning Artifacts:** `_bmad-output/planning-artifacts`
 - **Implementation Artifacts:** `_bmad-output/implementation-artifacts`
-- **Sprint Status:** `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- **Sprint Status:** `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml`
 - **Epic 1 Status:** in-progress (auto-updated when first story was created)
 - **Story 1.11 Status:** ready-for-dev (this story file just created)
 
@@ -252,7 +252,7 @@ The following insights were extracted from the git history relevant to this stor
 - `src/adapters/driving/tui/shared/components/index.ts` (barrel exports for the new components)
 - `src/adapters/driving/tui/shared/README.md` (Story 1.11 shell/store rules)
 - `package.json` / `package-lock.json` (add `zustand@5.0.14`, exact-pinned)
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` (story → in-progress → review)
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` (story → in-progress → review)
 
 ### Change Log
 

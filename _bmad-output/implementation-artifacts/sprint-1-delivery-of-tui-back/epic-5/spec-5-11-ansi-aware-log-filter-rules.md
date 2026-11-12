@@ -6,8 +6,8 @@ status: 'done'
 baseline_commit: '0b239162fef34fb501b71ece95562a7e3f333af5'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md'
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-5/spec-5-9-stackable-log-filter-rules.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-5-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-5/spec-5-9-stackable-log-filter-rules.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -80,20 +80,20 @@ Keeping every escape sequence (even those inside removed ranges) is the simplest
 **Visible-text matching**
 
 - Entry point: rules match on the visible copy and rebuild the original with its escapes.
-  [`logs-zone.logic.ts:627`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L627)
+  [`logs-zone.logic.ts:627`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L627)
 
 - Split a line into visible text plus escape sequences and their visible offsets.
-  [`logs-zone.logic.ts:545`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L545)
+  [`logs-zone.logic.ts:545`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L545)
 
 - Re-emit every escape in order, so kept characters keep exactly their original colours.
-  [`logs-zone.logic.ts:562`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L562)
+  [`logs-zone.logic.ts:562`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L562)
 
 **Level detection**
 
 - Level is judged on the stripped text, so a code glued to `DEBUG` no longer hides it.
-  [`logs-zone.logic.ts:524`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L524)
+  [`logs-zone.logic.ts:524`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L524)
 
 **Tests**
 
 - Real Nest and api-gateway fixtures, exact-output assertions, multi-match show, trailing escapes.
-  [`logs-zone.logic.test.ts:1192`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.test.ts#L1192)
+  [`logs-zone.logic.test.ts:1192`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.test.ts#L1192)

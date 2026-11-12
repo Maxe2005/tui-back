@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '192c9fecf233b12d912c8fdfe73ee367cf9af893'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-10-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-10-context.md'
   - '{project-root}/AGENTS.md'
 ---
 
@@ -79,23 +79,23 @@ Completion word 1 → names + `--help -h`; word 2 after `edt`/`registry` → ver
 **Generator**
 
 - Pure entry point: names, derived verbs and flags become one bash script.
-  [`completion-spec.ts:36`](../../../src/adapters/driving/cli/completion-spec.ts#L36)
+  [`completion-spec.ts:36`](../../../../src/adapters/driving/cli/completion-spec.ts#L36)
 
 - Verb-style commands are derived from usage lines, not a hand-kept list.
-  [`completion-spec.ts:22`](../../../src/adapters/driving/cli/completion-spec.ts#L22)
+  [`completion-spec.ts:22`](../../../../src/adapters/driving/cli/completion-spec.ts#L22)
 
 **Subcommand and TTY output**
 
 - `completion bash` closes over the final list so it completes itself.
-  [`subcommands.ts:530`](../../../src/adapters/driving/cli/subcommands.ts#L530)
+  [`subcommands.ts:530`](../../../../src/adapters/driving/cli/subcommands.ts#L530)
 
 - Optional hook prints the raw script on a TTY, envelope otherwise.
-  [`envelope.ts:19`](../../../src/adapters/driving/cli/envelope.ts#L19)
+  [`envelope.ts:19`](../../../../src/adapters/driving/cli/envelope.ts#L19)
 
 - Dispatch forwards the subcommand's hook to the renderer.
-  [`dispatch.ts:68`](../../../src/adapters/driving/cli/dispatch.ts#L68)
+  [`dispatch.ts:68`](../../../../src/adapters/driving/cli/dispatch.ts#L68)
 
 **Tests**
 
 - Black-box: bash -n, sourced probes, help-vs-script name guard.
-  [`tui-back.e2e.test.ts:2589`](../../../src/bin/tui-back.e2e.test.ts#L2589)
+  [`tui-back.e2e.test.ts:2589`](../../../../src/bin/tui-back.e2e.test.ts#L2589)

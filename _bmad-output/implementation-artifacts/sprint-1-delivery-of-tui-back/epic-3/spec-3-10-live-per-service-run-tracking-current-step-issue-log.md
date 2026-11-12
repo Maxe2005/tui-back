@@ -5,7 +5,7 @@ created: '2026-09-28'
 status: 'done'
 baseline_commit: '2f7ab70085a5f35f5a4ae5a4f9fba93897cc1aac'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -78,58 +78,58 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 **Live-phase seam (core entry point)**
 
 - One optional callback mirroring onUpdateBlocker — start here for design intent
-  [`group-update.ts:175`](../../../src/core/scripts/group-update.ts#L175)
+  [`group-update.ts:175`](../../../../src/core/scripts/group-update.ts#L175)
 
 - Throw- and rejection-proof emission keeps driving bugs out of pipeline
-  [`group-update.ts:184`](../../../src/core/scripts/group-update.ts#L184)
+  [`group-update.ts:184`](../../../../src/core/scripts/group-update.ts#L184)
 
 - Pulling versus merging signals around the pull / fetch-merge fork
-  [`group-update.ts:757`](../../../src/core/scripts/group-update.ts#L757)
+  [`group-update.ts:757`](../../../../src/core/scripts/group-update.ts#L757)
 
 - Migrating signal plus the shared failure code both layers use
-  [`group-update.ts:830`](../../../src/core/scripts/group-update.ts#L830)
+  [`group-update.ts:830`](../../../../src/core/scripts/group-update.ts#L830)
 
 - Restarting emitted once inside the shared helper both paths call
-  [`group-update.ts:565`](../../../src/core/scripts/group-update.ts#L565)
+  [`group-update.ts:565`](../../../../src/core/scripts/group-update.ts#L565)
 
 - Standalone restart forwards the identical channel, no second mechanism
-  [`service-restart.ts:47`](../../../src/core/scripts/service-restart.ts#L47)
+  [`service-restart.ts:47`](../../../../src/core/scripts/service-restart.ts#L47)
 
 **Store live maps**
 
 - Unresolved-on-blocker, resolved-on-next-phase derivation helpers
-  [`update-slice.ts:157`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L157)
+  [`update-slice.ts:157`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L157)
 
 - Group-run wiring: blocker appends entries, each phase resolves them
-  [`update-slice.ts:532`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L532)
+  [`update-slice.ts:532`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L532)
 
 - Migration failures derived at completion; phase map clears with run
-  [`update-slice.ts:549`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L549)
+  [`update-slice.ts:549`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L549)
 
 - Standalone restart opens with a fresh log, clears only its key
-  [`update-slice.ts:744`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L744)
+  [`update-slice.ts:744`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L744)
 
 **Zone rendering**
 
 - Live detail replaces last-outcome view while service is targeted
-  [`update-zone.tsx:604`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L604)
+  [`update-zone.tsx:604`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L604)
 
 - Migrate phase finally produces the long-reserved migrating glyph
-  [`update-zone.logic.ts:39`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L39)
+  [`update-zone.logic.ts:39`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L39)
 
 - Live formatter with starting fallback and one-row-per-issue sanitizing
-  [`update-zone.logic.ts:107`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L107)
+  [`update-zone.logic.ts:107`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L107)
 
 **Peripherals**
 
 - CLI passes no observer — output envelope unchanged, no new flags
-  [`subcommands.ts:173`](../../../src/adapters/driving/cli/subcommands.ts#L173)
+  [`subcommands.ts:173`](../../../../src/adapters/driving/cli/subcommands.ts#L173)
 
 - Core matrix: phase order, throwing/async observers, early-exit silence
-  [`group-update.test.ts:2233`](../../../src/core/scripts/group-update.test.ts#L2233)
+  [`group-update.test.ts:2233`](../../../../src/core/scripts/group-update.test.ts#L2233)
 
 - Slice guards: visibility, resolve, dedupe, migration entries, clearing
-  [`update-slice.test.ts:1430`](../../../src/adapters/driving/tui/store/slices/update-slice.test.ts#L1430)
+  [`update-slice.test.ts:1430`](../../../../src/adapters/driving/tui/store/slices/update-slice.test.ts#L1430)
 
 - Zone smoke: live detail, starting fallback, standalone restart rendering
-  [`update-zone.test.tsx:899`](../../../src/adapters/driving/tui/zones/update/update-zone.test.tsx#L899)
+  [`update-zone.test.tsx:899`](../../../../src/adapters/driving/tui/zones/update/update-zone.test.tsx#L899)

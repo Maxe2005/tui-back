@@ -7,8 +7,8 @@ route: 'one-shot'
 baseline_commit: '91a980ce822c4fc5840316b54683b6195fbcd1a7'
 review_loop_iteration: 0
 context:
-  - '_bmad-output/planning-artifacts/sprint-change-proposal-2026-08-27.md'
-  - '_bmad-output/implementation-artifacts/epic-2/spec-2-18-edt-zone-active-highlight-fixed-width-detail-pane-categorized-services-per-service-actions.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/sprint-change-proposal-2026-08-27.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-18-edt-zone-active-highlight-fixed-width-detail-pane-categorized-services-per-service-actions.md'
 ---
 
 # EDT Zone — Active/Emphasized Coloring Split (Story 2.18 amendment)
@@ -24,35 +24,35 @@ context:
 **The coloring split — the core mechanism**
 
 - `ListRowProps` gains `emphasized` (takes over accent+bold) and repurposes `active` (now a discreet suffix, no longer label color/bold) — read both doc comments together, they explain the decoupling and why.
-  [`list-row.tsx:13`](../../../src/adapters/driving/tui/shared/components/list-row.tsx#L13)
+  [`list-row.tsx:13`](../../../../src/adapters/driving/tui/shared/components/list-row.tsx#L13)
 
 - `resolveRowLayout` — `bold`/`labelColor` now derive from `emphasized`; `activeSuffix` is new, derives from `active`, with the `•` glyph required by DESIGN.md's status-color rule (colors.info must never be color-only).
-  [`list-row.tsx:38`](../../../src/adapters/driving/tui/shared/components/list-row.tsx#L38)
+  [`list-row.tsx:38`](../../../../src/adapters/driving/tui/shared/components/list-row.tsx#L38)
 
 - `ListRow`'s render — `activeSuffix` renders as its own `colors.info` `<Text>` after `meta`, independent of the label's own color/bold.
-  [`list-row.tsx:54`](../../../src/adapters/driving/tui/shared/components/list-row.tsx#L54)
+  [`list-row.tsx:54`](../../../../src/adapters/driving/tui/shared/components/list-row.tsx#L54)
 
 **Wiring into the EDT zone**
 
 - `formatEdtRowMeta` simplified — no longer takes `isActive`/builds the "— active" string itself, now a pure member-count formatter.
-  [`edts-zone.tsx:268`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L268)
+  [`edts-zone.tsx:268`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L268)
 
 - The EDT selector's `ListRow` call site — `emphasized` is keyed off `clampedEdtsSelected` (persists across all three panes' focus), `active` keeps its original `activeEdtUlid` trigger condition.
-  [`edts-zone.tsx:1396`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1396)
+  [`edts-zone.tsx:1396`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1396)
 
 **Tests — the behavioral proof**
 
 - `resolveRowLayout` pure-function coverage for `active` alone and composed with `emphasized`, pinning the `•` glyph in `activeSuffix`.
-  [`list-row.test.tsx:78`](../../../src/adapters/driving/tui/shared/components/list-row.test.tsx#L78)
+  [`list-row.test.tsx:78`](../../../../src/adapters/driving/tui/shared/components/list-row.test.tsx#L78)
 
 - `ListRow` render coverage for the discreet suffix alone, after `meta`, and composed with `selected` (a real, previously-untested combination).
-  [`list-row.test.tsx:156`](../../../src/adapters/driving/tui/shared/components/list-row.test.tsx#L156)
+  [`list-row.test.tsx:156`](../../../../src/adapters/driving/tui/shared/components/list-row.test.tsx#L156)
 
 - `FORCE_COLOR=1` styling proof that the cursor-index row is bold (emphasized) and the active EDT's row carries the info-colored suffix — on two different rows.
-  [`edts-zone.styles.test.tsx:42`](../../../src/adapters/driving/tui/zones/edts/edts-zone.styles.test.tsx#L42)
+  [`edts-zone.styles.test.tsx:42`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.styles.test.tsx#L42)
 
 - New regression proving `emphasized` persists after focus tabs away from the EDT selector to EDT SERVICES/OTHER SERVICES, unlike the pane-local cursor bar — the specific claim this amendment makes that Story 2.18's original tests never covered.
-  [`edts-zone.styles.test.tsx:76`](../../../src/adapters/driving/tui/zones/edts/edts-zone.styles.test.tsx#L76)
+  [`edts-zone.styles.test.tsx:76`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.styles.test.tsx#L76)
 
 - `formatEdtRowMeta` test simplified to match its narrower signature.
-  [`edts-zone.test.tsx:504`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L504)
+  [`edts-zone.test.tsx:504`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L504)

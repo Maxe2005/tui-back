@@ -123,60 +123,60 @@ Seeding lives in `enterBranchStep`, not `initialCreateDialog`. The global name (
 **Seeding the wizard from a root EDT**
 
 - Entry point: Step 3 entry applies the root seed once per path, name follows the global name.
-  [`wizard.logic.ts:449`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L449)
+  [`wizard.logic.ts:449`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L449)
 
 - One-shot seeding (`seededPaths`) so a row reset to Global is never reseeded.
-  [`wizard.logic.ts:479`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L479)
+  [`wizard.logic.ts:479`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L479)
 
 - Shared refresh rule: only rows still exactly the untouched seed follow a new name.
-  [`wizard.logic.ts:506`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L506)
+  [`wizard.logic.ts:506`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L506)
 
 - Panel A name edits reuse the same refresh, so inherited rows track the global name live.
-  [`step-branches.tsx:110`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L110)
+  [`step-branches.tsx:110`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L110)
 
 - Initial state: root members pre-checked, topic left empty.
-  [`edts-zone.logic.ts:941`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L941)
+  [`edts-zone.logic.ts:941`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L941)
 
 **Root members gone from the pool**
 
 - Prune on a non-empty pool only, so an unloaded pool never wipes the selection.
-  [`wizard.logic.ts:546`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L546)
+  [`wizard.logic.ts:546`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L546)
 
 - Step 2 validation counts only live services (review fix).
-  [`wizard.logic.ts:61`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L61)
+  [`wizard.logic.ts:61`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L61)
 
 - Pruned right before seeding when Step 3 is entered.
-  [`create-wizard.tsx:246`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L246)
+  [`create-wizard.tsx:246`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L246)
 
 - Dim Step 2 note naming the ignored root services.
-  [`step-services.tsx:64`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-services.tsx#L64)
+  [`step-services.tsx:64`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-services.tsx#L64)
 
 **Command entry and root resolution**
 
 - Known topic → seeded wizard; unknown → create-from pick with inline error; none → plain pick.
-  [`edts-zone.tsx:468`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L468)
+  [`edts-zone.tsx:468`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L468)
 
 - create-from mode selects into the seeded wizard; error clears on the first filter edit.
-  [`quick-pick-dialog.tsx:90`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L90)
+  [`quick-pick-dialog.tsx:90`](../../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L90)
 
 - Store opener mirrors edt-delete's topic parsing.
-  [`edt-slice.ts:534`](../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L534)
+  [`edt-slice.ts:534`](../../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L534)
 
 - Registered command, landing on the EDTs zone.
-  [`commands.ts:54`](../../../src/adapters/driving/tui/commands/commands.ts#L54)
+  [`commands.ts:54`](../../../../src/adapters/driving/tui/commands/commands.ts#L54)
 
 **Traceability**
 
 - Root line under the breadcrumb, and the root topic carried into every log detail.
-  [`create-wizard.tsx:469`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L469)
+  [`create-wizard.tsx:469`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L469)
 
 - Log detail names the root: `Created EDT "x" from "root" …`.
-  [`wizard.logic.ts:602`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L602)
+  [`wizard.logic.ts:602`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L602)
 
 **Peripherals**
 
 - Pure seeding/refresh/prune tests, one per matrix row.
-  [`wizard.logic.test.ts:321`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.test.ts#L321)
+  [`wizard.logic.test.ts:321`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.test.ts#L321)
 
 - Real-keypress suite: pick, not-found, seeded submit, switch/failed log paths.
-  [`edts-zone.interaction.test.tsx:3722`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3722)
+  [`edts-zone.interaction.test.tsx:3722`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3722)

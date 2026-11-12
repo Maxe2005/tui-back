@@ -5,7 +5,7 @@ created: '2026-09-17'
 status: 'done'
 baseline_commit: '9e9ca44da5eee409e46fbc94f9c0419ff0bc7b0a'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -86,43 +86,43 @@ Lock nesting order: acquire global `group-update` first, then `edt:<ulid>` — s
 **Core use-case**
 
 - Entry point: lock nesting, zero-member no-op, per-member loop
-  [`group-update.ts:58`](../../../src/core/scripts/group-update.ts#L58)
+  [`group-update.ts:58`](../../../../src/core/scripts/group-update.ts#L58)
 
 - Per-member flow: dirty gate, branch-mismatch guard, pull-or-merge, restart
-  [`group-update.ts:121`](../../../src/core/scripts/group-update.ts#L121)
+  [`group-update.ts:121`](../../../../src/core/scripts/group-update.ts#L121)
 
 - New port surface: pull, merge, abort, merge-in-progress classifier
-  [`git.ts:80`](../../../src/core/ports/git.ts#L80)
+  [`git.ts:80`](../../../../src/core/ports/git.ts#L80)
 
 - Container restart contract
-  [`container.ts:9`](../../../src/core/ports/container.ts#L9)
+  [`container.ts:9`](../../../../src/core/ports/container.ts#L9)
 
 **Driven adapters**
 
 - Non-interactive ff-only pull plus merge/abort implementations
-  [`git/index.ts:385`](../../../src/adapters/driven/git/index.ts#L385)
+  [`git/index.ts:385`](../../../../src/adapters/driven/git/index.ts#L385)
 
 - Docker restart with flag-injection guard and exit-code fallback
-  [`container/index.ts:24`](../../../src/adapters/driven/container/index.ts#L24)
+  [`container/index.ts:24`](../../../../src/adapters/driven/container/index.ts#L24)
 
 **Driving adapters and wiring**
 
 - Bare `update` subcommand entry and strict arg rejection
-  [`subcommands.ts:132`](../../../src/adapters/driving/cli/subcommands.ts#L132)
+  [`subcommands.ts:132`](../../../../src/adapters/driving/cli/subcommands.ts#L132)
 
 - Container port instantiated in the composition root
-  [`main.ts:34`](../../../src/bin/main.ts#L34)
+  [`main.ts:34`](../../../../src/bin/main.ts#L34)
 
 - In-process run, double-run feedback, guarded interrupted-marking
-  [`update-slice.ts:51`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L51)
+  [`update-slice.ts:51`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L51)
 
 - Zone rendering: spinners, summary, quit-confirm dialog
-  [`update-zone.tsx:88`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L88)
+  [`update-zone.tsx:88`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L88)
 
 **Tests**
 
 - Full I/O-matrix coverage against fake ports
-  [`group-update.test.ts:1`](../../../src/core/scripts/group-update.test.ts#L1)
+  [`group-update.test.ts:1`](../../../../src/core/scripts/group-update.test.ts#L1)
 
 - Black-box CLI runs including conflict isolation and lock contention
-  [`tui-back.e2e.test.ts:1`](../../../src/bin/tui-back.e2e.test.ts#L1)
+  [`tui-back.e2e.test.ts:1`](../../../../src/bin/tui-back.e2e.test.ts#L1)

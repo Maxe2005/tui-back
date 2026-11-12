@@ -6,8 +6,8 @@ status: 'in-progress'
 review_loop_iteration: 0
 baseline_commit: 'pending'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/planning-artifacts/sprint-change-proposal-2026-08-24.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/sprint-change-proposal-2026-08-24.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">

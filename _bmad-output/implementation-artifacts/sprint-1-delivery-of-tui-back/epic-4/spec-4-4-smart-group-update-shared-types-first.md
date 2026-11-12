@@ -5,7 +5,7 @@ created: '2026-10-12'
 status: 'done'
 baseline_commit: '1ccb95929f40caccdcfaccdf3e28aaad4fc7827d'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-4-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-4-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -82,45 +82,45 @@ The between-stage hook keeps the pool pure and the module out of core: the store
 **Phase use-case**
 
 - Decides publish per mode, then runs publish and propagate unchanged; failures become one code
-  [`smart-update.ts:71`](../../../src/core/shared-types/smart-update.ts#L71)
+  [`smart-update.ts:71`](../../../../src/core/shared-types/smart-update.ts#L71)
 
 - "If changed" rule: only an advanced merge on an updated source row publishes
-  [`smart-update.ts:60`](../../../src/core/shared-types/smart-update.ts#L60)
+  [`smart-update.ts:60`](../../../../src/core/shared-types/smart-update.ts#L60)
 
 **Generic core seam**
 
 - Between-stage hook; skipped once cancelled, a throwing hook cancels the run
-  [`run-pool.ts:37`](../../../src/core/scripts/run-pool.ts#L37)
+  [`run-pool.ts:37`](../../../../src/core/scripts/run-pool.ts#L37)
 
 - Threaded to both the EDT and all-repos pools without naming shared-types
-  [`group-update.ts:196`](../../../src/core/scripts/group-update.ts#L196)
+  [`group-update.ts:196`](../../../../src/core/scripts/group-update.ts#L196)
 
 **Store wiring**
 
 - Stage ordering, hook, live phase and incident pause on failure
-  [`update-slice.ts:694`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L694)
+  [`update-slice.ts:694`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L694)
 
 - Phase-failed incident variant reusing the 3.18 queue
-  [`update-incidents.logic.ts:12`](../../../src/adapters/driving/tui/zones/update/update-incidents.logic.ts#L12)
+  [`update-incidents.logic.ts:12`](../../../../src/adapters/driving/tui/zones/update/update-incidents.logic.ts#L12)
 
 **Configuration row and live view**
 
 - Mode only forwarded when the source row is still selected
-  [`update-config-dialog.logic.ts:171`](../../../src/adapters/driving/tui/zones/update/update-config-dialog.logic.ts#L171)
+  [`update-config-dialog.logic.ts:171`](../../../../src/adapters/driving/tui/zones/update/update-config-dialog.logic.ts#L171)
 
 - Space cycles off / if-changed / always
-  [`update-config-panels.logic.ts:65`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L65)
+  [`update-config-panels.logic.ts:65`](../../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L65)
 
 - Detail pane shows the publishing / propagating step
-  [`update-service-detail.tsx:63`](../../../src/adapters/driving/tui/zones/update/update-service-detail.tsx#L63)
+  [`update-service-detail.tsx:63`](../../../../src/adapters/driving/tui/zones/update/update-service-detail.tsx#L63)
 
 **Tests**
 
 - Use-case against fakes, one case per matrix row
-  [`smart-update.test.ts:1`](../../../src/core/shared-types/smart-update.test.ts#L1)
+  [`smart-update.test.ts:1`](../../../../src/core/shared-types/smart-update.test.ts#L1)
 
 - Pool hook: order, cancel, throwing hook
-  [`run-pool.test.ts:165`](../../../src/core/scripts/run-pool.test.ts#L165)
+  [`run-pool.test.ts:165`](../../../../src/core/scripts/run-pool.test.ts#L165)
 
 - Slice: ordering, pause with retry/skip/abort, confirm path
-  [`update-slice.test.ts:362`](../../../src/adapters/driving/tui/store/slices/update-slice.test.ts#L362)
+  [`update-slice.test.ts:362`](../../../../src/adapters/driving/tui/store/slices/update-slice.test.ts#L362)

@@ -16,7 +16,7 @@ headless: false
 - **Stories completed**: 13/13
   1-1-project-scaffolding-hexagonal-skeleton, 1-2-xdg-state-layout-resolution, 1-3-script-output-envelope-cli-entrypoint-contract, 1-4-manifest-schema-loader-validation, 1-5-explicit-repo-registry, 1-6-static-module-registry, 1-7-single-instance-enforcement-per-resource-action-lock, 1-8-atelier-design-tokens-theme-module, 1-9-read-focused-display-components, 1-10-interactive-feedback-components, 1-11-permanent-app-shell, 1-12-launch-banner-keybinding-help-screen, 1-13-canonical-keybinding-contract-zone-navigation
 - **Pending stories** (`pending_stories`): none — all 13 stories are `done`
-- **Evidence inventory**: All 13 story artifacts exist under `_bmad-output/implementation-artifacts/epic-1/`. Sprint status (`_bmad-output/implementation-artifacts/sprint-status.yaml`) confirms all stories `done` with `epic-1-retrospective: optional`. No previous retrospective exists.
+- **Evidence inventory**: All 13 story artifacts exist under `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1/`. Sprint status (`_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml`) confirms all stories `done` with `epic-1-retrospective: optional`. No previous retrospective exists.
 - **Missing evidence**: Session logs not captured during story implementation. Acceptance criteria were not explicitly declared in the epic spec; verdict is profiled from the diff and stories rather than declared.
 
 ## Findings

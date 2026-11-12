@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '63d056486a20f41c5466950408a31d933896a191'
 review_loop_iteration: 0
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
   - '_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md'
 ---
 
@@ -125,59 +125,59 @@ context:
 **Divergence contract & computation**
 
 - Entry point: the `GitPort` contract this whole story hangs off — three-way Result shape (`ok` / `no-upstream` / `unknown-offline`), never a fabricated value.
-  [`git.ts:49`](../../../src/core/ports/git.ts#L49)
+  [`git.ts:49`](../../../../src/core/ports/git.ts#L49)
 
 - The real implementation: three-step read (branch → upstream-configured? → rev-list counts), local-only, never fetches.
-  [`git/index.ts:202`](../../../src/adapters/driven/git/index.ts#L202)
+  [`git/index.ts:202`](../../../../src/adapters/driven/git/index.ts#L202)
 
 - Review-patch fix: distinguishes "upstream genuinely unset" from a real git/spawn failure on the config read, so an environment error is never silently reported as `no-upstream`.
-  [`git/index.ts:278`](../../../src/adapters/driven/git/index.ts#L278)
+  [`git/index.ts:278`](../../../../src/adapters/driven/git/index.ts#L278)
 
 **Use-case: listing branch/divergence uniformly**
 
 - Turns every managed repo (member or not) into a branch/divergence result, reading membership fresh from the active EDT each call.
-  [`list.ts:64`](../../../src/core/edt/list.ts#L64)
+  [`list.ts:64`](../../../../src/core/edt/list.ts#L64)
 
 - Per-service read: folds any git error (including a detached-HEAD `currentBranch` failure) into the same `unknown-offline` treatment the matrix requires.
-  [`list.ts:127`](../../../src/core/edt/list.ts#L127)
+  [`list.ts:127`](../../../../src/core/edt/list.ts#L127)
 
 **CLI surface**
 
 - `tui-back edts`: thin wrapper handing the same use-case straight to JSON/text output — CLI/TUI parity by construction.
-  [`subcommands.ts:92`](../../../src/adapters/driving/cli/subcommands.ts#L92)
+  [`subcommands.ts:92`](../../../../src/adapters/driving/cli/subcommands.ts#L92)
 
 **TUI composition root & store wiring**
 
 - Scope-extension entry point: the composition root that wires core ports into the TUI for the first time (mirrors `main.ts`'s CLI wiring exactly).
-  [`tui.ts:54`](../../../src/bin/tui.ts#L54)
+  [`tui.ts:54`](../../../../src/bin/tui.ts#L54)
 
 - The ports the store closes over — kept optional so every pre-2.6 `createAppStore()` call site stays unwired-but-usable.
-  [`app-store.ts:29`](../../../src/adapters/driving/tui/store/app-store.ts#L29)
+  [`app-store.ts:29`](../../../../src/adapters/driving/tui/store/app-store.ts#L29)
 
 - `loadEdtsBranches`: the async action bridging the use-case into Zustand state — status/error/unreachable/errors all reset together on each load.
-  [`app-store.ts:122`](../../../src/adapters/driving/tui/store/app-store.ts#L122)
+  [`app-store.ts:122`](../../../../src/adapters/driving/tui/store/app-store.ts#L122)
 
 **TUI EDTs zone rendering**
 
 - The zone itself: replaces the `ZonePlaceholder` stub with a real list+detail view driven entirely by store state.
-  [`edts-zone.tsx:119`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L119)
+  [`edts-zone.tsx:119`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L119)
 
 - Review-patch fix: an error state now shows *only* the error — never a stale row list left over from a prior successful load.
-  [`edts-zone.tsx:142`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L142)
+  [`edts-zone.tsx:142`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L142)
 
 - Review-patch fix: `unreachable`/`errors` counts (previously silently dropped) now surface as a one-line summary.
-  [`edts-zone.tsx:80`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L80)
+  [`edts-zone.tsx:80`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L80)
 
 - Review-patch fix: `j`/`k` row-selection extracted into pure, directly-unit-testable functions (the `useInput` callback itself can't be exercised by the test harness).
-  [`edts-zone.tsx:101`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L101) · [`edts-zone.tsx:111`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L111)
+  [`edts-zone.tsx:101`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L101) · [`edts-zone.tsx:111`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L111)
 
 **Peripherals**
 
 - Shared test-infra fix found along the way: pins a fake terminal size so any wrap-sensitive Ink render assertion is deterministic across environments.
-  [`render-to-string.ts:31`](../../../src/adapters/driving/tui/shared/components/render-to-string.ts#L31)
+  [`render-to-string.ts:31`](../../../../src/adapters/driving/tui/shared/components/render-to-string.ts#L31)
 
-- Core unit tests (every I/O-matrix row against fake ports): [`list.test.ts`](../../../src/core/edt/list.test.ts)
-- Driven-adapter integration tests (real clone/origin pairs, upstream config-failure shim): [`git/index.test.ts`](../../../src/adapters/driven/git/index.test.ts)
-- TUI render tests (loading/error/stale-on-error/issues-summary/truncation/selection): [`edts-zone.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx)
-- Store tests (load/error/concurrent-fetch-guard/unwired-degrade): [`app-store.test.ts`](../../../src/adapters/driving/tui/store/app-store.test.ts)
-- Black-box e2e (`tui-back edts` against real git repos): [`tui-back.e2e.test.ts`](../../../src/bin/tui-back.e2e.test.ts)
+- Core unit tests (every I/O-matrix row against fake ports): [`list.test.ts`](../../../../src/core/edt/list.test.ts)
+- Driven-adapter integration tests (real clone/origin pairs, upstream config-failure shim): [`git/index.test.ts`](../../../../src/adapters/driven/git/index.test.ts)
+- TUI render tests (loading/error/stale-on-error/issues-summary/truncation/selection): [`edts-zone.test.tsx`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx)
+- Store tests (load/error/concurrent-fetch-guard/unwired-degrade): [`app-store.test.ts`](../../../../src/adapters/driving/tui/store/app-store.test.ts)
+- Black-box e2e (`tui-back edts` against real git repos): [`tui-back.e2e.test.ts`](../../../../src/bin/tui-back.e2e.test.ts)

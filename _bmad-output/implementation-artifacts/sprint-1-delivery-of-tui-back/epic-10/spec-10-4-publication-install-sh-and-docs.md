@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '4545bdf94f87b3c1099bd367cc68b73f7dccbfd5'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-10-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-10-context.md'
   - '{project-root}/AGENTS.md'
   - '{project-root}/docs/tui-back-install.md'
 ---
@@ -58,7 +58,7 @@ context:
 - [x] `package.json` -- add `files`; verify with `npm pack --dry-run` that `_bmad-output`, `.agents`, `.claude`, `.opencode`, `.bmad-loop` are absent and `src/bin/tui-back.mjs` present; add `.npmignore` only if needed
 - [x] `README.md` -- install one-liner (curl `install.sh` and `npx`), commands, aliases, completion, update, uninstall, `build-essential` fallback, link to docs
 - [x] `.memlog.md` -- append (decision) entry: AD-14 amendment + AD-24 added 2026-11-05
-- [x] `_bmad-output/implementation-artifacts/epic-10/spec-10-4-publication-install-sh-and-docs.md` -- record the clean-machine result (container run if available, else mark as pending manual step for Max)
+- [x] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-10/spec-10-4-publication-install-sh-and-docs.md` -- record the clean-machine result (container run if available, else mark as pending manual step for Max)
 
 **Acceptance Criteria:**
 - Given `install.sh`, when `bash -n` runs, then it passes; when a check fails, then exit 1 and nothing is installed.
@@ -90,26 +90,26 @@ The `npx` install ends with the existing `install` subcommand (Story 10.3), so `
 **Installer precheck**
 
 - Entry point: thin precheck, no writes, then hands over to the `install` subcommand.
-  [`install.sh:1`](../../../install.sh#L1)
+  [`install.sh:1`](../../../../install.sh#L1)
 
 - Black-box tests under a stub-only PATH cover the whole matrix and the Node 23/24 boundary.
-  [`install-sh.e2e.test.ts:1`](../../../src/bin/install-sh.e2e.test.ts#L1)
+  [`install-sh.e2e.test.ts:1`](../../../../src/bin/install-sh.e2e.test.ts#L1)
 
 **Package contents**
 
 - `files` allow-list keeps planning and agent folders and tests out of the install.
-  [`package.json:13`](../../../package.json#L13)
+  [`package.json:13`](../../../../package.json#L13)
 
 - Test asserts the `npm pack` file list and slug agreement with `repository`.
-  [`install-sh.e2e.test.ts:80`](../../../src/bin/install-sh.e2e.test.ts#L80)
+  [`install-sh.e2e.test.ts:80`](../../../../src/bin/install-sh.e2e.test.ts#L80)
 
 **Docs and license**
 
 - Public entry point: install, aliases, completion, update, uninstall, `build-essential` fallback.
-  [`README.md:1`](../../../README.md#L1)
+  [`README.md:1`](../../../../README.md#L1)
 
 - ISC license.
-  [`LICENSE:1`](../../../LICENSE#L1)
+  [`LICENSE:1`](../../../../LICENSE#L1)
 
 - Memlog entry for the AD-14 amendment and AD-24.
-  [`.memlog.md`](../../planning-artifacts/architecture/architecture-tui-back-2026-08-11/.memlog.md)
+  [`.memlog.md`](../../../planning-artifacts/architecture/architecture-tui-back-2026-08-11/.memlog.md)

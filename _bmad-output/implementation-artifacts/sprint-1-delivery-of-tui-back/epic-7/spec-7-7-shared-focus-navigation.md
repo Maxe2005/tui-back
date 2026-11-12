@@ -82,34 +82,34 @@ Ink parses `ESC[Z` as `tab` with `shift: true`, so one `key.tab` check suffices.
 **Primitive**
 
 - Entry point: modes, Shift+Tab reversal, wrapping step, hint helpers.
-  [`focus-navigation.ts:28`](../../../src/adapters/driving/tui/shared/keys/focus-navigation.ts#L28)
+  [`focus-navigation.ts:28`](../../../../src/adapters/driving/tui/shared/keys/focus-navigation.ts#L28)
 
 - Wrapping step with first/last fallback for an unknown current stop.
-  [`focus-navigation.ts:52`](../../../src/adapters/driving/tui/shared/keys/focus-navigation.ts#L52)
+  [`focus-navigation.ts:52`](../../../../src/adapters/driving/tui/shared/keys/focus-navigation.ts#L52)
 
 **Zone declarations and handlers**
 
 - EDTs pane-focus declaration consumed by the zone handler.
-  [`edts-zone.logic.ts:203`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L203)
+  [`edts-zone.logic.ts:203`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L203)
 
 - Shared two-panel declaration for wizard and switch-resolution.
-  [`edts-zone.logic.ts:218`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L218)
+  [`edts-zone.logic.ts:218`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L218)
 
 - Settings tabs: Tab and Left/Right both go through the primitive.
-  [`settings-screen.tsx:398`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L398)
+  [`settings-screen.tsx:398`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L398)
 
 - Resize-mode boundary cycling now takes a direction.
-  [`navigation-slice.ts:187`](../../../src/adapters/driving/tui/store/slices/navigation-slice.ts#L187)
+  [`navigation-slice.ts:187`](../../../../src/adapters/driving/tui/store/slices/navigation-slice.ts#L187)
 
 - Shift+Tab passed as back from the app shell.
-  [`app-shell.tsx:282`](../../../src/adapters/driving/tui/app-shell.tsx#L282)
+  [`app-shell.tsx:282`](../../../../src/adapters/driving/tui/app-shell.tsx#L282)
 
 **Hints**
 
 - Footer focus hint built from the zone declarations.
-  [`footer.tsx:4`](../../../src/adapters/driving/tui/shared/components/footer.tsx#L4)
+  [`footer.tsx:4`](../../../../src/adapters/driving/tui/shared/components/footer.tsx#L4)
 
 **Guard and tests**
 
 - Guard keeps `key.tab` inside the primitive and documented text-input exceptions.
-  [`focus-navigation.guard.test.ts`](../../../src/adapters/driving/tui/shared/keys/focus-navigation.guard.test.ts)
+  [`focus-navigation.guard.test.ts`](../../../../src/adapters/driving/tui/shared/keys/focus-navigation.guard.test.ts)

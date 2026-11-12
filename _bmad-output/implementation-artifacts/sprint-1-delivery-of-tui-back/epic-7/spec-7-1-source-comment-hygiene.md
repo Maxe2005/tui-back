@@ -69,7 +69,7 @@ context:
 - [x] `src/adapters/driving/tui/shared/**` -- sweep -- commit `docs(tui-shared)`.
 - [x] each `src/adapters/driving/tui/zones/<zone>` -- sweep -- one commit per zone.
 - [x] `src/comment-hygiene.test.ts` -- add guard test walking `src/` and failing on any match of `\b[Ss]tory \d+\.\d+|\bAC\d+\b|review patch` -- commit `test`.
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- `epic-7: in-progress`, story status per workflow -- commit `docs(sprint)`.
+- [x] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- `epic-7: in-progress`, story status per workflow -- commit `docs(sprint)`.
 
 **Acceptance Criteria:**
 - Given any file under `src/`, when the sweep is done, then it opens with a header of at most 5 lines (or none for a barrel).

@@ -84,7 +84,7 @@ NEW:
 
 *(Full text of each amended/new FR as drafted and approved appears in the session transcript; reproduced in full in the PRD file itself once applied.)*
 
-### 4.2 Epics (`_bmad-output/planning-artifacts/epics.md`, Epic 3)
+### 4.2 Epics (`_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md`, Epic 3)
 
 - **Story 3.1** amended: the configuration interface (3.7) opens before the run; the merge source is the configured per-service branch, not a fixed `sharedBranch`; restart honors the clean-restart toggle; a deselected service is never targeted.
 - **Story 3.2** amended: migration only runs when the run's migrate toggle is on, overriding manifest declaration rather than just defaulting it.

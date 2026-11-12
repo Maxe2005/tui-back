@@ -5,7 +5,7 @@ created: '2026-10-08'
 status: 'done'
 baseline_commit: '2ebdbea55826be73ef80227ba0f0e61c5971f8f4'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-4-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-4-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -85,41 +85,41 @@ The config schema lives on the registry entry so `schema.ts` stays generic and n
 **Port and adapter**
 
 - Core-owned contract: three explicit-argument operations, error codes documented.
-  [`shared-types.ts:1`](../../../src/core/ports/shared-types.ts#L1)
+  [`shared-types.ts:1`](../../../../src/core/ports/shared-types.ts#L1)
 
 - Targeted text edit keeps every other byte of package.json intact.
-  [`npm-package.ts:109`](../../../src/adapters/driven/modules/shared-types/npm-package.ts#L109)
+  [`npm-package.ts:109`](../../../../src/adapters/driven/modules/shared-types/npm-package.ts#L109)
 
 - Exact-version check separates "not published" from "registry unreachable".
-  [`npm-package.ts:142`](../../../src/adapters/driven/modules/shared-types/npm-package.ts#L142)
+  [`npm-package.ts:142`](../../../../src/adapters/driven/modules/shared-types/npm-package.ts#L142)
 
 **Registry and manifest validation**
 
 - Discriminated union on `kind`; both module ids registered.
-  [`module-registry.ts:34`](../../../src/adapters/driven/modules/module-registry.ts#L34)
+  [`module-registry.ts:34`](../../../../src/adapters/driven/modules/module-registry.ts#L34)
 
 - Parameter schemas derived from the registry, so the manifest schema never names a module.
-  [`module-registry.ts:54`](../../../src/adapters/driven/modules/module-registry.ts#L54)
+  [`module-registry.ts:54`](../../../../src/adapters/driven/modules/module-registry.ts#L54)
 
 - Strict, defaulted per-module config validation with clear messages.
-  [`schema.ts:51`](../../../src/adapters/driven/manifest/schema.ts#L51)
+  [`schema.ts:51`](../../../../src/adapters/driven/manifest/schema.ts#L51)
 
 - Defaults for both modules; unknown and blank parameters rejected.
-  [`config.ts:1`](../../../src/adapters/driven/modules/shared-types/config.ts#L1)
+  [`config.ts:1`](../../../../src/adapters/driven/modules/shared-types/config.ts#L1)
 
 **Callers**
 
 - Narrowing on `kind` after the union change.
-  [`main.ts:61`](../../../src/bin/main.ts#L61)
-  [`tui.ts:116`](../../../src/bin/tui.ts#L116)
+  [`main.ts:61`](../../../../src/bin/main.ts#L61)
+  [`tui.ts:116`](../../../../src/bin/tui.ts#L116)
 
 **Tests**
 
 - Adapter against fake fs and registry runner, every matrix row.
-  [`npm-package.test.ts:1`](../../../src/adapters/driven/modules/shared-types/npm-package.test.ts#L1)
+  [`npm-package.test.ts:1`](../../../../src/adapters/driven/modules/shared-types/npm-package.test.ts#L1)
 
 - Manifest loader: defaults, custom, unknown, blank.
-  [`index.test.ts:536`](../../../src/adapters/driven/manifest/index.test.ts#L536)
+  [`index.test.ts:536`](../../../../src/adapters/driven/manifest/index.test.ts#L536)
 
 - Container-less source accepted as a member.
-  [`list-repos.test.ts:169`](../../../src/core/scripts/list-repos.test.ts#L169)
+  [`list-repos.test.ts:169`](../../../../src/core/scripts/list-repos.test.ts#L169)

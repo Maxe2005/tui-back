@@ -2,6 +2,10 @@
 """Multi-sprint registry for BMAD: resolve / list / new / activate / close.
 
 Registry: {project-root}/_bmad-output/sprints/registry.json (stdlib only).
+Layout (one folder per sprint, same name in both trees):
+  _bmad-output/sprints/<sprint>/                      epics.md + sprint-change-proposal-*.md   (+ registry.json one level up)
+  _bmad-output/implementation-artifacts/<sprint>/     epic-N/ (story specs), epic-N-context.md, sprint-status.yaml(+archive)
+  _bmad-output/implementation-artifacts/deferred-work.md   (shared, sprint-agnostic)
 Epic numbers stay GLOBAL across sprints (sprint 2 continues after sprint 1's last epic),
 so story keys, story files, branch names and retro keys never collide.
 Every command prints JSON on stdout. Exit 1 + {"ok": false, "error": ...} on failure.
@@ -46,6 +50,7 @@ def view(s, active):
         "ok": True, "sprint_id": s["id"], "name": s["name"], "status": s["status"],
         "is_active": s["id"] == active,
         "epics_file": str(epics), "status_file": str(ROOT / s["status_file"]),
+        "sprint_dir": str(epics.parent), "artifacts_dir": str(ROOT / s["artifacts_dir"]),
         "epics_range": s.get("epics"),
         "epics_file_exists": epics.exists(),
         "status_file_exists": (ROOT / s["status_file"]).exists(),
@@ -84,10 +89,13 @@ def main():
         nums = [int(re.sub(r"\D", "", s["id"]) or 0) for s in reg["sprints"]]
         sid = f"sprint-{max(nums) + 1}"
         slug = re.sub(r"[^a-z0-9]+", "-", args.name.lower()).strip("-")[:50]
-        d = Path("_bmad-output/sprints") / f"{sid}-{slug}"
+        d = Path("_bmad-output/sprints") / f"{sid}-{slug}"            # epics.md + sprint change proposals
+        a = Path("_bmad-output/implementation-artifacts") / f"{sid}-{slug}"  # epic-N/ specs, epic contexts, sprint-status
         (ROOT / d).mkdir(parents=True, exist_ok=True)
+        (ROOT / a).mkdir(parents=True, exist_ok=True)
         reg["sprints"].append({"id": sid, "name": args.name, "status": "planned",
-                               "epics_file": str(d / "epics.md"), "status_file": str(d / "sprint-status.yaml"),
+                               "epics_file": str(d / "epics.md"), "artifacts_dir": str(a),
+                               "status_file": str(a / "sprint-status.yaml"),
                                "epics": f"{max_epic(reg) + 1}-"})
         if not args.no_activate:
             reg["active"] = sid

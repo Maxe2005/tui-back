@@ -6,9 +6,9 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '5f35527819c00d878af5b5a2e2a367d5fb4b4ff7'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/implementation-artifacts/epic-2/spec-2-9-edts-zone-create-switch-modify.md'
-  - '_bmad-output/implementation-artifacts/epic-2/spec-2-15-edt-commands-and-action-history.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-9-edts-zone-create-switch-modify.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-15-edt-commands-and-action-history.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -127,59 +127,59 @@ context:
 **Pure functions — isolated, directly unit-testable**
 
 - `ListRow`'s new `active` prop: `resolveRowLayout` sets `labelColor: colors.accent, bold: true` when `active`, composing with (never replacing) `selected`'s own accent-bar/`›`/fill treatment.
-  [`list-row.tsx:26`](../../../src/adapters/driving/tui/shared/components/list-row.tsx#L26)
+  [`list-row.tsx:26`](../../../../src/adapters/driving/tui/shared/components/list-row.tsx#L26)
 
 - `cyclePaneFocus`: the 3-way `edts → edt-services → other-services → edts` rotation replacing the old 2-way `togglePaneFocus`.
-  [`edts-zone.tsx:169`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L169)
+  [`edts-zone.tsx:169`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L169)
 
 - `formatAvailableActionsHint`: the context-derived hint line, extracted out of `formatEdtActionHistory`'s old hardcoded "Available: ..." line.
-  [`edts-zone.tsx:318`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L318)
+  [`edts-zone.tsx:318`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L318)
 
 - `partitionServicesByEdtMembership`: splits the flat SERVICES list against the *selected* EDT's membership (never `row.isMember`, which stays tied to the *active* EDT).
-  [`edts-zone.tsx:337`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L337)
+  [`edts-zone.tsx:337`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L337)
 
 - `SERVICE_ACTION_MENU_ITEMS`: the contextual menu's fixed three rows (Remove / Change branch / disabled Restart), rendered via `ListRow` per the Design Notes.
-  [`edts-zone.tsx:485`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L485)
+  [`edts-zone.tsx:485`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L485)
 
 **Review-loop corrections — cursor and summary placement fixes from the first review pass**
 
 - Both service-pane cursors reset to `0` whenever the *selected* EDT changes, so a stale index never silently points at an unrelated row after switching EDTs.
-  [`edts-zone.tsx:698`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L698)
+  [`edts-zone.tsx:698`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L698)
 
 - The unreachable/error `issuesSummary` now renders once, independent of which partition (EDT SERVICES vs. OTHER SERVICES) the flagged service falls into — previously orphaned under OTHER SERVICES only.
-  [`edts-zone.tsx:1408`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1408)
+  [`edts-zone.tsx:1408`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1408)
 
 **Contextual-menu and Add-to-EDT dialog wiring — the actual behavior change**
 
 - EDT SERVICES row menu: `Remove from EDT` → `modifyEdt({removeMembers:[repoPath]})`.
-  [`edts-zone.tsx:1104`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1104)
+  [`edts-zone.tsx:1104`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1104)
 
 - EDT SERVICES row menu: `Change branch for this EDT` → `modifyEdt({setBranches:[...]})`, validated via the existing `validateBranchEditValue`.
-  [`edts-zone.tsx:1128`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1128)
+  [`edts-zone.tsx:1128`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1128)
 
 - The menu's own input dispatcher — arrow/Home/End cursor movement, the disabled Restart row's Enter no-op, and (post-review) an `!current.submitting` guard on Escape matching its sibling dialogs.
-  [`edts-zone.tsx:1196`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1196)
+  [`edts-zone.tsx:1196`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1196)
 
 - OTHER SERVICES row: `Add to EDT` → `modifyEdt({addMembers, setBranches})` in one call, pre-filled from `ServiceBranchDivergence.branch`.
-  [`edts-zone.tsx:1234`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1234)
+  [`edts-zone.tsx:1234`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1234)
 
 - `canEditMemberBranch` loosening, resolved as a bypass (Design Notes): both new flows open their branch-edit text input directly from the row-level `Enter` handler, never routing through `resolveModifyEnterAction`/`canEditMemberBranch` — confirmed sufficient, `canEditMemberBranch` itself is unchanged.
 
 **Wiring into the base view**
 
 - The EDT selector's `ListRow` now passes `active={entry.ulid === activeEdtUlid}`, independent of which row the keyboard cursor sits on.
-  [`edts-zone.tsx:1391`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1391)
+  [`edts-zone.tsx:1391`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1391)
 
 - The detail pane joins `formatEdtDetail` + `formatEdtActionHistory` + `formatAvailableActionsHint` with the existing `'\n\n'` separator.
-  [`edts-zone.tsx:1451`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1451)
+  [`edts-zone.tsx:1451`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1451)
 
 **Interaction and styling tests — the end-to-end and visual proof**
 
 - New `FORCE_COLOR=1` styles test proving the active row's label actually carries the bold/accent ANSI sequence (mirroring `zone-tab-bar.styles.test.tsx`), added after the first review pass found the plain-text AC1 test didn't verify styling.
-  [`edts-zone.styles.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.styles.test.tsx)
+  [`edts-zone.styles.test.tsx`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.styles.test.tsx)
 
 - 3-way Tab cycle, contextual-menu Remove/Change-branch (incl. empty-value rejection, the disabled-Restart no-op, and partial-failure via `summarizeFailedResults`), Add-to-EDT confirm/partial-failure, Escape/cancel on both new dialogs and the branch-edit sub-view, and Enter no-ops on empty panes.
-  [`edts-zone.interaction.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx)
+  [`edts-zone.interaction.test.tsx`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx)
 
 - Pure-function coverage plus renderToString smoke tests for the active-highlight row, the "No EDT selected" fallback, both new dialogs, the per-pane hint text, and the width-stability regression.
-  [`edts-zone.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx)
+  [`edts-zone.test.tsx`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx)

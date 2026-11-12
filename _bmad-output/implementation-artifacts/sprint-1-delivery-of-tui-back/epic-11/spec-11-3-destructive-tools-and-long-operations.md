@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '8434b332f69fbd2f3e2290ad3d1ccd4154d41a91'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-11-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-11-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -81,37 +81,37 @@ context:
 **Destructive tools and preview (design entry point)**
 
 - Declarative destructive tools, each with a loss-naming prompt.
-  [`tool-registry.ts:280`](../../../src/adapters/driving/mcp/tool-registry.ts#L280)
+  [`tool-registry.ts:280`](../../../../src/adapters/driving/mcp/tool-registry.ts#L280)
 
 - `update` cross-field validation (`fromEdt` only with `from-edt`).
-  [`tool-registry.ts:346`](../../../src/adapters/driving/mcp/tool-registry.ts#L346)
+  [`tool-registry.ts:346`](../../../../src/adapters/driving/mcp/tool-registry.ts#L346)
 
 - `registry-clean` previews stale entries, then removes exactly those.
-  [`tool-registry.ts:370`](../../../src/adapters/driving/mcp/tool-registry.ts#L370)
+  [`tool-registry.ts:370`](../../../../src/adapters/driving/mcp/tool-registry.ts#L370)
 
 **Server flow: prepare, gate, run**
 
 - Handler checks abort before and after the gate, so nothing runs once cancelled.
-  [`server.ts:59`](../../../src/adapters/driving/mcp/server.ts#L59)
+  [`server.ts:59`](../../../../src/adapters/driving/mcp/server.ts#L59)
 
 - Progress notifications only with a token; stop after the reply.
-  [`server.ts:136`](../../../src/adapters/driving/mcp/server.ts#L136)
+  [`server.ts:136`](../../../../src/adapters/driving/mcp/server.ts#L136)
 
 **Cooperative cancellation**
 
 - Optional external cancel folded into the pool's stop check.
-  [`group-update.ts:253`](../../../src/core/scripts/group-update.ts#L253)
+  [`group-update.ts:253`](../../../../src/core/scripts/group-update.ts#L253)
 
 - CLI context maps abort signal and phases into `update`.
-  [`subcommands.ts:1656`](../../../src/adapters/driving/cli/subcommands.ts#L1656)
+  [`subcommands.ts:1656`](../../../../src/adapters/driving/cli/subcommands.ts#L1656)
 
 - Subcommand context type; absent context keeps CLI behaviour unchanged.
-  [`dispatch.ts:9`](../../../src/adapters/driving/cli/dispatch.ts#L9)
+  [`dispatch.ts:9`](../../../../src/adapters/driving/cli/dispatch.ts#L9)
 
 **Tests**
 
 - Fake-client coverage of every destructive tool, progress, abort and locks.
-  [`destructive.test.ts:1`](../../../src/adapters/driving/mcp/destructive.test.ts#L1)
+  [`destructive.test.ts:1`](../../../../src/adapters/driving/mcp/destructive.test.ts#L1)
 
 - Real `update` subcommand with signal and onPhase.
-  [`dispatch.test.ts:1`](../../../src/adapters/driving/cli/dispatch.test.ts#L1)
+  [`dispatch.test.ts:1`](../../../../src/adapters/driving/cli/dispatch.test.ts#L1)

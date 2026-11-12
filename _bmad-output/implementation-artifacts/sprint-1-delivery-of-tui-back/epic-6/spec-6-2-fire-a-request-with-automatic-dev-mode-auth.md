@@ -6,7 +6,7 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: 'eeda2d625eeef6b6eab4d8f3a1e7aa4f0d317e31'
 context:
-  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/epic-6-context.md'
+  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -115,36 +115,36 @@ getSession(config, { forceRefresh: true }) // on 401; max 2 consecutive re-auths
 
 **Core fire loop**
 - Whole story in one use-case: gate, route check, cookie, 401 budget
-  [`fire-request.ts:62`](../../../src/core/routes/fire-request.ts#L62)
+  [`fire-request.ts:62`](../../../../src/core/routes/fire-request.ts#L62)
 - Retry budget semantics: 1 try plus up to 2 re-auths
-  [`fire-request.ts:126`](../../../src/core/routes/fire-request.ts#L126)
+  [`fire-request.ts:126`](../../../../src/core/routes/fire-request.ts#L126)
 - Auth port contract behind the pluggable boundary
-  [`dev-auth.ts:23`](../../../src/core/ports/dev-auth.ts#L23)
+  [`dev-auth.ts:23`](../../../../src/core/ports/dev-auth.ts#L23)
 
 **Cookie session module**
 - Session acquisition with TTL cache and in-flight dedupe
-  [`cookie-session-auth.ts:92`](../../../src/adapters/driven/modules/route-explorer/cookie-session-auth.ts#L92)
+  [`cookie-session-auth.ts:92`](../../../../src/adapters/driven/modules/route-explorer/cookie-session-auth.ts#L92)
 - Freshness check with stored TTL and clamped skew
-  [`cookie-session-auth.ts:44`](../../../src/adapters/driven/modules/route-explorer/cookie-session-auth.ts#L44)
+  [`cookie-session-auth.ts:44`](../../../../src/adapters/driven/modules/route-explorer/cookie-session-auth.ts#L44)
 
 **Wiring**
 - Static registry gains optional auth instance
-  [`module-registry.ts:18`](../../../src/adapters/driven/modules/module-registry.ts#L18)
+  [`module-registry.ts:18`](../../../../src/adapters/driven/modules/module-registry.ts#L18)
 - Thin CLI wrapper over the core use-case
-  [`subcommands.ts:214`](../../../src/adapters/driving/cli/subcommands.ts#L214)
+  [`subcommands.ts:214`](../../../../src/adapters/driving/cli/subcommands.ts#L214)
 - Both composition roots inject the auth port
-  [`main.ts:60`](../../../src/bin/main.ts#L60)
+  [`main.ts:60`](../../../../src/bin/main.ts#L60)
 
 **TUI firing**
 - Enter dispatch extracted as pure testable helper
-  [`routes-zone.logic.ts:83`](../../../src/adapters/driving/tui/zones/routes/routes-zone.logic.ts#L83)
+  [`routes-zone.logic.ts:83`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.logic.ts#L83)
 - Zone binds Enter and renders response or auth error
-  [`routes-zone.tsx:79`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L79)
+  [`routes-zone.tsx:79`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L79)
 - Slice state machine with concurrency guard
-  [`routes-slice.ts:134`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L134)
+  [`routes-slice.ts:134`](../../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L134)
 
 **Tests**
 - I/O-matrix coverage against fake ports and stub fetch
-  [`fire-request.test.ts:1`](../../../src/core/routes/fire-request.test.ts#L1)
+  [`fire-request.test.ts:1`](../../../../src/core/routes/fire-request.test.ts#L1)
 - Set-Cookie parsing, TTL skew, endpoint failures
-  [`cookie-session-auth.test.ts:1`](../../../src/adapters/driven/modules/route-explorer/cookie-session-auth.test.ts#L1)
+  [`cookie-session-auth.test.ts:1`](../../../../src/adapters/driven/modules/route-explorer/cookie-session-auth.test.ts#L1)

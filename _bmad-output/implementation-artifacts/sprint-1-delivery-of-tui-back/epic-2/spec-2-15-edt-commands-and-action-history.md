@@ -5,8 +5,8 @@ created: '2026-08-26'
 status: 'done'
 baseline_commit: 'ec0e4554de6cf8bef691dd9586abd4538d21842a'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/implementation-artifacts/epic-2/spec-2-9-edts-zone-create-switch-modify.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-9-edts-zone-create-switch-modify.md'
   - '_bmad-output/implementation-artifacts/deferred-work.md'
 ---
 

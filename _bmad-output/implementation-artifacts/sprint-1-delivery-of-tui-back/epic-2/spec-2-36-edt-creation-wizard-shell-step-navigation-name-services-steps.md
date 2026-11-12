@@ -99,72 +99,72 @@ baseline_commit: '790d37fc5035e0c5722e9984f7d3dda56327dc88'
 **Wizard shell & step navigation**
 
 - Entry point: one dispatcher — submitting guard, acknowledge state, nav keys, then per step.
-  [`create-wizard.tsx:183`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L183)
+  [`create-wizard.tsx:183`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L183)
 
 - Advance validated inside the updater against `prev`, never the keypress closure.
-  [`create-wizard.tsx:140`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L140)
+  [`create-wizard.tsx:140`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L140)
 
 - Step entry resets error/picker; Step 3 re-runs prefill and opens a fresh picker.
-  [`create-wizard.tsx:124`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L124)
+  [`create-wizard.tsx:124`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L124)
 
 - Step 4 re-checks Steps 1-3 so a late name clash gets the wizard message.
-  [`create-wizard.tsx:152`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L152)
+  [`create-wizard.tsx:152`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L152)
 
 - Partial-failure create: EDT exists, rows stay until Enter/Esc closes.
-  [`create-wizard.tsx:244`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L244)
+  [`create-wizard.tsx:244`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L244)
 
 **Pure wizard rules**
 
 - Name check mirrors the core's exact trimmed, case-sensitive duplicate test.
-  [`wizard.logic.ts:35`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L35)
+  [`wizard.logic.ts:35`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L35)
 
 - Per-step gate; Step 3 reuses validateCreateBranchFields unchanged.
-  [`wizard.logic.ts:47`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L47)
+  [`wizard.logic.ts:47`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L47)
 
 - Breadcrumb tones derive from reachability (first blocked step, inclusive).
-  [`wizard.logic.ts:96`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L96)
+  [`wizard.logic.ts:96`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L96)
 
 - Ctrl+Arrow plus Ctrl+N/P fallbacks for terminals without arrow modifiers.
-  [`wizard.logic.ts:119`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L119)
+  [`wizard.logic.ts:119`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L119)
 
 **Steps**
 
 - Interim Step 3: today's branch handlers moved verbatim; Esc closes only the picker.
-  [`step-branches.tsx:141`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L141)
+  [`step-branches.tsx:141`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L141)
 
 - Step 3 Tab stays inside the step, wrapping back to the base picker.
-  [`step-branches.tsx:163`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L163)
+  [`step-branches.tsx:163`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L163)
 
 - Step 1 live availability line.
-  [`step-name.tsx:28`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-name.tsx#L28)
+  [`step-name.tsx:28`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-name.tsx#L28)
 
 - Step 2 toggle keeps the untouched branch fields tracking the selection.
-  [`step-services.tsx:22`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-services.tsx#L22)
+  [`step-services.tsx:22`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-services.tsx#L22)
 
 - Step 4 interim recap and plain confirm.
-  [`step-activation.tsx:9`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-activation.tsx#L9)
+  [`step-activation.tsx:9`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-activation.tsx#L9)
 
 **Wiring & contract**
 
 - Single flat state gains `step`; branch fields kept until Story 2.37.
-  [`edts-zone.logic.ts:853`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L853)
+  [`edts-zone.logic.ts:853`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L853)
 
 - Zone renders the wizard, passing loaded EDTs for the live name check.
-  [`edts-zone.tsx:870`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L870)
+  [`edts-zone.tsx:870`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L870)
 
 - Wizard-scoped keys added to the help-screen contract.
-  [`keybindings.ts:84`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L84)
+  [`keybindings.ts:84`](../../../../src/adapters/driving/tui/keybindings/keybindings.ts#L84)
 
 **Tests**
 
 - Logic unit tests: availability, gates, reachability, breadcrumb, nav keys.
-  [`wizard.logic.test.ts:52`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.test.ts#L52)
+  [`wizard.logic.test.ts:52`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.test.ts#L52)
 
 - Back navigation keeps name, selection and touched branch fields.
-  [`edts-zone.interaction.test.tsx:1153`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1153)
+  [`edts-zone.interaction.test.tsx:1153`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1153)
 
 - Esc cancel asserted positively (populated list frame, wizard gone).
-  [`edts-zone.interaction.test.tsx:1691`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1691)
+  [`edts-zone.interaction.test.tsx:1691`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1691)
 
 - Step 4 name re-check against an EDT appearing mid-wizard.
-  [`edts-zone.interaction.test.tsx:1776`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1776)
+  [`edts-zone.interaction.test.tsx:1776`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1776)

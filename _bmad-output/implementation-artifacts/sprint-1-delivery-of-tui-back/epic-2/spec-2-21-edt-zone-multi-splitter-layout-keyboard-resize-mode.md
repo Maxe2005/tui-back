@@ -97,54 +97,54 @@ Reuse `resolveSplitFlex`/`clampListRatio` three times rather than inventing an N
 **Ctrl+W resize-mode dispatch (entry point)**
 
 - Start here: pure, unit-tested helpers deciding when resize-mode engages/exits and which arrow moves which axis.
-  [`app-shell.tsx:87`](../../../src/adapters/driving/tui/app-shell.tsx#L87)
+  [`app-shell.tsx:87`](../../../../src/adapters/driving/tui/app-shell.tsx#L87)
 
 - Where those helpers get wired into the global keypress handler, gated the same way every other overlay already is.
-  [`app-shell.tsx:275`](../../../src/adapters/driving/tui/app-shell.tsx#L275)
+  [`app-shell.tsx:275`](../../../../src/adapters/driving/tui/app-shell.tsx#L275)
 
 - The tracked `deferred-work.md` gate item: `resizeMode` joins the zone-switch exclusion so arrows resize instead of switching zones.
-  [`app-shell.tsx:329`](../../../src/adapters/driving/tui/app-shell.tsx#L329)
+  [`app-shell.tsx:329`](../../../../src/adapters/driving/tui/app-shell.tsx#L329)
 
 **Persistence: state.json read-merge-write + concurrency (review-fix hardened)**
 
 - `withWriteLock` serializes the whole read-merge-write per file path — closes the cross-field write race a first review pass found.
-  [`state/index.ts:58`](../../../src/adapters/driven/state/index.ts#L58)
+  [`state/index.ts:58`](../../../../src/adapters/driven/state/index.ts#L58)
 
 - Shared read-parse-validate step; carries raw JSON forward so a validation failure in one field never blocks the other.
-  [`state/index.ts:118`](../../../src/adapters/driven/state/index.ts#L118)
+  [`state/index.ts:118`](../../../../src/adapters/driven/state/index.ts#L118)
 
 - Best-effort single-field recovery from raw JSON when the whole-file schema check fails elsewhere.
-  [`state/index.ts:146`](../../../src/adapters/driven/state/index.ts#L146)
+  [`state/index.ts:146`](../../../../src/adapters/driven/state/index.ts#L146)
 
 - `writeActiveEdt`: read-merge-write under the lock, now propagating a genuine I/O read error instead of silently dropping data.
-  [`state/index.ts:208`](../../../src/adapters/driven/state/index.ts#L208)
+  [`state/index.ts:208`](../../../../src/adapters/driven/state/index.ts#L208)
 
 - `writeSplitterRatios`: the symmetric read-merge-write for the new field.
-  [`state/index.ts:238`](../../../src/adapters/driven/state/index.ts#L238)
+  [`state/index.ts:238`](../../../../src/adapters/driven/state/index.ts#L238)
 
 - The optional `splitterRatios` field, kept loose (plain-string keys) so core stays TUI-agnostic.
-  [`state/schema.ts:18`](../../../src/adapters/driven/state/schema.ts#L18)
+  [`state/schema.ts:18`](../../../../src/adapters/driven/state/schema.ts#L18)
 
 **Store: ZoneRatios widening + resize-mode state**
 
 - `resizeMode`'s shape — the single source of truth both AppShell and EdtsZone read.
-  [`app-store.ts:57`](../../../src/adapters/driving/tui/store/app-store.ts#L57)
+  [`app-store.ts:57`](../../../../src/adapters/driving/tui/store/app-store.ts#L57)
 
 - `setSplitterRatio`: per-boundary clamp, live apply, then persists via the save chain; bumps the version guard.
-  [`app-store.ts:374`](../../../src/adapters/driving/tui/store/app-store.ts#L374)
+  [`app-store.ts:374`](../../../../src/adapters/driving/tui/store/app-store.ts#L374)
 
 - `loadSplitterRatios`: per-zone fallback on shape mismatch, version-guarded against a load racing a live move (review fix).
-  [`app-store.ts:405`](../../../src/adapters/driving/tui/store/app-store.ts#L405)
+  [`app-store.ts:405`](../../../../src/adapters/driving/tui/store/app-store.ts#L405)
 
 **Visual: 3-pane restructure + accent-targeting**
 
 - The EDT zone's list column split into 3 sub-panes, each `targeted` prop wired to `resizeMode`.
-  [`edts-zone.tsx:1428`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1428)
-  [`edts-zone.tsx:1470`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1470)
-  [`edts-zone.tsx:1511`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1511)
+  [`edts-zone.tsx:1428`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1428)
+  [`edts-zone.tsx:1470`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1470)
+  [`edts-zone.tsx:1511`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1511)
 
 - `Splitter`'s default flips from always-accent to border-unless-targeted.
-  [`splitter.tsx:28`](../../../src/adapters/driving/tui/shared/components/splitter.tsx#L28)
+  [`splitter.tsx:28`](../../../../src/adapters/driving/tui/shared/components/splitter.tsx#L28)
 
 **Peripherals**
 

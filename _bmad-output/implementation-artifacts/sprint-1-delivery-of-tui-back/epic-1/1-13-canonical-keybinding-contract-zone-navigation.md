@@ -6,8 +6,8 @@ status: 'ready-for-dev'
 review_loop_iteration: 0
 baseline_commit: '37ea1a9d02943de4e8277c1a632a42a73cd28a69'
 context:
-  - /home/mchoisel/Documents/IANORD/tui-back/_bmad-output/implementation-artifacts/epic-1-context.md
-  - /home/mchoisel/Documents/IANORD/tui-back/_bmad-output/planning-artifacts/epics.md
+  - /home/mchoisel/Documents/IANORD/tui-back/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1-context.md
+  - /home/mchoisel/Documents/IANORD/tui-back/_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md
 ---
 
 <!-- Target: 900–1300 tokens. Above 1600 = high risk of context rot.
@@ -75,7 +75,7 @@ context:
 - `src/adapters/driving/tui/shared/components/modal-dialog.tsx` -- Extended in Story 1.12 with optional `children`/`maxHeight`; reused for filter/command stub modals
 - `src/adapters/driving/tui/shared/components/index.ts` -- Barrel export; add `single-instance` if needed (depcruise globs already cover `src/**/*.ts`)
 - `src/adapters/driving/tui/shared/README.md` -- Append Story 1.13 bullet documenting global key dispatch, list navigation per-zone, single-instance lock, `q`-quit
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` -- Update story status: `backlog` → `in-progress` → `review` → `done`
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- Update story status: `backlog` → `in-progress` → `review` → `done`
 
 ## Tasks & Acceptance
 
@@ -89,7 +89,7 @@ context:
 - [ ] `src/adapters/driving/tui/shared/README.md` -- append Story 1.13 documentation bullet
 - [ ] `src/adapters/driving/tui/app-shell.test.tsx` -- add tests for new pure helpers; render test with injected store asserting zone switch via `setActiveZone`
 - [ ] `src/adapters/driving/tui/store/app-store.test.ts` -- verify `setActiveZone` clears zone event badge (already covered by 1.11 AC3 pattern)
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- update status through `in-progress` → `review` → `done`
+- [ ] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- update status through `in-progress` → `review` → `done`
 
 **Acceptance Criteria:**
 - Given any zone, when `d`/`e`/`u`/`l`/`r`/`s` pressed, then `activeZone` updates and corresponding zone screen mounts

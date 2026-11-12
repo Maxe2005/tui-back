@@ -6,10 +6,10 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '60e9adbb7ab406669d80fe06fd9c3b138ce44d47'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/planning-artifacts/sprint-change-proposal-2026-08-25.md'
-  - '_bmad-output/planning-artifacts/sprint-change-proposal-2026-08-25-2.md'
-  - '_bmad-output/implementation-artifacts/epic-2/epic-2-context.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/sprint-change-proposal-2026-08-25.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/sprint-change-proposal-2026-08-25-2.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -118,46 +118,46 @@ export const COMMANDS: readonly Command[] = [
 **Ink `useInput` fan-out fix (review-caught, see Spec Change Log)**
 
 - Entry point — `commandBarOpen` moved into the store so a mounted zone can read it.
-  [`app-store.ts:189`](../../../src/adapters/driving/tui/store/app-store.ts#L189)
+  [`app-store.ts:189`](../../../../src/adapters/driving/tui/store/app-store.ts#L189)
 
 - The actual fix: `EdtsZone`'s own `useInput` stops reacting while the bar owns input.
-  [`edts-zone.tsx:857`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L857)
+  [`edts-zone.tsx:857`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L857)
 
 **Command dispatch — `:` wiring**
 
 - The bug this story corrects: `:` now opens the bar instead of the registry screen directly.
-  [`app-shell.tsx:162`](../../../src/adapters/driving/tui/app-shell.tsx#L162)
+  [`app-shell.tsx:162`](../../../../src/adapters/driving/tui/app-shell.tsx#L162)
 
 - Overlay-exclusivity guard extended with the new flag, mirroring the other three overlays.
-  [`app-shell.tsx:144`](../../../src/adapters/driving/tui/app-shell.tsx#L144)
+  [`app-shell.tsx:144`](../../../../src/adapters/driving/tui/app-shell.tsx#L144)
 
 - Command bar mounted the same way `RepoRegistryScreen`/`KeybindingHelp` already are.
-  [`app-shell.tsx:201`](../../../src/adapters/driving/tui/app-shell.tsx#L201)
+  [`app-shell.tsx:201`](../../../../src/adapters/driving/tui/app-shell.tsx#L201)
 
 **Command bar — self-contained input handling**
 
 - The bar's own `useInput`: typing, filter, Tab-autocomplete, Enter-run/unknown, Esc-cancel.
-  [`command-bar.tsx:57`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L57)
+  [`command-bar.tsx:57`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L57)
 
 - Tab-autocomplete extracted as its own pure function — the 2+-match branch is unreachable via a real keypress today, so it's unit-tested directly instead.
-  [`command-bar.tsx:42`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L42)
+  [`command-bar.tsx:42`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L42)
 
 **Command registry**
 
 - The static registry and its pure prefix-match / exact-match helpers — no core/port change.
-  [`commands.ts`](../../../src/adapters/driving/tui/commands/commands.ts)
+  [`commands.ts`](../../../../src/adapters/driving/tui/commands/commands.ts)
 
 **Peripherals**
 
 - Real-keypress coverage for the fan-out regression, the full I/O matrix, and the two new overlay-guard cases.
-  [`app-shell.interaction.test.tsx:258`](../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L258)
+  [`app-shell.interaction.test.tsx:258`](../../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L258)
 
 - Unit coverage for the command bar's own pure functions, including the ambiguous-match case.
-  [`command-bar.test.tsx`](../../../src/adapters/driving/tui/shared/command-bar.test.tsx)
+  [`command-bar.test.tsx`](../../../../src/adapters/driving/tui/shared/command-bar.test.tsx)
 
 - Unit coverage for the registry's filter/exact-match helpers.
-  [`commands.test.ts`](../../../src/adapters/driving/tui/commands/commands.test.ts)
+  [`commands.test.ts`](../../../../src/adapters/driving/tui/commands/commands.test.ts)
 
 - Two stale comments corrected to stop describing `:` as opening the registry screen directly.
-  [`repo-registry-screen.tsx:3`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L3)
+  [`repo-registry-screen.tsx:3`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L3)
 </content>

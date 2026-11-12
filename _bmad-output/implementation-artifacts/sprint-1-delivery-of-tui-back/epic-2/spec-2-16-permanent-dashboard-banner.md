@@ -6,8 +6,8 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '5cff68fa84241760d7b9b19601a79149aac456ac'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/implementation-artifacts/epic-2/epic-2-context.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md'
   - '_bmad-output/implementation-artifacts/deferred-work.md'
 ---
 
@@ -96,35 +96,35 @@ Three test files carry coverage of the one-time behavior and must all move toget
 **Core behavior change**
 
 - Entry point — the banner is now an unconditional line in the render tree, not a flag-gated one.
-  [`dashboard-zone.tsx:48`](../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L48)
+  [`dashboard-zone.tsx:48`](../../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L48)
 
 - The actual one-time *writer* is deleted here, not in `DashboardZone` — this effect set the flag on leaving Dashboard.
-  [`app-shell.tsx:136`](../../../src/adapters/driving/tui/app-shell.tsx#L136)
+  [`app-shell.tsx:136`](../../../../src/adapters/driving/tui/app-shell.tsx#L136)
 
 - The flag and its action are removed from both the `AppState` interface and `createAppStore` — no remaining reader once the banner is unconditional.
-  [`app-store.ts:134`](../../../src/adapters/driving/tui/store/app-store.ts#L134)
+  [`app-store.ts:134`](../../../../src/adapters/driving/tui/store/app-store.ts#L134)
 
 **Test coverage — DashboardZone's four rendered states**
 
 - Empty-registry state: banner asserted above the prompt.
-  [`dashboard-zone.test.tsx:116`](../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L116)
+  [`dashboard-zone.test.tsx:116`](../../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L116)
 
 - Non-empty-registry (placeholder) state: banner assertion added by review to close the I/O matrix.
-  [`dashboard-zone.test.tsx:59`](../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L59)
+  [`dashboard-zone.test.tsx:59`](../../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L59)
 
 - Before-check-resolves state: banner assertion added by review, mirroring its two siblings.
-  [`dashboard-zone.test.tsx:72`](../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L72)
+  [`dashboard-zone.test.tsx:72`](../../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L72)
 
 - Registry-check-error state: banner assertion added by review to close the I/O matrix's last row.
-  [`dashboard-zone.test.tsx:87`](../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L87)
+  [`dashboard-zone.test.tsx:87`](../../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L87)
 
 **Test coverage — LaunchBanner and AppShell integration**
 
 - The two flag-based tests (first-render / hides-once-flagged) collapse into one, since no flag remains to vary.
-  [`launch-banner.test.tsx:11`](../../../src/adapters/driving/tui/zones/dashboard/launch-banner.test.tsx#L11)
+  [`launch-banner.test.tsx:11`](../../../../src/adapters/driving/tui/zones/dashboard/launch-banner.test.tsx#L11)
 
 - Switch-away-and-back at the AppShell level: proves the banner survives navigation and never leaks into another zone's render.
-  [`app-shell.test.tsx:125`](../../../src/adapters/driving/tui/app-shell.test.tsx#L125)
+  [`app-shell.test.tsx:125`](../../../../src/adapters/driving/tui/app-shell.test.tsx#L125)
 
 - Peripheral: the `minimalState: AppState` test fixture drops the two removed fields (a `tsc` excess-property requirement, not a behavior change).
-  [`app-shell.test.tsx:248`](../../../src/adapters/driving/tui/app-shell.test.tsx#L248)
+  [`app-shell.test.tsx:248`](../../../../src/adapters/driving/tui/app-shell.test.tsx#L248)

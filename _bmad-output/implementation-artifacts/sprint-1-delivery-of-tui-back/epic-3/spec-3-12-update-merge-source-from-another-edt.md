@@ -5,7 +5,7 @@ created: '2026-10-01'
 status: 'done'
 review_loop_iteration: 0
 baseline_commit: '701ae10f5035f88442a2e5bc6eae2d8fffb84885'
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -89,37 +89,37 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 **Core contract**
 
 - Selection items may override migrations / clean restart per service.
-  [`group-update.ts:121`](../../../src/core/scripts/group-update.ts#L121)
+  [`group-update.ts:121`](../../../../src/core/scripts/group-update.ts#L121)
 
 - Resolver and CLI selection from another EDT (unchanged from the first cut).
-  [`resolve-merge-sources.ts:62`](../../../src/core/scripts/resolve-merge-sources.ts#L62)
+  [`resolve-merge-sources.ts:62`](../../../../src/core/scripts/resolve-merge-sources.ts#L62)
 
 **Shared field**
 
 - Placeholder, highlight-only arrows, two-stage Enter, empty-commit rule.
-  [`suggest-field.logic.ts:32`](../../../src/adapters/driving/tui/shared/components/suggest-field.logic.ts#L32)
+  [`suggest-field.logic.ts:32`](../../../../src/adapters/driving/tui/shared/components/suggest-field.logic.ts#L32)
 
 **Screen model**
 
 - Effective values: an undeclared action never reads as enabled.
-  [`update-config-panels.logic.ts:27`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L27)
+  [`update-config-panels.logic.ts:27`](../../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L27)
 
 - Key routing per focus, line and field.
-  [`update-config-panels.logic.ts:157`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L157)
+  [`update-config-panels.logic.ts:157`](../../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L157)
 
 - Height budget: table shrinks before anything can overflow.
-  [`update-config-panels.logic.ts:260`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L260)
+  [`update-config-panels.logic.ts:260`](../../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L260)
 
 - Service box apply: empty branch follows global; unknown branch refused.
-  [`update-service-box.logic.ts:140`](../../../src/adapters/driving/tui/zones/update/update-service-box.logic.ts#L140)
+  [`update-service-box.logic.ts:140`](../../../../src/adapters/driving/tui/zones/update/update-service-box.logic.ts#L140)
 
 **Wiring and views**
 
 - Manifest declarations feed each row at open time.
-  [`update-slice.ts:292`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L292)
+  [`update-slice.ts:292`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L292)
 
 - Controller hook: view state, loaders, step-to-draft mapping.
-  [`use-update-config-panels.ts:57`](../../../src/adapters/driving/tui/zones/update/use-update-config-panels.ts#L57)
+  [`use-update-config-panels.ts:57`](../../../../src/adapters/driving/tui/zones/update/use-update-config-panels.ts#L57)
 
 - Two-panel view mirroring edt-create's Step 3.
-  [`update-config-panels.tsx:148`](../../../src/adapters/driving/tui/zones/update/update-config-panels.tsx#L148)
+  [`update-config-panels.tsx:148`](../../../../src/adapters/driving/tui/zones/update/update-config-panels.tsx#L148)

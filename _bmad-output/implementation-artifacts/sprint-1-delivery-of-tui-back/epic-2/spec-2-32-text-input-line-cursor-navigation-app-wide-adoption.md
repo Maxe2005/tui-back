@@ -81,35 +81,35 @@ baseline_commit: '9e9ca44da5eee409e46fbc94f9c0419ff0bc7b0a'
 **Cursor primitive**
 
 - Entry point: the shared `{value, cursor}` render contract every field below now speaks.
-  [`text-input-line.tsx:28`](../../../src/adapters/driving/tui/shared/components/text-input-line.tsx#L28)
+  [`text-input-line.tsx:28`](../../../../src/adapters/driving/tui/shared/components/text-input-line.tsx#L28)
 
 - New optional prop, defaults to `value.length` so omitting callers stay visually unchanged.
-  [`text-input-line.tsx:12`](../../../src/adapters/driving/tui/shared/components/text-input-line.tsx#L12)
+  [`text-input-line.tsx:12`](../../../../src/adapters/driving/tui/shared/components/text-input-line.tsx#L12)
 
 **Cursor-aware key interpreter (EDT-zone)**
 
 - Retargeted from bare-string to `{value, cursor}`; Left/Right/Home/End now move the cursor.
-  [`edts-zone.logic.ts:201`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L201)
+  [`edts-zone.logic.ts:201`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L201)
 
 - Ctrl/Meta checked first so those combos stay fully inert (review fix — was ordered after the arrow/edit branches).
-  [`edts-zone.logic.ts:207`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L207)
+  [`edts-zone.logic.ts:207`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L207)
 
 - New paired-cursor fields on `CreateDialogState`/`ModifyDialogState`, mirroring `branchNamesTouched`'s map convention.
-  [`edts-zone.logic.ts:822`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L822)
+  [`edts-zone.logic.ts:822`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L822)
 
 **Parallel reimplementation (branch-picker, import-cycle constrained)**
 
 - Same retargeting as `nextTextInputValue`, kept local/non-imported by design.
-  [`branch-picker.tsx:163`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L163)
+  [`branch-picker.tsx:163`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L163)
 
 - Same Ctrl/Meta-first fix as the EDT-zone copy — both duplicated functions had the identical bug.
-  [`branch-picker.tsx:168`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L168)
+  [`branch-picker.tsx:168`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L168)
 
 - Row-selection `pickCursor` no longer resets on a pure text-caret move (review fix).
-  [`branch-picker.tsx:394`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L394)
+  [`branch-picker.tsx:394`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L394)
 
 - Three new per-field cursor fields on `BranchPickerState`, named to avoid colliding with the existing row-selection `pickCursor`.
-  [`branch-picker.tsx:70`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L70)
+  [`branch-picker.tsx:70`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L70)
 
 **Dialog wiring**
 
@@ -126,21 +126,21 @@ baseline_commit: '9e9ca44da5eee409e46fbc94f9c0419ff0bc7b0a'
   [`create-dialog.tsx:499`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-dialog.tsx#L499)
 
 - Topic field's key dispatch, Modify dialog — structurally identical to Create's.
-  [`modify-dialog.tsx:345`](../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L345)
+  [`modify-dialog.tsx:345`](../../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L345)
 
 **Tests**
 
 - Regression test proving a cursor-only move never marks a branch-name field touched (closes a review-found verification gap).
-  [`edts-zone.interaction.test.tsx:711`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L711)
+  [`edts-zone.interaction.test.tsx:711`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L711)
 
 - `nextTextInputValue`'s full I/O-matrix coverage, `{value, cursor}` shape.
-  [`edts-zone.test.tsx:457`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L457)
+  [`edts-zone.test.tsx:457`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L457)
 
 - Branch-picker cursor navigation + the strengthened Left/Right assertions (review fix).
-  [`branch-picker.test.tsx:56`](../../../src/adapters/driving/tui/shared/components/branch-picker.test.tsx#L56)
+  [`branch-picker.test.tsx:56`](../../../../src/adapters/driving/tui/shared/components/branch-picker.test.tsx#L56)
 
 - `TextInputLine` cursor placement/default-omitted-prop coverage.
-  [`text-input-line.test.tsx:61`](../../../src/adapters/driving/tui/shared/components/text-input-line.test.tsx#L61)
+  [`text-input-line.test.tsx:61`](../../../../src/adapters/driving/tui/shared/components/text-input-line.test.tsx#L61)
 
 - ANSI-precise inverse-glyph-position assertions.
-  [`text-input-line.styles.test.tsx:34`](../../../src/adapters/driving/tui/shared/components/text-input-line.styles.test.tsx#L34)
+  [`text-input-line.styles.test.tsx:34`](../../../../src/adapters/driving/tui/shared/components/text-input-line.styles.test.tsx#L34)

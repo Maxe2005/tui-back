@@ -93,68 +93,68 @@ baseline_commit: 'f30e6dd7a9fbf20220ba2c34b27b47e25212ee9b'
 **Core budget primitive**
 
 - Entry point — the invariant everything else in this story is built on: never render more rows than `maxVisibleRows`, indicators included.
-  [`bounded-list.tsx:76`](../../../src/adapters/driving/tui/shared/components/bounded-list.tsx#L76)
+  [`bounded-list.tsx:76`](../../../../src/adapters/driving/tui/shared/components/bounded-list.tsx#L76)
 
 - Review fix: a final affordability pass caps indicators to whatever the budget has left after content, closing the maxVisibleRows-1/2 overshoot a reviewer found.
-  [`bounded-list.tsx:108`](../../../src/adapters/driving/tui/shared/components/bounded-list.tsx#L108)
+  [`bounded-list.tsx:108`](../../../../src/adapters/driving/tui/shared/components/bounded-list.tsx#L108)
 
 - Thin, stateless component wiring the primitive to a renderer + optional cursor-follow.
-  [`bounded-list.tsx:151`](../../../src/adapters/driving/tui/shared/components/bounded-list.tsx#L151)
+  [`bounded-list.tsx:151`](../../../../src/adapters/driving/tui/shared/components/bounded-list.tsx#L151)
 
 **Grid vertical pagination (reuses the same primitive)**
 
 - `layoutCommandGrid` splits into the pre-5.5 horizontal resolver plus this new vertical pass — single public entry point unchanged.
-  [`command-bar.tsx:213`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L213)
+  [`command-bar.tsx:213`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L213)
 
 - Review fix: now reuses `resolveBoundedVisibility` instead of a second, easy-to-desync budget calculation — closes the same over-budget class of bug at the grid level.
-  [`command-bar.tsx:309`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L309)
+  [`command-bar.tsx:309`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L309)
 
 **Logs zone wiring (the reported defect's origin)**
 
 - Sequential top-down row allocator — EDT list, then OTHER list, then hints, then the filter editor's own reservation; each empty-list case now counts its 1-row placeholder rather than 0 (review fix).
-  [`logs-zone.tsx:356`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L356)
+  [`logs-zone.tsx:356`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L356)
 
 - Review fix: column width for the history grid now reads from the full unsliced column, not the vertically-windowed one, so padding no longer shifts as the user scrolls.
-  [`logs-zone.tsx:1317`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L1317)
+  [`logs-zone.tsx:1317`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L1317)
 
 - ACTIVE EDT MEMBERS list bounded to its share of the budget.
-  [`logs-zone.tsx:903`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L903)
+  [`logs-zone.tsx:903`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L903)
 
 - OTHER SERVICES list bounded to its share, after subtracting the EDT list's consumption.
-  [`logs-zone.tsx:928`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L928)
+  [`logs-zone.tsx:928`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L928)
 
 - Hints panel bounded last (and still hidden entirely while the filter editor is open — story 5.4's fix, retained).
-  [`logs-zone.tsx:970`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L970)
+  [`logs-zone.tsx:970`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L970)
 
 **EDTs zone (same defect pattern, applied for consistency)**
 
 - Same top-down allocator idiom as the Logs zone, with its own chrome-row constant.
-  [`edts-zone.tsx:230`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L230)
+  [`edts-zone.tsx:230`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L230)
 
 - EDT SERVICES list bounded.
-  [`edts-zone.tsx:626`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L626)
+  [`edts-zone.tsx:626`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L626)
 
 - OTHER SERVICES list bounded.
-  [`edts-zone.tsx:657`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L657)
+  [`edts-zone.tsx:657`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L657)
 
 **Extraction proof (no behavior change)**
 
 - `keybinding-help.tsx`'s old window/clamp functions are now literal aliases for the shared primitive.
-  [`keybinding-help.tsx:17`](../../../src/adapters/driving/tui/shared/components/keybinding-help.tsx#L17)
+  [`keybinding-help.tsx:17`](../../../../src/adapters/driving/tui/shared/components/keybinding-help.tsx#L17)
 
 **Tests**
 
 - Budget-invariant unit coverage at the extreme `maxVisibleRows` 1/2 values, plus the cursor-follow regression the review fix targets.
-  [`bounded-list.test.tsx`](../../../src/adapters/driving/tui/shared/components/bounded-list.test.tsx)
+  [`bounded-list.test.tsx`](../../../../src/adapters/driving/tui/shared/components/bounded-list.test.tsx)
 
 - Vertical-pagination coverage for the grid, including the same never-over-budget sweep.
-  [`command-bar.test.tsx`](../../../src/adapters/driving/tui/shared/command-bar.test.tsx)
+  [`command-bar.test.tsx`](../../../../src/adapters/driving/tui/shared/command-bar.test.tsx)
 
 - I/O-matrix coverage: OVERFLOW_LOGS_LISTS, NO_OVERFLOW, and the empty-list-placeholder boundary case.
-  [`logs-zone.test.tsx`](../../../src/adapters/driving/tui/zones/logs/logs-zone.test.tsx)
+  [`logs-zone.test.tsx`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.test.tsx)
 
 - Interaction coverage: OVERFLOW_HISTORY_GRID, RESIZE_LIVE, EDITOR_OPEN_BEHIND_CONTENT, scrolled-cursor Enter-recall correctness, and column-width stability while scrolling.
-  [`logs-zone.interaction.test.tsx`](../../../src/adapters/driving/tui/zones/logs/logs-zone.interaction.test.tsx)
+  [`logs-zone.interaction.test.tsx`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.interaction.test.tsx)
 
 - OVERFLOW_EDTS_LISTS and NO_OVERFLOW coverage for the EDTs zone.
-  [`edts-zone.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx)
+  [`edts-zone.test.tsx`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx)

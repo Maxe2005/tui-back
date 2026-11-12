@@ -101,11 +101,11 @@ so that they never collide with a bespoke directory layout.
 
 ### References
 
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 1.2: XDG State Layout Resolution]
-- [Source: _bmad-output/planning-artifacts/epics.md#NFR-5 — Local state layout]
-- [Source: _bmad-output/planning-artifacts/epics.md#AD-6 — Repo registry]
-- [Source: _bmad-output/planning-artifacts/epics.md#AD-7 — Storage topology]
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 1.5: Explicit Repo Registry — the only story that cites "Story 1.2" by number]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 1.2: XDG State Layout Resolution]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#NFR-5 — Local state layout]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#AD-6 — Repo registry]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#AD-7 — Storage topology]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 1.5: Explicit Repo Registry — the only story that cites "Story 1.2" by number]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#Stack]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#src/ tree — core/ "zero import of ... fs"]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-13 — Testing strategy by layer]
@@ -142,7 +142,7 @@ so that they never collide with a bespoke directory layout.
 - `.dependency-cruiser.cjs` (modified during code review — `no-core-to-adapters` rule fix)
 - `dependency-cruiser.config.test.ts` (new during code review — regression fixture for the rule fix)
 - `_bmad-output/implementation-artifacts/deferred-work.md` (modified — new item documenting the depcheck NodeNext-resolution gap, then corrected/resolved during code review)
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story status)
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` (modified — story status)
 - `_bmad-output/implementation-artifacts/1-2-xdg-state-layout-resolution.md` (this file)
 
 ## Change Log

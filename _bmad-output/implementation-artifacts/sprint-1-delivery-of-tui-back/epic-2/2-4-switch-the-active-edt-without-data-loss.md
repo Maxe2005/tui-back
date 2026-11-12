@@ -6,10 +6,10 @@ status: 'done'
 baseline_commit: fa61e0bcf0463b4fafad20583ca324a969f1e259
 review_loop_iteration: 0
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
   - '_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md'
-  - '_bmad-output/implementation-artifacts/epic-2/epic-2-context.md'
-  - '_bmad-output/implementation-artifacts/epic-2/2-3-git-branch-scope-safety-gate-shared-branch-rejection.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/2-3-git-branch-scope-safety-gate-shared-branch-rejection.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -83,7 +83,7 @@ context:
 - [x] `src/bin/main.ts` -- composition-root wiring
 - [x] `src/bin/tui-back.e2e.test.ts` -- e2e case(s) for switch
 - [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- log TUI-wiring deferral; resolve AD-8 entry
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip `2-4` to `in-progress` then `review`
+- [x] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- flip `2-4` to `in-progress` then `review`
 
 **Acceptance Criteria:**
 - Given the target topic doesn't match any registered EDT, when switch runs, then it fails upfront (`edt-not-found`) with no repo touched.
@@ -112,58 +112,58 @@ context:
 **Entry point — the switch use-case**
 
 - Start here: per-repo stash/checkout loop, then the write sequence below it.
-  [`switch.ts:70`](../../../src/core/edt/switch.ts#L70)
+  [`switch.ts:70`](../../../../src/core/edt/switch.ts#L70)
 
 **AD-9: locking and surfaced failures around switch's own writes (review patch)**
 
 - The write sequence — `state.json` then `edts.yaml` — now runs inside the same advisory lock `create.ts` uses for its own registry write, closing a gap the review found (concurrent switch/create calls could race on `edts.yaml`).
-  [`switch.ts:170`](../../../src/core/edt/switch.ts#L170)
+  [`switch.ts:170`](../../../../src/core/edt/switch.ts#L170)
 
 - A failed `setStatus` for the target no longer just logs to console — it's a `failed` row in `data.results`, so the caller can actually see the registry didn't flip.
-  [`switch.ts:179`](../../../src/core/edt/switch.ts#L179)
+  [`switch.ts:179`](../../../../src/core/edt/switch.ts#L179)
 
 - Same fix for the outgoing EDT's deactivation/interruption.
-  [`switch.ts:185`](../../../src/core/edt/switch.ts#L185)
+  [`switch.ts:185`](../../../../src/core/edt/switch.ts#L185)
 
 - New required param carrying the lock's resource key, wired from the CLI's existing `edtRegistryResourceKey` (already used by `edt create`).
-  [`switch.ts:65`](../../../src/core/edt/switch.ts#L65)
+  [`switch.ts:65`](../../../../src/core/edt/switch.ts#L65)
 
 **AD-8: cross-EDT branch-ownership gate (review patch)**
 
 - `assertAllowedBranch`'s cross-EDT check now `resolve()`s both sides before comparing — a raw string comparison could have silently let the gate this story adds pass through a real conflict.
-  [`git/index.ts:86`](../../../src/adapters/driven/git/index.ts#L86)
+  [`git/index.ts:86`](../../../../src/adapters/driven/git/index.ts#L86)
 
 - The gate itself: rejects a branch already registered as a *different*, still-registered EDT's own branch for the same repo.
-  [`git/index.ts:76`](../../../src/adapters/driven/git/index.ts#L76)
+  [`git/index.ts:76`](../../../../src/adapters/driven/git/index.ts#L76)
 
 **Deregistered target member (review patch)**
 
 - A target member whose repo has since dropped out of the managed-repo registry is now a `failed` row instead of a silent skip.
-  [`switch.ts:151`](../../../src/core/edt/switch.ts#L151)
+  [`switch.ts:151`](../../../../src/core/edt/switch.ts#L151)
 
 **Status typing (review patch)**
 
 - `EdtStatus` closes the bare-`string` gap that let a typo'd status value compile and persist silently.
-  [`edt-registry.ts:20`](../../../src/core/ports/edt-registry.ts#L20)
+  [`edt-registry.ts:20`](../../../../src/core/ports/edt-registry.ts#L20)
 
 - Port signature now takes the typed status.
-  [`edt-registry.ts:37`](../../../src/core/ports/edt-registry.ts#L37)
+  [`edt-registry.ts:37`](../../../../src/core/ports/edt-registry.ts#L37)
 
 **CLI wiring**
 
 - `runEdtSwitch` now threads `edtRegistryResourceKey` through to the use-case, same shape as `runEdtCreate`'s existing wiring just below it.
-  [`subcommands.ts:255`](../../../src/adapters/driving/cli/subcommands.ts#L255)
+  [`subcommands.ts:255`](../../../../src/adapters/driving/cli/subcommands.ts#L255)
 
 **Tests**
 
 - e2e proof that the AD-8 gate is actually wired through the real composition root (`main.ts`), not just unit-tested against a hand-built port.
-  [`tui-back.e2e.test.ts:1131`](../../../src/bin/tui-back.e2e.test.ts#L1131)
+  [`tui-back.e2e.test.ts:1131`](../../../../src/bin/tui-back.e2e.test.ts#L1131)
 
 - Unit coverage for the new lock + surfaced-failure behavior.
-  [`switch.test.ts:455`](../../../src/core/edt/switch.test.ts#L455)
+  [`switch.test.ts:455`](../../../../src/core/edt/switch.test.ts#L455)
 
 - Unit coverage for the deregistered-member case.
-  [`switch.test.ts:524`](../../../src/core/edt/switch.test.ts#L524)
+  [`switch.test.ts:524`](../../../../src/core/edt/switch.test.ts#L524)
 
 - Unit coverage for the `resolve()` normalization fix.
-  [`git/index.test.ts:199`](../../../src/adapters/driven/git/index.test.ts#L199)
+  [`git/index.test.ts:199`](../../../../src/adapters/driven/git/index.test.ts#L199)

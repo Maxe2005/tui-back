@@ -91,23 +91,23 @@ Excerpt: last 3 non-empty lines of trimmed output, capped at 200 chars. `diffSta
 **Core: what the run did**
 
 - Entry point: HEAD compared before/after to tell up-to-date from advanced, never failing the row.
-  [`group-update.ts:108`](../../../src/core/scripts/group-update.ts#L108)
+  [`group-update.ts:108`](../../../../src/core/scripts/group-update.ts#L108)
 
 - HEAD captured after the dirty gate, before pull/merge.
-  [`group-update.ts:797`](../../../src/core/scripts/group-update.ts#L797)
+  [`group-update.ts:797`](../../../../src/core/scripts/group-update.ts#L797)
 
 - Migration outcome recorded; excerpt keeps the tail, ANSI stripped.
-  [`group-update.ts:885`](../../../src/core/scripts/group-update.ts#L885)
+  [`group-update.ts:885`](../../../../src/core/scripts/group-update.ts#L885)
 
 **Git port capability**
 
 - Numstat parsing; binary files count as a file with zero lines.
-  [`index.ts:568`](../../../src/adapters/driven/git/index.ts#L568)
+  [`index.ts:568`](../../../../src/adapters/driven/git/index.ts#L568)
 
 **TUI**
 
 - Detail-pane lines rendered from the in-memory last outcome.
-  [`update-zone.logic.ts:122`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L122)
+  [`update-zone.logic.ts:122`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L122)
 
 - Update tab badged when a run ends off-zone.
-  [`update-slice.ts:656`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L656)
+  [`update-slice.ts:656`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L656)

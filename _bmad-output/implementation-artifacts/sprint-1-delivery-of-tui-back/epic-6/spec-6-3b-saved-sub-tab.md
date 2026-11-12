@@ -6,7 +6,7 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '917afabe9c0611f5720796e661eca848717357fd'
 context:
-  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/epic-6-context.md'
+  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -90,31 +90,31 @@ The tab model already anticipates a third entry (Story 6.4's `Logs` becomes the 
 **Tab model (start here)**
 
 - Saved first, defaults and resets still on Request
-  [`routes-slice.ts:60`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L60)
+  [`routes-slice.ts:60`](../../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L60)
 
 - Generic stepper needed no change for three tabs
-  [`tab-navigation.ts:29`](../../../src/adapters/driving/tui/shared/keys/tab-navigation.ts#L29)
+  [`tab-navigation.ts:29`](../../../../src/adapters/driving/tui/shared/keys/tab-navigation.ts#L29)
 
 **Tab view and rows**
 
 - Stateless Saved view: list, filter, empty, error line
-  [`routes-saved-tab.tsx:14`](../../../src/adapters/driving/tui/zones/routes/routes-saved-tab.tsx#L14)
+  [`routes-saved-tab.tsx:14`](../../../../src/adapters/driving/tui/zones/routes/routes-saved-tab.tsx#L14)
 
 - Rows filtered by pane route key, no stale possible
-  [`routes-zone.tsx:257`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L257)
+  [`routes-zone.tsx:257`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L257)
 
 **Zone wiring**
 
 - Saved keys: filter, load, delete, retry, Esc unwind
-  [`routes-zone.tsx:1338`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1338)
+  [`routes-zone.tsx:1338`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1338)
 
 - Store errors surface with retry; reset on route change
-  [`routes-zone.tsx:985`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L985)
+  [`routes-zone.tsx:985`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L985)
 
 - Saved branch render and footer hints
-  [`routes-zone.tsx:1891`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1891)
+  [`routes-zone.tsx:1891`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1891)
 
 **Tests (last)**
 
 - Scoped list, load, delete, filter, reset flows end to end
-  [`routes-zone.interaction.test.tsx:1350`](../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L1350)
+  [`routes-zone.interaction.test.tsx:1350`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L1350)

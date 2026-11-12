@@ -6,7 +6,7 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '92f2a4c44789962dede2d43c3e2147dc68523c9b'
 context:
-  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/epic-6-context.md'
+  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -92,51 +92,51 @@ context:
 **Core use-case and port**
 
 - Manifest gate plus scanner delegation, the whole story in one function
-  [`list-routes.ts:24`](../../../src/core/routes/list-routes.ts#L24)
+  [`list-routes.ts:24`](../../../../src/core/routes/list-routes.ts#L24)
 
 - Port contract: Route shape, scanner signature, canonical method-plus-path identity
-  [`route-scanner.ts:20`](../../../src/core/ports/route-scanner.ts#L20)
+  [`route-scanner.ts:20`](../../../../src/core/ports/route-scanner.ts#L20)
 
 **Scanner strictness and fetching**
 
 - Malformed entries fail loudly instead of vanishing into an empty list
-  [`nestjs-openapi.ts:64`](../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts#L64)
+  [`nestjs-openapi.ts:64`](../../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts#L64)
 
 - URL fetch carries an abort timeout so a dead endpoint cannot hang the zone
-  [`nestjs-openapi.ts:40`](../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts#L40)
+  [`nestjs-openapi.ts:40`](../../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.ts#L40)
 
 **Static registration and wiring**
 
 - First real registry entry; knownModuleIds derives from it automatically
-  [`module-registry.ts:17`](../../../src/adapters/driven/modules/module-registry.ts#L17)
+  [`module-registry.ts:17`](../../../../src/adapters/driven/modules/module-registry.ts#L17)
 
 - Both composition roots resolve the same key via the shared module-id constant
-  [`main.ts:56`](../../../src/bin/main.ts#L56)
+  [`main.ts:56`](../../../../src/bin/main.ts#L56)
 
 - Same resolution on the TUI side so CLI and zone scan identically
-  [`tui.ts:118`](../../../src/bin/tui.ts#L118)
+  [`tui.ts:118`](../../../../src/bin/tui.ts#L118)
 
 **Driving adapters**
 
 - Thin list-routes subcommand over the core use-case, AD-2 style
-  [`subcommands.ts:194`](../../../src/adapters/driving/cli/subcommands.ts#L194)
+  [`subcommands.ts:194`](../../../../src/adapters/driving/cli/subcommands.ts#L194)
 
 - Slice picks the active EDT carrier else first carrier; failures stay distinct
-  [`routes-slice.ts:43`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L43)
+  [`routes-slice.ts:43`](../../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L43)
 
 - Zone renders loading, failure, empty, and list states without overlap
-  [`routes-zone.tsx:36`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L36)
+  [`routes-zone.tsx:36`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L36)
 
 **Tests**
 
 - I/O matrix against fake ports, including strictness and alias-key cases
-  [`list-routes.test.ts:1`](../../../src/core/routes/list-routes.test.ts#L1)
+  [`list-routes.test.ts:1`](../../../../src/core/routes/list-routes.test.ts#L1)
 
 - Real temp-dir scanner coverage plus the no-fallthrough regression pin
-  [`nestjs-openapi.test.ts:1`](../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.test.ts#L1)
+  [`nestjs-openapi.test.ts:1`](../../../../src/adapters/driven/modules/route-explorer/nestjs-openapi.test.ts#L1)
 
 - Slice registry-failure branch and carrier-preference coverage
-  [`routes-slice.test.ts:1`](../../../src/adapters/driving/tui/store/slices/routes-slice.test.ts#L1)
+  [`routes-slice.test.ts:1`](../../../../src/adapters/driving/tui/store/slices/routes-slice.test.ts#L1)
 
 - Black-box CLI envelope block for list-routes
-  [`tui-back.e2e.test.ts:1`](../../../src/bin/tui-back.e2e.test.ts#L1)
+  [`tui-back.e2e.test.ts:1`](../../../../src/bin/tui-back.e2e.test.ts#L1)

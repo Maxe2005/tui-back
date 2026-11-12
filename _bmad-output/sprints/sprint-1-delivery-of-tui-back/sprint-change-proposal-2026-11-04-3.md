@@ -159,7 +159,7 @@ Append to **Rôle**:
   porte `healthCheck: "disabled"`.
 ```
 
-### 4.6 Sprint status (`implementation-artifacts/sprint-status.yaml`)
+### 4.6 Sprint status (`implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml`)
 
 Epic 9 comment: append `+ help filter & per-service health check toggle (2026-11-04, sprint-change-proposal-2026-11-04-3.md): 9-10 independent; 9-7 -> 9-11.`
 

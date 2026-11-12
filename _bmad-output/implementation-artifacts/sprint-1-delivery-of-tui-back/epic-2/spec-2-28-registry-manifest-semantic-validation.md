@@ -6,8 +6,8 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '0e22c8c1160f605d90af4d807628a3457b3d760e'
 context:
-  - `{project-root}/_bmad-output/implementation-artifacts/epic-2-context.md`
-  - `{project-root}/_bmad-output/implementation-artifacts/epic-2/spec-2-33-registry-deregister-stale-unreachable-or-unmanaged-repos.md`
+  - `{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2-context.md`
+  - `{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-33-registry-deregister-stale-unreachable-or-unmanaged-repos.md`
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -102,31 +102,31 @@ context:
 **Semantic core**
 
 - Read-only per-path loop with isolation and registry-file ordering.
-  [`validate-registry.ts:75`](../../../src/core/scripts/validate-registry.ts#L75)
+  [`validate-registry.ts:75`](../../../../src/core/scripts/validate-registry.ts#L75)
 
 - sharedBranch check: local first, `origin/` only on miss.
-  [`validate-registry.ts:47`](../../../src/core/scripts/validate-registry.ts#L47)
+  [`validate-registry.ts:47`](../../../../src/core/scripts/validate-registry.ts#L47)
 
 **CLI parity**
 
 - `registry validate` branch: zero-arg, excess rejected.
-  [`subcommands.ts:850`](../../../src/adapters/driving/cli/subcommands.ts#L850)
+  [`subcommands.ts:850`](../../../../src/adapters/driving/cli/subcommands.ts#L850)
 
 **TUI**
 
 - Store action with session guard.
-  [`registry-slice.ts:315`](../../../src/adapters/driving/tui/store/slices/registry-slice.ts#L315)
+  [`registry-slice.ts:315`](../../../../src/adapters/driving/tui/store/slices/registry-slice.ts#L315)
 
 - Phases slot below clean, above scan results.
-  [`repo-registry-screen.tsx:93`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L93)
+  [`repo-registry-screen.tsx:93`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L93)
 
 - Ctrl+V trigger at root input.
-  [`repo-registry-screen.tsx:271`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L271)
+  [`repo-registry-screen.tsx:271`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L271)
 
 **Tests**
 
 - Fake-port matrix covering every I/O row.
-  [`validate-registry.test.ts:1`](../../../src/core/scripts/validate-registry.test.ts#L1)
+  [`validate-registry.test.ts:1`](../../../../src/core/scripts/validate-registry.test.ts#L1)
 
 - Black-box CLI cases.
-  [`tui-back.e2e.test.ts:423`](../../../src/bin/tui-back.e2e.test.ts#L423)
+  [`tui-back.e2e.test.ts:423`](../../../../src/bin/tui-back.e2e.test.ts#L423)

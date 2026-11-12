@@ -219,7 +219,7 @@ The canonical keybinding contract for downstream implementation:
 
 ### Interaction consistency contract (UX-DR36, Story 7.4) — validated 2026-10-07
 
-The same intent uses the same key, wording and component in every zone and dialog. Source: `_bmad-output/implementation-artifacts/epic-7/interaction-inventory-7-4.md`. Any deviation must be listed in the last table with its reason.
+The same intent uses the same key, wording and component in every zone and dialog. Source: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/interaction-inventory-7-4.md`. Any deviation must be listed in the last table with its reason.
 
 | Intent | Canonical choice |
 |---|---|

@@ -193,7 +193,7 @@ This happens before any `git` invocation (AD-8).
 
 ---
 
-### 4.5 Sprint status (`implementation-artifacts/sprint-status.yaml`)
+### 4.5 Sprint status (`implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml`)
 
 Append under epic-2, after `2-41-…`:
 ```yaml

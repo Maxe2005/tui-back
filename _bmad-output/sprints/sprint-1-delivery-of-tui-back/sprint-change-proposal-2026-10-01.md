@@ -374,7 +374,7 @@ As a developer, I want every zone to use the same keys, wording and components f
 
 **Acceptance Criteria:**
 
-**Given** the story starts **When** the audit runs **Then** it produces an inventory (table, committed under `_bmad-output/implementation-artifacts/epic-7/`) of every zone's and dialog's bindings and components per intent: list cursor/jump, enter/activate, edit-commit-cancel, toggle, confirm/cancel dialog, destructive-action confirmation, filter, refresh/retry, footer hint wording and order, modal title casing/language, empty/loading/error state components, text input (TextInputLine), pick lists (FilterablePickList), branch inputs (BranchAutocompleteInput).
+**Given** the story starts **When** the audit runs **Then** it produces an inventory (table, committed under `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/`) of every zone's and dialog's bindings and components per intent: list cursor/jump, enter/activate, edit-commit-cancel, toggle, confirm/cancel dialog, destructive-action confirmation, filter, refresh/retry, footer hint wording and order, modal title casing/language, empty/loading/error state components, text input (TextInputLine), pick lists (FilterablePickList), branch inputs (BranchAutocompleteInput).
 
 **Given** the inventory **When** divergences are found **Then** one canonical choice per intent is recorded as the UX-DR36 table in EXPERIENCE.md (Interaction Primitives), and the developer validates that table before the alignment work starts.
 

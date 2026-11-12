@@ -6,8 +6,8 @@ status: 'done'
 review_loop_iteration: 1
 baseline_commit: '6b8b84a1adae0fdd7139140a6e87b308c39f82c7'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/implementation-artifacts/epic-2/epic-2-context.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md'
   - '_bmad-output/implementation-artifacts/deferred-work.md'
 ---
 
@@ -129,59 +129,59 @@ No shared navigation hook exists — each zone re-implements pure interpreter fu
 **Per-item failure surfacing (the review round's core correctness fix)**
 
 - Entry point: `createEdt`/`switchActiveEdt`/`modifyEdt` are per-repo isolated — `ok: true` can still carry `results` rows with `outcome: 'failed'`; every submit handler used to ignore that.
-  [`edts-zone.tsx:247`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L247)
+  [`edts-zone.tsx:247`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L247)
 
 - The create submit now surfaces a per-member failure inline instead of silently closing as if every selection had applied.
-  [`edts-zone.tsx:547`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L547)
+  [`edts-zone.tsx:547`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L547)
 
 - Same fix applied to the switch-confirm path, over per-repo stash/checkout failures.
-  [`edts-zone.tsx:580`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L580)
+  [`edts-zone.tsx:580`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L580)
 
 - Same fix applied to the modify path, over per-member/branch-change failures.
-  [`edts-zone.tsx:612`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L612)
+  [`edts-zone.tsx:612`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L612)
 
 **Keyboard-trap fix: the forced, zero-EDT create prompt had no way out short of Ctrl+C**
 
 - Escape now quits when there's genuinely nothing to cancel back to, cancels back to the list otherwise.
-  [`edts-zone.tsx:641`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L641)
+  [`edts-zone.tsx:641`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L641)
 
 - New `quitRequested`/`requestQuit` store fields — the only way a captured zone can reach `onQuit`, which lives at the composition-root boundary.
-  [`app-store.ts:159`](../../../src/adapters/driving/tui/store/app-store.ts#L159)
+  [`app-store.ts:159`](../../../../src/adapters/driving/tui/store/app-store.ts#L159)
 
 - AppShell's effect handing `quitRequested` off to the real `onQuit`.
-  [`app-shell.tsx:89`](../../../src/adapters/driving/tui/app-shell.tsx#L89)
+  [`app-shell.tsx:89`](../../../../src/adapters/driving/tui/app-shell.tsx#L89)
 
 **A newly-created first EDT never became "active"**
 
 - `createEdt` never wrote `state.json`'s active-EDT pointer (only `switchActiveEdt` did) — the store action now does, mirroring switch's own behavior.
-  [`app-store.ts:274`](../../../src/adapters/driving/tui/store/app-store.ts#L274)
+  [`app-store.ts:274`](../../../../src/adapters/driving/tui/store/app-store.ts#L274)
 
 **A `state.json` read failure used to discard an already-successfully-loaded, possibly genuinely-empty EDT list**
 
 - `loadEdts` now degrades only the active-EDT pointer, never the list itself, on that failure.
-  [`app-store.ts:245`](../../../src/adapters/driving/tui/store/app-store.ts#L245)
+  [`app-store.ts:245`](../../../../src/adapters/driving/tui/store/app-store.ts#L245)
 
 **Smaller inline-validation and state-conflation fixes**
 
 - A services-load failure used to render as "no registered services available." — now a distinct `'error'` candidate-list state.
-  [`edts-zone.tsx:280`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L280)
+  [`edts-zone.tsx:280`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L280)
 
 - An empty create-form topic now rejects inline instead of surfacing `createEdt`'s raw CLI usage string.
-  [`edts-zone.tsx:547`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L547)
+  [`edts-zone.tsx:547`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L547)
 
 - A branch-edit value is now persisted trimmed, matching what was actually validated.
-  [`edts-zone.tsx:641`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L641)
+  [`edts-zone.tsx:641`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L641)
 
 **Tests covering the above**
 
 - Direct coverage of the store's `loadEdts`/`createEdt`/`switchEdt`/`modifyEdt` actions — previously zero, every zone test substituted fakes for all four.
-  [`app-store.test.ts`](../../../src/adapters/driving/tui/store/app-store.test.ts)
+  [`app-store.test.ts`](../../../../src/adapters/driving/tui/store/app-store.test.ts)
 
 - Real-keypress coverage of the quit-escape-hatch and the per-member-failure surfacing.
-  [`edts-zone.interaction.test.tsx`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx)
+  [`edts-zone.interaction.test.tsx`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx)
 
 - New file: real-keypress coverage of AC6 (`zoneInputCaptured` gate) mounted through `AppShell` itself, not just the zone.
-  [`app-shell.interaction.test.tsx`](../../../src/adapters/driving/tui/app-shell.interaction.test.tsx)
+  [`app-shell.interaction.test.tsx`](../../../../src/adapters/driving/tui/app-shell.interaction.test.tsx)
 
 - Latent harness bug fixed along the way: a bare Escape press could resolve before Ink's real 20ms pending-escape flush timer fired, risking vacuous passes on every Escape-driven assertion in this file.
-  [`edts-zone.interaction.test.tsx:35`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L35)
+  [`edts-zone.interaction.test.tsx:35`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L35)

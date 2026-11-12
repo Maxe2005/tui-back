@@ -6,8 +6,8 @@ status: 'done'
 baseline_commit: '6b7730e3176444b3a12a395c2d58357e2eeb2784'
 review_loop_iteration: 0
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/implementation-artifacts/epic-2/spec-2-14-command-entry-bar-registered-commands.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-14-command-entry-bar-registered-commands.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -108,60 +108,60 @@ context:
 **Tab-completion state machine**
 
 - Entry point: resolves a single `Tab` press into complete/show-grid/pending/noop, including the double-press-within-window detection a review fix hardened against clock skew.
-  [`command-bar.tsx:112`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L112)
+  [`command-bar.tsx:112`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L112)
 
 - Longest-shared-prefix helper `resolveTabPress` delegates to.
-  [`command-bar.tsx:78`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L78)
+  [`command-bar.tsx:78`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L78)
 
 **Grid layout & cursor math (pure functions)**
 
 - Column-major layout + horizontal-scroll truncation.
-  [`command-bar.tsx:180`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L180)
+  [`command-bar.tsx:180`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L180)
 
 - Vertical cursor movement, clamped within a column; `null` signals "leave to input".
-  [`command-bar.tsx:263`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L263)
+  [`command-bar.tsx:263`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L263)
 
 - Horizontal cursor movement + one-column scroll at a hidden edge.
-  [`command-bar.tsx:282`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L282)
+  [`command-bar.tsx:282`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L282)
 
 - Key→direction mapping, extracted during review so a swapped up/down or left/right ternary is directly unit-testable (the real 4-command registry can never span 2+ columns, so this was otherwise unreachable by any real-keypress test).
-  [`command-bar.tsx:252`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L252)
+  [`command-bar.tsx:252`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L252)
 
 - Resolves the command under an absolute grid cursor.
-  [`command-bar.tsx:311`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L311)
+  [`command-bar.tsx:311`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L311)
 
 **`useInput` keyboard state machine**
 
 - Grid-visibility derivation (`gridShown && matches.length > 1`) driving the whole render.
-  [`command-bar.tsx:337`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L337)
+  [`command-bar.tsx:337`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L337)
 
 - Grid-focus branch: `Up`/`Down`/`Left`/`Right`/`Enter`/backspace/`Esc`, plus a review-fix no-op guard for `Tab` (Boundaries define no case for it there).
-  [`command-bar.tsx:413`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L413)
+  [`command-bar.tsx:413`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L413)
 
 - Input-focus branch: `Tab` (empty-input grid reveal / autocomplete / double-press arm), pending-state discard on any other key.
-  [`command-bar.tsx:442`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L442)
+  [`command-bar.tsx:442`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L442)
 
 **Render**
 
 - Grid cells (`…` truncation markers, no-list-on-open gating via `gridVisible`).
-  [`command-bar.tsx:502`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L502)
+  [`command-bar.tsx:502`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L502)
 
 **Tests**
 
 - Pure-function unit coverage for the full I/O matrix, plus the review-fix direction-mapping and clock-skew cases.
-  [`command-bar.test.tsx:88`](../../../src/adapters/driving/tui/shared/command-bar.test.tsx#L88)
-  [`command-bar.test.tsx:148`](../../../src/adapters/driving/tui/shared/command-bar.test.tsx#L148)
-  [`command-bar.test.tsx:188`](../../../src/adapters/driving/tui/shared/command-bar.test.tsx#L188)
+  [`command-bar.test.tsx:88`](../../../../src/adapters/driving/tui/shared/command-bar.test.tsx#L88)
+  [`command-bar.test.tsx:148`](../../../../src/adapters/driving/tui/shared/command-bar.test.tsx#L148)
+  [`command-bar.test.tsx:188`](../../../../src/adapters/driving/tui/shared/command-bar.test.tsx#L188)
 
 - Real-keypress end-to-end coverage: open → `Tab` → grid → arrow around → `Enter`/typing/`Esc` exits, plus the two review-fix regression tests (`Tab` no-op in grid, intervening key discards pending).
-  [`app-shell.interaction.test.tsx:846`](../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L846)
-  [`app-shell.interaction.test.tsx:966`](../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L966)
-  [`app-shell.interaction.test.tsx:994`](../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L994)
+  [`app-shell.interaction.test.tsx:846`](../../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L846)
+  [`app-shell.interaction.test.tsx:966`](../../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L966)
+  [`app-shell.interaction.test.tsx:994`](../../../../src/adapters/driving/tui/app-shell.interaction.test.tsx#L994)
 
 **Out-of-scope, incidental (pre-existing, not this story's intent)**
 
 - `footer.tsx`/`top-bar-footer-split.test.tsx`: an already-committed story 2.20 follow-up (commit `eb04578`, confirmed intentional) removing the redundant `[d/e/u/l/r/s] zone` mnemonic — bundled into this branch's history, unrelated to command-bar work.
-  [`footer.tsx:4`](../../../src/adapters/driving/tui/shared/components/footer.tsx#L4)
+  [`footer.tsx:4`](../../../../src/adapters/driving/tui/shared/components/footer.tsx#L4)
 
 - `tui-back.e2e.test.ts`: retargets the e2e script path from `tui-back.mjs` to `cli-back.mjs` — confirmed by the verification-gap reviewer (mutation-tested) to be a real fix for a pre-existing stale reference, not a story 2.17 concern.
-  [`tui-back.e2e.test.ts:29`](../../../src/bin/tui-back.e2e.test.ts#L29)
+  [`tui-back.e2e.test.ts:29`](../../../../src/bin/tui-back.e2e.test.ts#L29)

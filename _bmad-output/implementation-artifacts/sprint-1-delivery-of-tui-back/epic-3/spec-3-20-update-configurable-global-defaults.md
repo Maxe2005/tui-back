@@ -5,7 +5,7 @@ created: '2026-10-14'
 status: 'done'
 baseline_commit: '6a6bb433f6e317b416e94fa933d6a6ac1189a737'
 review_loop_iteration: 0
-context: ['{project-root}/_bmad-output/implementation-artifacts/epic-3-context.md']
+context: ['{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md']
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -77,34 +77,34 @@ context: ['{project-root}/_bmad-output/implementation-artifacts/epic-3-context.m
 **Settings model**
 
 - Entry point: new `update` keys and defaults equal to today's hard-coded values.
-  [`settings.ts:89`](../../../src/core/ports/settings.ts#L89)
+  [`settings.ts:89`](../../../../src/core/ports/settings.ts#L89)
 
 - Zod fields optional-with-default, so missing keys change nothing.
-  [`schema.ts:87`](../../../src/adapters/driven/settings/schema.ts#L87)
+  [`schema.ts:87`](../../../../src/adapters/driven/settings/schema.ts#L87)
 
 **TUI: `:settings` Update tab**
 
 - New tab; concurrency moved here beside the three new rows.
-  [`settings-screen.tsx:212`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L212)
+  [`settings-screen.tsx:212`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L212)
 
 - Edits persist immediately through `updateSettings`.
-  [`settings-screen.tsx:594`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L594)
+  [`settings-screen.tsx:594`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L594)
 
 **TUI: config screen seeding**
 
 - Draft globals seeded from settings; rows still start on `follow`.
-  [`update-config-dialog.logic.ts:91`](../../../src/adapters/driving/tui/zones/update/update-config-dialog.logic.ts#L91)
+  [`update-config-dialog.logic.ts:91`](../../../../src/adapters/driving/tui/zones/update/update-config-dialog.logic.ts#L91)
 
 - Store passes settings in; nothing is written back.
-  [`update-slice.ts:463`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L463)
+  [`update-slice.ts:463`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L463)
 
 **CLI**
 
 - Override flag parsing; a flag together with its negation is rejected.
-  [`subcommands.ts:60`](../../../src/adapters/driving/cli/subcommands.ts#L60)
+  [`subcommands.ts:60`](../../../../src/adapters/driving/cli/subcommands.ts#L60)
 
 - Settings defaults loaded; load problems go to stderr, then fall back.
-  [`subcommands.ts:204`](../../../src/adapters/driving/cli/subcommands.ts#L204)
+  [`subcommands.ts:204`](../../../../src/adapters/driving/cli/subcommands.ts#L204)
 
 - Composition root wires the settings port.
-  [`main.ts:86`](../../../src/bin/main.ts#L86)
+  [`main.ts:86`](../../../../src/bin/main.ts#L86)

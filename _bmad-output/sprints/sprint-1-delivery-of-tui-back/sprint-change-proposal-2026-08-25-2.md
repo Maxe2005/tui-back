@@ -114,7 +114,7 @@ Rationale: absent → `undefined` (no default value — there is no sensible "de
 +- **Rule:** a repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service` (identity), `container` (docker-compose/container target name), optional `migrationCommand` (absent means the service has no migrations — a group update skips the migration step for it without error, FR-10/FR-12), optional `sharedBranch` (default `development` — FR-8), and `modules` (map of module-id → per-module config, e.g. `route-explorer: {scanner: nestjs-openapi, auth: jose-dev-jwt}`). A repo or module absent from a manifest is invisible to every tool action — no special-case code anywhere in `core/`.
 ```
 
-**`_bmad-output/planning-artifacts/epics.md`** — two spots:
+**`_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md`** — two spots:
 
 a) AD-4 summary line:
 ```diff
@@ -139,7 +139,7 @@ b) Story 1.4 Acceptance Criteria — add an explicit AC for the omitted-field ca
 
 Story 3.2 AC (lines ~1009-1011) and `epic-3-context.md` line 27 are already correct — no change needed there.
 
-**`_bmad-output/implementation-artifacts/epic-2/spec-2-11-repo-registry-screen-manifest-onboarding-guidance.md`** (Code Map — still a live spec, Story 2.11 unmerged):
+**`_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-11-repo-registry-screen-manifest-onboarding-guidance.md`** (Code Map — still a live spec, Story 2.11 unmerged):
 ```diff
 -- `src/adapters/driven/manifest/schema.ts` -- manifest field reference (`service`, `container`, `migrationCommand`, `modules`) for the static guidance text
 +- `src/adapters/driven/manifest/schema.ts` -- manifest field reference (`service`, `container`, `modules`, optional `migrationCommand`) for the static guidance text

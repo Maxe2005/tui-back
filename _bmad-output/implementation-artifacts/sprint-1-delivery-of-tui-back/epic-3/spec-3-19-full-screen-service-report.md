@@ -5,7 +5,7 @@ created: '2026-10-12'
 status: 'done'
 baseline_commit: 'a2c1c0b3c1fe0d4d504a632344e4cac62227c48b'
 review_loop_iteration: 0
-context: ['{project-root}/_bmad-output/implementation-artifacts/epic-3-context.md']
+context: ['{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md']
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -83,45 +83,45 @@ Report lines are built as a flat `string`-like line model (with a kind tag for f
 **Report model (entry point)**
 
 - Pure line model: unflattened steps, issues, failed-line indices; start here.
-  [`update-zone.logic.ts:562`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L562)
+  [`update-zone.logic.ts:562`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L562)
 
 - Full-fidelity step views via opt-in `full`; inline pane stays capped.
-  [`update-zone.logic.ts:434`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L434)
+  [`update-zone.logic.ts:434`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L434)
 
 - Text sanitising: ANSI/control stripping, CR handling.
-  [`update-zone.logic.ts:552`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L552)
+  [`update-zone.logic.ts:552`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L552)
 
 - Steps inferred for recap-only results.
-  [`update-zone.logic.ts:381`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L381)
+  [`update-zone.logic.ts:381`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L381)
 
 **Scrolling and keys**
 
 - Windowing and max offset, wrap-aware.
-  [`update-zone.logic.ts:619`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L619)
+  [`update-zone.logic.ts:619`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L619)
 
 - Key mapping and failed-step jump.
-  [`update-zone.logic.ts:645`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L645)
+  [`update-zone.logic.ts:645`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L645)
 
 **View and zone wiring**
 
 - Presentational windowed view reporting its real layout.
-  [`fullscreen-report.tsx:24`](../../../src/adapters/driving/tui/zones/update/fullscreen-report.tsx#L24)
+  [`fullscreen-report.tsx:24`](../../../../src/adapters/driving/tui/zones/update/fullscreen-report.tsx#L24)
 
 - Report input derivation and open/close; input capture and key precedence.
-  [`update-zone.tsx:546`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L546)
+  [`update-zone.tsx:546`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L546)
 
 **Keybindings**
 
 - `[f] full report` footer row.
-  [`keybindings.ts:192`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L192)
+  [`keybindings.ts:192`](../../../../src/adapters/driving/tui/keybindings/keybindings.ts#L192)
 
 - Report footer context.
-  [`footer-contexts.ts:107`](../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L107)
+  [`footer-contexts.ts:107`](../../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L107)
 
 **Tests**
 
 - Interaction and bounded-rendering tests.
-  [`fullscreen-report.test.tsx`](../../../src/adapters/driving/tui/zones/update/fullscreen-report.test.tsx)
+  [`fullscreen-report.test.tsx`](../../../../src/adapters/driving/tui/zones/update/fullscreen-report.test.tsx)
 
 - Pure logic tests.
-  [`update-zone.report.test.ts`](../../../src/adapters/driving/tui/zones/update/update-zone.report.test.ts)
+  [`update-zone.report.test.ts`](../../../../src/adapters/driving/tui/zones/update/update-zone.report.test.ts)

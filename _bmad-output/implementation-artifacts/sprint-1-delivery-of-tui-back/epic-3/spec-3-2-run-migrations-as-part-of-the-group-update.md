@@ -5,7 +5,7 @@ created: '2026-09-17'
 status: 'done'
 baseline_commit: '9ad60aef0f1557446cae7be54a6b4af1352f5ecc'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -78,34 +78,34 @@ Phase ordering inside `updateMember`: `currentBranch` → pull-or-merge (3.1, un
 **Core use-case**
 
 - Entry point: migrate-phase params threading and per-member loop
-  [`group-update.ts:62`](../../../src/core/scripts/group-update.ts#L62)
+  [`group-update.ts:62`](../../../../src/core/scripts/group-update.ts#L62)
 
 - Per-member flow: migrate between pull/merge and restart, failure short-circuits
-  [`group-update.ts:238`](../../../src/core/scripts/group-update.ts#L238)
+  [`group-update.ts:238`](../../../../src/core/scripts/group-update.ts#L238)
 
 - New port surface: single `run` contract returning trimmed output
-  [`migration.ts:8`](../../../src/core/ports/migration.ts#L8)
+  [`migration.ts:8`](../../../../src/core/ports/migration.ts#L8)
 
 **Driven adapter**
 
 - Non-interactive `sh -c` spawn with never-throw guard and exit taxonomy
-  [`index.ts:25`](../../../src/adapters/driven/migration/index.ts#L25)
+  [`index.ts:25`](../../../../src/adapters/driven/migration/index.ts#L25)
 
 **Driving adapters and wiring**
 
 - Bare `update` subcommand passes the migration port, still rejects flags
-  [`subcommands.ts:134`](../../../src/adapters/driving/cli/subcommands.ts#L134)
+  [`subcommands.ts:134`](../../../../src/adapters/driving/cli/subcommands.ts#L134)
 
 - Migration port instantiated in both composition roots
-  [`main.ts:36`](../../../src/bin/main.ts#L36)
+  [`main.ts:36`](../../../../src/bin/main.ts#L36)
 
 - In-process run requires the migration port before starting
-  [`update-slice.ts:52`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L52)
+  [`update-slice.ts:52`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L52)
 
 **Tests**
 
 - Full migrate-phase matrix against fake ports with strict ordering
-  [`group-update.test.ts:573`](../../../src/core/scripts/group-update.test.ts#L573)
+  [`group-update.test.ts:573`](../../../../src/core/scripts/group-update.test.ts#L573)
 
 - Black-box failing-migration isolation with command and output in detail
-  [`tui-back.e2e.test.ts:1524`](../../../src/bin/tui-back.e2e.test.ts#L1524)
+  [`tui-back.e2e.test.ts:1524`](../../../../src/bin/tui-back.e2e.test.ts#L1524)

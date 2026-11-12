@@ -150,7 +150,7 @@ Monochrome in `{colors.text-dim}`, on `{colors.surface}`, above the Dashboard's 
 - **Project:** tui-back · **Project Key:** NOKEY · **Document Output Language:** English
 - **Planning Artifacts:** `_bmad-output/planning-artifacts`
 - **Implementation Artifacts:** `_bmad-output/implementation-artifacts`
-- **Sprint Status:** `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- **Sprint Status:** `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml`
 - **Epic 1 Status:** in-progress (already set — first story of the epic predates this one, no status change needed)
 - **Story 1.12 Status:** ready-for-dev (this file just created)
 
@@ -250,7 +250,7 @@ Monochrome in `{colors.text-dim}`, on `{colors.surface}`, above the Dashboard's 
 - `src/bin/tui-back.e2e.test.ts` (bin entry count now two)
 - `package.json` / `package-lock.json` (bin entry)
 - `.dependency-cruiser.cjs` (TUI entry-point exception)
-- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml`
 
 ---
 

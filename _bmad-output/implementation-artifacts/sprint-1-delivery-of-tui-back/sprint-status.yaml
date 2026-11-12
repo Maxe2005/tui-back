@@ -37,7 +37,7 @@ last_updated: 2026-11-12
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
-story_location: _bmad-output/implementation-artifacts
+story_location: _bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back
 
 development_status:
   # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-11-09); only open work is listed here.

@@ -119,63 +119,63 @@ On a checkout failure after adopt's membership write, the stash is restored onto
 **Classification & pre-flight (the decision point)**
 
 - Entry point: repos classified against the outgoing EDT; destination stays target-driven.
-  [`switch.ts:146`](../../../src/core/edt/switch.ts#L146)
+  [`switch.ts:146`](../../../../src/core/edt/switch.ts#L146)
 
 - Zero-write gate: seam or explicit resolutions, else `switch-dirty-services-unresolved`.
-  [`switch.ts:328`](../../../src/core/edt/switch.ts#L328)
+  [`switch.ts:328`](../../../../src/core/edt/switch.ts#L328)
 
 - Resolution and seam types consumed by 2.40 (CLI) and 2.41 (dialog).
-  [`switch.ts:72`](../../../src/core/edt/switch.ts#L72)
+  [`switch.ts:72`](../../../../src/core/edt/switch.ts#L72)
 
 **Per-repo execution**
 
 - Per-repo plan from a fresh dirty read: state-1 auto-stash, else the resolution.
-  [`switch.ts:464`](../../../src/core/edt/switch.ts#L464)
+  [`switch.ts:464`](../../../../src/core/edt/switch.ts#L464)
 
 - Adopt in AC order: gate, stash, branch, membership, with the stash restored on failure.
-  [`switch.ts:567`](../../../src/core/edt/switch.ts#L567)
+  [`switch.ts:567`](../../../../src/core/edt/switch.ts#L567)
 
 - Discard captures expanded paths, then runs the one destructive primitive.
-  [`switch.ts:533`](../../../src/core/edt/switch.ts#L533)
+  [`switch.ts:533`](../../../../src/core/edt/switch.ts#L533)
 
 - Member branch verified before any irreversible step (review patch).
-  [`switch.ts:704`](../../../src/core/edt/switch.ts#L704)
+  [`switch.ts:704`](../../../../src/core/edt/switch.ts#L704)
 
 - Non-member destination fetched before discard; nothing popped any more.
-  [`switch.ts:758`](../../../src/core/edt/switch.ts#L758)
+  [`switch.ts:758`](../../../../src/core/edt/switch.ts#L758)
 
 - Failure rows keep the discarded paths, adoption and stash facts.
-  [`switch.ts:634`](../../../src/core/edt/switch.ts#L634)
+  [`switch.ts:634`](../../../../src/core/edt/switch.ts#L634)
 
 **Git primitives & persistence**
 
 - `reset --hard` + `clean -fd`, naming the failing step; never `-x` or `-ff`.
-  [`index.ts:579`](../../../src/adapters/driven/git/index.ts#L579)
+  [`index.ts:579`](../../../../src/adapters/driven/git/index.ts#L579)
 
 - Opt-in untracked expansion; story 3.4's default is untouched.
-  [`index.ts:525`](../../../src/adapters/driven/git/index.ts#L525)
+  [`index.ts:525`](../../../../src/adapters/driven/git/index.ts#L525)
 
 - Port contract documents the consent-gated caller rule.
-  [`git.ts:131`](../../../src/core/ports/git.ts#L131)
+  [`git.ts:131`](../../../../src/core/ports/git.ts#L131)
 
 - Adopt reuses modify's lock-held edts.yaml assembly, never the full `modifyEdt`.
-  [`modify.ts:458`](../../../src/core/edt/modify.ts#L458)
+  [`modify.ts:458`](../../../../src/core/edt/modify.ts#L458)
 
 **Interim TUI**
 
 - Preview explains the block; Enter and Esc resolve cancel until 2.41.
-  [`switch-dialog.tsx:85`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L85)
+  [`switch-dialog.tsx:85`](../../../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L85)
 
 - Seam still pauses on the reshaped dirty rows.
-  [`edt-slice.ts:340`](../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L340)
+  [`edt-slice.ts:340`](../../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L340)
 
 **Tests**
 
 - Classifier, pre-flight, adopt and discard matrix.
-  [`switch.test.ts:635`](../../../src/core/edt/switch.test.ts#L635)
+  [`switch.test.ts:635`](../../../../src/core/edt/switch.test.ts#L635)
 
 - Real-git discard: ignored files survive, and the failing step is named.
-  [`index.test.ts:1520`](../../../src/adapters/driven/git/index.test.ts#L1520)
+  [`index.test.ts:1520`](../../../../src/adapters/driven/git/index.test.ts#L1520)
 
 - E2E: state-1 stash round-trip and fail-safe CLI.
-  [`tui-back.e2e.test.ts:1126`](../../../src/bin/tui-back.e2e.test.ts#L1126)
+  [`tui-back.e2e.test.ts:1126`](../../../../src/bin/tui-back.e2e.test.ts#L1126)

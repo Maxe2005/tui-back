@@ -6,9 +6,9 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '45be09e2b13a9f698bc210b930a8a1763bdebbf9'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/planning-artifacts/sprint-change-proposal-2026-08-24-2.md'
-  - '_bmad-output/implementation-artifacts/epic-2-context.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/sprint-change-proposal-2026-08-24-2.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -114,64 +114,64 @@ const outcome = before.data.includes(canonicalPath) ? 'already-registered' : 're
 **Idempotent registration & outcome classification**
 
 - Entry point: the snapshot-diff that turns `registerRepo`'s silent idempotency into `registered`/`already-registered`.
-  [`app-store.ts:297`](../../../src/adapters/driving/tui/store/app-store.ts#L297)
+  [`app-store.ts:297`](../../../../src/adapters/driving/tui/store/app-store.ts#L297)
 
 - Where the diffed outcome is assigned per path, after all selected paths are registered.
-  [`app-store.ts:326`](../../../src/adapters/driving/tui/store/app-store.ts#L326)
+  [`app-store.ts:326`](../../../../src/adapters/driving/tui/store/app-store.ts#L326)
 
 - `RegistryOutcome` union the classification above must stay exhaustive against.
-  [`app-store.ts:48`](../../../src/adapters/driving/tui/store/app-store.ts#L48)
+  [`app-store.ts:48`](../../../../src/adapters/driving/tui/store/app-store.ts#L48)
 
 **Screen entry point & command palette wiring**
 
 - `:` now opens the real screen instead of the placeholder `ModalDialog`; `?` is suppressed while it's open.
-  [`app-shell.tsx:94`](../../../src/adapters/driving/tui/app-shell.tsx#L94)
+  [`app-shell.tsx:94`](../../../../src/adapters/driving/tui/app-shell.tsx#L94)
 
 - Where `openRegistryScreen` is actually dispatched from the `:` keypress.
-  [`app-shell.tsx:112`](../../../src/adapters/driving/tui/app-shell.tsx#L112)
+  [`app-shell.tsx:112`](../../../../src/adapters/driving/tui/app-shell.tsx#L112)
 
 - `Esc` closes the screen; gated so it doesn't also bubble to other Esc handlers.
-  [`app-shell.tsx:128`](../../../src/adapters/driving/tui/app-shell.tsx#L128)
+  [`app-shell.tsx:128`](../../../../src/adapters/driving/tui/app-shell.tsx#L128)
 
 **Screen state machine & candidate selection**
 
 - Pure phase-resolution function driving the screen's render — the core of the AC surface.
-  [`repo-registry-screen.tsx:49`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L49)
+  [`repo-registry-screen.tsx:49`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L49)
 
 - Static manifest guidance, always rendered regardless of scan/register state (spec's "Always" rule).
-  [`repo-registry-screen.tsx:31`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L31)
+  [`repo-registry-screen.tsx:31`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L31)
 
 - Root component wiring scan trigger, `checkbox-list-item` multi-select, and register confirm.
-  [`repo-registry-screen.tsx:124`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L124)
+  [`repo-registry-screen.tsx:124`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L124)
 
 **Dashboard empty-registry prompt**
 
 - Mount-effect re-checks on every `registryScreenOpen` flip, not just on mount — avoids a stale prompt (AC3).
-  [`dashboard-zone.tsx:40`](../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L40)
+  [`dashboard-zone.tsx:40`](../../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L40)
 
 - Render branches: error state, empty-registry prompt, and the untouched existing placeholder — checked in that order.
-  [`dashboard-zone.tsx:47`](../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L47)
+  [`dashboard-zone.tsx:47`](../../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.tsx#L47)
 
 **Stale-write guarding across async registry actions**
 
 - `registrySessionId` counter, bumped on screen reset, guards against a slow scan/register overwriting newer state.
-  [`app-store.ts:97`](../../../src/adapters/driving/tui/store/app-store.ts#L97)
+  [`app-store.ts:97`](../../../../src/adapters/driving/tui/store/app-store.ts#L97)
 
 - Guard check applied after the awaited `registry.list()`/`register` calls resolve.
-  [`app-store.ts:329`](../../../src/adapters/driving/tui/store/app-store.ts#L329)
+  [`app-store.ts:329`](../../../../src/adapters/driving/tui/store/app-store.ts#L329)
 
 **Composition root wiring**
 
 - `LockPort` + resource key added to `AppStoreDeps`, mirroring `bin/main.ts`'s CLI wiring exactly.
-  [`tui.ts:68`](../../../src/bin/tui.ts#L68)
+  [`tui.ts:68`](../../../../src/bin/tui.ts#L68)
 
 **Peripherals**
 
 - New `describe` block covering open/close, empty-check, scan, and register-outcome classification.
-  [`app-store.test.ts:1`](../../../src/adapters/driving/tui/store/app-store.test.ts#L1)
+  [`app-store.test.ts:1`](../../../../src/adapters/driving/tui/store/app-store.test.ts#L1)
 
 - Pure key-handling and `renderToString` smoke tests per screen phase.
-  [`repo-registry-screen.test.tsx:1`](../../../src/adapters/driving/tui/shared/repo-registry-screen.test.tsx#L1)
+  [`repo-registry-screen.test.tsx:1`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.test.tsx#L1)
 
 - Regression guard: registry re-check fires on a `registryScreenOpen` flip without remounting.
-  [`dashboard-zone.test.tsx:121`](../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L121)
+  [`dashboard-zone.test.tsx:121`](../../../../src/adapters/driving/tui/zones/dashboard/dashboard-zone.test.tsx#L121)

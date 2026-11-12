@@ -7,7 +7,7 @@ baseline_commit: 'e91a9755eb2cae82f806cabefa2de3bc89bc3f8f'
 review_loop_iteration: 0
 context:
   - '{project-root}/AGENTS.md'
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-7/spec-7-4-interaction-consistency-audit-alignment.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/spec-7-4-interaction-consistency-audit-alignment.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -105,15 +105,15 @@ Decisions:
 **Footer contract**
 
 - Overlay ranking decides which owner's context the footer shows.
-  [`footer-contexts.ts:307`](../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L307)
+  [`footer-contexts.ts:307`](../../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L307)
 
 - Per-dialog context selection for EDTs, now the only place those keys are advertised.
-  [`edts-footer-context.ts:73`](../../../src/adapters/driving/tui/zones/edts/edts-footer-context.ts#L73)
+  [`edts-footer-context.ts:73`](../../../../src/adapters/driving/tui/zones/edts/edts-footer-context.ts#L73)
 
 - Guard test: hint strings must go through `formatHints`.
-  [`hints.guard.test.ts:38`](../../../src/adapters/driving/tui/shared/components/hints.guard.test.ts#L38)
+  [`hints.guard.test.ts:38`](../../../../src/adapters/driving/tui/shared/components/hints.guard.test.ts#L38)
 
 **Shared components**
 
 - One menu list and key resolver replace three reducers.
-  [`menu-list.tsx:32`](../../../src/adapters/driving/tui/shared/components/menu-list.tsx#L32)
+  [`menu-list.tsx:32`](../../../../src/adapters/driving/tui/shared/components/menu-list.tsx#L32)

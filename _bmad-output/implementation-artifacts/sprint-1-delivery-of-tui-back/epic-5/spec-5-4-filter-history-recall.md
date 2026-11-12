@@ -104,76 +104,76 @@ History entries store the query text only, never the level — level stays a liv
 **History core (pure logic)**
 
 - Entry point — the scope+mode key shape and the push/dedup/trim rule everything above builds on.
-  [`logs-zone.logic.ts:519`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L519)
+  [`logs-zone.logic.ts:519`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L519)
 
 - Front-push + top-only dedup + trim-to-N, the exact rule the I/O matrix's HISTORY_PUSH/DEDUP_TOP rows describe.
-  [`logs-zone.logic.ts:534`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L534)
+  [`logs-zone.logic.ts:534`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L534)
 
 - Pure draft↔browsing transitions for `↑`/`↓` — the state machine the editor's arrow keys just drive.
-  [`logs-zone.logic.ts:549`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L549)
+  [`logs-zone.logic.ts:549`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L549)
 
 **Filter editor wiring (arrow-recall, grid, Tab fix)**
 
 - `browsing` added to the editor's draft state — non-null exactly while `↑`/`↓` are recalling.
-  [`logs-zone.tsx:142`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L142)
+  [`logs-zone.tsx:142`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L142)
 
 - Review-fix: Tab's mode toggle now resets `browsing` and restores the pre-browse draft, closing the stale-index-across-modes gap a reviewer found.
-  [`logs-zone.tsx:512`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L512)
+  [`logs-zone.tsx:512`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L512)
 
 - `↑`/`↓` dispatch into the pure resolvers above; `↓` on an untouched draft opens the grid instead.
-  [`logs-zone.tsx:528`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L528)
+  [`logs-zone.tsx:528`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L528)
 
 - Commit path — pushes into history only on a successful `Enter`, never on every keystroke.
-  [`logs-zone.tsx:501`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L501)
+  [`logs-zone.tsx:501`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L501)
 
 - Grid-browser render — reuses the generalized command-bar layout instead of a second bespoke grid.
-  [`logs-zone.tsx:1122`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L1122)
+  [`logs-zone.tsx:1122`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L1122)
 
 **Generalized grid primitive**
 
 - `columnDisplayWidth` takes a `getLabel` accessor instead of `Command.name` — the one real behavioral dependency that made the grid `Command`-specific.
-  [`command-bar.tsx:175`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L175)
+  [`command-bar.tsx:175`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L175)
 
 - `layoutCommandGrid`/`groupCommandsByColumn`/`commandAtGridCursor` generalized to `<T>`, now shared by the command bar and the filter-history grid.
-  [`command-bar.tsx:190`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L190)
+  [`command-bar.tsx:190`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L190)
 
 **Persistence (StatePort + race-condition fix)**
 
 - `filterHistory` added to `StatePort` alongside `splitterRatios` — same shape, same contract.
-  [`state.ts:27`](../../../src/core/ports/state.ts#L27)
+  [`state.ts:27`](../../../../src/core/ports/state.ts#L27)
 
 - Read-merge-write under lock so a `filterHistory` write never clobbers `activeEdt`/`splitterRatios` (or vice versa).
-  [`index.ts:229`](../../../src/adapters/driven/state/index.ts#L229)
+  [`index.ts:229`](../../../../src/adapters/driven/state/index.ts#L229)
 
 - Review-fix: a commit/clear now awaits any in-flight initial load before touching `filterHistory`, closing a silent-data-loss race a reviewer found.
-  [`logs-slice.ts:390`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L390)
+  [`logs-slice.ts:390`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L390)
 
 - The guard itself — a load-in-progress promise, published synchronously so a same-tick commit can await it.
-  [`logs-slice.ts:356`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L356)
+  [`logs-slice.ts:356`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L356)
 
 **Settings (new fields + Logs tab rework)**
 
 - Two new settings, `MIN`/`MAX` constants and defaults, single source of truth for the schema and the tab's clamps.
-  [`settings.ts:92`](../../../src/core/ports/settings.ts#L92)
+  [`settings.ts:92`](../../../../src/core/ports/settings.ts#L92)
 
 - The Logs tab's new row-cursor model — mirrors the EDTs tab's group-list precedent so 6 fields/actions stay reachable.
-  [`settings-screen.tsx:243`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L243)
+  [`settings-screen.tsx:243`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L243)
 
 - Per-service clear drill-down — the one row that mutates a different key (`repoPath`) than the rest of the tab.
-  [`settings-screen.tsx:387`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L387)
+  [`settings-screen.tsx:387`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L387)
 
 **Store wiring**
 
 - History hydrated once at mount, same idiom as `loadSplitterRatios`.
-  [`app-shell.tsx:253`](../../../src/adapters/driving/tui/app-shell.tsx#L253)
+  [`app-shell.tsx:253`](../../../../src/adapters/driving/tui/app-shell.tsx#L253)
 
 **Tests**
 
 - Race-condition regression — proves a commit/clear during the initial load no longer loses on-disk history.
-  [`app-store.test.ts`](../../../src/adapters/driving/tui/store/app-store.test.ts)
+  [`app-store.test.ts`](../../../../src/adapters/driving/tui/store/app-store.test.ts)
 
 - Full I/O-matrix + Tab-reset + grid-no-op + subscription-untouched coverage, real-keypress driven.
-  [`logs-zone.interaction.test.tsx`](../../../src/adapters/driving/tui/zones/logs/logs-zone.interaction.test.tsx)
+  [`logs-zone.interaction.test.tsx`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.interaction.test.tsx)
 
 - Pure-function coverage for the history core and the new settings rows.
-  [`logs-zone.logic.test.ts`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.test.ts), [`settings-screen.test.tsx`](../../../src/adapters/driving/tui/shared/settings-screen.test.tsx)
+  [`logs-zone.logic.test.ts`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.test.ts), [`settings-screen.test.tsx`](../../../../src/adapters/driving/tui/shared/settings-screen.test.tsx)

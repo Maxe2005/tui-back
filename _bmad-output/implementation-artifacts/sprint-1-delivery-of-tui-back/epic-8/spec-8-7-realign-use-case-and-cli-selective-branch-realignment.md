@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '97e1082aaa5d8251032813ccb38694a306dbda5f'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-8/epic-8-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-8/epic-8-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -64,7 +64,7 @@ context:
 - [x] `src/core/dashboard/drift.ts` (+ test), `snapshot.ts` -- `listDriftCandidates`, snapshot tests unchanged -- candidates
 - [x] `src/core/realign/index.ts` (+ test) -- `resolveRealignSelection`, `realignServices` covering the matrix, lock, log, restart; export from `src/core/index.ts` -- use-case
 - [x] `src/adapters/driving/cli/subcommands.ts` (+ `dispatch.test.ts`) -- `realign` subcommand, `REALIGN_USAGE`, envelope `{rows, restart?}` -- CLI
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 2-44 and 8-6 to `done` (stale), 8-7 to `in-progress` -- tracking
+- [x] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- 2-44 and 8-6 to `done` (stale), 8-7 to `in-progress` -- tracking
 
 **Acceptance Criteria:**
 - Given a realign holding the lock, when `update`, `edt switch` or another `realign` starts, then it is rejected; given a switch in flight, when `realign` starts, then it is rejected.

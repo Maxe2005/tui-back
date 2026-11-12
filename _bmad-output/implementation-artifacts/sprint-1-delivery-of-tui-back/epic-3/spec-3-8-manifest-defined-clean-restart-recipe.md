@@ -5,7 +5,7 @@ created: '2026-09-24'
 status: 'done'
 baseline_commit: '87f23e8e1f41c3aff1206ef5db0dad7030247e79'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -81,37 +81,37 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 **Restart decision (entry point)**
 
 - Core owns the recipe-vs-plain branch, never both ports per service
-  [`group-update.ts:741`](../../../src/core/scripts/group-update.ts#L741)
+  [`group-update.ts:741`](../../../../src/core/scripts/group-update.ts#L741)
 
 - Single-command port keeps loop and stop-on-first-failure core-side
-  [`restart.ts:10`](../../../src/core/ports/restart.ts#L10)
+  [`restart.ts:10`](../../../../src/core/ports/restart.ts#L10)
 
 **Contract and manifest**
 
 - Optional ordered recipe beside migrationCommand, absent stays undefined
-  [`manifest.ts:10`](../../../src/core/ports/manifest.ts#L10)
+  [`manifest.ts:10`](../../../../src/core/ports/manifest.ts#L10)
 
 - Zod validation mirrors migrationCommand blank rejection
-  [`schema.ts:23`](../../../src/adapters/driven/manifest/schema.ts#L23)
+  [`schema.ts:23`](../../../../src/adapters/driven/manifest/schema.ts#L23)
 
 - Injectable shell with repo cwd and kebab-case failures, never throws
-  [`index.ts:25`](../../../src/adapters/driven/restart/index.ts#L25)
+  [`index.ts:25`](../../../../src/adapters/driven/restart/index.ts#L25)
 
 **Threading**
 
 - Both CLI scopes pass the new port, no new flags
-  [`subcommands.ts:159`](../../../src/adapters/driving/cli/subcommands.ts#L159)
+  [`subcommands.ts:159`](../../../../src/adapters/driving/cli/subcommands.ts#L159)
 
 - Missing-port guard extended, store degrades explicitly
-  [`update-slice.ts:393`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L393)
+  [`update-slice.ts:393`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L393)
 
 **Peripherals**
 
 - Recipe matrix plus all-scope and repeated-failure coverage
-  [`group-update.test.ts:1988`](../../../src/core/scripts/group-update.test.ts#L1988)
+  [`group-update.test.ts:1988`](../../../../src/core/scripts/group-update.test.ts#L1988)
 
 - Adapter integration against stub and real shell
-  [`index.test.ts:48`](../../../src/adapters/driven/restart/index.test.ts#L48)
+  [`index.test.ts:48`](../../../../src/adapters/driven/restart/index.test.ts#L48)
 
 - Black-box fallback and recipe-untouched runs
-  [`tui-back.e2e.test.ts:1909`](../../../src/bin/tui-back.e2e.test.ts#L1909)
+  [`tui-back.e2e.test.ts:1909`](../../../../src/bin/tui-back.e2e.test.ts#L1909)

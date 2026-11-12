@@ -1,6 +1,6 @@
 ---
 date: 2026-08-28
-trigger: 'Real-usage debugging campaign for EDT management (opened by Sprint Change Proposal 2026-08-27, §"Debug-log process") — 6 findings recorded in `_bmad-output/implementation-artifacts/epic-2/edt-management-debug-log.md` while exercising create/switch/modify for the first time end-to-end'
+trigger: 'Real-usage debugging campaign for EDT management (opened by Sprint Change Proposal 2026-08-27, §"Debug-log process") — 6 findings recorded in `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/edt-management-debug-log.md` while exercising create/switch/modify for the first time end-to-end'
 mode: incremental
 epic_impact: 'Epic 2 (in-progress) — 5 new stories appended (2.22-2.26), one in-place amendment to Story 2.2 (done, TUI-path narrowing only), no epic redefinition, no PRD/MVP change beyond one FR-4 consequence-level amendment.'
 scope_classification: minor

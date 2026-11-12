@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: b7a45ffbbd876683fd2aac1d01e7b819bb32e538
 review_loop_iteration: 0
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
   - '_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md'
 ---
 
@@ -58,7 +58,7 @@ context:
 - [x] `src/adapters/driven/git/index.test.ts` -- unit-test `assertAllowedBranch`.
 - [x] `src/bin/tui-back.e2e.test.ts` -- e2e case for disabled+shared.
 - [x] `_bmad-output/implementation-artifacts/deferred-work.md` -- mark fallback item resolved.
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip 2.3 to `in-progress` then `review` (code review gates `done`).
+- [x] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- flip 2.3 to `in-progress` then `review` (code review gates `done`).
 
 **Acceptance Criteria:**
 - Given any git write path, when the target is shared/protected, then the adapter-level gate rejects it before any `git` invocation (AD-8).
@@ -87,41 +87,41 @@ context:
 **The reusable branch-scope gate**
 
 - Entry point: the new port method every git write (and every branch-reuse read) must pass.
-  [`git.ts:15`](../../../src/core/ports/git.ts#L15)
+  [`git.ts:15`](../../../../src/core/ports/git.ts#L15)
 
 - Story 2.2's inline shared-branch check, extracted into one adapter-resolved gate function.
-  [`index.ts:37`](../../../src/adapters/driven/git/index.ts#L37)
+  [`index.ts:37`](../../../../src/adapters/driven/git/index.ts#L37)
 
 - `createBranch` now delegates to the gate first instead of checking inline.
-  [`index.ts:57`](../../../src/adapters/driven/git/index.ts#L57)
+  [`index.ts:57`](../../../../src/adapters/driven/git/index.ts#L57)
 
 - `deleteBranch` delegates too, with a purpose-neutral rejection message shared across both.
-  [`index.ts:96`](../../../src/adapters/driven/git/index.ts#L96)
+  [`index.ts:96`](../../../../src/adapters/driven/git/index.ts#L96)
 
 **Closing the fallback leak in EDT creation**
 
 - The branch-creation-disabled path gates the member's *existing* current branch before reuse — the leak Story 2.2 shipped with.
-  [`create.ts:314`](../../../src/core/edt/create.ts#L314)
+  [`create.ts:314`](../../../../src/core/edt/create.ts#L314)
 
 - The per-member loop excludes any `failed` member from the registered `members` array, closing every fallback path at once.
-  [`create.ts:239`](../../../src/core/edt/create.ts#L239)
+  [`create.ts:239`](../../../../src/core/edt/create.ts#L239)
 
 - `ResolvedMemberBranch.branch` is now optional, reflecting that a failed member never has one worth recording.
-  [`create.ts:279`](../../../src/core/edt/create.ts#L279)
+  [`create.ts:279`](../../../../src/core/edt/create.ts#L279)
 
 **Tests locking in the matrix**
 
 - Direct unit coverage of the new gate: shared branches, manifest `sharedBranch`, and the passing case.
-  [`index.test.ts:77`](../../../src/adapters/driven/git/index.test.ts#L77)
+  [`index.test.ts:77`](../../../../src/adapters/driven/git/index.test.ts#L77)
 
 - Matrix case: disabled branch-creation + shared current branch → excluded, no git write.
-  [`create.test.ts:234`](../../../src/core/edt/create.test.ts#L234)
+  [`create.test.ts:234`](../../../../src/core/edt/create.test.ts#L234)
 
 - Edge case: the gate can fail with a non-`shared-branch-rejected` code too — still excluded.
-  [`create.test.ts:264`](../../../src/core/edt/create.test.ts#L264)
+  [`create.test.ts:264`](../../../../src/core/edt/create.test.ts#L264)
 
 - Matrix case: `createBranch` fails and the old fallback branch would have been shared → excluded.
-  [`create.test.ts:446`](../../../src/core/edt/create.test.ts#L446)
+  [`create.test.ts:446`](../../../../src/core/edt/create.test.ts#L446)
 
 - Black-box confirmation through the real CLI + a real git repo.
-  [`tui-back.e2e.test.ts:703`](../../../src/bin/tui-back.e2e.test.ts#L703)
+  [`tui-back.e2e.test.ts:703`](../../../../src/bin/tui-back.e2e.test.ts#L703)

@@ -7,7 +7,7 @@ baseline_commit: '94d7ee8b9969e883059b51793119b5115dbce3d5'
 review_loop_iteration: 0
 context:
   - '{project-root}/AGENTS.md'
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-7/interaction-inventory-7-4.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/interaction-inventory-7-4.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -129,7 +129,7 @@ Removed: `UpdateConfigDialog`, `resolveUpdateConfigKey`, the single-row cursor/e
 **Contract**
 
 - Validated UX-DR36 table and its deviations: the reference everything conforms to.
-  [`EXPERIENCE.md`](../../../_bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md)
+  [`EXPERIENCE.md`](../../../planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md)
 
 - Evidence behind it: per-intent inventory and divergences.
   [`interaction-inventory-7-4.md`](interaction-inventory-7-4.md)
@@ -137,24 +137,24 @@ Removed: `UpdateConfigDialog`, `resolveUpdateConfigKey`, the single-row cursor/e
 **Shared helpers**
 
 - One hint format: `[Key] verb`, two-space separator.
-  [`hints.ts:8`](../../../src/adapters/driving/tui/shared/components/hints.ts#L8)
+  [`hints.ts:8`](../../../../src/adapters/driving/tui/shared/components/hints.ts#L8)
 
 - One loading/empty/error line with retry text.
-  [`state-line.tsx:24`](../../../src/adapters/driving/tui/shared/components/state-line.tsx#L24)
+  [`state-line.tsx:24`](../../../../src/adapters/driving/tui/shared/components/state-line.tsx#L24)
 
 - Shared Home/End cursor and box-line movement (Tab, not value flip).
-  [`list-cursor.ts:9`](../../../src/adapters/driving/tui/shared/keys/list-cursor.ts#L9)
-  [`box-line-nav.ts:7`](../../../src/adapters/driving/tui/shared/keys/box-line-nav.ts#L7)
+  [`list-cursor.ts:9`](../../../../src/adapters/driving/tui/shared/keys/list-cursor.ts#L9)
+  [`box-line-nav.ts:7`](../../../../src/adapters/driving/tui/shared/keys/box-line-nav.ts#L7)
 
 - Footer derived from the keybinding declarations.
-  [`footer.tsx:28`](../../../src/adapters/driving/tui/shared/components/footer.tsx#L28)
+  [`footer.tsx:28`](../../../../src/adapters/driving/tui/shared/components/footer.tsx#L28)
 
 **Merged Update config**
 
 - Single-service now uses the two-panel screen with its own minimum height.
-  [`update-config-panels.logic.ts:253`](../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L253)
+  [`update-config-panels.logic.ts:253`](../../../../src/adapters/driving/tui/zones/update/update-config-panels.logic.ts#L253)
 
 **Key changes**
 
 - BranchPicker rename moves to Ctrl+T (Ink exposes no F2).
-  [`branch-picker.tsx:358`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L358)
+  [`branch-picker.tsx:358`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L358)

@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '94fcb1c076ec35c72e520e6e3cb5c3238267af84'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-11-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-11-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -71,32 +71,32 @@ context:
 **Install output**
 
 - Constants for the printed command, JSON config and uninstall note; nothing is ever applied.
-  [`install.ts:177`](../../../src/adapters/driving/cli/install.ts#L177)
+  [`install.ts:177`](../../../../src/adapters/driving/cli/install.ts#L177)
 
 - Install result gains `mcp`; config is cloned so consumers cannot mutate the shared object.
-  [`install.ts:236`](../../../src/adapters/driving/cli/install.ts#L236)
+  [`install.ts:236`](../../../../src/adapters/driving/cli/install.ts#L236)
 
 - Uninstall result gains `mcpNote`.
-  [`install.ts:260`](../../../src/adapters/driving/cli/install.ts#L260)
+  [`install.ts:260`](../../../../src/adapters/driving/cli/install.ts#L260)
 
 - Human text prints the command and JSON labelled "not applied".
-  [`install.ts:290`](../../../src/adapters/driving/cli/install.ts#L290)
+  [`install.ts:290`](../../../../src/adapters/driving/cli/install.ts#L290)
 
 **Documentation**
 
 - README MCP section: registration, scope and PATH notes, tools by safety class.
-  [`README.md:50`](../../../README.md#L50)
+  [`README.md:50`](../../../../README.md#L50)
 
 - Authorization and fail-closed rules, plus the real-endpoints warning.
-  [`README.md:86`](../../../README.md#L86)
+  [`README.md:86`](../../../../README.md#L86)
 
 - Install doc documents the new result fields and that no client config is touched.
-  [`tui-back-install.md:29`](../../../docs/tui-back-install.md#L29)
+  [`tui-back-install.md:29`](../../../../docs/tui-back-install.md#L29)
 
 **Tests**
 
 - Install result, files written, failures carry no MCP text.
-  [`install.test.ts:127`](../../../src/adapters/driving/cli/install.test.ts#L127)
+  [`install.test.ts:127`](../../../../src/adapters/driving/cli/install.test.ts#L127)
 
 - README tool lists must equal the registry per safety class.
-  [`tool-registry.test.ts:72`](../../../src/adapters/driving/mcp/tool-registry.test.ts#L72)
+  [`tool-registry.test.ts:72`](../../../../src/adapters/driving/mcp/tool-registry.test.ts#L72)

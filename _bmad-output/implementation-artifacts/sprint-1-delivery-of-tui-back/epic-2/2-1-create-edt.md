@@ -66,8 +66,8 @@ so that I can work in an isolated repository context with its own configuration 
 - [x] [Review][Patch] Every rollback path swallows `rmSync` cleanup failures silently (`catch {}`) — fixed: cleanup failures are now logged via `console.error` instead of being discarded. [src/core/edt/create.ts]
 - [x] [Review][Patch] No `existsSync` guard before creating the EDT directory — fixed: `createEdt` now returns `edt-creation-failed` if `edtDir` already exists, before ever writing to it. [src/core/edt/create.ts:28-32]
 - [x] [Review][Patch] Dead imports: `existsSync`/`ManifestPort` unused in create.ts; `ok`/`err` unused in main.ts — fixed as part of the rewrite (both files' import lists now match what's actually used). [src/core/edt/create.ts, src/bin/main.ts]
-- [x] [Review][Patch] Missing trailing newline in create.ts and the new story markdown file — fixed. [src/core/edt/create.ts, _bmad-output/implementation-artifacts/epic-2/2-1-create-edt.md]
-- [x] [Review][Patch] Story file's Tasks/Subtasks checkboxes and Dev Agent Record (File List, Completion Notes, Debug Log) don't reflect actual implementation state — fixed below. [_bmad-output/implementation-artifacts/epic-2/2-1-create-edt.md]
+- [x] [Review][Patch] Missing trailing newline in create.ts and the new story markdown file — fixed. [src/core/edt/create.ts, _bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/2-1-create-edt.md]
+- [x] [Review][Patch] Story file's Tasks/Subtasks checkboxes and Dev Agent Record (File List, Completion Notes, Debug Log) don't reflect actual implementation state — fixed below. [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/2-1-create-edt.md]
 
 ### Dev Notes
 
@@ -95,8 +95,8 @@ so that I can work in an isolated repository context with its own configuration 
 
 ### References
 
-- [Source: _bmad-output/planning-artifacts/epics.md#Epic 2: EDT Workspace Management]
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 2.1: Create an EDT]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Epic 2: EDT Workspace Management]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 2.1: Create an EDT]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-1 — Dependency direction is one-way, driving adapters never touch driven adapters directly]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-4 — Manifest is the only per-repo activation surface]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-7 — Storage topology and schema-migration mechanism]

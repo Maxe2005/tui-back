@@ -5,7 +5,7 @@ created: '2026-10-08'
 status: 'done'
 baseline_commit: 'aeadad76bd09b40de2ed1732f930c74f7c8def55'
 review_loop_iteration: 1
-context: [_bmad-output/implementation-artifacts/epic-4-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-4-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — renegotiated 2026-10-08 after review loop 1 (single coarse run, no resume, ambiguous-source blocks)">
@@ -87,40 +87,40 @@ The release script is opaque to the tool (no step protocol, no markers), so step
 **Single-execution publish**
 
 - Core use-case: exactly one command run, then read plus registry-verify before success
-  [`publish-version.ts:24`](../../../src/core/shared-types/publish-version.ts#L24)
+  [`publish-version.ts:24`](../../../../src/core/shared-types/publish-version.ts#L24)
 
 - Port addition: source's own version, trimmed, never a dependency line
-  [`shared-types.ts:14`](../../../src/core/ports/shared-types.ts#L14)
+  [`shared-types.ts:14`](../../../../src/core/ports/shared-types.ts#L14)
 
 - Adapter: targeted read without re-serialisation
-  [`npm-package.ts:109`](../../../src/adapters/driven/modules/shared-types/npm-package.ts#L109)
+  [`npm-package.ts:109`](../../../../src/adapters/driven/modules/shared-types/npm-package.ts#L109)
 
 **Source resolution and wiring**
 
 - Active-EDT source listing shared with consumers; several sources stay ambiguous
-  [`list-consumers.ts:51`](../../../src/core/shared-types/list-consumers.ts#L51)
+  [`list-consumers.ts:51`](../../../../src/core/shared-types/list-consumers.ts#L51)
 
 - Composition root wires source independently of consumer presence
-  [`tui.ts:138`](../../../src/bin/tui.ts#L138)
+  [`tui.ts:138`](../../../../src/bin/tui.ts#L138)
 
 **Store and zone**
 
 - Single-source resolution, guarded run plus re-verifying retry
-  [`shared-types-slice.ts:159`](../../../src/adapters/driving/tui/store/slices/shared-types-slice.ts#L159)
+  [`shared-types-slice.ts:159`](../../../../src/adapters/driving/tui/store/slices/shared-types-slice.ts#L159)
 
 - Coarse running view, failure plus relaunch, success plus chain offer
-  [`shared-types-zone.tsx:245`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L245)
+  [`shared-types-zone.tsx:245`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L245)
 
 - Pure key decisions for publish entry, blocked and done states
-  [`shared-types-zone.logic.ts:121`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L121)
+  [`shared-types-zone.logic.ts:121`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L121)
 
 **Tests**
 
 - Use-case: single execution, gates, verify-before-mark, failure mappings
-  [`publish-version.test.ts:1`](../../../src/core/shared-types/publish-version.test.ts#L1)
+  [`publish-version.test.ts:1`](../../../../src/core/shared-types/publish-version.test.ts#L1)
 
 - Slice: ambiguous source, already-published retry, guard notices, error mappings
-  [`shared-types-publish.test.ts:1`](../../../src/adapters/driving/tui/store/slices/shared-types-publish.test.ts#L1)
+  [`shared-types-publish.test.ts:1`](../../../../src/adapters/driving/tui/store/slices/shared-types-publish.test.ts#L1)
 
 - Zone: gating, spinner, relaunch, chain pre-fill, quit confirm
-  [`shared-types-publish.interaction.test.tsx:1`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-publish.interaction.test.tsx#L1)
+  [`shared-types-publish.interaction.test.tsx:1`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-publish.interaction.test.tsx#L1)

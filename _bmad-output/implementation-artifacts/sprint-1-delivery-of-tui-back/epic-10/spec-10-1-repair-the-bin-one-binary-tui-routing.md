@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: 'b57abb90479d691ee175a9e7f9a5a2def59c06cf'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-10-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-10-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -79,24 +79,24 @@ Spike result: `npm pack` + `npm i -g --prefix <tmp> ./tui-back-1.0.0.tgz` succee
 **Single-binary routing**
 
 - Entry point: `argv[2] === 'tui'` picks the TUI, otherwise the CLI.
-  [`tui-back.mjs:6`](../../../src/bin/tui-back.mjs#L6)
+  [`tui-back.mjs:6`](../../../../src/bin/tui-back.mjs#L6)
 
 - Dangling `tui-back-tui` bin removed; `tsx` now a runtime dependency.
-  [`package.json:9`](../../../package.json#L9)
+  [`package.json:9`](../../../../package.json#L9)
 
 - `tui` is listed statically in `--help`, outside the subcommand registry.
-  [`dispatch.ts:23`](../../../src/adapters/driving/cli/dispatch.ts#L23)
+  [`dispatch.ts:23`](../../../../src/adapters/driving/cli/dispatch.ts#L23)
 
 - Non-TTY message renamed to match the new command.
-  [`tui.ts:45`](../../../src/bin/tui.ts#L45)
+  [`tui.ts:45`](../../../../src/bin/tui.ts#L45)
 
 **Tests and docs**
 
 - Bin keys, executable target, non-TTY `tui` exit and help entry.
-  [`tui-back.e2e.test.ts:142`](../../../src/bin/tui-back.e2e.test.ts#L142)
+  [`tui-back.e2e.test.ts:142`](../../../../src/bin/tui-back.e2e.test.ts#L142)
 
 - Help expectation includes the static entry.
-  [`dispatch.test.ts:118`](../../../src/adapters/driving/cli/dispatch.test.ts#L118)
+  [`dispatch.test.ts:118`](../../../../src/adapters/driving/cli/dispatch.test.ts#L118)
 
 - Stale `cli-back.mjs` / `tui-back-tui` mentions dropped.
-  [`AGENTS.md:8`](../../../AGENTS.md#L8)
+  [`AGENTS.md:8`](../../../../AGENTS.md#L8)

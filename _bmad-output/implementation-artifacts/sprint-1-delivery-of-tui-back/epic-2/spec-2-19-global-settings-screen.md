@@ -6,8 +6,8 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '6c8505b98f6a29fcfc6cc5bad7dfe60a134374af'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
-  - '_bmad-output/implementation-artifacts/epic-2/epic-2-context.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
+  - '_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -135,67 +135,67 @@ context:
 **Settings model & shared bounds**
 
 - Entry point: the `Settings` contract plus the [MIN, MAX] range shared by the zod schema and the screen's own clamp, so gridMaxRows can never drift between the two.
-  [`settings.ts:12`](../../../src/core/ports/settings.ts#L12)
+  [`settings.ts:12`](../../../../src/core/ports/settings.ts#L12)
 
 - Zod enforces the same upper/lower bound as the live UI clamp — a hand-edited `settings.yaml` with an out-of-range value now falls back to defaults instead of silently persisting.
-  [`schema.ts:17`](../../../src/adapters/driven/settings/schema.ts#L17)
+  [`schema.ts:17`](../../../../src/adapters/driven/settings/schema.ts#L17)
 
 **Load/save adapter (the one genuinely novel I/O path)**
 
 - `loadSettings`/`saveSettings` mirror the registry adapter's read/parse/validate flow; corrupt/invalid files are always `ok` with a warning, never an `err`.
-  [`index.ts:31`](../../../src/adapters/driven/settings/index.ts#L31)
+  [`index.ts:31`](../../../../src/adapters/driven/settings/index.ts#L31)
 
 - `resolveSettingsFile`/`createSettingsPort` -- the XDG-path + port-factory pair the composition root wires in.
-  [`index.ts:20`](../../../src/adapters/driven/settings/index.ts#L20)
+  [`index.ts:20`](../../../../src/adapters/driven/settings/index.ts#L20)
 
 **Store slice: optimistic update, serialized persistence, stale-load guard**
 
 - `settingsSaveChain`/`settingsVersion` -- closure-scoped state added in the review-loop patch pass: serializes concurrent `updateSettings()` disk writes in request order, and lets `loadSettings()` detect it's been superseded.
-  [`app-store.ts:307`](../../../src/adapters/driving/tui/store/app-store.ts#L307)
+  [`app-store.ts:307`](../../../../src/adapters/driving/tui/store/app-store.ts#L307)
 
 - `loadSettings()` captures its start version and discards a stale in-flight result rather than clobbering a newer optimistic update.
-  [`app-store.ts:542`](../../../src/adapters/driving/tui/store/app-store.ts#L542)
+  [`app-store.ts:542`](../../../../src/adapters/driving/tui/store/app-store.ts#L542)
 
 - `updateSettings()` bumps the version, applies optimistically, then chains its `save()` onto the pending chain and clears `settingsWarning` on success.
-  [`app-store.ts:563`](../../../src/adapters/driving/tui/store/app-store.ts#L563)
+  [`app-store.ts:563`](../../../../src/adapters/driving/tui/store/app-store.ts#L563)
 
 - `closeSettingsScreen()` also clears `settingsWarning` -- closing acknowledges a previously-surfaced warning instead of leaving it to linger.
-  [`app-store.ts:238`](../../../src/adapters/driving/tui/store/app-store.ts#L238)
+  [`app-store.ts:238`](../../../../src/adapters/driving/tui/store/app-store.ts#L238)
 
 **Settings screen: tab strip, grid-rows control, hint checkboxes**
 
 - `SettingsScreen` -- the modal's tab cycling, digit/arrow grid-rows editing, and checkbox hint-toggling, wired to the store slice above.
-  [`settings-screen.tsx:132`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L132)
+  [`settings-screen.tsx:132`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L132)
 
 - `clampGridMaxRows`/`adjustGridMaxRows`/`parseGridMaxRowsDigit` -- pure functions behind the Command Palette tab, now bounded by the shared `MIN_GRID_MAX_ROWS`/`MAX_GRID_MAX_ROWS` re-exported from `core/ports/settings.ts`.
-  [`settings-screen.tsx:78`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L78)
+  [`settings-screen.tsx:78`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L78)
 
 - `HIDEABLE_ACTION_HINTS`/`toggleHiddenHint`/`moveHintCursor` -- the EDTs tab's checkbox list over Story 2.18's actual hint tokens.
-  [`settings-screen.tsx:99`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L99)
+  [`settings-screen.tsx:99`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L99)
 
 **Live downstream consumers**
 
 - `command-bar.tsx` reads `store.settings.commandPalette.gridMaxRows` in place of the old constant -- confirms a Command Palette tab change is visibly live without restarting.
-  [`command-bar.tsx:326`](../../../src/adapters/driving/tui/shared/command-bar.tsx#L326)
+  [`command-bar.tsx:326`](../../../../src/adapters/driving/tui/shared/command-bar.tsx#L326)
 
 - `edts-zone.tsx` filters the rendered action hint by `store.settings.edts.hiddenActionHints` -- confirms an EDTs-tab checkbox toggle is visibly live.
-  [`edts-zone.tsx:342`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L342)
+  [`edts-zone.tsx:342`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L342)
 
 **Wiring & composition root**
 
 - `app-shell.tsx` mounts/gates/Esc-closes `SettingsScreen` exactly like `registryScreenOpen`, and loads settings once at mount.
-  [`app-shell.tsx:259`](../../../src/adapters/driving/tui/app-shell.tsx#L259)
+  [`app-shell.tsx:259`](../../../../src/adapters/driving/tui/app-shell.tsx#L259)
 
 - `commands.ts`'s `settings` command entry -- the only way to reach the screen (never a raw keypress).
-  [`commands.ts:40`](../../../src/adapters/driving/tui/commands/commands.ts#L40)
+  [`commands.ts:40`](../../../../src/adapters/driving/tui/commands/commands.ts#L40)
 
 - `tui.ts` composition root -- `resolveSettingsFile`/`createSettingsPort` wired into `createAppStore`.
-  [`tui.ts:102`](../../../src/bin/tui.ts#L102)
+  [`tui.ts:102`](../../../../src/bin/tui.ts#L102)
 
 **Peripherals**
 
 - New unit tests covering the serialized-save and stale-load-guard patches (`app-store.test.ts`) and the out-of-range `gridMaxRows` fallback (`index.test.ts`).
-  [`app-store.test.ts:628`](../../../src/adapters/driving/tui/store/app-store.test.ts#L628)
+  [`app-store.test.ts:628`](../../../../src/adapters/driving/tui/store/app-store.test.ts#L628)
 
 ## Suggested Review Order — Amendment (2026-08-28)
 
@@ -204,42 +204,42 @@ Scoped to this round's diff only (since `baseline_commit`) — the EDTs tab's gr
 **Model: the new field**
 
 - `Settings.edts` gains `hiddenActionTypes: string[]`, defaulted to `[]` alongside the existing `hiddenActionHints` — the additive shape this whole amendment hangs off.
-  [`settings.ts:21`](../../../src/core/ports/settings.ts#L21)
+  [`settings.ts:21`](../../../../src/core/ports/settings.ts#L21)
 
 - Matching zod field, same `.strict()` object as `hiddenActionHints` — an old `settings.yaml` missing it now fails validation and falls back to every default, per the frozen Boundaries' documented "corrupt/invalid falls back to every default" convention.
-  [`schema.ts:22`](../../../src/adapters/driven/settings/schema.ts#L22)
+  [`schema.ts:22`](../../../../src/adapters/driven/settings/schema.ts#L22)
 
 **Filter: hiding action types from the "Recent actions" log**
 
 - `formatEdtActionHistory` gains a `hiddenActionTypes` parameter, filtering `actionLog` before rendering — same live-read-no-cache pattern as the existing hint filter; a fully-hidden log reads as "No actions yet" rather than a dangling header.
-  [`edts-zone.tsx:290`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L290)
+  [`edts-zone.tsx:290`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L290)
 
 - Call site reads `store.settings.edts.hiddenActionTypes` live and threads it into the render — confirms an EDTs-tab checkbox toggle is visibly live.
-  [`edts-zone.tsx:1502`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1502)
+  [`edts-zone.tsx:1502`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1502)
 
 **EDTs tab: the new group-list drill-down (AC6)**
 
 - `drilledIn`/`SETTINGS_GROUPS`/`HIDEABLE_ACTION_TYPES` — the two-level state machine (group list → checkbox list) this amendment's whole UX hinges on.
-  [`settings-screen.tsx:152`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L152)
+  [`settings-screen.tsx:152`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L152)
 
 - `useInput`'s Esc branch: tab-aware — steps back one level when drilled in, otherwise closes the whole screen (amended Boundaries).
-  [`settings-screen.tsx:199`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L199)
+  [`settings-screen.tsx:199`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L199)
 
 - Tab/Left/Right cycling is now gated on `!drilledIn` (AC1 amended) — prevents cycling away from underneath a drilled-in group.
-  [`settings-screen.tsx:213`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L213)
+  [`settings-screen.tsx:213`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L213)
 
 - Group-list level's own Up/Down/Enter handling, and the drilled-in "action-types" checkbox handling reusing `toggleHiddenHint`/`moveHintCursor` from the first round.
-  [`settings-screen.tsx:248`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L248)
+  [`settings-screen.tsx:248`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L248)
 
 **Wiring: Esc-close ownership moved out of AppShell**
 
 - `SettingsScreen` now owns its own Esc-close via an `onClose` prop (mirrors `CommandBar`'s existing pattern) — necessary because only `SettingsScreen` knows whether a group is drilled in; AppShell's previous centralized Esc-close couldn't express that. The one change beyond the spec's amended Code Map.
-  [`app-shell.tsx:284`](../../../src/adapters/driving/tui/app-shell.tsx#L284)
+  [`app-shell.tsx:284`](../../../../src/adapters/driving/tui/app-shell.tsx#L284)
 
 **Peripherals**
 
 - `SettingsUpdate`'s type tightened to make `commandPalette`/`edts` independently partial, so a caller can update just `hiddenActionTypes` without also supplying `hiddenActionHints` — the runtime shallow-merge already allowed this; only the type didn't.
-  [`app-store.ts:135`](../../../src/adapters/driving/tui/store/app-store.ts#L135)
+  [`app-store.ts:135`](../../../../src/adapters/driving/tui/store/app-store.ts#L135)
 
 - New tests: the group-list pure functions and two-level Enter/Esc navigation (`settings-screen.test.tsx`), the action-type filter (`edts-zone.test.tsx`), and the tab-cycle-suppression/two-stage-Esc interaction regressions (`app-shell.interaction.test.tsx`).
-  [`settings-screen.test.tsx:133`](../../../src/adapters/driving/tui/shared/settings-screen.test.tsx#L133)
+  [`settings-screen.test.tsx:133`](../../../../src/adapters/driving/tui/shared/settings-screen.test.tsx#L133)

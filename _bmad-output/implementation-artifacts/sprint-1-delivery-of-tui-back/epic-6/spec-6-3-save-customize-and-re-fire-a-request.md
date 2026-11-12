@@ -6,7 +6,7 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '422be0eecdbb1d4b39c59b8b572bc51fdee056d6'
 context:
-  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/epic-6-context.md'
+  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -95,54 +95,54 @@ context:
 **Core library (start here)**
 
 - One fire path: load, override, fire, persist back with fired details
-  [`saved-requests.ts:280`](../../../src/core/routes/saved-requests.ts#L280)
+  [`saved-requests.ts:280`](../../../../src/core/routes/saved-requests.ts#L280)
 
 - Fail-open stale per repo; fire-time unknown-route stays the hard gate
-  [`saved-requests.ts:200`](../../../src/core/routes/saved-requests.ts#L200)
+  [`saved-requests.ts:200`](../../../../src/core/routes/saved-requests.ts#L200)
 
 - Port contract: input-owned identity, overwrite preserves id/name
-  [`saved-request.ts:33`](../../../src/core/ports/saved-request.ts#L33)
+  [`saved-request.ts:33`](../../../../src/core/ports/saved-request.ts#L33)
 
 **Storage**
 
 - global.db factory, schema-on-open, named store errors
-  [`index.ts:112`](../../../src/adapters/driven/saved-requests/index.ts#L112)
+  [`index.ts:112`](../../../../src/adapters/driven/saved-requests/index.ts#L112)
 
 - Row validation fails loud and named, never silently drops
-  [`index.ts:35`](../../../src/adapters/driven/saved-requests/index.ts#L35)
+  [`index.ts:35`](../../../../src/adapters/driven/saved-requests/index.ts#L35)
 
 - 001 carries only saved_requests plus a repo_path index
-  [`schema-001.sql:1`](../../../src/adapters/driven/saved-requests/schema-001.sql#L1)
+  [`schema-001.sql:1`](../../../../src/adapters/driven/saved-requests/schema-001.sql#L1)
 
 **CLI parity**
 
 - --save pre-checks the collision before anything is fired
-  [`subcommands.ts:280`](../../../src/adapters/driving/cli/subcommands.ts#L280)
+  [`subcommands.ts:280`](../../../../src/adapters/driving/cli/subcommands.ts#L280)
 
 - request-fire forwards overrides plus overwrite/save-as choice
-  [`subcommands.ts:375`](../../../src/adapters/driving/cli/subcommands.ts#L375)
+  [`subcommands.ts:375`](../../../../src/adapters/driving/cli/subcommands.ts#L375)
 
 - Both composition roots inject the store like scanner/auth
-  [`main.ts:41`](../../../src/bin/main.ts#L41)
+  [`main.ts:41`](../../../../src/bin/main.ts#L41)
 
 **TUI**
 
 - Save prompt owns every key; Ctrl+O only on confirmed duplicates
-  [`routes-zone.tsx:1030`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1030)
+  [`routes-zone.tsx:1030`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1030)
 
 - Picker blocks stale rows with feedback, d deletes with confirm
-  [`routes-zone.tsx:1062`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1062)
+  [`routes-zone.tsx:1062`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1062)
 
 - Slice keeps origins, cache and drafts coherent across reloads
-  [`routes-slice.ts:432`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L432)
+  [`routes-slice.ts:432`](../../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L432)
 
 - Footer hints show only bound keys per context
-  [`routes-zone.tsx:1551`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1551)
+  [`routes-zone.tsx:1551`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L1551)
 
 **Tests (last)**
 
 - Core matrix plus manifest-failure and two-repo stale proofs
-  [`saved-requests.test.ts:62`](../../../src/core/routes/saved-requests.test.ts#L62)
+  [`saved-requests.test.ts:62`](../../../../src/core/routes/saved-requests.test.ts#L62)
 
 - Real-keypress save/collision/picker/delete flows end to end
-  [`routes-zone.interaction.test.tsx:1191`](../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L1191)
+  [`routes-zone.interaction.test.tsx:1191`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L1191)

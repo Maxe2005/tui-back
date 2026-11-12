@@ -121,62 +121,62 @@ baseline_commit: 'dc1e4d352cb7a5f6354ffcd8dbd901d87e65cdef'
 **First-EDT activation core**
 
 - Entry point: pre-flight → blocked/activated; nothing checked out while any at-risk path is unconfirmed.
-  [`activate.ts:74`](../../../src/core/edt/activate.ts#L74)
+  [`activate.ts:74`](../../../../src/core/edt/activate.ts#L74)
 
 - At-risk set and the confirmed-overwrite gate (a fresh unconfirmed path re-blocks).
-  [`activate.ts:120`](../../../src/core/edt/activate.ts#L120)
+  [`activate.ts:120`](../../../../src/core/edt/activate.ts#L120)
 
 - Pointer re-read under the edts.yaml lock closes the activate/switch race.
-  [`activate.ts:153`](../../../src/core/edt/activate.ts#L153)
+  [`activate.ts:153`](../../../../src/core/edt/activate.ts#L153)
 
 - Destination rule extracted from switch.ts so both use-cases share FR-8.
-  [`switch.ts:464`](../../../src/core/edt/switch.ts#L464)
+  [`switch.ts:464`](../../../../src/core/edt/switch.ts#L464)
 
 **Git primitives**
 
 - Consent-gated discard: literal pathspecs, chunked, restores tracked/staged, cleans untracked.
-  [`index.ts:615`](../../../src/adapters/driven/git/index.ts#L615)
+  [`index.ts:615`](../../../../src/adapters/driven/git/index.ts#L615)
 
 - Read-only branch diff with `--no-renames` so both rename sides count as at risk.
-  [`index.ts:582`](../../../src/adapters/driven/git/index.ts#L582)
+  [`index.ts:582`](../../../../src/adapters/driven/git/index.ts#L582)
 
 **Store: no more silent activation**
 
 - `createEdt` no longer writes `state.json`.
-  [`edt-slice.ts:288`](../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L288)
+  [`edt-slice.ts:288`](../../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L288)
 
 - New `activateEdt` action updates the cached pointer and tab visibility.
-  [`edt-slice.ts:316`](../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L316)
+  [`edt-slice.ts:316`](../../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L316)
 
 **Wizard Step 4 flows**
 
 - Submit: create once, then first-EDT activation, switch handoff or stay; logs to the new ulid.
-  [`create-wizard.tsx:93`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L93)
+  [`create-wizard.tsx:93`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L93)
 
 - Retry/Overwrite re-run only activation; error details surface as failed rows.
-  [`create-wizard.tsx:154`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L154)
+  [`create-wizard.tsx:154`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/create-wizard.tsx#L154)
 
 - Pure key reducer: radio, R/E/Esc pause panel, Ctrl+E overwrite confirm.
-  [`activation.logic.ts:50`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/activation.logic.ts#L50)
+  [`activation.logic.ts:50`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/activation.logic.ts#L50)
 
 - Step 4 state shape.
-  [`edts-zone.logic.ts:674`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L674)
+  [`edts-zone.logic.ts:674`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L674)
 
 - Views: locked "Oui", radio + info block, pause panel, confirm, terminal messages.
-  [`step-activation.tsx:147`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-activation.tsx#L147)
+  [`step-activation.tsx:147`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-activation.tsx#L147)
 
 **Switch handoff**
 
 - Opens the switch dialog on the new EDT and runs it at once (2.41 resolution reused).
-  [`switch-dialog.tsx:145`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L145)
+  [`switch-dialog.tsx:145`](../../../../src/adapters/driving/tui/zones/edts/dialogs/switch-dialog.tsx#L145)
 
 - Looks the new EDT up in the reloaded store; not-found keeps it inactive and logs.
-  [`edts-zone.tsx:591`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L591)
+  [`edts-zone.tsx:591`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L591)
 
 **Peripherals**
 
 - Step 4 interaction suite (first EDT, switch/stay, partial/total failures, log target).
-  [`edts-zone.interaction.test.tsx:3688`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3688)
+  [`edts-zone.interaction.test.tsx:3688`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3688)
 
 - Keybinding contract for Step 4.
-  [`keybindings.ts:108`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L108)
+  [`keybindings.ts:108`](../../../../src/adapters/driving/tui/keybindings/keybindings.ts#L108)

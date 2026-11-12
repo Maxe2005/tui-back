@@ -5,7 +5,7 @@ created: '2026-10-08'
 status: 'done'
 baseline_commit: '7c7047cad47ee02f2f1d02ff96b2e4d8e6c45727'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-4-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-4-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -87,42 +87,42 @@ Consumer discovery needs each member's `shared-types-consumer` config. Core cann
 **Propagation use-case**
 
 - Entry point: verify first, then per-service gate, dirty check, write, install, restart, commit.
-  [`propagate-version.ts:114`](../../../src/core/shared-types/propagate-version.ts#L114)
+  [`propagate-version.ts:114`](../../../../src/core/shared-types/propagate-version.ts#L114)
 
 - Version format guard blocks malformed input before any registry call.
-  [`propagate-version.ts:85`](../../../src/core/shared-types/propagate-version.ts#L85)
+  [`propagate-version.ts:85`](../../../../src/core/shared-types/propagate-version.ts#L85)
 
 - Active EDT consumers resolved from manifests without core naming the module.
-  [`list-consumers.ts:45`](../../../src/core/shared-types/list-consumers.ts#L45)
+  [`list-consumers.ts:45`](../../../../src/core/shared-types/list-consumers.ts#L45)
 
 **Git safety**
 
 - Gated path-scoped staging; only the named files, never a push.
-  [`index.ts:909`](../../../src/adapters/driven/git/index.ts#L909)
+  [`index.ts:909`](../../../../src/adapters/driven/git/index.ts#L909)
 
 - `commit --only` keeps foreign staged files out of the bump commit.
-  [`index.ts:926`](../../../src/adapters/driven/git/index.ts#L926)
+  [`index.ts:926`](../../../../src/adapters/driven/git/index.ts#L926)
 
 **Store and wiring**
 
 - Run and retry actions; `runInProgress` gates the global quit.
-  [`shared-types-slice.ts:158`](../../../src/adapters/driving/tui/store/slices/shared-types-slice.ts#L158)
+  [`shared-types-slice.ts:158`](../../../../src/adapters/driving/tui/store/slices/shared-types-slice.ts#L158)
 
 - Composition root degrades instead of throwing when the module is absent.
-  [`tui.ts:133`](../../../src/bin/tui.ts#L133)
+  [`tui.ts:133`](../../../../src/bin/tui.ts#L133)
 
 **Zone**
 
 - Form, checklist, options, run view, results, retry and quit confirm.
-  [`shared-types-zone.tsx:41`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L41)
+  [`shared-types-zone.tsx:41`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L41)
 
 - Pure form logic: only a valid version can run.
-  [`shared-types-zone.logic.ts:61`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L61)
+  [`shared-types-zone.logic.ts:61`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L61)
 
 **Tests**
 
 - Every matrix row, dirty lockfile, and resume at install, restart or commit.
-  [`propagate-version.test.ts:1`](../../../src/core/shared-types/propagate-version.test.ts#L1)
+  [`propagate-version.test.ts:1`](../../../../src/core/shared-types/propagate-version.test.ts#L1)
 
 - Real keypress flows: form, quit confirm, retry, reset after blocked or done.
-  [`shared-types-zone.interaction.test.tsx:1`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.interaction.test.tsx#L1)
+  [`shared-types-zone.interaction.test.tsx:1`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.interaction.test.tsx#L1)

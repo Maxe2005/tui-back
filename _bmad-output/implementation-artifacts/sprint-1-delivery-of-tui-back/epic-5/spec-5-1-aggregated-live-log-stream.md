@@ -108,75 +108,75 @@ Buffer growth is intentionally two-speed: the live-tail path (`pushLine`) stays 
 **Core log engine (contract + ring buffer)**
 
 - Start here — the port every other layer implements or calls against.
-  [`docker.ts:33`](../../../src/core/ports/docker.ts#L33)
+  [`docker.ts:33`](../../../../src/core/ports/docker.ts#L33)
 
 - Ring buffer + subscribe/unsubscribe/loadOlder; `pushLine` caps the live tail, `loadOlder` intentionally doesn't (see its own Design Notes entry).
-  [`logs/index.ts:75`](../../../src/core/logs/index.ts#L75)
+  [`logs/index.ts:75`](../../../../src/core/logs/index.ts#L75)
 
 - Scrollback dedup fix: fetched lines strictly older than the cursor before prepending.
-  [`logs/index.ts:152`](../../../src/core/logs/index.ts#L152)
+  [`logs/index.ts:152`](../../../../src/core/logs/index.ts#L152)
 
 - Thin `Result<T>` boundary the TUI slice calls through.
-  [`logs/use-cases.ts:20`](../../../src/core/logs/use-cases.ts#L20)
+  [`logs/use-cases.ts:20`](../../../../src/core/logs/use-cases.ts#L20)
 
 **Docker adapter (child_process, no new dependency)**
 
 - Availability probe now reads the actual `{{.State.Running}}` value, not just exit status — a stopped container used to pass silently.
-  [`docker/index.ts:43`](../../../src/adapters/driven/docker/index.ts#L43)
+  [`docker/index.ts:43`](../../../../src/adapters/driven/docker/index.ts#L43)
 
 - Live tail: `stopped`-guarded data handlers (kills a post-`stop()` data race) and a clean-exit-while-active case now surfaces as a stream-ended error instead of freezing silently.
-  [`docker/index.ts:61`](../../../src/adapters/driven/docker/index.ts#L61)
+  [`docker/index.ts:61`](../../../../src/adapters/driven/docker/index.ts#L61)
 
 - One-shot older-lines fetch: stdout/stderr merge now trimmed to the requested count (was overshooting up to 2x).
-  [`docker/index.ts:135`](../../../src/adapters/driven/docker/index.ts#L135)
+  [`docker/index.ts:135`](../../../../src/adapters/driven/docker/index.ts#L135)
 
 - Line-splitting/timestamp-parsing extracted here so it's unit-testable without a live docker daemon.
-  [`docker/index.logic.ts:18`](../../../src/adapters/driven/docker/index.logic.ts#L18)
+  [`docker/index.logic.ts:18`](../../../../src/adapters/driven/docker/index.logic.ts#L18)
 
 **TUI Logs zone (grid, focus, fullscreen)**
 
 - Zone entry point: two selection lists + auto-resizing pane grid + fullscreen view.
-  [`logs-zone.tsx:55`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L55)
+  [`logs-zone.tsx:55`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L55)
 
 - Single keybinding dispatcher: Tab cycle, Space/Ctrl+A selection, arrow/Ctrl+arrow pane nav vs scroll, Enter/Escape fullscreen.
-  [`logs-zone.tsx:186`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L186)
+  [`logs-zone.tsx:186`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L186)
 
 - Squarest-grid layout math, pure and unit-tested.
-  [`logs-zone.logic.ts:39`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L39)
+  [`logs-zone.logic.ts:39`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L39)
 
 - Scroll offset / "at oldest line" now computed against the filtered (t/o/e) line count, not the raw buffer.
-  [`logs-zone.logic.ts:99`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L99)
+  [`logs-zone.logic.ts:99`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L99)
 
 - Grid rendering; check the incomplete-last-row alignment for non-square pane counts.
-  [`logs-zone.tsx:371`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L371)
+  [`logs-zone.tsx:371`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L371)
 
 - Fullscreen view now takes the service name directly instead of a live list lookup that could miss it.
-  [`logs-zone.tsx:462`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L462)
+  [`logs-zone.tsx:462`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L462)
 
 **Store wiring**
 
 - Selection/subscribe/unsubscribe actions; manifest-load failure now surfaces a `streamError` instead of silently no-opping.
-  [`logs-slice.ts:184`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L184)
+  [`logs-slice.ts:184`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L184)
 
 - New teardown action backing the process-exit hook below.
-  [`logs-slice.ts:246`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L246)
+  [`logs-slice.ts:246`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L246)
 
 - `DockerPort` + `LogsSlice` wired into the single Zustand store (AD-10).
-  [`app-store.ts:56`](../../../src/adapters/driving/tui/store/app-store.ts#L56)
+  [`app-store.ts:56`](../../../../src/adapters/driving/tui/store/app-store.ts#L56)
 
 - Process-level exit/SIGINT/SIGTERM hook stops orphaned `docker logs -f` children on abnormal exit.
-  [`tui.ts:135`](../../../src/bin/tui.ts#L135)
+  [`tui.ts:135`](../../../../src/bin/tui.ts#L135)
 
 **Settings extension**
 
 - `logs.bufferSize` + min/max constants (default 500, mirrors `gridMaxRows`'s pattern).
-  [`settings.ts:28`](../../../src/core/ports/settings.ts#L28)
+  [`settings.ts:28`](../../../../src/core/ports/settings.ts#L28)
 
 - Zod validation; comment corrected to state an invalid value resets the whole settings object, not just `logs`.
-  [`schema.ts:49`](../../../src/adapters/driven/settings/schema.ts#L49)
+  [`schema.ts:49`](../../../../src/adapters/driven/settings/schema.ts#L49)
 
 - Clamp/adjust/digit-preset helpers and the Logs tab's key handler.
-  [`settings-screen.tsx:118`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L118)
+  [`settings-screen.tsx:118`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L118)
 
 **Peripherals**
 

@@ -108,61 +108,61 @@ baseline_commit: 'f47d56c9043423061f8e9c33429fcbc3bb9b332b'
 **The rule (single source of truth)**
 
 - Entry point: the protected set is exactly `protectedBranches ∪ {sharedBranch}`; nothing implicit.
-  [`shared-branches.ts:14`](../../../src/core/edt/shared-branches.ts#L14)
+  [`shared-branches.ts:14`](../../../../src/core/edt/shared-branches.ts#L14)
 
 - Structural protection type, so a Manifest, a candidate and a dirty row all fit.
-  [`shared-branches.ts:11`](../../../src/core/edt/shared-branches.ts#L11)
+  [`shared-branches.ts:11`](../../../../src/core/edt/shared-branches.ts#L11)
 
 **Manifest schema**
 
 - Optional list of trimmed, non-empty names; malformed values fail through the usual load error.
-  [`schema.ts:26`](../../../src/adapters/driven/manifest/schema.ts#L26)
+  [`schema.ts:26`](../../../../src/adapters/driven/manifest/schema.ts#L26)
 
 **Authoritative git gate (AD-8)**
 
 - Set resolved from `loaded.data` at write time; message names branch, manifest and repo.
-  [`index.ts:91`](../../../src/adapters/driven/git/index.ts#L91)
+  [`index.ts:91`](../../../../src/adapters/driven/git/index.ts#L91)
 
 **Data threaded to the TUI**
 
 - `ServiceBranchDivergence` carries `protectedBranches` next to `sharedBranch`.
-  [`list.ts:136`](../../../src/core/edt/list.ts#L136)
+  [`list.ts:136`](../../../../src/core/edt/list.ts#L136)
 
 - Switch dirty rows flag the current branch with the same helper.
-  [`switch.ts:436`](../../../src/core/edt/switch.ts#L436)
+  [`switch.ts:436`](../../../../src/core/edt/switch.ts#L436)
 
 **Advisory TUI checks**
 
 - Step 3 plan checks judge names against each service's own set.
-  [`wizard.logic.ts:260`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L260)
+  [`wizard.logic.ts:260`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L260)
 
 - Short row wording; the service is already named by the row and prefix.
-  [`wizard.logic.ts:241`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L241)
+  [`wizard.logic.ts:241`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/wizard.logic.ts#L241)
 
 - Override box context carries the set and the single service-name source.
-  [`step-branches.tsx:37`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L37)
+  [`step-branches.tsx:37`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx#L37)
 
 - Box messages name the service's manifest.
-  [`override-box.logic.ts:76`](../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/override-box.logic.ts#L76)
+  [`override-box.logic.ts:76`](../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard/override-box.logic.ts#L76)
 
 - Switch resolution adopt check uses the repo's own set.
-  [`switch-resolution.logic.ts:261`](../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution.logic.ts#L261)
+  [`switch-resolution.logic.ts:261`](../../../../src/adapters/driving/tui/zones/edts/dialogs/switch-resolution/switch-resolution.logic.ts#L261)
 
 **Docs & generator**
 
 - Field reference and manual rollout note.
-  [`tui-back-manifest.md:82`](../../../docs/tui-back-manifest.md#L82)
+  [`tui-back-manifest.md:82`](../../../../docs/tui-back-manifest.md#L82)
 
 - In-app guidance states what omitting the key means.
-  [`repo-registry-screen.tsx:44`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L44)
+  [`repo-registry-screen.tsx:44`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L44)
 
 - Generator emits today's protection by default.
-  [`SKILL.md:58`](../../../.claude/skills/manifest-generator/SKILL.md#L58)
+  [`SKILL.md:58`](../../../../.claude/skills/manifest-generator/SKILL.md#L58)
 
 **Tests**
 
 - Helper: absent, empty, overlapping lists and case sensitivity.
-  [`shared-branches.test.ts:16`](../../../src/core/edt/shared-branches.test.ts#L16)
+  [`shared-branches.test.ts:16`](../../../../src/core/edt/shared-branches.test.ts#L16)
 
 - Real-loader gate: message wording and formerly implicit branches allowed.
-  [`index.test.ts:152`](../../../src/adapters/driven/git/index.test.ts#L152)
+  [`index.test.ts:152`](../../../../src/adapters/driven/git/index.test.ts#L152)

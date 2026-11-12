@@ -134,67 +134,67 @@ Written assuming 2.23/2.24/2.25 have landed (epics.md sequences this story after
 **Shared branch-picker component**
 
 - Entry point: the mode-cycling/field reducer every entry point dispatches into — start here to see the whole interaction model in one place.
-  [`branch-picker.tsx:175`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L175)
+  [`branch-picker.tsx:175`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L175)
 
 - Review-fix: Tab away from an open other-members sub-list and back now closes it, so Enter submits instead of "picking" (edge-case-hunter finding).
-  [`branch-picker.tsx:194`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L194)
+  [`branch-picker.tsx:194`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L194)
 
 - Retry re-enters this same reducer's state shape — reopens Rename current/Pick-existing's rename sub-view or Create-new, depending on the caller's `field`.
-  [`branch-picker.tsx:105`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L105)
+  [`branch-picker.tsx:105`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L105)
 
 - Presentational half — one filterable-list widget reused for both Create-new's base-branch field and Pick-existing's list.
-  [`branch-picker.tsx:378`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L378)
+  [`branch-picker.tsx:378`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L378)
 
 **GitPort: listBranches/renameBranch**
 
 - Port contract — the two new capabilities the picker needs, local-only by design.
-  [`ports/git.ts:75`](../../../src/core/ports/git.ts#L75)
+  [`ports/git.ts:75`](../../../../src/core/ports/git.ts#L75)
 
 - Review-fix: renaming a branch to its own current name is now a no-op success (was a false `branch-exists`) — order matters, checked only once `oldName` is confirmed to exist.
-  [`git/index.ts:404`](../../../src/adapters/driven/git/index.ts#L404)
+  [`git/index.ts:404`](../../../../src/adapters/driven/git/index.ts#L404)
 
 **Core modifyEdt: renameBranches step and thin wrappers**
 
 - Pre-lock step: resolves `oldName` from this EDT's own membership only, gates it, calls `git.renameBranch`, feeds the existing `branchChanges` array.
-  [`modify.ts:306`](../../../src/core/edt/modify.ts#L306)
+  [`modify.ts:306`](../../../../src/core/edt/modify.ts#L306)
 
 - `createMemberBranch`/`renameMemberBranch`/`listMemberBranches` — thin `deps.git` wrappers keeping the store's new actions off `deps.git` directly.
-  [`modify.ts:444`](../../../src/core/edt/modify.ts#L444)
+  [`modify.ts:444`](../../../../src/core/edt/modify.ts#L444)
 
 **EDTs-zone: 3 entry-point integration (where most review fixes landed)**
 
 - Review-fix: staging a `set`/`create`/`rename` outcome now clears the sibling map for the same repoPath — the two maps could previously both carry an entry (blind-hunter + edge-case-hunter, both independently caught this).
-  [`edts-zone.tsx:1463`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1463)
+  [`edts-zone.tsx:1463`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1463)
 
 - Review-fix: Modify's collision retry now routes to the picker's rename field (with the correct `oldName`) when the failed attempt was itself a rename, instead of always forcing Create-new.
-  [`edts-zone.tsx:1734`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1734)
+  [`edts-zone.tsx:1734`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1734)
 
 - Same retry-routing fix, service-actions' "Change branch for this EDT" side — tracks `lastAttemptedRenameOldName` alongside the existing `lastAttemptedBranch`.
-  [`edts-zone.tsx:1863`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1863)
+  [`edts-zone.tsx:1863`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1863)
 
 - Review-fix: Add-to-EDT's key handler now passes the real deduplicated other-members' branch list instead of a hardcoded `[]` — the "[↓] other members' branches" hint now actually works.
-  [`edts-zone.tsx:2072`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L2072)
+  [`edts-zone.tsx:2072`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L2072)
 
 - Review-fix: the branch-list fetch effect is now keyed on `repoPath`/`branchesStatus` (primitives) instead of the picker session object, so it fires once per session-open rather than on every keystroke.
-  [`edts-zone.tsx:1134`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1134)
+  [`edts-zone.tsx:1134`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L1134)
 
 **Failure UI: branch-exists registry entry**
 
 - Second `ASSISTED_ACTIONS` entry alongside 2.25's `branch-owned-by-other-edt`, reusing the same per-repo structured rendering.
-  [`failed-result-list.tsx:34`](../../../src/adapters/driving/tui/shared/components/failed-result-list.tsx#L34)
+  [`failed-result-list.tsx:34`](../../../../src/adapters/driving/tui/shared/components/failed-result-list.tsx#L34)
 
 **Store wiring**
 
 - Three new actions wrapping the core exports above — never `deps.git` directly, matching every other use-case call in this file.
-  [`app-store.ts:672`](../../../src/adapters/driving/tui/store/app-store.ts#L672)
+  [`app-store.ts:672`](../../../../src/adapters/driving/tui/store/app-store.ts#L672)
 
 **Peripherals**
 
 - New component tests: mode cycling, filtering, every outcome, retry, and the two review-fix regressions above.
-  [`branch-picker.test.tsx`](../../../src/adapters/driving/tui/shared/components/branch-picker.test.tsx)
+  [`branch-picker.test.tsx`](../../../../src/adapters/driving/tui/shared/components/branch-picker.test.tsx)
 
 - New end-to-end coverage added during review: Modify/service-actions Rename-current reaching `renameBranches` (not `setBranches`), and a real `branch-exists` collision surfacing "try a different name" in context.
-  [`edts-zone.interaction.test.tsx:1745`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1745)
+  [`edts-zone.interaction.test.tsx:1745`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1745)
 
 - New store-level tests verifying the real `deps.git` wiring behind `listBranches`/`createMemberBranch`/`renameBranch`/`renameBranches`.
-  [`app-store.test.ts:656`](../../../src/adapters/driving/tui/store/app-store.test.ts#L656)
+  [`app-store.test.ts:656`](../../../../src/adapters/driving/tui/store/app-store.test.ts#L656)

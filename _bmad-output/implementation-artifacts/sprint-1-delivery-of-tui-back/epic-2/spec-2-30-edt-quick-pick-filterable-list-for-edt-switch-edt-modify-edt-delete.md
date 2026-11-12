@@ -6,7 +6,7 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '120835ca0122d9eb3cc54e78ce712a78796745a4'
 context:
-  - `{project-root}/_bmad-output/implementation-artifacts/epic-2-context.md`
+  - `{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2-context.md`
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -97,44 +97,44 @@ context:
 **The quick-pick widget itself**
 
 - Entry point — candidate-pool rule (switch excludes active, modify/delete include it) and the filter's prefix-match convention.
-  [`quick-pick-dialog.tsx:34`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L34)
+  [`quick-pick-dialog.tsx:34`](../../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L34)
 
 - Key dispatch: Esc cancels, arrows move a clamped row cursor, Enter opens the exact same pre-targeted dialog the topic-supplied path already opens.
-  [`quick-pick-dialog.tsx:66`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L66)
+  [`quick-pick-dialog.tsx:66`](../../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L66)
 
 - Filter-field text editing reuses `nextTextInputValue`; a pure caret move never resets the row cursor, only an actual text change does.
-  [`quick-pick-dialog.tsx:90`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L90)
+  [`quick-pick-dialog.tsx:90`](../../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L90)
 
 - Rendering: filter field + row list + the explicit "No matching EDT" empty state (never a silently-empty list).
-  [`quick-pick-dialog.tsx:122`](../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L122)
+  [`quick-pick-dialog.tsx:122`](../../../../src/adapters/driving/tui/zones/edts/dialogs/quick-pick-dialog.tsx#L122)
 
 **State shape**
 
 - `QuickPickDialogState`/`initialQuickPickDialog` — one dialog, one `mode` field, never three near-duplicate dialogs.
-  [`edts-zone.logic.ts:1098`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L1098)
+  [`edts-zone.logic.ts:1098`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L1098)
 
 **Replacing the old guesswork**
 
 - The `currentEdtAction` effect's switch branch: quick-pick replaces the old "first non-active EDT" guess.
-  [`edts-zone.tsx:400`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L400)
+  [`edts-zone.tsx:400`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L400)
 
 - The modify branch: quick-pick replaces the old "focused row" guess.
-  [`edts-zone.tsx:419`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L419)
+  [`edts-zone.tsx:419`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L419)
 
 - The delete branch: quick-pick replaces the old "focused row" guess; selecting the active EDT still surfaces the existing rejection dialog, unchanged.
-  [`edts-zone.tsx:436`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L436)
+  [`edts-zone.tsx:436`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L436)
 
 **Zone wiring**
 
 - Handler instantiation, `useInput` dispatch branch, and render dispatch branch — the 3 integration points into the zone.
-  [`edts-zone.tsx:549`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L549)
-  [`edts-zone.tsx:598`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L598)
-  [`edts-zone.tsx:876`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L876)
+  [`edts-zone.tsx:549`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L549)
+  [`edts-zone.tsx:598`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L598)
+  [`edts-zone.tsx:876`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L876)
 
 **Tests**
 
 - Real-keypress coverage: per-mode candidate pool, Esc, filter+arrow-nav+Enter, zero-match state, caret-move-preserves-cursor, Enter-on-zero-matches no-op, delete-mode active-EDT rejection, topic-supplied path unchanged.
-  [`edts-zone.interaction.test.tsx:3090`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3090)
+  [`edts-zone.interaction.test.tsx:3090`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L3090)
 
 - Pure-function unit tests for `matchEdtsByPrefix`/`resolveQuickPickCandidates` plus a static rendering snapshot.
-  [`edts-zone.test.tsx:1567`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L1567)
+  [`edts-zone.test.tsx:1567`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L1567)

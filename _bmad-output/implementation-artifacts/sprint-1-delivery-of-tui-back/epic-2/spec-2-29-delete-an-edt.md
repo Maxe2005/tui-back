@@ -6,8 +6,8 @@ status: 'done'
 review_loop_iteration: 1
 baseline_commit: '9e9ca44da5eee409e46fbc94f9c0419ff0bc7b0a'
 context:
-  - `{project-root}/_bmad-output/implementation-artifacts/epic-2/epic-2-context.md`
-  - `{project-root}/_bmad-output/implementation-artifacts/epic-2/spec-2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state.md`
+  - `{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md`
+  - `{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-25-edt-zone-structured-per-repo-failure-display-branch-collision-state.md`
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -99,7 +99,7 @@ context:
 - **Finding (review_loop_iteration 1, verification-gap):** attempt 1's `resolveMemberDeleteStatuses`/`deleteMemberBranch` computed a member's "uncommitted-work"/clean signal via `git.hasUncommittedChanges(repoPath)` alone. That reads `git status --porcelain` against whatever branch is *currently checked out* in `repoPath` — but `deleteEdt` only ever runs against a *non-active* EDT, and per `switch.ts`'s design (message-tagged `tui-back:<ulid>` stash on switch-away), a non-active member's branch is essentially never the branch actually checked out there. The old code's "clean" signal therefore reflected whichever other EDT/branch currently occupies that repo, not the target member's own state — risking a false "clean" (defaulting to `git branch -d` while a real, tagged stash for that branch's uncommitted work is left behind orphaned) or a false "dirty" (an unrelated EDT's local changes wrongly suppressing the "Delete branch" default).
 - **What was amended:** added `GitPort.hasStash(repoPath, tag)` (Code Map) and the corrected clean-detection algorithm (this Design Notes section) so "clean" is evaluated against the *member's own branch*, not the working tree's current occupant.
 - **Known-bad state avoided:** a merged member branch silently deleted (`-d`) while its own tagged stash survives orphaned with no branch left to restore it into; or a genuinely clean/mergeable branch wrongly defaulting to "Leave" because some unrelated EDT's dirt was misread as this member's own.
-- **KEEP:** everything else in attempt 1's diff (`{project-root}/_bmad-output/implementation-artifacts/epic-2/spec-2-29-attempt-1-diff.txt`) worked correctly and passed full verification (`npm test`/`typecheck`/`depcheck`, all I/O-matrix rows covered) -- preserve its file layout, the `deleteEdt`/CLI/TUI structure, and its test style exactly; only the clean-detection mechanism changes.
+- **KEEP:** everything else in attempt 1's diff (`{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-29-attempt-1-diff.txt`) worked correctly and passed full verification (`npm test`/`typecheck`/`depcheck`, all I/O-matrix rows covered) -- preserve its file layout, the `deleteEdt`/CLI/TUI structure, and its test style exactly; only the clean-detection mechanism changes.
 - **Patch round (review_loop_iteration 1, blind-hunter/edge-case-hunter, applied without a further loopback):** fixed the CLI `missing-argument` usage message (was referencing a nonexistent `--topic` flag), added `--branches` validation (empty/unmatched/duplicate repoPath all now `invalid-argument` instead of silently mis-defaulting), made `deleteMemberBranch` short-circuit to `outcome: 'deleted'` when the branch is already gone instead of erroring on `isBranchMerged`, attached partial `results` to the error `details` when `edtRegistry.remove()` fails after some branches were already deleted, surfaced `statusError` in the delete-confirm dialog's per-row meta text, normalized the `dispositions` lookup via `resolve()`, and added coverage for previously-untested error branches (`edtRegistry.list()`/`state.readActiveEdt()`/`manifest.load()` failures in `deleteMemberBranch`). Four lower-severity/ambiguous-intent findings (no `logEdtAction` on active-rejection; silent no-op on an unmatched `edt-delete <topic>`; a pre-existing double-Enter re-entrancy pattern shared by every confirm dialog; no `--` escape hatch for a topic starting with `--`) were deferred to `deferred-work.md` rather than blocking this story.
 
 ## Design Notes
@@ -125,60 +125,60 @@ If neither holds, the member's branch is clean -- covers the common case (member
 **Core use-case: `deleteEdt`**
 
 - Entry point — active-EDT rejection, per-member disposition loop (outside the lock), lock-held registry/file removal.
-  [`delete.ts:68`](../../../src/core/edt/delete.ts#L68)
+  [`delete.ts:68`](../../../../src/core/edt/delete.ts#L68)
 
 - Per-member branch deletion: `assertAllowedBranch` gate, corrected clean-detection, already-deleted-branch short-circuit, `-d`/`-D` choice.
-  [`delete.ts:139`](../../../src/core/edt/delete.ts#L139)
+  [`delete.ts:139`](../../../../src/core/edt/delete.ts#L139)
 
 - The bug-fix itself: dirty iff a `tui-back:<edtUlid>`-tagged stash exists OR the checked-out branch is this member's own and dirty.
-  [`delete.ts:205`](../../../src/core/edt/delete.ts#L205)
+  [`delete.ts:205`](../../../../src/core/edt/delete.ts#L205)
 
 **Git/registry port widening**
 
 - `isBranchMerged` — `git merge-base --is-ancestor`, independent of what's checked out.
-  [`git/index.ts:182`](../../../src/adapters/driven/git/index.ts#L182)
+  [`git/index.ts:182`](../../../../src/adapters/driven/git/index.ts#L182)
 
 - `hasStash` — non-destructive existence check, built on `restoreStash`'s extracted `findStashRef`.
-  [`git/index.ts:396`](../../../src/adapters/driven/git/index.ts#L396)
+  [`git/index.ts:396`](../../../../src/adapters/driven/git/index.ts#L396)
 
 - `GitPort` contract additions (`isBranchMerged`, `hasStash`, widened `deleteBranch`).
-  [`git.ts:47`](../../../src/core/ports/git.ts#L47)
+  [`git.ts:47`](../../../../src/core/ports/git.ts#L47)
 
 - `EdtRegistryPort.remove` contract.
-  [`edt-registry.ts:54`](../../../src/core/ports/edt-registry.ts#L54)
+  [`edt-registry.ts:54`](../../../../src/core/ports/edt-registry.ts#L54)
 
 - `removeEdtRegistryEntry` — read/find/filter/write, mirrors `updateEdtEntry`.
-  [`edt-registry/index.ts:147`](../../../src/adapters/driven/edt-registry/index.ts#L147)
+  [`edt-registry/index.ts:147`](../../../../src/adapters/driven/edt-registry/index.ts#L147)
 
 **TUI: dialog and wiring**
 
 - `DeleteDialogView`/`createDeleteDialogHandlers` — confirm dialog, per-member checklist, `statusError` annotation, submit/cancel.
-  [`delete-dialog.tsx:43`](../../../src/adapters/driving/tui/zones/edts/dialogs/delete-dialog.tsx#L43)
+  [`delete-dialog.tsx:43`](../../../../src/adapters/driving/tui/zones/edts/dialogs/delete-dialog.tsx#L43)
 
 - `DeleteDialogState`/`initialDeleteDialog` — active-EDT `rejected` state vs. normal confirm state.
-  [`edts-zone.logic.ts:905`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L905)
+  [`edts-zone.logic.ts:905`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L905)
 
 - Dialog-opening effect and input/render dispatch wiring.
-  [`edts-zone.tsx:528`](../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L528)
+  [`edts-zone.tsx:528`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.tsx#L528)
 
 - `deleteEdt`/`openEdtDeleteDialog` store actions.
-  [`edt-slice.ts:340`](../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L340)
+  [`edt-slice.ts:340`](../../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L340)
 
 - `edt-delete` command-bar registration.
-  [`commands.ts:38`](../../../src/adapters/driving/tui/commands/commands.ts#L38)
+  [`commands.ts:38`](../../../../src/adapters/driving/tui/commands/commands.ts#L38)
 
 **CLI**
 
 - `runEdtDelete` — positional `<topic>`, `--branches <repoPath>=<leave|delete>` parsing and validation.
-  [`subcommands.ts:461`](../../../src/adapters/driving/cli/subcommands.ts#L461)
+  [`subcommands.ts:461`](../../../../src/adapters/driving/cli/subcommands.ts#L461)
 
 - `EDT_DELETE_USAGE` and dispatch wiring.
-  [`subcommands.ts:34`](../../../src/adapters/driving/cli/subcommands.ts#L34)
+  [`subcommands.ts:34`](../../../../src/adapters/driving/cli/subcommands.ts#L34)
 
 **Peripherals**
 
 - `create.ts`'s rollback call site updated for `deleteBranch`'s new `force` parameter.
-  [`create.ts`](../../../src/core/edt/create.ts)
+  [`create.ts`](../../../../src/core/edt/create.ts)
 
 - Full I/O-matrix + clean-detection + patch-round coverage.
-  [`delete.test.ts`](../../../src/core/edt/delete.test.ts)
+  [`delete.test.ts`](../../../../src/core/edt/delete.test.ts)

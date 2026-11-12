@@ -89,35 +89,35 @@ The candidates-then-members lookup order is inherited from the existing retry-re
 **Checklist Enter routing (the blocking-bug fix)**
 
 - Entry point: the new membership-awareness rule — an already-a-member row is never branch-editable via checklist `Enter` any more.
-  [`edts-zone.logic.ts:598`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L598)
+  [`edts-zone.logic.ts:598`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L598)
 
 - `resolveModifyEnterAction` threads `originalMemberPaths` through to the rule above.
-  [`edts-zone.logic.ts:609`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L609)
+  [`edts-zone.logic.ts:609`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L609)
 
 - Sole call site: builds the dialog-open-time membership snapshot and passes it in.
-  [`modify-dialog.tsx:317`](../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L317)
+  [`modify-dialog.tsx:317`](../../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L317)
 
 **Dynamic branch-picker title**
 
 - `resolveModifyDialogTitle` — resolves the session's service (candidates, then `target.members` fallback) and computes the title string.
-  [`modify-dialog.tsx:345`](../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L345)
+  [`modify-dialog.tsx:345`](../../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L345)
 
 - `ModifyDialogView` consumes it as a plain computed string — no new state.
-  [`modify-dialog.tsx:365`](../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L365)
+  [`modify-dialog.tsx:365`](../../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L365)
 
 **Peripherals**
 
 - Unit coverage for both functions, including the empty-`originalMemberPaths` (brand-new EDT) case added during review.
-  [`edts-zone.test.tsx:745`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L745)
+  [`edts-zone.test.tsx:745`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L745)
 
 - Interaction coverage: existing-member Enter now submits instead of opening the picker.
-  [`edts-zone.interaction.test.tsx:274`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L274)
+  [`edts-zone.interaction.test.tsx:274`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L274)
 
 - Interaction coverage: dynamic title for a freshly-checked candidate, reverting on close.
-  [`edts-zone.interaction.test.tsx:326`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L326)
+  [`edts-zone.interaction.test.tsx:326`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L326)
 
 - Interaction coverage: dynamic title for an existing member reopened via the retry escape hatch.
-  [`edts-zone.interaction.test.tsx:370`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L370)
+  [`edts-zone.interaction.test.tsx:370`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L370)
 
 - Review-fix: the `target.members` title fallback, exercised when the existing member is absent from `candidates`.
-  [`edts-zone.interaction.test.tsx:446`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L446)
+  [`edts-zone.interaction.test.tsx:446`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L446)

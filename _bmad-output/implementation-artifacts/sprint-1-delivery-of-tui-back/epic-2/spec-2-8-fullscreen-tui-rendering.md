@@ -6,9 +6,9 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: 'b5becd2c072ad515fcc9da9ee68cf82c2a6096e4'
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md'
-  - '_bmad-output/planning-artifacts/sprint-change-proposal-2026-08-19.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/sprint-change-proposal-2026-08-19.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">

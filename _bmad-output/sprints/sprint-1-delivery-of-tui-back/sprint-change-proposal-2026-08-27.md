@@ -201,7 +201,7 @@ on what I'm looking at, and have that adjustment survive across sessions.
 
 ### Debug-log process (point 3 — not a scoped change)
 
-New file `_bmad-output/implementation-artifacts/epic-2/edt-management-debug-log.md`, separate
+New file `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/edt-management-debug-log.md`, separate
 from `deferred-work.md` (known/accepted debt) since these are unsorted reports. Entries record
 what was tested, expected vs. observed behavior, and a status (`à trier` / `story ouverte` /
 `pas un bug` / `corrigé`), filled in as Max reports issues from real usage. No story is created

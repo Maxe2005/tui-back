@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '72dc5611d92c226768b90cb403b65e934f924b5c'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-9-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -83,52 +83,52 @@ context:
 **Choice screen (post-publish)**
 
 - Entry point: one predicate drives both rendering and key handling, whatever the source state.
-  [`shared-types-zone.tsx:135`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L135)
+  [`shared-types-zone.tsx:135`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L135)
 
 - Cursor reset keyed on the publish object during render, so no stale frame.
-  [`shared-types-zone.tsx:127`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L127)
+  [`shared-types-zone.tsx:127`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L127)
 
 - Key dispatch: Propagate pre-fills and lands on row 1, Back keeps, Close resets.
-  [`shared-types-zone.tsx:232`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L232)
+  [`shared-types-zone.tsx:232`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L232)
 
 - Choices built once and shared by render and resolver.
-  [`shared-types-zone.logic.ts:258`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L258)
+  [`shared-types-zone.logic.ts:258`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L258)
 
 - Resolvers wrap resolveMenuKey and keep the C / R shortcuts.
-  [`shared-types-zone.logic.ts:278`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L278)
+  [`shared-types-zone.logic.ts:278`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L278)
 
 - Menu rendered right under the result line to stay visible on small terminals.
-  [`shared-types-zone.tsx:379`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L379)
+  [`shared-types-zone.tsx:379`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L379)
 
 **Action bar**
 
 - Single declaration feeding the bar and the `?` help rows.
-  [`keybindings.ts:27`](../../../src/adapters/driving/tui/keybindings/keybindings.ts#L27)
+  [`keybindings.ts:27`](../../../../src/adapters/driving/tui/keybindings/keybindings.ts#L27)
 
 - Availability + reasons; available actions first so Reload never clips off.
-  [`shared-types-zone.logic.ts:238`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L238)
+  [`shared-types-zone.logic.ts:238`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L238)
 
 - History reason moved here; new branches for several sources and unreadable source.
-  [`shared-types-zone.logic.ts:134`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L134)
+  [`shared-types-zone.logic.ts:134`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.logic.ts#L134)
 
 - Bar + reasons line + history notice replace the old dim hints.
-  [`shared-types-zone.tsx:344`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L344)
+  [`shared-types-zone.tsx:344`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L344)
 
 - Row budget grows for the bar and, when shown, the history notice.
-  [`shared-types-zone.tsx:53`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L53)
+  [`shared-types-zone.tsx:53`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-zone.tsx#L53)
 
 **Shared primitives & footer**
 
 - Optional one-line description under a menu row; rows without one unchanged.
-  [`menu-list.tsx:60`](../../../src/adapters/driving/tui/shared/components/menu-list.tsx#L60)
+  [`menu-list.tsx:60`](../../../../src/adapters/driving/tui/shared/components/menu-list.tsx#L60)
 
 - Footer contexts list Enter select plus the kept C / R shortcuts.
-  [`footer-contexts.ts:299`](../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L299)
+  [`footer-contexts.ts:299`](../../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L299)
 
 **Tests**
 
 - Interaction coverage for bar, choices, shortcuts, Close reset, reload visibility.
-  [`shared-types-publish.interaction.test.tsx:196`](../../../src/adapters/driving/tui/zones/shared-types/shared-types-publish.interaction.test.tsx#L196)
+  [`shared-types-publish.interaction.test.tsx:196`](../../../../src/adapters/driving/tui/zones/shared-types/shared-types-publish.interaction.test.tsx#L196)
 
 - Size matrix now covers publish done/blocked and asserts the highlighted choice is on screen.
-  [`bounds-matrix.test.tsx:199`](../../../src/adapters/driving/tui/shared/bounds/bounds-matrix.test.tsx#L199)
+  [`bounds-matrix.test.tsx:199`](../../../../src/adapters/driving/tui/shared/bounds/bounds-matrix.test.tsx#L199)

@@ -5,7 +5,7 @@ created: '2026-09-23'
 status: 'done'
 review_loop_iteration: 0
 baseline_commit: 'c9c47aeca1a955bde327a627cbf0d0890ec8f92a'
-context: [_bmad-output/implementation-artifacts/epic-2/epic-2-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">

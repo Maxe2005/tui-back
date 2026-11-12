@@ -88,43 +88,43 @@ baseline_commit: '086f650dd54c39c6352420170c09cbc649453169'
 **Health contract and Docker mapping**
 
 - Three-state contract every layer builds on
-  [`docker.ts:33`](../../../src/core/ports/docker.ts#L33)
+  [`docker.ts:33`](../../../../src/core/ports/docker.ts#L33)
 
 - Inspect-to-health mapping, pure and unit-tested
-  [`index.logic.ts:70`](../../../src/adapters/driven/docker/index.logic.ts#L70)
+  [`index.logic.ts:70`](../../../../src/adapters/driven/docker/index.logic.ts#L70)
 
 - Raw inspect-string parsing with never-throw fallback
-  [`index.logic.ts:83`](../../../src/adapters/driven/docker/index.logic.ts#L83)
+  [`index.logic.ts:83`](../../../../src/adapters/driven/docker/index.logic.ts#L83)
 
 - `docker inspect`/`restart` shell-outs plus the 30s restart timeout
-  [`index.ts:151`](../../../src/adapters/driven/docker/index.ts#L151)
+  [`index.ts:151`](../../../../src/adapters/driven/docker/index.ts#L151)
 
 **State ownership (polling and restart guard)**
 
 - Single state owner: per-pane health, timers, no-op restart
-  [`logs-slice.ts:357`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L357)
+  [`logs-slice.ts:357`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L357)
 
 - Poll updates badge on success only, keeps last-known otherwise
-  [`logs-slice.ts:204`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L204)
+  [`logs-slice.ts:204`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L204)
 
 **User-visible wiring**
 
 - Uppercase-`R`-only binding avoids the Routes-mnemonic double-dispatch
-  [`logs-zone.tsx:806`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L806)
+  [`logs-zone.tsx:806`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L806)
 
 - Same binding in fullscreen, where zone input is captured
-  [`logs-zone.tsx:624`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L624)
+  [`logs-zone.tsx:624`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L624)
 
 - Badge plus disabled-state rendering in pane headers
-  [`logs-zone.tsx:1089`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L1089)
+  [`logs-zone.tsx:1089`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L1089)
 
 **Tests**
 
 - Mutant-proof poll, no-op guard, manifest-failure restart cases
-  [`app-store.test.ts:1568`](../../../src/adapters/driving/tui/store/app-store.test.ts#L1568)
+  [`app-store.test.ts:1568`](../../../../src/adapters/driving/tui/store/app-store.test.ts#L1568)
 
 - Rendered `●`/`○`/`⣾` glyph assertions per health state
-  [`logs-zone.test.tsx:248`](../../../src/adapters/driving/tui/zones/logs/logs-zone.test.tsx#L248)
+  [`logs-zone.test.tsx:248`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.test.tsx#L248)
 
 - Live plus PATH-missing CLI-contract coverage for both methods
-  [`index.test.ts:131`](../../../src/adapters/driven/docker/index.test.ts#L131)
+  [`index.test.ts:131`](../../../../src/adapters/driven/docker/index.test.ts#L131)

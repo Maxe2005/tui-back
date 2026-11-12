@@ -5,7 +5,7 @@ created: '2026-10-12'
 status: 'done'
 baseline_commit: '799dda71a37cd77f4d9ab0ada80f13acabd0d5b0'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-4-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-4-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -72,42 +72,42 @@ context: [_bmad-output/implementation-artifacts/epic-4-context.md]
 **Conflict resolution (entry point)**
 
 - Resolver orchestration: package.json first, lock from EDT side, deferred `npm i`.
-  [`resolve-conflict.ts:136`](../../../src/core/shared-types/resolve-conflict.ts#L136)
+  [`resolve-conflict.ts:136`](../../../../src/core/shared-types/resolve-conflict.ts#L136)
 
 - Only blocks differing by the dependency line are rewritten; the rest stays byte for byte.
-  [`resolve-conflict.ts:50`](../../../src/core/shared-types/resolve-conflict.ts#L50)
+  [`resolve-conflict.ts:50`](../../../../src/core/shared-types/resolve-conflict.ts#L50)
 
 **Generic seam in core**
 
 - Optional seam threaded from the run params, never naming `shared-types`.
-  [`group-update.ts:205`](../../../src/core/scripts/group-update.ts#L205)
+  [`group-update.ts:205`](../../../../src/core/scripts/group-update.ts#L205)
 
 - Seam runs before each menu and after `edited`, then finalizes or falls through.
-  [`group-update.ts:807`](../../../src/core/scripts/group-update.ts#L807)
+  [`group-update.ts:807`](../../../../src/core/scripts/group-update.ts#L807)
 
 - Per-service conflict outcome lands on the row.
-  [`group-update.ts:1046`](../../../src/core/scripts/group-update.ts#L1046)
+  [`group-update.ts:1046`](../../../../src/core/scripts/group-update.ts#L1046)
 
 **Git primitives**
 
 - New port methods for unmerged paths, worktree file and side checkout.
-  [`git.ts:140`](../../../src/core/ports/git.ts#L140)
+  [`git.ts:140`](../../../../src/core/ports/git.ts#L140)
 
 - Gated, literal-pathspec write and stage inside the repo.
-  [`index.ts:1030`](../../../src/adapters/driven/git/index.ts#L1030)
+  [`index.ts:1030`](../../../../src/adapters/driven/git/index.ts#L1030)
 
 **TUI wiring and display**
 
 - Seam built from EDT consumers; published version preferred.
-  [`update-slice.ts:812`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L812)
+  [`update-slice.ts:812`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L812)
 
 - Published version captured from the 4.4 phase into per-run state.
-  [`update-slice.ts:785`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L785)
+  [`update-slice.ts:785`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L785)
 
 - Conflict outcome shown in the service detail and merge step.
-  [`update-zone.logic.ts:149`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L149)
+  [`update-zone.logic.ts:149`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L149)
 
 **Tests**
 
 - Block rewrite and resolver matrix rows.
-  [`resolve-conflict.test.ts:22`](../../../src/core/shared-types/resolve-conflict.test.ts#L22)
+  [`resolve-conflict.test.ts:22`](../../../../src/core/shared-types/resolve-conflict.test.ts#L22)

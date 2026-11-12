@@ -5,7 +5,7 @@ created: '2026-09-21'
 status: 'done'
 baseline_commit: 'eab36cbfe5c76860f210ce23a4a555115dc24963'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -83,46 +83,46 @@ The seam is a single optional callback on `GroupUpdateParams` — `onUpdateBlock
 **Seam design and per-service flow**
 
 - Seam contract plus lockfile classifier — the whole feature's entry point
-  [`group-update.ts:85`](../../../src/core/scripts/group-update.ts#L85)
+  [`group-update.ts:85`](../../../../src/core/scripts/group-update.ts#L85)
 
 - Lockfile auto-fix, dirty gate, and pull/merge settlement wiring
-  [`group-update.ts:409`](../../../src/core/scripts/group-update.ts#L409)
+  [`group-update.ts:409`](../../../../src/core/scripts/group-update.ts#L409)
 
 - Pre-existing mid-state detection — distinct rows, never aborted
-  [`group-update.ts:610`](../../../src/core/scripts/group-update.ts#L610)
+  [`group-update.ts:610`](../../../../src/core/scripts/group-update.ts#L610)
 
 - Mid-run conflict settlement — one prompt, bounded single retry
-  [`group-update.ts:762`](../../../src/core/scripts/group-update.ts#L762)
+  [`group-update.ts:762`](../../../../src/core/scripts/group-update.ts#L762)
 
 **Port surface and driven adapter**
 
 - Five new `GitPort` methods following the existing contract style
-  [`git.ts:92`](../../../src/core/ports/git.ts#L92)
+  [`git.ts:92`](../../../../src/core/ports/git.ts#L92)
 
 - Porcelain parse, path discard, rebase check, finalize — spawnSync taxonomy
-  [`index.ts:457`](../../../src/adapters/driven/git/index.ts#L457)
+  [`index.ts:457`](../../../../src/adapters/driven/git/index.ts#L457)
 
 **Driving adapters**
 
 - CLI passes no seam — skip/abort rows preserved on both scopes
-  [`subcommands.ts:141`](../../../src/adapters/driving/cli/subcommands.ts#L141)
+  [`subcommands.ts:141`](../../../../src/adapters/driving/cli/subcommands.ts#L141)
 
 - Slice blocker state plus closure-held resolver and orphan clearing
-  [`update-slice.ts:110`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L110)
+  [`update-slice.ts:110`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L110)
 
 - Modal body, key resolver, EDITOR split fix, menu key capture
-  [`update-zone.tsx:157`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L157)
+  [`update-zone.tsx:157`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L157)
 
 **Tests**
 
 - Core matrix with scripted seams, including discard/finalize/pull-path gaps
-  [`group-update.test.ts:1210`](../../../src/core/scripts/group-update.test.ts#L1210)
+  [`group-update.test.ts:1210`](../../../../src/core/scripts/group-update.test.ts#L1210)
 
 - Adapter integration per method plus hand-resolved-merge finalize
-  [`index.test.ts:1146`](../../../src/adapters/driven/git/index.test.ts#L1146)
+  [`index.test.ts:1146`](../../../../src/adapters/driven/git/index.test.ts#L1146)
 
 - Black-box lockfile auto-update against the real binary
-  [`tui-back.e2e.test.ts:1482`](../../../src/bin/tui-back.e2e.test.ts#L1482)
+  [`tui-back.e2e.test.ts:1482`](../../../../src/bin/tui-back.e2e.test.ts#L1482)
 
 - Slice seam round-trip plus zone resolver and menu render
-  [`update-zone.test.tsx:168`](../../../src/adapters/driving/tui/zones/update/update-zone.test.tsx#L168)
+  [`update-zone.test.tsx:168`](../../../../src/adapters/driving/tui/zones/update/update-zone.test.tsx#L168)

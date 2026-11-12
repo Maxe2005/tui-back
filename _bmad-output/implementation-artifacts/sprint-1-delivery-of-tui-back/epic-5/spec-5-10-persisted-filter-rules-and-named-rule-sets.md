@@ -6,8 +6,8 @@ status: 'done'
 baseline_commit: 'a0333790745ff9e88ddaa48ca390741925ddffeb'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md'
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-5/spec-5-9-stackable-log-filter-rules.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-5-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-5/spec-5-9-stackable-log-filter-rules.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -100,32 +100,32 @@ The core sanitizer validates the stored shape with its own plain rule type (core
 **Stored data and tolerant reader**
 
 - Sanitizer drops bad rules or values with warnings naming the field.
-  [`rule-sets.ts:83`](../../../src/core/logs/rule-sets.ts#L83)
+  [`rule-sets.ts:83`](../../../../src/core/logs/rule-sets.ts#L83)
 
 - Library operations with caps, overwrite and name validation.
-  [`rule-sets.ts:185`](../../../src/core/logs/rule-sets.ts#L185)
+  [`rule-sets.ts:185`](../../../../src/core/logs/rule-sets.ts#L185)
 
 - Port gains rule-list and library read/write.
-  [`state.ts:36`](../../../src/core/ports/state.ts#L36)
+  [`state.ts:36`](../../../../src/core/ports/state.ts#L36)
 
 - State schema fields stay lenient; core does the validation.
-  [`schema.ts:17`](../../../src/adapters/driven/state/schema.ts#L17)
+  [`schema.ts:17`](../../../../src/adapters/driven/state/schema.ts#L17)
 
 **Store and hydration**
 
 - Load, persist-on-change and unreadable-field guard.
-  [`logs-slice.ts:1214`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L1214)
+  [`logs-slice.ts:1214`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L1214)
 
 - Reset also clears persisted rules and the library.
-  [`reset-tool.ts:69`](../../../src/core/scripts/reset-tool.ts#L69)
+  [`reset-tool.ts:69`](../../../../src/core/scripts/reset-tool.ts#L69)
 
 **Editor and settings UI**
 
 - Library view keys: apply, rename, delete with confirmations.
-  [`logs-zone.tsx:629`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L629)
+  [`logs-zone.tsx:629`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L629)
 
 - Set name prompt for save and rename.
-  [`logs-zone.tsx:699`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L699)
+  [`logs-zone.tsx:699`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L699)
 
 - Confirmed clear-scope and delete-library actions.
-  [`settings-screen.tsx:501`](../../../src/adapters/driving/tui/shared/settings-screen.tsx#L501)
+  [`settings-screen.tsx:501`](../../../../src/adapters/driving/tui/shared/settings-screen.tsx#L501)

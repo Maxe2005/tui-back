@@ -163,11 +163,11 @@ so that a script run by hand and the same action triggered from the TUI are prov
 
 ### References
 
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 1.3: Script Output Envelope & CLI Entrypoint Contract]
-- [Source: _bmad-output/planning-artifacts/epics.md#AD-2 — Script/CLI parity via one umbrella binary]
-- [Source: _bmad-output/planning-artifacts/epics.md#AD-3 — Script output envelope]
-- [Source: _bmad-output/planning-artifacts/epics.md#AD-13 — Testing strategy by layer]
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 1.5: Explicit Repo Registry — "the first real action demonstrating a Must-scope action's standalone, idempotent, shell-invocable nature"]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 1.3: Script Output Envelope & CLI Entrypoint Contract]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#AD-2 — Script/CLI parity via one umbrella binary]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#AD-3 — Script output envelope]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#AD-13 — Testing strategy by layer]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 1.5: Explicit Repo Registry — "the first real action demonstrating a Must-scope action's standalone, idempotent, shell-invocable nature"]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-2]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-3]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-13]
@@ -215,7 +215,7 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `src/bin/main.ts` (rewritten — from Story 1.1's placeholder to the real composition root)
 - `src/bin/tui-back.e2e.test.ts` (new)
 - `_bmad-output/implementation-artifacts/deferred-work.md` (modified — new Task 3 investigation entry, closed out the stale Story 1.1 TS7 item)
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story status)
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` (modified — story status)
 - `_bmad-output/implementation-artifacts/1-3-script-output-envelope-cli-entrypoint-contract.md` (this file)
 
 ## Change Log

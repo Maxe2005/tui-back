@@ -5,7 +5,7 @@ created: '2026-09-24'
 status: 'done'
 baseline_commit: '6a8c0d7ed2dc60d2aeab48ec37c7332715db2a15'
 review_loop_iteration: 0
-context: [_bmad-output/implementation-artifacts/epic-3-context.md]
+context: [_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-3-context.md]
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -79,43 +79,43 @@ context: [_bmad-output/implementation-artifacts/epic-3-context.md]
 **Standalone restart use-case (entry point)**
 
 - New single-service use-case: per-service lock, manifest load, shared restart step
-  [`service-restart.ts:42`](../../../src/core/scripts/service-restart.ts#L42)
+  [`service-restart.ts:42`](../../../../src/core/scripts/service-restart.ts#L42)
 
 - Path-first lock identity shared with the store map and row derivation
-  [`service-restart.ts:30`](../../../src/core/scripts/service-restart.ts#L30)
+  [`service-restart.ts:30`](../../../../src/core/scripts/service-restart.ts#L30)
 
 - Extracted 3.8 branch both callers share — never both ports per action
-  [`group-update.ts:517`](../../../src/core/scripts/group-update.ts#L517)
+  [`group-update.ts:517`](../../../../src/core/scripts/group-update.ts#L517)
 
 **Store guards and status**
 
 - In-flight map, bidirectional guards, outcome merge into last-outcome view only
-  [`update-slice.ts:606`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L606)
+  [`update-slice.ts:606`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L606)
 
 - Same-service contention slot preserved while a restart holds it
-  [`update-slice.ts:624`](../../../src/adapters/driving/tui/store/slices/update-slice.ts#L624)
+  [`update-slice.ts:624`](../../../../src/adapters/driving/tui/store/slices/update-slice.ts#L624)
 
 - Coarse `restarting` flag slotted below `updating`, above stale errors
-  [`update-zone.logic.ts:32`](../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L32)
+  [`update-zone.logic.ts:32`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L32)
 
 **Zone menu wiring**
 
 - Pure choice routing: update opens pre-scoped config, restart runs standalone, cancel dismisses
-  [`update-service-menu-dialog.tsx:67`](../../../src/adapters/driving/tui/zones/update/update-service-menu-dialog.tsx#L67)
+  [`update-service-menu-dialog.tsx:67`](../../../../src/adapters/driving/tui/zones/update/update-service-menu-dialog.tsx#L67)
 
 - `Enter` opens the row menu; choices dispatch through the pure router
-  [`update-zone.tsx:528`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L528)
+  [`update-zone.tsx:528`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L528)
 
 - Rows derive `restarting` from the resolved-path in-flight map
-  [`update-zone.tsx:624`](../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L624)
+  [`update-zone.tsx:624`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L624)
 
 **Tests**
 
 - Core matrix: order, stop-on-failure detail, fallback, contention, blank-path guard
-  [`service-restart.test.ts:65`](../../../src/core/scripts/service-restart.test.ts#L65)
+  [`service-restart.test.ts:65`](../../../../src/core/scripts/service-restart.test.ts#L65)
 
 - Router matrix, render smoke, restarting glyph and failed-outcome rows
-  [`update-service-menu-dialog.test.tsx:14`](../../../src/adapters/driving/tui/zones/update/update-service-menu-dialog.test.tsx#L14)
+  [`update-service-menu-dialog.test.tsx:14`](../../../../src/adapters/driving/tui/zones/update/update-service-menu-dialog.test.tsx#L14)
 
 - Slice guards both directions, per-service concurrency, pinned-shape and confirm-while-restart cases
-  [`update-slice.test.ts:1153`](../../../src/adapters/driving/tui/store/slices/update-slice.test.ts#L1153)
+  [`update-slice.test.ts:1153`](../../../../src/adapters/driving/tui/store/slices/update-slice.test.ts#L1153)

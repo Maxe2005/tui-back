@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '8ee2a7cd79710cbc8142c0d19ac209ccaa037459'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-12-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -67,40 +67,40 @@ context:
 **Composition entry point**
 
 - `createGitPort` now only wires family functions; re-exports keep the old import surface.
-  [`index.ts:33`](../../../src/adapters/driven/git/index.ts#L33)
+  [`index.ts:33`](../../../../src/adapters/driven/git/index.ts#L33)
 
 **Branch-scope safety gate**
 
 - The AD-8 gate lives alone; every write family imports it.
-  [`gate.ts:15`](../../../src/adapters/driven/git/gate.ts#L15)
+  [`gate.ts:15`](../../../../src/adapters/driven/git/gate.ts#L15)
 
 - Current-branch variant used by commit and merge writes.
-  [`gate.ts:59`](../../../src/adapters/driven/git/gate.ts#L59)
+  [`gate.ts:59`](../../../../src/adapters/driven/git/gate.ts#L59)
 
 - Deviation from spec: `refs.ts` breaks the gate/branches import cycle.
-  [`refs.ts:47`](../../../src/adapters/driven/git/refs.ts#L47)
+  [`refs.ts:47`](../../../../src/adapters/driven/git/refs.ts#L47)
 
 **Write families**
 
 - Branch create/delete/rename behind the gate.
-  [`branches.ts:10`](../../../src/adapters/driven/git/branches.ts#L10)
+  [`branches.ts:10`](../../../../src/adapters/driven/git/branches.ts#L10)
 
 - Stage and commit behind the current-branch gate.
-  [`commit.ts:10`](../../../src/adapters/driven/git/commit.ts#L10)
+  [`commit.ts:10`](../../../../src/adapters/driven/git/commit.ts#L10)
 
 - Merge and conflict-resolution primitives.
-  [`merge.ts:17`](../../../src/adapters/driven/git/merge.ts#L17)
+  [`merge.ts:17`](../../../../src/adapters/driven/git/merge.ts#L17)
 
 - Destructive discard primitives, reviewed for unchanged git arguments.
-  [`discard.ts:93`](../../../src/adapters/driven/git/discard.ts#L93)
+  [`discard.ts:93`](../../../../src/adapters/driven/git/discard.ts#L93)
 
 - Stash save/restore.
-  [`stash.ts:8`](../../../src/adapters/driven/git/stash.ts#L8)
+  [`stash.ts:8`](../../../../src/adapters/driven/git/stash.ts#L8)
 
 **Read-only families**
 
 - Diff and dirty-path inspection.
-  [`diff.ts:101`](../../../src/adapters/driven/git/diff.ts#L101)
+  [`diff.ts:101`](../../../../src/adapters/driven/git/diff.ts#L101)
 
 - Version-bump history walk.
-  [`version-history.ts:21`](../../../src/adapters/driven/git/version-history.ts#L21)
+  [`version-history.ts:21`](../../../../src/adapters/driven/git/version-history.ts#L21)

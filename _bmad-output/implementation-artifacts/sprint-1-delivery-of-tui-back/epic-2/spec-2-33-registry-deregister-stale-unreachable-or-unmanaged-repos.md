@@ -117,63 +117,63 @@ display-only, never read by the removal path.
 **Port & adapter — targeted removal**
 
 - Entry point: the one new capability everything else is built on.
-  [`registry.ts:18`](../../../src/core/ports/registry.ts#L18)
+  [`registry.ts:18`](../../../../src/core/ports/registry.ts#L18)
 
 - `add`'s read-modify-write shape in reverse; absent path is a no-op success.
-  [`registry/index.ts:116`](../../../src/adapters/driven/registry/index.ts#L116)
+  [`registry/index.ts:116`](../../../../src/adapters/driven/registry/index.ts#L116)
 
 **Core use-case — classify then remove**
 
 - Classifies every registered path into exactly two stale reasons, plus `errors` for a path that couldn't even be checked (review fix).
-  [`clean-registry.ts:60`](../../../src/core/scripts/clean-registry.ts#L60)
+  [`clean-registry.ts:60`](../../../../src/core/scripts/clean-registry.ts#L60)
 
 - Tagged-union return (`stale`/`none`/`error`) replaces the original `reason | undefined` — an inconclusive `registry.exists()` result is no longer silently dropped.
-  [`clean-registry.ts:94`](../../../src/core/scripts/clean-registry.ts#L94)
+  [`clean-registry.ts:94`](../../../../src/core/scripts/clean-registry.ts#L94)
 
 - Confirmed removal, one outcome row per path, per-path lock isolation mirroring `create.ts`/`switch.ts`/`delete.ts`.
-  [`clean-registry.ts:139`](../../../src/core/scripts/clean-registry.ts#L139)
+  [`clean-registry.ts:139`](../../../../src/core/scripts/clean-registry.ts#L139)
 
 **CLI — `registry clean`**
 
 - Verb-dispatch subcommand registration, same shape as `edt`.
-  [`subcommands.ts:202`](../../../src/adapters/driving/cli/subcommands.ts#L202)
+  [`subcommands.ts:202`](../../../../src/adapters/driving/cli/subcommands.ts#L202)
 
 - Bare invocation always classifies first; non-TTY with candidates present is `confirmation-required`, never a silent no-op.
-  [`subcommands.ts:647`](../../../src/adapters/driving/cli/subcommands.ts#L647)
+  [`subcommands.ts:647`](../../../../src/adapters/driving/cli/subcommands.ts#L647)
 
 - `--path` value validation (rejects a flag-shaped or empty value) and de-duplication — review fix closing three edge cases at once.
-  [`subcommands.ts:678`](../../../src/adapters/driving/cli/subcommands.ts#L678)
+  [`subcommands.ts:678`](../../../../src/adapters/driving/cli/subcommands.ts#L678)
 
 - The interactive list-then-confirm prompt itself — the one path this story adds real terminal I/O to.
-  [`subcommands.ts:753`](../../../src/adapters/driving/cli/subcommands.ts#L753)
+  [`subcommands.ts:753`](../../../../src/adapters/driving/cli/subcommands.ts#L753)
 
 - Interactive gate now requires `stdin` to actually be a TTY too, not just `stdout` (review fix — avoids hanging on redirected stdin).
-  [`main.ts:56`](../../../src/bin/main.ts#L56)
+  [`main.ts:56`](../../../../src/bin/main.ts#L56)
 
 **TUI — REPO REGISTRY screen**
 
 - Ctrl+L trigger from the root-input phase, chosen to avoid colliding with the free-text root-path field.
-  [`repo-registry-screen.tsx:224`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L224)
+  [`repo-registry-screen.tsx:224`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L224)
 
 - Phase derivation gains `clean-candidates`/`cleaning`/`clean-results`, still pure/store-driven like the pre-existing scan phases.
-  [`repo-registry-screen.tsx:68`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L68)
+  [`repo-registry-screen.tsx:68`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L68)
 
 - `errors` bucket rendered alongside candidates so an inconclusive path is visible, not silently missing (review fix).
-  [`repo-registry-screen.tsx:398`](../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L398)
+  [`repo-registry-screen.tsx:398`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.tsx#L398)
 
 - Store actions for the clean flow, session-guarded async following `scanRegistryRoot`'s existing pattern.
-  [`registry-slice.ts:221`](../../../src/adapters/driving/tui/store/slices/registry-slice.ts#L221)
+  [`registry-slice.ts:221`](../../../../src/adapters/driving/tui/store/slices/registry-slice.ts#L221)
 
 **Tests**
 
 - Full classification/removal matrix, including the `errors` bucket review fix.
-  [`clean-registry.test.ts`](../../../src/core/scripts/clean-registry.test.ts)
+  [`clean-registry.test.ts`](../../../../src/core/scripts/clean-registry.test.ts)
 
 - Mocked-`readline` coverage of the interactive TTY confirm/decline flow — previously untested (review fix).
-  [`dispatch.test.ts:647`](../../../src/adapters/driving/cli/dispatch.test.ts#L647)
+  [`dispatch.test.ts:647`](../../../../src/adapters/driving/cli/dispatch.test.ts#L647)
 
 - Black-box CLI coverage, incl. the `memberOfEdts` note through the real binary (review fix).
-  [`tui-back.e2e.test.ts`](../../../src/bin/tui-back.e2e.test.ts)
+  [`tui-back.e2e.test.ts`](../../../../src/bin/tui-back.e2e.test.ts)
 
 - New-phase render/interaction coverage for the REPO REGISTRY screen.
-  [`repo-registry-screen.test.tsx`](../../../src/adapters/driving/tui/shared/repo-registry-screen.test.tsx)
+  [`repo-registry-screen.test.tsx`](../../../../src/adapters/driving/tui/shared/repo-registry-screen.test.tsx)

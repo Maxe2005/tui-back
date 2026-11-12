@@ -6,8 +6,8 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: 'dad21b3e2820f2bf1b164e9f9b45ab9308b9d99d'
 context:
-  - `{project-root}/_bmad-output/implementation-artifacts/epic-2/epic-2-context.md`
-  - `{project-root}/_bmad-output/implementation-artifacts/epic-2/spec-2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current.md`
+  - `{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/epic-2-context.md`
+  - `{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-26-branch-picker-3-explicit-modes-pick-existing-create-new-rename-current.md`
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -155,27 +155,27 @@ The new per-member `baseBranches: Readonly<Record<string,string>>` on `CreateDia
 **Manifest-driven base-branch data (entry point)**
 
 - New field every other change consumes — each service's manifest-declared shared branch.
-  [`list.ts:36`](../../../src/core/edt/list.ts#L36)
+  [`list.ts:36`](../../../../src/core/edt/list.ts#L36)
 
 - Threads the manifest's `sharedBranch` into the row `listEdtBranchesDivergence` already builds.
-  [`list.ts:126`](../../../src/core/edt/list.ts#L126)
+  [`list.ts:126`](../../../../src/core/edt/list.ts#L126)
 
 **Per-member base-branch resolution & the real git write**
 
 - `bases[member]` wins over the top-level `base` — the new per-repo override shape.
-  [`create.ts:69`](../../../src/core/edt/create.ts#L69)
+  [`create.ts:69`](../../../../src/core/edt/create.ts#L69)
 
 - The only real git write this data feeds — code-review fix: `||` not `??`, so an explicit empty override still falls back.
-  [`create.ts:342`](../../../src/core/edt/create.ts#L342)
+  [`create.ts:342`](../../../../src/core/edt/create.ts#L342)
 
 - Decides shared vs. forced-per-member from selected members' `sharedBranch` values.
-  [`edts-zone.logic.ts:358`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L358)
+  [`edts-zone.logic.ts:358`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L358)
 
 - Derives the top-level `base`/per-member `bases` map submitted to core.
-  [`edts-zone.logic.ts:403`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L403)
+  [`edts-zone.logic.ts:403`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L403)
 
 - `defaultBaseBranch` becomes a required, caller-supplied option — closes the boundary for all 4 `BranchPicker` entry points, not just Create's own.
-  [`edts-zone.logic.ts:966`](../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L966)
+  [`edts-zone.logic.ts:966`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L966)
 
 **Create-EDT dialog wiring**
 
@@ -194,29 +194,29 @@ The new per-member `baseBranches: Readonly<Record<string,string>>` on `CreateDia
 **Shared `BranchPicker` component change**
 
 - Code-review fix: suppresses the dead nested "Base branch" sub-field this repurposed entry point never uses.
-  [`branch-picker.tsx:362`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L362)
+  [`branch-picker.tsx:362`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L362)
 
 - Relabels the remaining field "Base branch" instead of "Name" when hidden, only while unfocused.
-  [`branch-picker.tsx:403`](../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L403)
+  [`branch-picker.tsx:403`](../../../../src/adapters/driving/tui/shared/components/branch-picker.tsx#L403)
 
 **Manifest-driven default across Modify/service-actions (code-review fix)**
 
 - Falls back to the member's own current branch, never blank, if the manifest candidate lookup misses.
-  [`modify-dialog.tsx:136`](../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L136)
+  [`modify-dialog.tsx:136`](../../../../src/adapters/driving/tui/zones/edts/dialogs/modify-dialog.tsx#L136)
 
 - Same fallback fix, service-actions' own "Change branch" entry point.
-  [`service-actions-dialog.tsx:128`](../../../src/adapters/driving/tui/zones/edts/dialogs/service-actions-dialog.tsx#L128)
+  [`service-actions-dialog.tsx:128`](../../../../src/adapters/driving/tui/zones/edts/dialogs/service-actions-dialog.tsx#L128)
 
 **Peripherals**
 
 - I/O matrix coverage plus the 4 code-review test additions (quick-submit, Pick-existing/Escape routing, manifest-base assertion).
-  [`edts-zone.interaction.test.tsx:1052`](../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1052)
+  [`edts-zone.interaction.test.tsx:1052`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.interaction.test.tsx#L1052)
 
 - Unit coverage for the new resolution functions (`resolveBaseBranchMode`, `suggestBaseBranchFor`, `prefillBaseBranches`).
-  [`edts-zone.test.tsx:678`](../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L678)
+  [`edts-zone.test.tsx:678`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.test.tsx#L678)
 
 - Core-layer regression coverage for `sharedBranch` threading and the `bases` override.
-  [`list.test.ts`](../../../src/core/edt/list.test.ts) · [`create.test.ts`](../../../src/core/edt/create.test.ts)
+  [`list.test.ts`](../../../../src/core/edt/list.test.ts) · [`create.test.ts`](../../../../src/core/edt/create.test.ts)
 
 - Story 2-27 bumped to `in-progress` in sprint tracking.
-  [`sprint-status.yaml`](../../../_bmad-output/implementation-artifacts/sprint-status.yaml)
+  [`sprint-status.yaml`](../sprint-status.yaml)

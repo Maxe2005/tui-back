@@ -3470,7 +3470,7 @@ As a developer, I want every zone to use the same keys, wording and components f
 
 **Acceptance Criteria:**
 
-**Given** the story starts **When** the audit runs **Then** it produces an inventory (table, committed under `_bmad-output/implementation-artifacts/epic-7/`) of every zone's and dialog's bindings and components per intent: list cursor/jump, enter/activate, edit-commit-cancel, toggle, confirm/cancel dialog, destructive-action confirmation, filter, refresh/retry, footer hint wording and order, modal title casing/language, empty/loading/error state components, text input (TextInputLine), pick lists (FilterablePickList), branch inputs (BranchAutocompleteInput).
+**Given** the story starts **When** the audit runs **Then** it produces an inventory (table, committed under `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/`) of every zone's and dialog's bindings and components per intent: list cursor/jump, enter/activate, edit-commit-cancel, toggle, confirm/cancel dialog, destructive-action confirmation, filter, refresh/retry, footer hint wording and order, modal title casing/language, empty/loading/error state components, text input (TextInputLine), pick lists (FilterablePickList), branch inputs (BranchAutocompleteInput).
 
 **Given** the inventory **When** divergences are found **Then** one canonical choice per intent is recorded as the UX-DR36 table in EXPERIENCE.md (Interaction Primitives), and the developer validates that table before the alignment work starts.
 
@@ -3541,7 +3541,7 @@ As a developer, I want every region of the TUI — zones, panes, dialogs, rows, 
 
 **Acceptance Criteria:**
 
-**Given** the story starts **When** the audit runs **Then** it produces an inventory (table, committed under `_bmad-output/implementation-artifacts/epic-7/` **before any code change**) of every rendered surface — zone bodies, `ZoneLayout` panes, the 20+ `ModalDialog` consumers and their children, `DetailPane`, Update service boxes/detail/issue log, error and `DimAnnotation` messages, Dashboard, shared-types, the command bar, `?` help, footer, top bar — recording for each: its height source (fixed / measured / unbounded), its width source, how long or multi-line text is treated (wrap / truncate / unbounded), whether appendable content (issue logs, error lists, log lines, history) is capped, and a verdict (bounded / partially bounded / unbounded).
+**Given** the story starts **When** the audit runs **Then** it produces an inventory (table, committed under `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/` **before any code change**) of every rendered surface — zone bodies, `ZoneLayout` panes, the 20+ `ModalDialog` consumers and their children, `DetailPane`, Update service boxes/detail/issue log, error and `DimAnnotation` messages, Dashboard, shared-types, the command bar, `?` help, footer, top bar — recording for each: its height source (fixed / measured / unbounded), its width source, how long or multi-line text is treated (wrap / truncate / unbounded), whether appendable content (issue logs, error lists, log lines, history) is capped, and a verdict (bounded / partially bounded / unbounded).
 
 **Given** the inventory **When** the unbounded and partially bounded surfaces are listed **Then** each is reproduced at least once with a failing test (or a documented manual repro for Ink-level behavior that tests cannot show) before it is patched, and the developer validates the inventory and the chosen mechanisms before the patch phase starts.
 

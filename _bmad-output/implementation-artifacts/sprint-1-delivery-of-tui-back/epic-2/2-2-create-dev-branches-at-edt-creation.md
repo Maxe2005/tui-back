@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: 9a1cdeb503bfb97928435c1443aac36daee9b075
 review_loop_iteration: 0
 context:
-  - '_bmad-output/planning-artifacts/epics.md'
+  - '_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md'
   - '_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md'
 ---
 
@@ -82,7 +82,7 @@ context:
 - [x] `src/core/edt/create.test.ts` -- unit tests of every I/O-matrix row with fake ports -- AD-13 core layer.
 - [x] `src/adapters/driven/git/index.test.ts` -- real-git integration tests (create, collision, base-missing, shared-branch rejection, currentBranch) -- AD-13 driven layer.
 - [x] `src/bin/tui-back.e2e.test.ts` -- update skeleton/racing tests to new schema; add git-backed branch-creation e2e cases -- black-box parity.
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- flip story 2.2 to `in-progress` then `done` -- status tracking.
+- [x] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- flip story 2.2 to `in-progress` then `done` -- status tracking.
 
 **Acceptance Criteria:**
 - Given branch-creation enabled, when a developer creates an EDT with a topic, ≥1 member, a base branch (default `development`) and a naming mode, then a working branch is created in each selected member accordingly — grouped = one identical name everywhere, individual = one name per member — and registered as that member's EDT branch (feeds Story 2.6).

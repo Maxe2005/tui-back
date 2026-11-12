@@ -129,8 +129,8 @@ so that every subsequent story has a consistent place to add code and can be run
 
 ### References
 
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 1.1: Project Scaffolding & Hexagonal Skeleton]
-- [Source: _bmad-output/planning-artifacts/epics.md#Additional Requirements] — "No starter/greenfield template specified" item
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 1.1: Project Scaffolding & Hexagonal Skeleton]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Additional Requirements] — "No starter/greenfield template specified" item
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-1 — Dependency direction is one-way, driving adapters never touch driven adapters directly]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-14 — Packaging is deferred]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#Stack]
@@ -174,7 +174,7 @@ Claude Sonnet 5 (claude-sonnet-5)
 - `src/bin/tui-back.mjs` (created)
 - `src/core/index.test.ts` (created)
 - `.dependency-cruiser.cjs` (created)
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified — story 1.1 status set to `review`)
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` (modified — story 1.1 status set to `review`)
 - `.dependency-cruiser.cjs` (created)
 
 ## Change Log

@@ -54,7 +54,7 @@ context:
 - [x] `src/adapters/driving/tui/zones/logs/logs-zone.tsx` -- render the info-only third section; scope Ctrl+A per focused list; badges on every row; explicit restarting label -- the visible graft.
 - [x] `src/adapters/driving/tui/zones/logs/logs-zone.logic.ts` -- Tab cycle skips the info-only group; per-list select-all toggle -- no focus-model change.
 - [x] Tests for every I/O-matrix row (logic + render + interaction mirror) -- locks the graft per AD-13.
-- [ ] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 7.2 stays `in-progress` until merge.
+- [ ] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- 7.2 stays `in-progress` until merge.
 
 **Acceptance Criteria:**
 - Given container-less services in the registry, when the Logs zone renders, then they appear only in a greyed info-only section: no cursor, no Space, no Enter, no Tab stop, no Ctrl+A effect.
@@ -74,20 +74,20 @@ context:
 **Presence and polling in the slice**
 
 - Per-row presence resolves async and cached, with an in-flight set and stale writes contained
-  [`logs-slice.ts:289`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L289)
+  [`logs-slice.ts:289`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L289)
 
 - Listed-row poll short-circuits on known container-less, trims before Docker, prunes on retarget
-  [`logs-slice.ts:313`](../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L313)
+  [`logs-slice.ts:313`](../../../../src/adapters/driving/tui/store/slices/logs-slice.ts#L313)
 
 **Visible graft in the zone**
 
 - Third section renders from the same split as the selectable lists; Ctrl+A is focus-scoped
-  [`logs-zone.tsx:155`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L155)
+  [`logs-zone.tsx:155`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L155)
 
 - Every row badges via pane, listed poll, then down default; restarting reads explicitly
-  [`logs-zone.tsx:189`](../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L189)
+  [`logs-zone.tsx:189`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.tsx#L189)
 
 **Pure helpers**
 
 - No-container never reads as restarting; single split predicate for both lists
-  [`logs-zone.logic.ts:42`](../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L42)
+  [`logs-zone.logic.ts:42`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L42)

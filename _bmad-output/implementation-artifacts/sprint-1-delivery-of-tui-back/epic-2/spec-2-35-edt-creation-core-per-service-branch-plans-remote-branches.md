@@ -98,46 +98,46 @@ two `GitPort` methods (`listRemoteBranches`, `createTrackingBranch`), remote-ref
 **Plan contract & validation**
 
 - Entry point: the plan union the wizard will feed; authoritative when present.
-  [`create.ts:98`](../../../src/core/edt/create.ts#L98)
+  [`create.ts:98`](../../../../src/core/edt/create.ts#L98)
 
 - All plan rejections happen here, before any file or git write.
-  [`create.ts:366`](../../../src/core/edt/create.ts#L366)
+  [`create.ts:366`](../../../../src/core/edt/create.ts#L366)
 
 **Plan execution (per member)**
 
 - Dispatch keeps the legacy `branchOptions` path untouched beside the plan path.
-  [`create.ts:464`](../../../src/core/edt/create.ts#L464)
+  [`create.ts:464`](../../../../src/core/edt/create.ts#L464)
 
 - Existing local branch gated with the new EDT's ulid — closes the cross-EDT gap.
-  [`create.ts:537`](../../../src/core/edt/create.ts#L537)
+  [`create.ts:537`](../../../../src/core/edt/create.ts#L537)
 
 - Remote-only branch becomes a local tracking branch; local name defaults to stripped remote.
-  [`create.ts:578`](../../../src/core/edt/create.ts#L578)
+  [`create.ts:578`](../../../../src/core/edt/create.ts#L578)
 
 - Rollback: force-delete created/tracking branches, rename renamed ones back, log failures.
-  [`create.ts:326`](../../../src/core/edt/create.ts#L326)
+  [`create.ts:326`](../../../../src/core/edt/create.ts#L326)
 
 **Git adapter**
 
 - Base resolved under heads then remotes; `--no-track` avoids inheriting `origin/x` upstream.
-  [`index.ts:149`](../../../src/adapters/driven/git/index.ts#L149)
+  [`index.ts:149`](../../../../src/adapters/driven/git/index.ts#L149)
 
 - Rename now gates the old name too — `development` can't be renamed away.
-  [`index.ts:641`](../../../src/adapters/driven/git/index.ts#L641)
+  [`index.ts:641`](../../../../src/adapters/driven/git/index.ts#L641)
 
 - Remote listing skips only symbolic refs; `:short` would mangle `origin/HEAD`.
-  [`index.ts:685`](../../../src/adapters/driven/git/index.ts#L685)
+  [`index.ts:685`](../../../../src/adapters/driven/git/index.ts#L685)
 
 - Tracking branch: gate, collision check, remote-ref check, then `git branch --track`.
-  [`index.ts:713`](../../../src/adapters/driven/git/index.ts#L713)
+  [`index.ts:713`](../../../../src/adapters/driven/git/index.ts#L713)
 
 - Port contract for the two new methods.
-  [`git.ts:151`](../../../src/core/ports/git.ts#L151)
+  [`git.ts:151`](../../../../src/core/ports/git.ts#L151)
 
 **Tests**
 
 - Plan behavior matrix, validation, cross-EDT gate and rollback against fake ports.
-  [`create.test.ts:604`](../../../src/core/edt/create.test.ts#L604)
+  [`create.test.ts:604`](../../../../src/core/edt/create.test.ts#L604)
 
 - Real-repo remote listing and tracking-branch coverage.
-  [`index.test.ts:969`](../../../src/adapters/driven/git/index.test.ts#L969)
+  [`index.test.ts:969`](../../../../src/adapters/driven/git/index.test.ts#L969)

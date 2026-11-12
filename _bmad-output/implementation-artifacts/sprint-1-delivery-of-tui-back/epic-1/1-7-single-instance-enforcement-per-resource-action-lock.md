@@ -120,7 +120,7 @@ The lock mechanism ships reusable and correct now so that (a) the only genuinely
 
 ### References
 
-- [Source: `_bmad-output/planning-artifacts/epics.md#Story-1.7` (lines 335-358)] — user story + AC1-AC4 verbatim.
+- [Source: `_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story-1.7` (lines 335-358)] — user story + AC1-AC4 verbatim.
 - [Source: `_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-9` (lines 125-129)] — two mechanisms: TUI-only instance lock + per-EDT/repo advisory action lock; CLI never blocked; release semantics. Also `.memlog.md` lines 39-46 (rescoped AD-9 story).
 - [Source: same spine §AD-1 (lines 63-81), §AD-2 (83-87), §AD-3 (89-93), §AD-7 (113-117)] — AD-1 boundary (core no fs/adapters), AD-2 parity (TUI in-process, no self-spawn), AD-3 envelope, AD-7 state tier (`XDG_STATE_HOME` for transient state).
 - [Source: `_bmad-output/planning-artifacts/prds/prd-tui-back-2026-08-10/prd.md` line 360] — single-instance enforcement NFR (concurrent writers unsafe).
@@ -172,7 +172,7 @@ The lock mechanism ships reusable and correct now so that (a) the only genuinely
 - `src/adapters/driving/cli/dispatch.test.ts` (updated)
 - `src/bin/main.ts` (updated)
 - `src/bin/tui-back.e2e.test.ts` (updated)
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` (updated)
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` (updated)
 - `_bmad-output/implementation-artifacts/1-7-single-instance-enforcement-per-resource-action-lock.md` (updated)
 
 ### Change Log

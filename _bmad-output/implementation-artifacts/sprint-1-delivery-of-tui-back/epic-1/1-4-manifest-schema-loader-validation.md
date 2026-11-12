@@ -171,16 +171,16 @@ so that an unmanaged repo is never accidentally touched.
 
 - New: `src/core/ports/manifest.ts` — first file under `core/ports/` (additive, matches the Spine tree; leaf folders are created by the story that first needs them).
 - New: `src/adapters/driven/manifest/schema.ts`, `src/adapters/driven/manifest/index.ts`, `src/adapters/driven/manifest/index.test.ts` — first files under `adapters/driven/manifest/`.
-- Modified: `package.json` + `package-lock.json` (new `dependencies` block), `_bmad-output/implementation-artifacts/sprint-status.yaml`, this story file.
+- Modified: `package.json` + `package-lock.json` (new `dependencies` block), `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml`, this story file.
 - Not touched: `src/bin/**`, `src/adapters/driving/**`, `src/adapters/driven/xdg/**`, `src/core/result.ts`, `src/core/index.ts`, `src/adapters/driven/index.ts`.
 - No variance from the architecture's `src/` tree.
 
 ### References
 
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 1.4: Manifest Schema, Loader & Validation]
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 1.5: Explicit Repo Registry — "the first real action..."]
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 1.6: Static Module Registry — where module-id validation happens]
-- [Source: _bmad-output/planning-artifacts/epics.md#AD-4 — Manifest is the only per-repo activation surface]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 1.4: Manifest Schema, Loader & Validation]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 1.5: Explicit Repo Registry — "the first real action..."]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#Story 1.6: Static Module Registry — where module-id validation happens]
+- [Source: _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md#AD-4 — Manifest is the only per-repo activation surface]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#AD-1, AD-3, AD-4, AD-5, AD-13]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#src/ tree — driven/manifest, core/ports]
 - [Source: _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md#Consistency Conventions — kebab-case error codes; Stack table — zod 4.4.3, yaml 2.9.0]
@@ -223,7 +223,7 @@ deepseek-v4-flash-free (opencode) implementing via bmad-dev-story.
 - `src/adapters/driven/manifest/schema.ts` — NEW: zod `manifestSchema` + `moduleConfigSchema`.
 - `src/adapters/driven/manifest/index.ts` — NEW: `loadManifest` (implements `ManifestPort.load`).
 - `src/adapters/driven/manifest/index.test.ts` — NEW: integration tests, real temp dirs.
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` — story 1.4 status ready-for-dev → in-progress → review.
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` — story 1.4 status ready-for-dev → in-progress → review.
 
 ## Change Log
 

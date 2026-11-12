@@ -6,7 +6,7 @@ status: 'done'
 baseline_commit: '46a8947fc5fc84d50d26ea1de8d3f8fc9c498af7'
 review_loop_iteration: 0
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/epic-8/epic-8-context.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-8/epic-8-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -58,7 +58,7 @@ context:
 - [x] `src/adapters/driving/cli/dispatch.test.ts` -- assert `others` and drift in the `dashboard` envelope -- CLI contract (AD-3)
 - [x] `dashboard.logic.ts` (+ test) -- drift items, ordering, text, detached suppressing "unknown (offline)", skipping cycle -- Attention rules
 - [x] `dashboard-zone.tsx`, `dashboard-body.tsx`, store slice + their tests/fixtures -- wire `others`, count in header -- rendering
-- [x] `_bmad-output/implementation-artifacts/sprint-status.yaml` -- 8-2…8-5 to `done` (stale), 8-6 to `in-progress` -- tracking
+- [x] `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` -- 8-2…8-5 to `done` (stale), 8-6 to `in-progress` -- tracking
 
 **Acceptance Criteria:**
 - Given drift lines and a protected-branch line, when Attention renders, then order is protected, drift, then the existing items, and the header count includes drift lines.

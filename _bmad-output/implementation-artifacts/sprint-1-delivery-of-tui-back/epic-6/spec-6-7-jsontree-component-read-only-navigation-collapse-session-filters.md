@@ -6,7 +6,7 @@ status: 'done'
 review_loop_iteration: 0
 baseline_commit: '9758f891400b6211eea984745becc7f7f65dfbfb'
 context:
-  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/epic-6-context.md'
+  - '/home/mchoisel/Documents/IANORD/tui-back-epic-6/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6-context.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -102,40 +102,40 @@ context:
 **Pure model (start here)**
 
 - Flatten, fold and rule semantics live here, Ink-free and fully unit-tested
-  [`model.ts:209`](../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L209)
+  [`model.ts:209`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L209)
 
 - Response classification: tree vs raw-with-reason vs explicit empty state
-  [`model.ts:525`](../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L525)
+  [`model.ts:525`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L525)
 
 - Escaped key paths keep literal dots distinct from nesting; indices generalize
-  [`model.ts:61`](../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L61)
+  [`model.ts:61`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L61)
 
 - Depth-level fold/unfold and tree-local key dispatch (shared contract untouched)
-  [`model.ts:273`](../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L273)
+  [`model.ts:273`](../../../../src/adapters/driving/tui/shared/components/json-tree/model.ts#L273)
 
 **Zone wiring**
 
 - Live-state recipes compose rapid keypresses instead of dropping them
-  [`routes-zone.tsx:184`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L184)
+  [`routes-zone.tsx:184`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L184)
 
 - Tree owns the keyboard while focused; Esc unwinds panel then focus
-  [`routes-zone.tsx:374`](../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L374)
+  [`routes-zone.tsx:374`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx#L374)
 
 **Session state**
 
 - Per-route tree states, fired key and focus next to the fire triple
-  [`routes-slice.ts:92`](../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L92)
+  [`routes-slice.ts:92`](../../../../src/adapters/driving/tui/store/slices/routes-slice.ts#L92)
 
 - Global Left/Right switch stays inert while the tree owns the arrows
-  [`app-shell.tsx:370`](../../../src/adapters/driving/tui/app-shell.tsx#L370)
+  [`app-shell.tsx:370`](../../../../src/adapters/driving/tui/app-shell.tsx#L370)
 
 **Peripherals**
 
 - Scalar type colors beside (not inside) the pinned theme aggregate
-  [`theme.ts:28`](../../../src/adapters/driving/tui/shared/theme/theme.ts#L28)
+  [`theme.ts:28`](../../../../src/adapters/driving/tui/shared/theme/theme.ts#L28)
 
 - Thin BoundedList view, filter panel, raw fallback with visible selection
-  [`json-tree.tsx:89`](../../../src/adapters/driving/tui/shared/components/json-tree/json-tree.tsx#L89)
+  [`json-tree.tsx:89`](../../../../src/adapters/driving/tui/shared/components/json-tree/json-tree.tsx#L89)
 
 - Consumer tests: depth levels, panel clear/close, raw scrolling via real keypresses
-  [`routes-zone.interaction.test.tsx:303`](../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L303)
+  [`routes-zone.interaction.test.tsx:303`](../../../../src/adapters/driving/tui/zones/routes/routes-zone.interaction.test.tsx#L303)
