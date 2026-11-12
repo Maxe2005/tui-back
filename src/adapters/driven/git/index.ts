@@ -16,6 +16,8 @@ import { branchOwners } from '../../../core/edt/branch-owners.js';
 import { isProtectedBranch } from '../../../core/edt/shared-branches.js';
 import { spawnFailureDetail, showRef, showFullRef, currentBranch } from './refs.js';
 export { currentBranch } from './refs.js';
+import { assertAllowedBranch, assertCurrentBranchAllowed } from './gate.js';
+export { assertAllowedBranch } from './gate.js';
 
 export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryPort): GitPort {
   return {
@@ -64,54 +66,6 @@ export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryP
     listVersionBumpCommits: (repoPath, ref, opts) => listVersionBumpCommits(repoPath, ref, opts),
     listBranchesContaining: (repoPath, commit, signal) => listBranchesContaining(repoPath, commit, signal),
   };
-}
-
-// The reusable branch-scope safety gate (AD-8): resolves the protected set from the
-// repo's own manifest at check time — never trusted from the caller — and rejects
-// before any `git` invocation. A repo whose manifest cannot load fails the gate too (it is
-// not a managed repo, so no branch of it can be judged safe). When both `edtId` and
-// `edtRegistry` are supplied, it also rejects a branchName already registered as a
-// *different* EDT's own branch for this repoPath (the cross-EDT half of AD-8).
-export async function assertAllowedBranch(
-  manifest: ManifestPort,
-  repoPath: string,
-  branchName: string,
-  edtId?: string,
-  edtRegistry?: EdtRegistryPort,
-): Promise<Result<void>> {
-  const loaded = await manifest.load(repoPath);
-  if (!loaded.ok) {
-    return loaded;
-  }
-
-  if (isProtectedBranch(branchName, loaded.data)) {
-    return err('shared-branch-rejected', `Branch "${branchName}" is protected by ${loaded.data.service}'s manifest (repo ${repoPath})`);
-  }
-
-  if (edtId !== undefined && edtRegistry !== undefined) {
-    const listed = await edtRegistry.list();
-    if (!listed.ok) {
-      return listed;
-    }
-    // Normalize both sides before comparing — repoPath is whatever shape the registry stored
-    // a member's path in, which isn't guaranteed to match the caller's resolve()'d repoPath
-    // byte-for-byte (trailing slash, relative segments, ...). Without this, the cross-EDT gate
-    // can silently miss a real conflict.
-    const target = resolve(repoPath);
-    const ownedByOther = listed.data.some(
-      (candidate) =>
-        candidate.ulid !== edtId &&
-        candidate.members.some((member) => resolve(member.repoPath) === target && member.branch === branchName),
-    );
-    if (ownedByOther) {
-      return err(
-        'branch-owned-by-other-edt',
-        `Branch "${branchName}" is already registered as a different EDT's own branch (repo ${repoPath})`,
-      );
-    }
-  }
-
-  return ok(undefined);
 }
 
 export async function createBranch(
@@ -920,16 +874,6 @@ export async function createTrackingBranch(
   return ok(undefined);
 }
 
-// The branch-scope gate for a write that has no branch argument: judges the repo's current
-// branch (a detached HEAD fails as `git-detached-head`, never writes).
-async function assertCurrentBranchAllowed(manifest: ManifestPort, repoPath: string): Promise<Result<void>> {
-  const branch = await currentBranch(repoPath);
-  if (!branch.ok) {
-    return branch;
-  }
-  return assertAllowedBranch(manifest, repoPath, branch.data);
-}
-
 // `git add -- <paths>`: stages exactly the listed paths, nothing else. Gated on the current
 // branch before any git call.
 export async function stagePaths(manifest: ManifestPort, repoPath: string, paths: string[]): Promise<Result<void>> {
@@ -1166,4 +1110,5 @@ export async function listBranchesContaining(repoPath: string, commit: string, s
   }
   return ok(names);
 }
+
 
