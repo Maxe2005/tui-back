@@ -50,11 +50,11 @@ export async function listUnpushedCommits(repoPath: string, branchName: string):
 }
 
 // `git pull --ff-only` on the current branch. Only ever called for a member that already sits
-// on its manifest sharedBranch (the merge path below would be a self-merge); pulls of the
+// on its manifest sharedBranch (the merge path would be a self-merge); pulls of the
 // shared branch carry no write-gate. `--ff-only` never merges and never rebases (a diverged
 // branch is a clean `git-pull-error`, never a surprise merge commit), and
 // `GIT_TERMINAL_PROMPT=0` keeps a credential-requiring remote from hanging on an interactive
-// prompt. Together with `--no-edit` on the merge path, no git invocation here can open an
+// prompt. Together with `--no-edit` on the merge path (merge.ts), no git invocation here can open an
 // editor or prompt.
 export async function pullBranch(repoPath: string): Promise<Result<void>> {
   const result = await runProcess('git', ['pull', '--ff-only'], {

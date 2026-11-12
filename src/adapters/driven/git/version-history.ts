@@ -122,12 +122,3 @@ export async function listBranchesContaining(repoPath: string, commit: string, s
   }
   return ok(names);
 }
-
-
-
-
-
-
-
-
-

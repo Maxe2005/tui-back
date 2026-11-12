@@ -3,7 +3,7 @@ import { type Result, err, ok } from '../../../core/result.js';
 import { runProcess } from '../process.js';
 import { spawnFailureDetail } from './refs.js';
 
-// 64 MiB: the stdout budget of the path-listing calls above/below (spawnSync's default is 1 MiB).
+// 64 MiB: the stdout budget of the path-listing calls in this file and discard.ts (spawnSync's default is 1 MiB).
 export const LARGE_OUTPUT_BUFFER = 64 * 1024 * 1024;
 
 // Trailing pathspec args that hide `paths` from a `git status` (`:(exclude,literal)` — no glob).
