@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { ok } from '../../../core/result.js';
@@ -65,5 +66,21 @@ describe('buildToolRegistry', () => {
     const result = await tool.run({});
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe('internal-error');
+  });
+});
+
+describe('README MCP section', () => {
+  it('lists exactly the registry tools under their own safety-class heading', () => {
+    const readme = readFileSync(new URL('../../../../README.md', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+    const section = readme.split(/^## MCP server$/m)[1]?.split(/^## (?!#)/m)[0] ?? '';
+    expect(section).not.toBe('');
+    for (const safety of ['read', 'write', 'destructive'] as const) {
+      const body = section.split(new RegExp(`^#### ${safety}\\b.*$`, 'm'))[1]?.split(/^###/m)[0] ?? '';
+      const toolLine = body.split('\n').find((line) => line.startsWith('`')) ?? '';
+      const documented = [...toolLine.matchAll(/`([a-z][a-z0-9_-]*)`/g)].map((m) => m[1]).sort();
+      const expected = TOOL_DEFINITIONS.filter((d) => d.safety === safety).map((d) => d.name).sort();
+      expect(expected.length).toBeGreaterThan(0);
+      expect(documented, `tools under ${safety}`).toEqual(expected);
+    }
   });
 });
