@@ -3,6 +3,9 @@ import {
   createInstallSubcommand,
   githubSpecFromRepository,
   isSupportedNode,
+  MCP_ADD_COMMAND,
+  MCP_JSON_CONFIG,
+  MCP_UNINSTALL_NOTE,
   parseNodeMajor,
   removeRcBlock,
   renderRcBlock,
@@ -118,6 +121,26 @@ describe('install subcommand', () => {
     const { sub } = build('v24.0.0');
     for (const args of [['--nope'], ['--uninstall', 'x'], ['x']]) {
       expect(await sub.run(args)).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+  });
+
+  it('install result carries the MCP registration and writes only the completion file and rc', async () => {
+    const { sub, files } = build('v24.0.0');
+    const result = await sub.run([]);
+    expect(result).toMatchObject({
+      ok: true,
+      data: { mcp: { command: 'claude mcp add tui-back -- tui-back mcp', config: { mcpServers: { 'tui-back': { command: 'tui-back', args: ['mcp'] } } } } },
+    });
+    expect([...files.keys()].sort()).toEqual(['/data/tui-back/completion.bash', '/home/u/.bashrc']);
+  });
+
+  it('uninstall result carries mcpNote; failures carry no MCP text', async () => {
+    const { sub } = build('v24.0.0');
+    expect(await sub.run(['--uninstall'])).toMatchObject({ ok: true, data: { mcpNote: expect.stringContaining('claude mcp remove tui-back') } });
+    for (const failing of [build('v22.0.0'), build('v24.0.0', { ok: false, kind: 'failed', message: 'x' } as NpmOutcome)]) {
+      const result = await failing.sub.run([]);
+      expect(result.ok).toBe(false);
+      expect(JSON.stringify(result)).not.toMatch(/mcp add|mcpServers|mcp remove/);
     }
   });
 
@@ -249,5 +272,10 @@ describe('install subcommand edge cases', () => {
     const removed = text({ npmRemoved: true, completionRemoved: true, rcBlockRemoved: false, nextStep: 'n' });
     expect(removed).toContain('Removed tui-back');
     expect(removed).toContain('rc block absent');
+    const mcp = text({ npmInstalled: true, completionFile: '/c', rcFile: '/r', shellWarning: null, nextStep: 'n', mcp: { command: MCP_ADD_COMMAND, config: MCP_JSON_CONFIG } });
+    expect(mcp).toContain('claude mcp add tui-back -- tui-back mcp');
+    expect(mcp).toContain('not applied');
+    expect(mcp).toContain(JSON.stringify(MCP_JSON_CONFIG, null, 2).split('\n').join('\n  '));
+    expect(text({ npmRemoved: true, completionRemoved: true, rcBlockRemoved: true, nextStep: 'n', mcpNote: MCP_UNINSTALL_NOTE })).toContain('claude mcp remove tui-back');
   });
 });

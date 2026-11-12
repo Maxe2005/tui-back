@@ -173,12 +173,21 @@ function npmFailure(outcome: Extract<NpmOutcome, { ok: false }>): Result<never> 
   return err('npm-failed', `npm failed: ${outcome.message}`);
 }
 
+/** Printed only, never applied: the installer does not touch any MCP client config. */
+export const MCP_ADD_COMMAND = 'claude mcp add tui-back -- tui-back mcp';
+export const MCP_JSON_CONFIG = Object.freeze({
+  mcpServers: Object.freeze({ 'tui-back': Object.freeze({ command: 'tui-back', args: Object.freeze(['mcp']) }) }),
+});
+export const MCP_UNINSTALL_NOTE =
+  "To remove the MCP registration, run `claude mcp remove tui-back` and remove the `tui-back` entry from other clients' config.";
+
 export interface InstallData {
   npmInstalled: boolean;
   completionFile: string;
   rcFile: string;
   shellWarning: string | null;
   nextStep: string;
+  mcp: { command: string; config: unknown };
 }
 
 export interface UninstallData {
@@ -188,6 +197,7 @@ export interface UninstallData {
   completionFile: string;
   rcFile: string;
   nextStep: string;
+  mcpNote: string;
 }
 
 const RELOAD_HINT = 'Run `source ~/.bashrc` (or open a new shell) to apply the change.';
@@ -223,7 +233,7 @@ export function createInstallSubcommand(deps: InstallDeps): Subcommand {
     const shellWarning = /(^|\/)bash$/.test(shell)
       ? null
       : `Your shell (${shell === '' ? 'unknown' : shell}) is not bash: only ~/.bashrc was configured, aliases and completion will not load elsewhere.`;
-    return ok({ npmInstalled: true, completionFile, rcFile, shellWarning, nextStep: RELOAD_HINT });
+    return ok({ npmInstalled: true, completionFile, rcFile, shellWarning, nextStep: RELOAD_HINT, mcp: { command: MCP_ADD_COMMAND, config: structuredClone(MCP_JSON_CONFIG) } });
   }
 
   async function uninstall(): Promise<Result<UninstallData>> {
@@ -247,6 +257,7 @@ export function createInstallSubcommand(deps: InstallDeps): Subcommand {
       completionFile,
       rcFile,
       nextStep: RELOAD_HINT,
+      mcpNote: MCP_UNINSTALL_NOTE,
     });
   }
 
@@ -276,9 +287,18 @@ export function createInstallSubcommand(deps: InstallDeps): Subcommand {
               `Completion: ${d.completionFile ?? ''}`,
               `Aliases and completion block: ${d.rcFile ?? ''}`,
               ...(d.shellWarning ? [`Warning: ${d.shellWarning}`] : []),
+              ...(d.mcp?.config !== undefined
+                ? [
+                    'MCP server (not applied; run it yourself to register tui-back with your client):',
+                    `  ${d.mcp.command}`,
+                    '  Or add this to another client\'s MCP config:',
+                    ...JSON.stringify(d.mcp.config, null, 2).split('\n').map((l) => `  ${l}`),
+                  ]
+                : []),
             ]
           : [
               `Removed ${PACKAGE_NAME} (global package ${d.npmRemoved === true ? 'removed' : 'skipped: npm not found'}, completion file ${d.completionRemoved === true ? 'removed' : 'absent'}, rc block ${d.rcBlockRemoved === true ? 'removed' : 'absent'}).`,
+              ...(d.mcpNote ? [d.mcpNote] : []),
             ];
       return [...lines, d.nextStep ?? RELOAD_HINT].join('\n');
     },
