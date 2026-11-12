@@ -2,7 +2,6 @@
 import { type Result, err, ok } from '../../../core/result.js';
 import { runProcess } from '../process.js';
 import { spawnFailureDetail } from './refs.js';
-import { stashSave } from './stash.js';
 
 // 64 MiB: the stdout budget of the path-listing calls above/below (spawnSync's default is 1 MiB).
 export const LARGE_OUTPUT_BUFFER = 64 * 1024 * 1024;

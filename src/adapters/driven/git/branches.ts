@@ -1,5 +1,4 @@
 // adapters/driven/git/branches: branch lifecycle and queries (create, delete, rename, track, checkout, list, merged/ahead-behind checks); every ref write goes through the gate.
-import { join, resolve } from 'node:path';
 import { branchOwners } from '../../../core/edt/branch-owners.js';
 import { type EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import { type ManifestPort } from '../../../core/ports/manifest.js';
