@@ -42,7 +42,7 @@ development_status:
   12-4-split-the-cli-subcommands-by-family: done
   12-5-split-the-group-update-core: done
   12-6-split-edt-switch: done
-  12-7-split-the-zone-logic-modules: review
+  12-7-split-the-zone-logic-modules: done
   12-8-split-the-update-and-logs-slices: backlog
   12-9-split-routeszone-into-hooks-and-subcomponents: backlog
   12-10-split-logszone-into-hooks-and-subcomponents: backlog
