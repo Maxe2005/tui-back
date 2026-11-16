@@ -977,3 +977,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-2-extract-pure-logic-from-json-tree-and-the-command-bar.md`
   summary: Rehome generic grid helpers (used by logs-zone) out of `command-grid.logic.ts`, and move constants (MAX_BODY_CHARS, MAX_BODY_DRAFTS) next to their only consumers.
   evidence: Reviewer noted logs-zone reuses layoutCommandGrid via command-bar re-export; naming/placement debt that epic 14 (reorganization) can absorb.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-3-split-the-settings-screen-by-tab.md`
+  summary: ServicesTab keys the health-check toggle by service name while rows are keyed by path, so two repos sharing a service name (or an unreadable-manifest dir name colliding with one) toggle together.
+  evidence: `healthCheckDisabled.includes(row.service)` in settings/services-tab.tsx, carried over unchanged from the original screen.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-3-split-the-settings-screen-by-tab.md`
+  summary: Logs filter-history helpers (FILTER_HISTORY_SIZE_STEP, adjust/clamp/parse) live in palette.logic.ts and logs-tab imports them from there; move to a neutral shared module.
+  evidence: logs-tab.tsx imports FILTER_HISTORY_SIZE_STEP from ./palette.logic.js; palette tab reuses it too.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-3-split-the-settings-screen-by-tab.md`
+  summary: settings-screen.tsx still holds all state and the single useInput (~726 lines); per-tab key resolvers/state hooks and a shared CursorRow component would shrink it and the ~15 duplicated cursor-glyph rows.
+  evidence: wc -l settings-screen.tsx = 726 after the split; spec marks extracting key handlers as Ask First.
