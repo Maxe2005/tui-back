@@ -58,6 +58,7 @@ import { settingsFooterContext } from './settings/footer-context.logic.js';
 import { SharedTypesTab } from './settings/shared-types-tab.js';
 import { ServicesTab } from './settings/services-tab.js';
 import { GeneralTab } from './settings/general-tab.js';
+import { UpdateTab } from './settings/update-tab.js';
 export * from './settings/footer-context.logic.js';
 export * from './settings/edts.logic.js';
 export * from './settings/logs.logic.js';
@@ -688,44 +689,7 @@ export function SettingsScreen({
         ) : null}
 
         {tab === 'update' ? (
-          <Box flexDirection="column">
-            {UPDATE_SETTINGS_ROWS.map((row, index) => {
-              const highlighted = index === updateCursor;
-              const cursorGlyph = <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>;
-              if (row === 'concurrency') {
-                return (
-                  <Box key={row} flexDirection="row">
-                    {cursorGlyph}
-                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">
-                      Update concurrency: <Text color={colors.accent}>{settings.update.concurrency}</Text>
-                    </Text>
-                  </Box>
-                );
-              }
-              if (row === 'merge-source') {
-                return (
-                  <Box key={row} flexDirection="row">
-                    {cursorGlyph}
-                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">
-                      Merge source:{' '}
-                      <Text color={colors.accent}>{settings.update.mergeSource === 'shared' ? 'Shared branch' : 'From EDT (pick at run time)'}</Text>
-                    </Text>
-                  </Box>
-                );
-              }
-              return (
-                <Box key={row} flexDirection="row">
-                  {cursorGlyph}
-                  <CheckboxListItem
-                    label={row === 'run-migrations' ? 'Run migrations' : 'Clean restart'}
-                    selected={highlighted}
-                    state={(row === 'run-migrations' ? settings.update.runMigrations : settings.update.cleanRestart) ? 'checked' : 'unchecked'}
-                  />
-                </Box>
-              );
-            })}
-            <DimAnnotation text={UPDATE_SETTINGS_ROW_HINTS[UPDATE_SETTINGS_ROWS[updateCursor] ?? 'concurrency']} />
-          </Box>
+          <UpdateTab settings={settings} cursor={updateCursor} />
         ) : null}
 
         {tab === 'command-palette' && paletteGroup === null ? (
