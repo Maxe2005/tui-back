@@ -524,11 +524,13 @@ describe('Step 4 helpers', () => {
         { service: 'a', outcome: 'failed', detail: { code: 'x', message: 'boom' } },
         { service: 'b', outcome: 'discarded', detail: { code: 'discarded', message: '', discardedPaths: ['f.ts'] } },
         { service: 'c', outcome: 'switched' },
+        { service: 'd', outcome: 'unchanged' },
       ]),
     ).toEqual([
       { service: 'a', message: 'boom' },
       { service: 'b', message: 'files overwritten (1): f.ts — then switched to its target branch' },
       { service: 'c', message: 'switched to its target branch' },
+      { service: 'd', message: 'already on its target branch' },
     ]);
   });
 });

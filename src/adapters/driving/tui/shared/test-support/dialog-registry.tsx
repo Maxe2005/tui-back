@@ -193,7 +193,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
           ...initialSwitchDialog(edt),
           results: services.map((s, i) => ({
             service: s.service,
-            outcome: (['switched', 'adopted', 'discarded', 'failed'] as const)[i % 4],
+            outcome: (['switched', 'adopted', 'discarded', 'failed', 'unchanged'] as const)[i % 5],
             detail: { code: 'x', message: MULTILINE_ERROR, adoptedBranch: s.branch ?? 'main' },
           })),
           failedRows: failedRows(),

@@ -48,6 +48,23 @@ describe('restartAfterSwitch', () => {
     expect(serviceActions.restart).toHaveBeenCalledTimes(2);
   });
 
+  it('skips `unchanged` rows as `skipped (unchanged)`: mixed moved / already there / no container', async () => {
+    const serviceActions = actions();
+    const mixed: SwitchEdtRepoResult[] = [
+      { service: 'api', outcome: 'switched' },
+      { service: 'web', outcome: 'unchanged' },
+      { service: 'lib', outcome: 'switched' },
+    ];
+    const report = await restartAfterSwitch({ results: mixed, repos: repos.slice(0, 3), mode: 'simple', concurrency: 2, serviceActions });
+    expect(report.ok).toBe(true);
+    if (!report.ok) return;
+    const byService = Object.fromEntries(report.data.rows.map((row) => [row.service, row]));
+    expect(byService.api).toMatchObject({ phase: 'functional' });
+    expect(byService.web).toMatchObject({ phase: 'skipped', skipReason: 'unchanged' });
+    expect(byService.lib).toMatchObject({ phase: 'skipped', skipReason: 'no container' });
+    expect(serviceActions.restart).toHaveBeenCalledTimes(1);
+  });
+
   it('targets only the changedServices override when given, ignoring the switch outcomes', async () => {
     const serviceActions = actions();
     const report = await restartAfterSwitch({ results: [], repos, mode: 'clean', concurrency: 1, serviceActions, changedServices: ['idle', 'lib'] });

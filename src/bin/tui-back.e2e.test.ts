@@ -1464,10 +1464,10 @@ describe('tui-back edt switch (black-box)', () => {
       expect(JSON.parse(switchToA.stdout.trim()).data).toMatchObject({
         ulid: ulidA,
         // r1 (a's member) checks into feat/r1; r2 (registered, but not a's member) is forced
-        // onto the shared branch too — it just happens to already be there.
+        // onto the shared branch too — it is already there, so its row is `unchanged`.
         results: [
           { service: 'route-explorer', outcome: 'switched' },
-          { service: 'route-explorer', outcome: 'switched' },
+          { service: 'route-explorer', outcome: 'unchanged' },
         ],
         wasInterrupted: false,
       });

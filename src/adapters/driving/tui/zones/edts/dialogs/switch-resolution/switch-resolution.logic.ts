@@ -543,7 +543,7 @@ function loggedPaths(paths: readonly string[]): string {
 
 // The dialog stays open on a results summary when anything beyond a plain switch happened.
 export function needsResultsView(results: readonly SwitchEdtRepoResult[]): boolean {
-  return results.some((row) => row.outcome !== 'switched');
+  return results.some((row) => row.outcome !== 'switched' && row.outcome !== 'unchanged');
 }
 
 // The action-log detail: adopted branches and discarded paths.

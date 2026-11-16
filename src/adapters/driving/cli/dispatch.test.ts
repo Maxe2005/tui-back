@@ -927,7 +927,7 @@ describe('subcommand registry guards', () => {
       members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
     };
 
-    function restartSetup(opts: { healthy?: boolean; mode?: 'none' | 'simple' | 'clean'; withHealthUrl?: boolean; healthCheckDisabled?: string[] } = {}) {
+    function restartSetup(opts: { healthy?: boolean; mode?: 'none' | 'simple' | 'clean'; withHealthUrl?: boolean; healthCheckDisabled?: string[]; currentBranch?: string } = {}) {
       const writeActiveEdt = vi.fn(async () => ok(undefined));
       const containerRestart = vi.fn(async () => ok(undefined));
       const probe = vi.fn(async () => ok({ healthy: opts.healthy ?? true, status: opts.healthy === false ? 503 : 200, ...(opts.healthy === false ? { reason: 'HTTP 503' } : {}) }));
@@ -968,6 +968,7 @@ describe('subcommand registry guards', () => {
           restartContainer: async () => ok(undefined),
         },
         healthProbe: { probe },
+        ...(opts.currentBranch !== undefined ? { git: fakeGitPort({ currentBranch: async () => ok(opts.currentBranch as string) }) } : {}),
       });
       const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
       if (!edt) throw new Error('expected edt subcommand');
@@ -999,6 +1000,16 @@ describe('subcommand registry guards', () => {
       expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
         expect.arrayContaining([{ service: 'svc-a', mode: 'simple', state: 'functional' }]),
       );
+    });
+
+    it('emits an additive `unchanged` row and restarts nothing for a repo already on its target branch', async () => {
+      const { edt, containerRestart } = restartSetup({ currentBranch: 'feat/a' });
+      const result = await edt.run(['switch', '--to', 'demo', '--restart', 'simple']);
+      expect(result.ok).toBe(true);
+      const data = result.ok ? (result.data as { results: { service: string; outcome: string }[]; restart: unknown[] }) : null;
+      expect(data?.results).toContainEqual(expect.objectContaining({ service: 'svc-a', outcome: 'unchanged' }));
+      expect(containerRestart).not.toHaveBeenCalled();
+      expect(data?.restart).toEqual(expect.arrayContaining([{ service: 'svc-a', mode: 'simple', state: 'skipped', detail: 'unchanged' }]));
     });
 
     it('--restart never probes a service whose health check is disabled in settings', async () => {

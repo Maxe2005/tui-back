@@ -601,7 +601,7 @@ export type SwitchDialogState = {
   // seam (initialized by the zone when `switchDirtyRepos` turns non-null).
   resolution: SwitchResolutionState | null;
   // An ok switch that adopted/discarded/failed anything keeps the dialog open on this per-repo
-  // summary (Enter/Esc close it); an all-`switched` run closes.
+  // summary (Enter/Esc close it); an all-`switched`/`unchanged` run closes.
   results?: SwitchEdtRepoResult[];
   // This switch's post-switch restart choice (FR-37). Undefined = inherit the
   // `switch.restartMode` setting (the dialog never writes it back); the create wizard's

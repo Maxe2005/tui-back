@@ -97,7 +97,7 @@ function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
     assertAllowedBranch: vi.fn(async () => ok(undefined)),
     createBranch: vi.fn(async () => ok(undefined)),
     deleteBranch: vi.fn(async () => ok(undefined)),
-    currentBranch: vi.fn(async () => ok('development')),
+    currentBranch: vi.fn(async () => ok('wip/elsewhere')),
     aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
     checkout: vi.fn(async () => ok(undefined)),
     hasUncommittedChanges: vi.fn(async () => ok(false)),
@@ -1701,5 +1701,96 @@ describe('switchActiveEdt — dirtyPolicy flag sugar', () => {
     await switchActiveEdt(params);
 
     expect(calls(git.discardAll)).toHaveLength(0);
+  });
+});
+
+describe('switchActiveEdt — unchanged outcome', () => {
+  const branches: Record<string, string> = { '/repo/a': 'feat/a', '/repo/b': 'development', '/repo/c': 'development' };
+  const onTarget = () => vi.fn(async (repoPath: string) => ok(branches[repoPath] ?? 'x'));
+
+  it('reports every clean repo already on its target as `unchanged`, running no checkout', async () => {
+    const git = fakeGit({ currentBranch: onTarget() });
+    const result = await switchActiveEdt(makeParams({ git }));
+    expect(result.ok && result.data.results).toEqual([
+      { service: 'svc-a', outcome: 'unchanged', detail: { code: 'unchanged', message: 'already on `feat/a`' } },
+      { service: 'svc-b', outcome: 'unchanged', detail: { code: 'unchanged', message: 'already on `development`' } },
+      { service: 'svc-c', outcome: 'unchanged', detail: { code: 'unchanged', message: 'already on `development`' } },
+    ]);
+    expect(calls(git.checkout)).toHaveLength(0);
+    expect(calls(git.restoreStash)).toHaveLength(0);
+  });
+
+  it('keeps `switched` for a repo on another branch', async () => {
+    const git = fakeGit();
+    const result = await switchActiveEdt(makeParams({ git }));
+    expect(result.ok && result.data.results.map((r) => r.outcome)).toEqual(['switched', 'switched', 'switched']);
+  });
+
+  it('keeps `switched` and pops the stash when a target-tagged stash exists on an already-there member', async () => {
+    const git = fakeGit({ currentBranch: onTarget(), hasStash: vi.fn(async () => ok(true)) });
+    const result = await switchActiveEdt(makeParams({ git }));
+    expect(result.ok && result.data.results.find((r) => r.service === 'svc-a')?.outcome).toBe('switched');
+    expect(calls(git.restoreStash)).toContainEqual(['/repo/a', 'tui-back:target-ulid']);
+  });
+
+  it('keeps `switched` (stash-on-dirty) for an already-there dirty state-1 repo', async () => {
+    const outgoing = edtEntry('outgoing-ulid', 'outgoing-topic', [member('svc-a', '/repo/a', 'feat/a-out')]);
+    const git = fakeGit({
+      currentBranch: onTarget(),
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a')),
+    });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, outgoing])) });
+    const result = await switchActiveEdt(makeParams({ git, edtRegistry }));
+    expect(result.ok && result.data.results.find((r) => r.service === 'svc-a')?.outcome).toBe('switched');
+    expect(calls(git.stashSave)).toHaveLength(1);
+  });
+
+  it('keeps `discarded` for an already-there dirty repo with a discard resolution', async () => {
+    const git = fakeGit({
+      currentBranch: onTarget(),
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+      listDirtyPaths: vi.fn(async () => ok(['x.txt'])),
+    });
+    const result = await switchActiveEdt(makeParams({ git, dirtyResolutions: { '/repo/b': { kind: 'discard' } } }));
+    expect(result.ok && result.data.results.find((r) => r.service === 'svc-b')?.outcome).toBe('discarded');
+  });
+
+  it('falls back to `switched` when currentBranch fails (or HEAD is detached)', async () => {
+    const git = fakeGit({ currentBranch: vi.fn(async () => err('detached-head', 'detached')) });
+    const result = await switchActiveEdt(makeParams({ git }));
+    expect(result.ok && result.data.results.map((r) => r.outcome)).toEqual(['switched', 'switched', 'switched']);
+  });
+
+  it('still resolves the destination first: a missing member branch fails even when "already there"', async () => {
+    const git = fakeGit({ currentBranch: onTarget(), branchExistsLocally: vi.fn(async (_p: string, b: string) => ok(b !== 'feat/a')) });
+    const result = await switchActiveEdt(makeParams({ git }));
+    expect(result.ok && result.data.results.find((r) => r.service === 'svc-a')?.outcome).toBe('failed');
+  });
+
+  it('treats a detached HEAD reading as not already there', async () => {
+    const git = fakeGit({ currentBranch: vi.fn(async () => ok('HEAD')) });
+    const result = await switchActiveEdt(makeParams({ git }));
+    expect(result.ok && result.data.results.map((r) => r.outcome)).toEqual(['switched', 'switched', 'switched']);
+  });
+
+  it('falls back to `switched` (checkout and pop run) when hasStash fails on an already-there member', async () => {
+    const git = fakeGit({ currentBranch: onTarget(), hasStash: vi.fn(async () => err('git-error', 'boom')) });
+    const result = await switchActiveEdt(makeParams({ git }));
+    expect(result.ok && result.data.results.find((r) => r.service === 'svc-a')?.outcome).toBe('switched');
+    expect(calls(git.checkout)).toContainEqual(['/repo/a', 'feat/a']);
+    expect(calls(git.restoreStash)).toContainEqual(['/repo/a', 'tui-back:target-ulid']);
+  });
+
+  it('keeps `switched` and checks out for an already-there dirty non-member (stash plan)', async () => {
+    const outgoing = edtEntry('outgoing-ulid', 'outgoing-topic', [member('svc-b', '/repo/b', 'feat/b')]);
+    const git = fakeGit({
+      currentBranch: onTarget(),
+      hasUncommittedChanges: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/b')),
+    });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, outgoing])) });
+    const result = await switchActiveEdt(makeParams({ git, edtRegistry }));
+    expect(result.ok && result.data.results.find((r) => r.service === 'svc-b')?.outcome).toBe('switched');
+    expect(calls(git.stashSave)).toContainEqual(['/repo/b', 'tui-back:outgoing-ulid']);
+    expect(calls(git.checkout)).toContainEqual(['/repo/b', 'development']);
   });
 });

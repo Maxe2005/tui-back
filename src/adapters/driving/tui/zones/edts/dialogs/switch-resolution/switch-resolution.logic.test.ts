@@ -250,6 +250,9 @@ describe('reduceSwitchResolutionKey', () => {
 describe('results & log detail', () => {
   it('keeps the dialog open on anything beyond a plain switch and records adopted branches and discarded paths', () => {
     expect(needsResultsView([{ service: 'a', outcome: 'switched' }])).toBe(false);
+    expect(needsResultsView([{ service: 'a', outcome: 'unchanged' }, { service: 'b', outcome: 'switched' }])).toBe(false);
+    expect(needsResultsView([{ service: 'a', outcome: 'unchanged' }, { service: 'b', outcome: 'unchanged' }])).toBe(false);
+    expect(needsResultsView([{ service: 'a', outcome: 'unchanged' }, { service: 'b', outcome: 'failed' }])).toBe(true);
     const results: SwitchEdtRepoResult[] = [
       { service: 'a', outcome: 'adopted', detail: { code: 'adopted', message: 'm', adoptedBranch: 'mon-topic' } },
       { service: 'b', outcome: 'discarded', detail: { code: 'discarded', message: 'm', discardedPaths: ['x.txt', 'y/z.txt'] } },
