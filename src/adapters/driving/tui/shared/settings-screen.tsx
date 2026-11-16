@@ -6,54 +6,24 @@
 import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
-import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
-import { TextInputLine } from './components/text-input-line.js';
-import { formatHint } from './components/hints.js';
+import type { TextInputState } from './components/text-edit.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
-import { resolveFocusStep, stepFocus } from './keys/focus-navigation.js';
+import { resolveFocusStep } from './keys/focus-navigation.js';
 import { nextCursorForKey } from './keys/list-cursor.js';
-import type { FooterContextId } from '../keybindings/index.js';
-import { colors, spacing, typography } from './theme/theme.js';
+import { spacing } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
-import {
-  MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
-  MAX_FILTER_HISTORY_GRID_MAX_ROWS,
-  MAX_HISTORY_DEPTH,
-  MAX_INPUT_HISTORY_SIZE,
-  MAX_MAX_COMMITS_SCANNED,
-  MIN_HISTORY_DEPTH,
-  MIN_MAX_COMMITS_SCANNED,
-  MAX_GRID_MAX_ROWS,
-  MAX_LOG_BUFFER_SIZE,
-  MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
-  MIN_FILTER_HISTORY_GRID_MAX_ROWS,
-  MIN_INPUT_HISTORY_SIZE,
-  MIN_GRID_MAX_ROWS,
-  MIN_LOG_BUFFER_SIZE,
-  MAX_UPDATE_CONCURRENCY,
-  MIN_UPDATE_CONCURRENCY,
-  cycleSwitchRestartMode,
-  cycleRealignScope,
-  type RealignScope,
-  type Settings,
-  type SwitchRestartMode,
-  type UpdateMergeSourceDefault,
-} from '../../../../core/ports/settings.js';
-import { StateLine } from './components/state-line.js';
+import { cycleSwitchRestartMode, cycleRealignScope } from '../../../../core/ports/settings.js';
 import { GLOBAL_RULES_KEY } from '../../../../core/logs/rule-sets.js';
-import { BoundedList } from './components/bounded-list.js';
-import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../core/edt/list.js';
-import { SETTINGS_LIST_CHROME_ROWS, SETTINGS_TABS, SETTINGS_TAB_LABELS, nextSettingsTab, resolveSettingsTabState, type SettingsTab } from './settings/settings-tabs.logic.js';
+import { SETTINGS_TABS, SETTINGS_TAB_LABELS, nextSettingsTab, resolveSettingsTabState, type SettingsTab } from './settings/settings-tabs.logic.js';
 import { buildServicesSettingsRows, resolveServicesSettingsKey } from './settings/services.logic.js';
-import { SHARED_TYPES_SETTINGS_ROWS, resolveSharedTypesSettingsKey } from './settings/shared-types.logic.js';
-import { EDITOR_COMMAND_PLACEHOLDER_TEXT, GENERAL_SETTINGS_ROWS, resolveGeneralSettingsKey } from './settings/general.logic.js';
-import { UPDATE_SETTINGS_ROWS, UPDATE_SETTINGS_ROW_HINTS, resolveUpdateSettingsKey } from './settings/update.logic.js';
-import { FILTER_HISTORY_SIZE_STEP, PALETTE_SETTINGS_GROUPS, type PaletteSettingsGroupId, adjustFilterHistoryGridMaxRows, adjustFilterHistorySize, adjustGridMaxRows, parseFilterHistoryGridMaxRowsDigit, parseGridMaxRowsDigit } from './settings/palette.logic.js';
-import { LOGS_CLEAR_ROWS, LOGS_CLEAR_ROW_LABELS, LOGS_RULES_ROWS, LOGS_RULES_ROW_LABELS, LOGS_SETTINGS_GROUPS, LOG_BUFFER_SIZE_STEP, type LogsRulesConfirm, type LogsSettingsGroupId, adjustLogBufferSize, parseLogBufferSizeDigit } from './settings/logs.logic.js';
-import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
+import { resolveSharedTypesSettingsKey } from './settings/shared-types.logic.js';
+import { GENERAL_SETTINGS_ROWS, resolveGeneralSettingsKey } from './settings/general.logic.js';
+import { resolveUpdateSettingsKey } from './settings/update.logic.js';
+import { PALETTE_SETTINGS_GROUPS, type PaletteSettingsGroupId, adjustFilterHistoryGridMaxRows, adjustFilterHistorySize, adjustGridMaxRows, parseFilterHistoryGridMaxRowsDigit, parseGridMaxRowsDigit } from './settings/palette.logic.js';
+import { LOGS_CLEAR_ROWS, LOGS_RULES_ROWS, LOGS_SETTINGS_GROUPS, type LogsRulesConfirm, type LogsSettingsGroupId, adjustLogBufferSize, parseLogBufferSizeDigit } from './settings/logs.logic.js';
+import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, SETTINGS_GROUPS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
 import { settingsFooterContext } from './settings/footer-context.logic.js';
 import { SharedTypesTab } from './settings/shared-types-tab.js';
 import { ServicesTab } from './settings/services-tab.js';
