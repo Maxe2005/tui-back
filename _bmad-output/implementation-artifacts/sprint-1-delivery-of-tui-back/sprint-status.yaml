@@ -51,7 +51,9 @@ development_status:
   epic-3: done
   epic-3-retrospective: optional
 
-  epic-4: done
+  epic-4: in-progress
+  4-8-manifest-declared-generated-files-regenerated-on-update-conflict: backlog
+  4-9-update-conflict-auto-resolution-in-the-cli-and-mcp: backlog
   epic-4-retrospective: optional
 
   epic-5: done

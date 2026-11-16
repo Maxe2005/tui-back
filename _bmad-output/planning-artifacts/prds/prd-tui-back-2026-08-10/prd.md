@@ -479,6 +479,10 @@ When a group update (or a single-service update of the source repo) covers the `
 
 When a consumer's update merge conflicts and the only conflicting hunk in `package.json` is the `shared-types` dependency line, the tool resolves it to the EDT's current value, takes `package-lock.json` from the EDT side and regenerates it with `npm i`, stages the lockfile if it changed and completes the merge. Any other conflicting hunk, or any conflict in another file, is left to the user through FR-11's assisted resolution.
 
+#### FR-52: Manifest-declared generated files regenerated on update conflict (added 2026-11-16, Sprint Change Proposal 2)
+
+A service's manifest may declare generated files (a glob) and the command that rebuilds them (`generatedFiles`, e.g. barrel `index.ts` files rebuilt by `npm run barrels`). When an update's merge conflicts, and once every other conflict is settled, the tool re-runs the command in place of hand-resolution, verifies no conflict marker remains, stages the regenerated files and completes the merge; otherwise the conflict is left to the developer with the command's error. Applies to the TUI, the CLI and MCP updates; FR-31's `shared-types` auto-resolution applies there too (Story 4.9). Files the command touches outside the declared globs are never staged.
+
 ---
 
 ### 4.5 Aggregated Log Observability

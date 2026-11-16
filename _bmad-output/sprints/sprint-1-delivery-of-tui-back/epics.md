@@ -60,6 +60,7 @@ FR-48 (added 2026-11-05): `tui-back mcp` exposes every subcommand as an MCP tool
 FR-49 (added 2026-11-05): The log filter is an ordered list of rules (text/regex, show/hide, whole line/matched text only), kept across restarts and savable as named rule sets; history recall restores every field.
 FR-50 (added 2026-11-16): Each EDT keeps its own favorite routes (repo, method, path), shown in a pane above the routes list; one key adds or removes the selected or open route; the last fired routes of the session are listed with their status and the last request can be re-fired in one keypress.
 FR-51 (added 2026-11-16): The favorite routes of an EDT can be fired together (smoke run) and reported as a status table; mutating requests are never sent unless explicitly included.
+FR-52 (added 2026-11-16, Sprint Change Proposal 2): A service's manifest may declare generated files and the command that rebuilds them (`generatedFiles`); an update merge conflict that touches only such files is settled by re-running the command, in the TUI, the CLI and MCP.
 
 ### NonFunctional Requirements
 
@@ -162,7 +163,7 @@ FR-13: Epic 4 - Publish a new shared-types version
 FR-14: Epic 4 - Version history library (redefined 2026-10-12, Story 4.6)
 FR-15: Epic 4 - Propagate a version to chosen services
 FR-30: Epic 4 - Smart group update (added 2026-10-05, Sprint Change Proposal — Story 4.4)
-FR-31: Epic 4 - Auto-resolve shared-types-only merge conflicts (added 2026-10-05, Sprint Change Proposal — Story 4.5)
+FR-31: Epic 4 - Auto-resolve shared-types-only merge conflicts (added 2026-10-05, Sprint Change Proposal — Story 4.5; also applied by the CLI and MCP updates — Story 4.9)
 FR-16: Epic 5 - Aggregated live log stream
 FR-17: Epic 5 - Filter the aggregated stream
 FR-18: Epic 5 - Inline service health
@@ -188,6 +189,7 @@ FR-48: Epic 11 - MCP server exposing every subcommand, with human authorization 
 FR-49: Epic 5 - Log filter action (show/hide) and target (line/match), stored in filter history (added 2026-11-05 — Story 5.8; stackable rules: Story 5.9; persisted rules and named sets: Story 5.10)
 FR-50: Epic 6 - Favorite routes per EDT, recents, quick re-fire (added 2026-11-16 — Stories 6.11, 6.12, 6.13; UX of Stories 6.10, 6.16, 6.17)
 FR-51: Epic 6 - Smoke run of the EDT's favorite routes (added 2026-11-16 — Stories 6.14, 6.15)
+FR-52: Epic 4 - Manifest-declared generated files regenerated on update conflict (added 2026-11-16 — Stories 4.8, 4.9)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
@@ -406,7 +408,7 @@ As a developer, I want to choose in `:settings` the defaults the Update configur
 
 ## Epic 4: `shared-types` Propagation & Smart Update
 A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution.
-**FRs covered:** FR-13, FR-14 (redefined 2026-10-12: version history library), FR-15, FR-30, FR-31, FR-36 (4.7)
+**FRs covered:** FR-13, FR-14 (redefined 2026-10-12: version history library), FR-15, FR-30, FR-31, FR-36 (4.7), FR-52 (4.8, 4.9)
 **Implementation notes:** First company-specific module, validating AD-4/AD-5 (AD-18); shared-types zone (UX-DR24). Prerequisites: Epic 7 done; Epic 3 merged into `devlopment` for Stories 4.4/4.5 (Sprint Change Proposal 2026-10-05).
 
 ### Epic 5: Aggregated Log Observability
@@ -2741,6 +2743,41 @@ As a developer, I want the st zone's option checkboxes to start the way I like, 
 **Given** the busy state **When** a run blocks (publish `blocked`) **Then** the tab shows the attention state the Update tab shows for incidents, if that component supports it; otherwise no badge.
 
 **Implementation notes:** the busy signal is lifted from the zone's local state into a store flag (`sharedTypesBusy`) so the shell can pass it to `ZoneTabBar`, mirroring `updateRunning`; `ZoneTabBar`'s `updateRunning` prop becomes a generic per-zone `busy` map (Update keeps its incident count).
+
+### Story 4.8: Manifest-Declared Generated Files, Regenerated on Update Conflict
+
+> Added 2026-11-16 (Sprint Change Proposal 2). Adds FR-52; amends AD-4; adds AD-26. Builds on Stories 3.4 (assisted resolution), 4.5 (the resolver seam) and 3.8 (`restartCommands`).
+
+As a developer, I want conflicts on files that a command regenerates to be settled by running that command, so that a barrel (`index.ts`) conflict never interrupts an update.
+
+**Acceptance Criteria:**
+
+- **Given** a manifest declaring `generatedFiles: [{ glob: "**/index.ts", command: "npm run barrels" }]` **When** it is loaded **Then** it validates; an entry with a blank `glob` or `command`, an absolute or `..` glob, or an unknown key fails validation with a precise message (`manifest-validation-failed`); an absent key means no generated files and changes nothing for existing manifests.
+- **Given** a merge or pull conflict in a repo declaring `generatedFiles` **When** the conflicted paths all match a declared glob **Then** the declared command runs once in the repo directory, no conflict marker remains in the matched files afterwards, the matched files that differ are staged (`GitPort.stagePaths`, AD-8), and the merge completes through the existing flow; the row's conflict outcome is `auto-resolved`.
+- **Given** conflicted paths that match no declared glob **When** the resolver runs **Then** it does not touch them: they stay conflicted and the existing assisted-resolution flow (Story 3.4) presents them; the generated files are regenerated **only once every other conflicted path is settled** (the resolver is idempotent and is re-run after the developer's edits and before each menu presentation); until then the row's outcome is `partial`.
+- **Given** the declared command fails (non-zero exit, unspawnable shell, or a conflict marker still present in a matched file) **When** it ran **Then** nothing is staged, the conflict stays open, and the run tracking shows the issue (command, exit status, first lines of output); the developer can fix and retry through the same menu.
+- **Given** the command modified files that match no declared glob **When** it finished **Then** those files are neither staged nor reverted, and the issue line lists them.
+- **Given** two declared entries with the same `command` **When** both match **Then** the command runs once.
+- **Given** a repo that also has the `shared-types-consumer` module **When** its merge conflicts on `package.json` and on `index.ts` **Then** both resolvers run through one composed seam (each settles only its own files); the outcome is `auto-resolved` only if together they settled every conflicted path, otherwise `partial`.
+- **Given** the docs **When** updated **Then** `docs/tui-back-manifest.md` documents `generatedFiles` (semantics, glob rules, ordering, failure behaviour, the trust note, an example for the `shared-types` source repo, the error row) **and** the `manifest-generator` skill detects likely candidates (a `barrels`/`generate`-style script, generated-file headers) and offers the entry.
+
+**Implementation notes:** `core/scripts/auto-resolve-generated.ts` returns the existing `AutoResolveResult`; `compose-auto-resolvers.ts` folds N resolvers into one `AutoResolveConflict` (results merged: `touched` OR-ed, issues joined) so `groupUpdate`'s signature is unchanged. No git write beyond `stagePaths` (the generator overwrites the conflicted files itself). Tests: pure resolver with a fake git and command port (all-generated, mixed, command failure, marker left, extra files touched, duplicate commands, idempotent rerun); schema tests; composition tests; manifest docs and skill updated in the same commits as the schema (one commit each: schema → resolver → composition + TUI wiring → docs + skill).
+
+### Story 4.9: Update Conflict Auto-Resolution in the CLI and MCP
+
+> Added 2026-11-16 (Sprint Change Proposal 2). Closes the FR-31 parity gap found in §1 (finding 4).
+
+As a developer or an agent running `tui-back update`, I want the same automatic conflict resolution the TUI has, so that a script or an MCP session does not stop on a conflict the tool can settle.
+
+**Acceptance Criteria:**
+
+- **Given** the CLI `tui-back update …` (main, all-repos, single-service) **When** a service's merge conflicts **Then** the composed auto-resolvers of Story 4.8 (the `shared-types` consumer resolver when its module is declared, the generated-files resolver when `generatedFiles` is declared) run exactly as in the TUI.
+- **Given** the resolvers settle every conflicted path **When** the run continues **Then** the service completes (migrate → restart) and the envelope row carries `conflict: "auto-resolved"`.
+- **Given** a conflict the resolvers cannot fully settle **When** run non-interactively **Then** behaviour is exactly today's for the CLI (the service is skipped or paused as it is now, repo left mid-merge with the issue named); the envelope row carries `conflict: "partial"` or `"left-to-user"` and the resolver's `issue` text.
+- **Given** the MCP `update` tool **When** invoked **Then** it behaves as the CLI (same use-case and wiring); no new tool and no change to the authorization policy (AD-25: it was already a write tool).
+- **Given** the existing TUI behaviour **When** this story lands **Then** it is unchanged (one shared builder of the composed resolver replaces the TUI-local one; no duplicated wiring).
+
+**Implementation notes:** extract `buildAutoResolveConflict` from `update-slice.ts` into a driving-neutral factory (`core` use-case wiring helper or a shared function in `adapters/driving`), used by both the slice and `commands/update.ts`; the envelope's conflict field already exists in `GroupUpdateRunDetail` (`group-update.ts:83-86`). Tests: CLI e2e with a conflicting fixture repo for each resolver and for a mixed conflict.
 
 ## Epic 5: Aggregated Log Observability
 
