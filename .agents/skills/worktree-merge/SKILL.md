@@ -71,7 +71,7 @@ git merge --no-ff <source> -m "Merge <source> into <target>"
      signalant comme `merged-whitespace-retry`.
    - Fichiers ajoutés des deux côtés à contenu identique : accepter tel quel.
    - **Fichiers de suivi** (`_bmad-output/implementation-artifacts/deferred-work.md`,
-     `_bmad-output/implementation-artifacts/sprint-status.yaml`, et tout autre
+     `_bmad-output/implementation-artifacts/<sprint>/sprint-status.yaml`, et tout autre
      fichier de suivi BMAD du même dossier) : résoudre soi-même, sans demander.
      Règle : conserver les ajouts des deux côtés (union des entrées, sans
      doublon), et pour `last_updated` / dates de mise à jour garder la plus
