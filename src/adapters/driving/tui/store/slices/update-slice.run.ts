@@ -15,7 +15,6 @@ import {
   type GroupUpdateScope,
   type StageControl,
   type OnUpdatePhase,
-  type UpdateBlockerChoice,
   type UpdatePhase,
 } from '../../../../../core/scripts/group-update.js';
 import { serviceRestart as serviceRestartUseCase } from '../../../../../core/scripts/service-restart.js';
