@@ -8,6 +8,7 @@ import { Box, Text, useWindowSize, type Key } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import { branchOwnersMap } from '../../../../../core/edt/branch-owners.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
@@ -126,6 +127,11 @@ export function EdtsZone({
   // The switch dirty-repo confirm seam (edt-slice.ts).
   const switchDirtyRepos = useStore((state) => state.switchDirtyRepos);
   const resolveSwitchDirtyRepos = useStore((state) => state.resolveSwitchDirtyRepos);
+  // FR-37: the post-switch restart run, and the setting the switch dialog's selector starts on.
+  const runSwitchRestart = useStore((state) => state.runSwitchRestart);
+  const clearSwitchRestart = useStore((state) => state.clearSwitchRestart);
+  const switchRestart = useStore((state) => state.switchRestart);
+  const defaultRestartMode = useStore((state) => state.settings.switch.restartMode);
   const modifyEdtAction = useStore((state) => state.modifyEdt);
   const deleteEdtAction = useStore((state) => state.deleteEdt);
   const resolveMemberDeleteStatusesAction = useStore((state) => state.resolveMemberDeleteStatuses);
@@ -356,9 +362,17 @@ export function EdtsZone({
         if (prev.branchPicker === null || prev.branchPicker.repoPath !== repoPath || prev.branchPicker.branchesStatus !== 'loading') {
           return prev;
         }
+        const listed = result.ok ? result.data : [];
+        const editedUlid = prev.kind === 'modify' ? prev.target.ulid : prev.edt.ulid;
+        const owners = branchOwnersMap(
+          edts ?? [],
+          repoPath,
+          Array.from(new Set([...listed, prev.branchPicker.state.currentBranch])),
+          editedUlid,
+        );
         return {
           ...prev,
-          branchPicker: { ...prev.branchPicker, branches: result.ok ? result.data : [], branchesStatus: result.ok ? 'ready' : 'error' },
+          branchPicker: { ...prev.branchPicker, branches: listed, owners, branchesStatus: result.ok ? 'ready' : 'error' },
         };
       });
     })();
@@ -462,6 +476,23 @@ export function EdtsZone({
 
   // Each dialog's submit/input-handling logic lives in its own file under dialogs/ — these
   // factories close over this render's values (the deps object is recreated every render).
+  // A post-switch restart report kept in the store (the run outlives this zone's dialogs): coming
+  // back to the zone reopens it on that report once, so the run state is intact on return.
+  // Only a report already in the store at mount is reopened — never one this mount started and
+  // the developer then closed with Esc while it was still running.
+  const restartReportReopened = useRef(switchRestart === null);
+  useEffect(() => {
+    if (restartReportReopened.current || switchRestart === null || dialog.kind !== 'none') {
+      return;
+    }
+    const target = edtsRows.find((row) => row.topic === switchRestart.topic);
+    if (target === undefined) {
+      return;
+    }
+    restartReportReopened.current = true;
+    setDialog({ ...initialSwitchDialog(target), results: [], restartReport: true });
+  }, [switchRestart, edts]);
+
   const { handleSwitchDialogInput, dispatchResolutionDecision, startSwitch } = createSwitchDialogHandlers({
     setDialog,
     switchEdtAction,
@@ -472,6 +503,10 @@ export function EdtsZone({
     focusedEdt,
     switchDirtyRepos,
     resolveSwitchDirtyRepos,
+    runSwitchRestart,
+    clearSwitchRestart,
+    switchRestart,
+    defaultRestartMode,
   });
   // Once the core switch parks on the dirty-repo seam, open the resolution view on a fresh draft —
   // the outgoing EDT is the store's active one (null on a first switch) — and load each state-2/3
@@ -988,7 +1023,7 @@ export function EdtsZone({
         />
       ) : null}
 
-      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} maxVisibleRows={switchResolutionMaxRows} /> : null}
+      {dialog.kind === 'switch-confirm' ? <SwitchDialogView dialog={dialog} switchDirtyRepos={switchDirtyRepos} maxVisibleRows={switchResolutionMaxRows} defaultRestartMode={defaultRestartMode} switchRestart={switchRestart} /> : null}
 
       {dialog.kind === 'modify' ? <ModifyDialogView dialog={dialog} candidates={candidates} candidateState={candidateState} maxRows={branchDropdownMaxRows} /> : null}
 

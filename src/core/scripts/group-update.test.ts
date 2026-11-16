@@ -17,6 +17,7 @@ import {
   edtUpdateLockKey,
   groupUpdate,
   markGroupUpdateInterrupted,
+  runRestartStep,
   type AutoResolveConflict,
   type GroupUpdateParams,
   type OnUpdateBlocker,
@@ -145,6 +146,10 @@ function fakeState(overrides: Partial<StatePort> = {}): StatePort {
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -190,6 +195,7 @@ function makeParams(overrides: Partial<GroupUpdateParams> = {}): GroupUpdatePara
     ...(overrides.runMigrations !== undefined ? { runMigrations: overrides.runMigrations } : {}),
     ...(overrides.cleanRestart !== undefined ? { cleanRestart: overrides.cleanRestart } : {}),
     ...(overrides.onPhase !== undefined ? { onPhase: overrides.onPhase } : {}),
+    ...(overrides.shouldCancel !== undefined ? { shouldCancel: overrides.shouldCancel } : {}),
     ...(overrides.onServiceResult !== undefined ? { onServiceResult: overrides.onServiceResult } : {}),
     ...(overrides.concurrency !== undefined ? { concurrency: overrides.concurrency } : {}),
     ...(overrides.ordering !== undefined ? { ordering: overrides.ordering } : {}),
@@ -1057,6 +1063,51 @@ describe('groupUpdate — all-repos scope', () => {
       ok: true,
       data: { results: [{ service: 'a', outcome: 'skipped', detail: { code: 'run-cancelled' } }, { service: 'b', outcome: 'updated' }] },
     });
+  });
+
+  it('shouldCancel stops the run cooperatively: nothing after the flip runs, rows are skipped not failed', async () => {
+    let cancelled = false;
+    const result = await groupUpdate(
+      allParams({
+        shouldCancel: () => cancelled,
+        onServiceResult: () => {
+          cancelled = true;
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results.length).toBeGreaterThan(1);
+      expect(result.data.results[0].outcome).toBe('updated');
+      expect(result.data.results.slice(1).every((row) => row.outcome === 'skipped' && row.detail?.code === 'run-cancelled')).toBe(true);
+    }
+  });
+
+  it('shouldCancel in EDT scope skips the remaining members as run-cancelled', async () => {
+    let cancelled = false;
+    const result = await groupUpdate(
+      makeParams({
+        shouldCancel: () => cancelled,
+        onServiceResult: () => {
+          cancelled = true;
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      data: { results: [{ service: 'svc-a', outcome: 'updated' }, { service: 'svc-b', outcome: 'skipped', detail: { code: 'run-cancelled' } }] },
+    });
+  });
+
+  it('a throwing shouldCancel is logged and treated as cancelled', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const result = await groupUpdate(makeParams({ shouldCancel: () => { throw new Error('bad predicate'); } }));
+      expect(result).toMatchObject({ ok: true, data: { results: [{ outcome: 'skipped', detail: { code: 'run-cancelled' } }, { outcome: 'skipped', detail: { code: 'run-cancelled' } }] } });
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('runs the same per-service flow for every managed repo, each in results', async () => {
@@ -3296,3 +3347,38 @@ describe('groupUpdate — conflict auto-resolution seam', () => {
   });
 });
 
+
+describe('runRestartStep onStep', () => {
+  const container = { restart: vi.fn(async () => ok(undefined)) } as unknown as ContainerPort;
+  const base = { container, containerName: 'api', repoPath: '/r/a', service: 'api' };
+
+  it('reports each recipe command before it runs, with its 1-based position', async () => {
+    const seen: string[] = [];
+    const restart = {
+      run: vi.fn(async (_p: string, command: string) => {
+        seen.push(`run ${command}`);
+        return ok({ output: '' });
+      }),
+    } as unknown as RestartPort;
+    const result = await runRestartStep({
+      ...base,
+      restart,
+      restartCommands: ['a', 'b'],
+      cleanRestart: true,
+      onStep: (step, total) => seen.push(`step ${step}/${total}`),
+    });
+    expect(result.ok).toBe(true);
+    expect(seen).toEqual(['step 1/2', 'run a', 'step 2/2', 'run b']);
+  });
+
+  it('stops reporting at the first failing command and never reports for a plain container restart', async () => {
+    const steps: number[] = [];
+    const failing = { run: vi.fn(async () => err('restart-failed', 'x')) } as unknown as RestartPort;
+    const failed = await runRestartStep({ ...base, restart: failing, restartCommands: ['a', 'b'], cleanRestart: true, onStep: (step) => steps.push(step) });
+    expect(failed.ok).toBe(false);
+    expect(steps).toEqual([1]);
+    const plain = await runRestartStep({ ...base, restart: failing, restartCommands: ['a'], cleanRestart: false, onStep: (step) => steps.push(step) });
+    expect(plain.ok).toBe(true);
+    expect(steps).toEqual([1]);
+  });
+});

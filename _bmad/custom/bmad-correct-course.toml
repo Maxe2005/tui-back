@@ -1,0 +1,8 @@
+# Multi-sprint override (see _bmad/custom/sprints.md). Update-proof: lives outside the skill directory.
+[workflow]
+activation_steps_prepend = [
+  "Resolve the target sprint: run `python3 {project-root}/_bmad/scripts/sprint_registry.py resolve` (add `--sprint <id>` if the user named one). Keep its `epics_file`, `status_file` and `artifacts_dir` and use them instead of `{planning_artifacts}/epics.md`, `{implementation_artifacts}/sprint-status.yaml` and `{implementation_artifacts}` itself (story/spec files `epic-N/`, `epic-N-context.md`, retrospectives, sprint-status archive) everywhere in this run; only `{implementation_artifacts}/deferred-work.md` stays at the shared root. Sprint change proposals go in the sprint's folder next to its `epics_file`, not in `{planning_artifacts}`. If the script fails, fall back to the legacy paths and tell the user.",
+]
+persistent_facts = [
+  "file:{project-root}/_bmad/custom/sprints.md",
+]

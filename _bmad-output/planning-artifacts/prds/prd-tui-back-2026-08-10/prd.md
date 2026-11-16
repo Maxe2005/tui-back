@@ -51,9 +51,9 @@ This is also a craft project — part of its value is the experience of designin
 - **UJ-2. Max traces a bug mid-session with a saved route request.**
   - **Persona + context:** Max, mid-coding on the EDT from UJ-1, needs to check whether a gateway endpoint is returning the right shape after a change.
   - **Entry state:** Tool running in the background, EDT active, dev-mode auth already handled by the tool.
-  - **Path:** Max opens the route explorer, finds the request in the global saved-request library even though it was originally saved from a different EDT (FR-23), re-fires it, tweaks one field first, and lets the tool save it as a new variant rather than overwriting the original (FR-21).
-  - **Climax:** The response and the relevant aggregated logs for the affected services appear together, in the same view (FR-22) — no separate terminal to open.
-  - **Resolution:** Max spots the issue in the logs, fixes it, and resumes coding without having left the tool.
+  - **Path:** Max opens the route explorer, finds the request in the global saved-request library even though it was originally saved from a different EDT (FR-23), re-fires it, tweaks one field first, and lets the tool save it as a new variant rather than overwriting the original (FR-21); his favorite routes of the EDT are one keypress away (FR-50).
+  - **Climax:** The response appears in the Routes pane; Max reads the matching service logs in the Logs zone (FR-49) without opening a separate terminal.
+  - **Resolution:** Max spots the issue, fixes it, and resumes coding without having left the tool.
 
 - **UJ-3. Max publishes and propagates a new `shared-types` version.**
   - **Persona + context:** Max just added a field to a shared DTO and needs every affected service on the new contract.
@@ -112,7 +112,7 @@ The tool only acts on a repo that carries a manifest; the manifest declares that
 
 #### FR-29: Container-less managed services (added 2026-10-01, Sprint Change Proposal)
 
-A managed repo's manifest may omit its container: the service is still fully managed (EDT membership, branches, group update, migrations, clean-restart recipe) but has no Docker runtime.
+A managed repo's manifest may omit its container: the service is still fully managed (EDT membership, branches, group update, migrations, clean-restart recipe) but has no Docker runtime. A container-less service that declares `healthUrl` is reported up or down from its health route (FR-42, added 2026-11-04).
 
 **Consequences (testable):**
 - A manifest without `container` validates and the repo registers like any other.
@@ -198,6 +198,7 @@ Assigning a protected branch as an EDT's "own" branch for a service is rejected.
 - Attempting to register a protected branch to an EDT fails with a clear explanation, before any git write happens.
 - Renaming a protected branch, in either direction, is refused.
 - A branch registered as another EDT's own branch for that service can be neither attached nor renamed. Every branch chooser shows which EDT uses it before the developer picks it.
+- The only exception is the preconfigured shared-branches EDT (FR-53), which sits on shared branches by definition and cannot be created by hand (added 2026-11-16).
 
 > Amended 2026-09-28 (Sprint Change Proposal, Stories 2.42–2.43): the fixed `development`/preprod/prod set is replaced by the per-service manifest list, and the cross-EDT consequence is added.
 
@@ -232,6 +233,7 @@ its git branch alone or delete it too — informed by that branch's merge status
 configured shared branch) and whether it carries uncommitted work.
 
 **Consequences (testable):**
+- The shared-branches EDT (FR-53) can never be deleted (`edt-system-readonly`).
 - Deleting an EDT while it is the active one is rejected with a clear message to switch away
   first — the tool never auto-switches on the developer's behalf to make room for a deletion.
 - The per-service branch-disposition choice ("leave as-is" / "delete, including any uncommitted
@@ -367,11 +369,69 @@ The defaults of the Update global parameters, the st zone's option toggles, the 
 When switching the active EDT, the developer can choose to restart the services in the same gesture: none (default), simple restart, or clean restart.
 
 **Consequences (testable):**
-- Only services whose branch changed in the switch and that declare a container are restarted; the others are reported as skipped with their reason, never failed.
+- Only services whose branch changed in the switch and that declare a container are restarted; the others are reported as skipped with their reason, never failed. A service already on the target branch, with nothing stashed, restored, discarded or adopted, is reported `unchanged` and not restarted (clarified 2026-11-16, Story 2.45).
 - Services restart in parallel, bounded by `update.concurrency`, with live per-service progress, like the group update.
 - Each service ends in one reported state: functional (container up and the manifest's `healthUrl` answers 2xx), up-unverified (up, no `healthUrl`), unhealthy, restarting, down, or failed.
 - A restart failure never rolls the switch back; a clean restart without a recipe falls back to a simple restart with a visible notice.
 - The default choice is the setting `switch.restartMode`; the CLI `edt switch --restart none|simple|clean` overrides it.
+
+#### FR-39: Service and container terminal (added 2026-11-04, Sprint Change Proposal)
+
+The developer can open a command terminal on a service (its repo directory) and, when the service has a container, on that container, inside the tool.
+
+**Consequences (testable):**
+- Commands are typed at a prompt; stdout/stderr stream back as lines; the output scrolls and can go full screen (shared with the Logs view).
+- A running command can be cancelled without quitting the tool; history recall works at the prompt.
+- Line-oriented only: no interactive TTY programs; a command needing a TTY fails with a visible hint.
+- A container-less service offers no container terminal (disabled, reason `no container`); a non-running container is disabled with its reason.
+
+#### FR-40: Unified service actions (added 2026-11-04, Sprint Change Proposal)
+
+Open in IDE, restart, clean restart, service terminal and container terminal are available from the Dashboard and from the Logs tab, from one registry with the same availability rules. Amends FR-35.
+
+#### FR-41: Shared Types action discoverability (added 2026-11-04, Sprint Change Proposal)
+
+In the Shared Types tab every action is shown as a labelled command with its key and, when unavailable, its reason. After a successful publish the next steps (propagate this version, back to the form, close) are presented as an explicit choice, not a hint line.
+
+#### FR-42: Health-first service status (added 2026-11-04, Sprint Change Proposal 2)
+
+Every view that shows a service's state (Dashboard, Logs, Update, CLI `dashboard`) derives it from one rule: when the manifest declares `healthUrl`, its answer is checked first and combined with the container state; otherwise the container state alone is used. The closed set of states is up, unhealthy, inconsistent, restarting, down, no-container (plus an explicit probe-error state). `inconsistent` (the health route answers while the container is down or restarting) is surfaced as an attention item. A container-less service declaring `healthUrl` gets a real up/down state. A service whose health check the developer disabled (FR-45) is resolved as if it declared no `healthUrl`.
+
+#### FR-43: Heal — restart the services that are not up (added 2026-11-04, Sprint Change Proposal 2)
+
+From the Dashboard (and the `heal` CLI), a developer restarts in one action every active-EDT service whose FR-42 status is down or unhealthy and that declares a container, after a confirmation listing targets and skipped services with reasons, in simple or clean mode; each restarted service is then verified and the run reports per-service final states.
+
+#### FR-44: Filterable keybinding help (added 2026-11-04, Sprint Change Proposal 3)
+
+The `?` help can be narrowed by typing: only the keybindings whose keys, description or section contain the typed text are listed, with a visible "no match" line when none does. Clearing the filter restores the full list; the keys that close the help keep working once the filter is empty.
+
+#### FR-45: Per-service health check toggle (added 2026-11-04, Sprint Change Proposal 3)
+
+From the settings screen, a developer turns the `healthUrl` check off or on per service. The preference is local (not in the manifest), enabled by default, and applies everywhere a status is resolved or verified (views, CLI, heal, post-restart verification). A disabled check is visibly marked so an unverified state is not mistaken for a missing route.
+
+#### FR-46: Single installable binary (added 2026-11-05, Sprint Change Proposal)
+
+The package exposes one `tui-back` binary. `tui-back <subcommand>` runs the CLI (AD-3 envelope); `tui-back tui` opens the interactive TUI and exits 1 when no terminal is attached.
+
+#### FR-47: Guided install and uninstall (added 2026-11-05, Sprint Change Proposal)
+
+`npx -y github:<owner>/tui-back install` installs the tool globally, adds the `tb` and `tbt` aliases and bash completion through a marked, idempotent block in `~/.bashrc`, and tells the developer to reload the shell. `--uninstall` reverses every step. A Node version below 24 stops the install with the exact commands to fix it; the installer never changes Node itself. Bash is the only supported shell.
+
+#### FR-48: MCP server with human authorization (added 2026-11-05, Sprint Change Proposal)
+
+`tui-back mcp` exposes every subcommand to an MCP client as a tool. Read-only tools run freely. Any tool that changes or destroys state runs only after the human explicitly approves that exact call; if the client cannot ask the human, those tools are refused. Approvals are per call and never remembered.
+
+#### FR-49: Hide / show-only log filters (added 2026-11-05, Sprint Change Proposal)
+
+The log filter is a list of rules (one in the first delivery, several afterwards, applied in order). Each rule is a text or regex query with an action (keep only what matches, or hide what matches) and a target (the whole line, or only the matched text); the default rule is today's behaviour. The choices apply to the live view only, never alter the buffered lines, rule lists and named rule sets are kept across restarts (FR-49 extension, Story 5.10), and the choices are recorded with the query in the filter history so recalling a filter restores them.
+
+#### FR-50: Favorite routes per EDT, recents and quick re-fire (added 2026-11-16, Sprint Change Proposal)
+
+Each EDT keeps its own favorite routes (repo, method, path), shown in a pane above the routes list. One key adds or removes the selected route, whether the developer is browsing the list or has a route open. The last routes fired in the session are listed with their status, and the last request can be re-fired in one keypress. A favorite whose route a rescan no longer discovers is flagged stale, never fired silently. Request editors never delete a body entry, a query row or a header row; the raw body mode is a full text editor; HTTP methods are shown in distinct colors.
+
+#### FR-51: Smoke run of the favorite routes (added 2026-11-16, Sprint Change Proposal)
+
+The favorite routes of an EDT can be fired together and reported as a status table (status, duration, outcome). Mutating requests (POST, PUT, PATCH, DELETE) are never sent unless explicitly included; unfilled required parameters and stale routes are skipped with their reason, never failed. The CLI exits non-zero when any fired route is not 2xx.
 
 ### 4.4 `shared-types` Propagation Module *(company-specific)*
 
@@ -421,6 +481,19 @@ When a group update (or a single-service update of the source repo) covers the `
 
 When a consumer's update merge conflicts and the only conflicting hunk in `package.json` is the `shared-types` dependency line, the tool resolves it to the EDT's current value, takes `package-lock.json` from the EDT side and regenerates it with `npm i`, stages the lockfile if it changed and completes the merge. Any other conflicting hunk, or any conflict in another file, is left to the user through FR-11's assisted resolution.
 
+#### FR-52: Manifest-declared generated files regenerated on update conflict (added 2026-11-16, Sprint Change Proposal 2)
+
+A service's manifest may declare generated files (a glob) and the command that rebuilds them (`generatedFiles`, e.g. barrel `index.ts` files rebuilt by `npm run barrels`). When an update's merge conflicts, and once every other conflict is settled, the tool re-runs the command in place of hand-resolution, verifies no conflict marker remains, stages the regenerated files and completes the merge; otherwise the conflict is left to the developer with the command's error. Applies to the TUI, the CLI and MCP updates; FR-31's `shared-types` auto-resolution applies there too (Story 4.9). Files the command touches outside the declared globs are never staged.
+
+#### FR-53: Shared-branches EDT (added 2026-11-16, Sprint Change Proposal 3)
+
+A preconfigured "shared branches" EDT gathers every managed service on its `sharedBranch`. It cannot be created, modified, renamed or deleted by hand; it is shown among the EDTs, and can be activated, only while a setting enables it (off by default). Activating it is an ordinary switch (FR-6): uncommitted work is preserved, every repo goes to its shared branch, and the post-switch restart (FR-37) applies. Its update brings every shared branch up to date in one go (fast-forward, then the usual migrations and restarts); an optional quick action fast-forwards the local shared branches without switching, leaving the active EDT and every worktree untouched. The setting cannot be turned off while the EDT is active.
+
+**Consequences (testable):**
+- With the setting off, no listing (TUI, CLI, MCP) shows the EDT and nothing else changes.
+- Every mutation of it fails `edt-system-readonly` before any write; uncommitted work cannot be adopted into it.
+- The only git writes it permits on a shared branch are the checkout and the fast-forward; commit, merge, rename, delete and push stay rejected.
+
 ---
 
 ### 4.5 Aggregated Log Observability
@@ -439,7 +512,7 @@ A developer can view a single, live, aggregated log stream from every service in
 
 #### FR-17: Filter the aggregated stream
 
-The stream can be filtered by service, by free-text/regex search `[ASSUMPTION: regex support specifically, not just free-text — a stronger capability commitment than the brief states outright]`, and by log level, without restarting it.
+The stream can be filtered by service, by free-text/regex search `[ASSUMPTION: regex support specifically, not just free-text — a stronger capability commitment than the brief states outright]`, and by log level, without restarting it. *(Amended 2026-11-05, Sprint Change Proposal: a filter can also hide what matches and act on the whole line or only the matched text, several rules stack and persist — FR-49.)*
 
 **Consequences (testable):**
 - Applying or changing a filter does not interrupt the live stream.
@@ -492,29 +565,16 @@ A developer can save a request (method, path, body, headers), and when re-firing
 - Save-as-new is rejected on a name collision with an existing saved request; the developer is prompted to choose a different name.
 - A saved request whose route is no longer discovered after a rescan is flagged stale and can be deleted — never fired silently.
 
-#### FR-22: See response and relevant logs together
+#### FR-22: See response and relevant logs together (withdrawn)
 
-Firing a request (saved or ad hoc) surfaces its response and the relevant aggregated logs for the affected services in the same place, immediately after. Cross-references §4.5. Good-enough correlation, not precise tracing, is the v1 bar — no request-ID propagation through the backend's RPC calls is assumed or required. Which services count as "affected" for a given route is learned progressively rather than pre-configured: the first time a route is fired, the tool proposes a default candidate set (every service in the active EDT, logs windowed to the few seconds around the fire) and lets the developer add or remove services from it; that choice is then saved against the route and reused automatically on every later fire, without asking again. An unfamiliar route keeps falling back to the broad default until it has been fired and confirmed once — the same pattern as FR-21's saved-request bodies, which start as a bare shape and accumulate real example values through use.
-
-**Consequences (testable):**
-- No separate step is needed to correlate a fired request with the logs it produced.
-- The first time a specific route is fired, the tool proposes a default affected-service set (active EDT's members, logs windowed around the fire time) rather than asking the developer to configure it upfront.
-- The developer can add or remove services from the proposed set before or after firing; the adjusted set is saved against the route and reused automatically on every later fire of the same route — no per-fire reconfiguration.
-- A route's learned affected-service set can be edited or reset later if the route's real dependencies change.
-
-**Notes:** `[NOTE FOR PM]` Exact time-window size around a fire is a technical/UX detail, deferred to `bmad-architecture`/`bmad-ux`.
+Withdrawn 2026-11-16 (Sprint Change Proposal): logs are read in the Logs zone (FR-16, FR-17, FR-49). A fired request no longer opens correlated logs, and no affected-service set is learned per route. The number is kept to avoid renumbering.
 
 #### FR-23: Manage the saved-request library across EDTs
 
-A developer's saved requests (FR-21) form one global library, not siloed per EDT — a request saved while working in one EDT is discoverable and fireable from any other EDT too. Each EDT can independently hide individual saved requests from its own view (too many, not relevant here) and mark others as favorites for quick access; a request can also be marked a global favorite, surfaced by default in every EDT's quick-access list, for examples reused often regardless of which EDT is active.
+A developer's saved requests (FR-21) form one global library, not siloed per EDT — a request saved while working in one EDT is discoverable and fireable from any other EDT too. *(Amended 2026-11-16, Sprint Change Proposal: per-EDT hide and per-EDT / global favorites of saved requests are withdrawn; favoriting is done on routes, FR-50.)*
 
 **Consequences (testable):**
 - A saved request created in one EDT is visible and fireable from any other EDT, without re-saving it.
-- Hiding a saved request in one EDT does not remove it from the global library or from any other EDT's view.
-- Favoriting works at two independent scopes: per-EDT (quick-access in that EDT only) and global (quick-access in every EDT by default).
-- Hide and favorite are the only means of managing library clutter in v1 — no folders or tagging system is implied.
-
-**Notes:** `[NOTE FOR PM]` Whether hide/favorite need a dedicated management screen versus inline controls on the existing saved-request list is a UX-level decision, deferred to `bmad-ux`.
 
 ## Cross-Cutting NFRs
 
@@ -589,7 +649,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 
 ### 6.2 Out of Scope for MVP
 
-- Guided, step-by-step installation/onboarding wizard — deferred to when the tool is shared with teammates (brief's Could-scope item).
+- Guided, step-by-step installation/onboarding wizard — deferred to when the tool is shared with teammates (brief's Could-scope item). Superseded in part by FR-47 (2026-11-05): a non-interactive installer is in scope; a wizard still is not.
 - **AI-assisted per-repo manifest bootstrapping (Could)** — an AI skill (e.g. a Claude Code skill) that scans an existing backend and drafts per-repo manifests to help initialize tool usage on it, including for onboarding the second, structurally different project later. Deferred until the manifest schema itself is fixed in architecture. `[NOTE FOR PM: Could-scope, not required for v1 — flag if this should be prioritized higher.]`
 - Validating the generic-core/module split against the second, gateway-less Java/Python project — proof deferred past v1.
 - Any AI-copilot layer automating error resolution or the git workflow — ruled out for now, not just deferred casually (see §5).
@@ -604,7 +664,7 @@ This is a problem-solving MVP: scope is bounded by which manual workflows it eli
 - **SM-2**: Zero forgotten-service incidents — no service silently left out of date after a group update. Target: 0 per month, observed over real use. Validates FR-10.
 - **SM-3**: Every merge/migration failure encountered during a group update is resolved through the tool's guided flow, without the developer dropping to a separate terminal. Validates FR-11, FR-12.
 - **SM-4**: `shared-types` propagation status is answerable at a glance, without a manual repo-by-repo check, every time it's asked. Validates FR-15, FR-30; FR-14 answers *which version, where, when* from git.
-- **SM-5**: The trace → fix → resume loop (fire a saved route request, see the relevant logs, get back to coding) stays fast enough not to break flow. Validates FR-20, FR-21, FR-22, FR-23.
+- **SM-5**: The trace → fix → resume loop (fire a saved or favorite route request, read the response, get back to coding) stays fast enough not to break flow. Validates FR-20, FR-21, FR-50.
 - **SM-6**: Zero incidents of a non-member service breaking EDT work because it was left on a stray branch — branch state for every managed repo is always visible and correct. Validates FR-8, FR-9.
 
 **Secondary**

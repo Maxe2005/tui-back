@@ -10,6 +10,7 @@ import {
   type BranchAutocompleteState,
 } from '../../../../shared/components/branch-autocomplete-input.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
+import { ownerRefusalForBranch } from '../../../../shared/branch-owners-text.js';
 import { checkPlan, type PlanIssue } from './wizard.logic.js';
 import { nextBoxLine } from '../../../../shared/keys/box-line-nav.js';
 
@@ -40,6 +41,8 @@ export type OverrideBoxContext = {
   remote: readonly string[];
   sharedBranch: string;
   protectedBranches: string[];
+  // branch -> owner topics (other EDTs), annotating the base/existing fields.
+  owners?: Readonly<Record<string, readonly string[]>>;
 };
 
 export type OverrideBoxKeyResult =
@@ -135,6 +138,8 @@ export function boxIssueMessage(issue: PlanIssue, mode: OverrideBoxMode, service
       return protectedSourceError(issue.branch, service);
     case 'protected-existing':
       return protectedExistingError(issue.name, service);
+    case 'owned-by-other-edt':
+      return ownerRefusalForBranch(issue.branch, issue.topics);
     case 'exists':
       return existingTargetError(issue.name);
     case 'noop-rename':
@@ -173,7 +178,7 @@ export function validateOverrideBox(box: OverrideBoxState, context: OverrideBoxC
     }
     plan = box.rename ? { kind: 'existing', branch, renameTo: box.newName.value.trim() } : { kind: 'existing', branch };
   }
-  const issue = checkPlan(plan, { status: 'ready', local: context.local, remote: context.remote }, context);
+  const issue = checkPlan(plan, { status: 'ready', local: context.local, remote: context.remote, owners: context.owners }, context);
   return issue === null ? { ok: true, plan } : { ok: false, error: boxIssueMessage(issue, box.mode, context.service) };
 }
 

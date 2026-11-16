@@ -97,7 +97,7 @@ graph LR
 
 - **Binds:** FR-2, FR-19, FR-20
 - **Prevents:** activating a module, or onboarding a new repo, ever requiring a core code change.
-- **Rule:** a repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service` (identity), optional `container` (docker-compose/container target name — absent means the service has no Docker runtime: no plain restart, no health, no log stream; amended 2026-10-01, FR-29), optional `migrationCommand` (absent means the service has no migrations — a group update skips the migration step for it without error, FR-10/FR-12), optional `restartCommands` (an ordered list of shell commands, e.g. `["npm i", "npm run d:up"]` — absent means the service has no clean-restart recipe and a group update or standalone trigger falls back to a plain container restart, FR-26), optional `sharedBranch` (default `development` — FR-8), optional `protectedBranches` (a list of branch names the tool must never claim for an EDT — FR-7; absent means only `sharedBranch` is protected; added 2026-09-28, Story 2.42), and `modules` (map of module-id → per-module config, e.g. `route-explorer: {scanner: nestjs-openapi, auth: jose-dev-jwt}`, `shared-types-source: {publishCommand: "npm run v", packageName: "@ianord/shared-types"}`, `shared-types-consumer: {dependency: "@ianord/shared-types", packageJsonPath: "package.json"}` — all parameters optional with these defaults; amended 2026-10-05). A repo or module absent from a manifest is invisible to every tool action — no special-case code anywhere in `core/`.
+- **Rule:** a repo is managed iff it carries a root `.tui-back.yaml`, zod-validated on load, declaring `service` (identity), optional `container` (docker-compose/container target name — absent means the service has no Docker runtime: no plain restart, no health, no log stream; amended 2026-10-01, FR-29), optional `migrationCommand` (absent means the service has no migrations — a group update skips the migration step for it without error, FR-10/FR-12), optional `restartCommands` (an ordered list of shell commands, e.g. `["npm i", "npm run d:up"]` — absent means the service has no clean-restart recipe and a group update or standalone trigger falls back to a plain container restart, FR-26), optional `sharedBranch` (default `development` — FR-8), optional `protectedBranches` (a list of branch names the tool must never claim for an EDT — FR-7; absent means only `sharedBranch` is protected; added 2026-09-28, Story 2.42), and `modules` (map of module-id → per-module config, e.g. `route-explorer: {scanner: nestjs-openapi, auth: jose-dev-jwt}`, `shared-types-source: {publishCommand: "npm run v", packageName: "@ianord/shared-types"}`, `shared-types-consumer: {dependency: "@ianord/shared-types", packageJsonPath: "package.json"}` — all parameters optional with these defaults; amended 2026-10-05). Optional `generatedFiles` (a list of `{glob, command}`: files a command regenerates, settled by re-running it on an update merge conflict — FR-52, AD-26; amended 2026-11-16). A repo or module absent from a manifest is invisible to every tool action — no special-case code anywhere in `core/`.
 
 ### AD-5 — Module implementations are statically registered, never dynamically loaded
 
@@ -124,6 +124,8 @@ graph LR
 - **Rule:** every git write passes through `adapters/driven/git`, which rejects — before any `git` invocation — a write targeting a protected branch of that service (its manifest `protectedBranches` ∪ `sharedBranch`, resolved from the manifest at write time), any branch not the current EDT's own registered branch for that service, or a rename whose old or new name is registered as another EDT's own branch. The git-adapter resolves that allowed-branch context itself, by reading current EDT/manifest state directly at write time through `EdtStorePort`/`ManifestPort` — it never trusts a branch name passed in by the caller, closing the gap where a stale or malicious caller-supplied value could bypass the check. No commit or push happens without the developer's explicit approval at the moment it happens. Uncommitted work is always auto-preserved before a tool-triggered branch switch, and the resulting state is re-verified, never assumed.
 
 > Amended 2026-09-28 (Sprint Change Proposal, Stories 2.42–2.43): protected set is manifest-defined per service; renames are gated against other EDTs' ownership.
+
+> Amended 2026-11-16 (Sprint Change Proposal 3, Stories 2.46/2.48): for an EDT with `kind = 'system-shared'` (AD-27) the gate accepts a service's `sharedBranch` as that EDT's own branch for checkout and for the fast-forward pull only, and the quick action may fast-forward a local shared branch from its own `origin` counterpart; commit, merge, rename, delete, push and every other write on a protected branch stay rejected. The carve-out keys on the entry's kind read from the registry at write time, never on a caller-supplied value.
 
 > Amended 2026-09-24 (Sprint Change Proposal, Story 2.39): `GitPort.discardAll` is the single destructive, non-branch-scoped write; it is guarded structurally (explicit per-repo `discard` resolution, still-dirty re-check, sole caller `switch.ts`) rather than by the branch-scope gate.
 
@@ -157,11 +159,11 @@ graph LR
 - **Prevents:** core business logic ending up covered only by fragile end-to-end TUI tests, or left untested altogether, on the excuse that "Ink is hard to test."
 - **Rule:** `core/` is unit-tested (Vitest) against fake port implementations — no real git/docker/sqlite in these tests. `adapters/driven/*` get targeted integration tests against the real system (temp file for persistence, temp repo for git). The Zustand store is tested directly, without rendering Ink. `adapters/driving/cli` is tested black-box — invoke a subcommand as a child process, assert the AD-3 envelope on stdout/exit code — which doubles as the executable spec of that contract. `adapters/driving/tui` gets smoke-tests via Ink's own `render()` only, not exhaustive render coverage — an accepted trade-off given `ink-testing-library` has no actively-maintained current version (last released ~2 years ago, predates Ink 7/React 19), since `core` and the store already carry the real logic coverage.
 
-### AD-14 — Packaging is deferred
+### AD-14 — Distribution: GitHub + npx, no compiled binary (amended 2026-11-05)
 
-- **Binds:** deployment envelope
-- **Prevents:** premature packaging investment before teammate distribution is a real goal, and a build artifact nobody keeps in sync with actual daily usage (which stays `tsx`/`node`).
-- **Rule:** v1 runs via `tsx`/`node` directly (a `package.json` bin, `npm link` for a local global command) — no compiled binary. A packaging mechanism (Node SEA / `pkg` / `bun --compile`) is chosen only when teammate distribution becomes a real goal, not before.
+- **Binds:** deployment envelope, FR-46, FR-47, Epic 10
+- **Prevents:** a build artifact nobody keeps in sync with daily usage, and a bin map that points at the wrong or a missing file.
+- **Rule:** the distribution channel is a public GitHub repo installed with `npx -y github:<owner>/tui-back install`. The tool keeps running on `tsx`/`node` (so `tsx` is a runtime dependency); no compiled binary (Node SEA / `pkg` / `bun --compile` stay rejected until a real need appears). The package exposes one bin, `tui-back`; `tui-back tui` routes to the TUI entrypoint, which bypasses the AD-3 envelope.
 
 ### AD-15 — TUI zone structure mirrors core capability boundaries 1:1
 
@@ -222,12 +224,12 @@ graph LR
 ## Deferred
 
 - **Exact FR-22 correlation-window duration** — the mechanism (bounded in-memory ring buffer, AD-11) is fixed here; the window's size is a UX/tuning call for `bmad-ux` or empirical adjustment once the tool is in daily use.
-- **Packaging mechanism specifics** (Node SEA vs `pkg` vs `bun --compile`) — AD-14 defers the choice itself until teammate distribution is a real goal.
+- **Compiled-binary packaging** (Node SEA / `pkg` / `bun --compile`) — rejected for now by the AD-14 amendment (2026-11-05); revisit only if install friction becomes a real problem.
 - **Validating the generic-core/module split against a second, structurally different stack** (gateway-less Java/Python) — explicitly out of v1 scope (PRD §5, §6.2); this spine's module boundary (AD-4, AD-5) is built to make that validation possible later, not to prove it now.
 - **AI-assisted manifest bootstrapping** (PRD §6.2, Could-scope) — the manifest schema it would target is fixed here (AD-4); building the bootstrapping skill itself stays deferred.
 - **Internal tool-diagnostic logging** (the tool's own debug logs, distinct from the aggregated container logs of AD-11) — not required by any FR; add only if debugging the tool itself in daily use turns out to need it.
 - **Single-instance detection mechanism** (lock file vs PID check vs OS-level lock) — AD-9 fixes that it must happen; the concrete technique is an implementation detail with no cross-builder divergence risk worth fixing here.
-- **Guided onboarding/installation wizard** — explicitly out of scope for v1 (PRD §6.2).
+- **Guided onboarding/installation wizard** — still out of scope (PRD §6.2); the non-interactive installer of FR-47 is in scope (AD-24).
 - **OpenTUI migration** — only evaluated if Ink's FPS/memory ceiling is actually observed as a problem in practice (SM-8), per AD-12.
 - **`XDG_CACHE_HOME`** — named by the PRD's local-state-layout NFR, but no cacheable derived data (e.g. a resolved OpenAPI schema) was identified during this run; left unused until one emerges.
 - **Canonical route-identity key across `RouteScannerPort` implementations** (method+path vs an opaque id) — the PRD doesn't specify one scheme, and different scanner implementations (NestJS/OpenAPI today, a future language's scanner later) may have different natural identities; left to each `RouteScannerPort` implementation's own contract, revisit only if a second implementation actually struggles to agree with the first on what identifies "the same route" for FR-21's saved-request matching.
@@ -255,4 +257,42 @@ graph LR
 - **Rule:** per-service actions (`openInIde`, `restart(simple|clean)`, future ones) are declared once in `core/` with availability rules (container-less, no clean-restart recipe, held lock) and consumed by any driving adapter. Editor launching sits behind a port. `GitPort` also gains read-only, streaming, cancellable history capabilities (`listVersionBumpCommits`, `listBranchesContaining`) for Story 4.6 (AD-16 extension).
 - **Extension (2026-10-14, FR-37, Story 2.44):** `ServiceActions.verifyService(repoPath)` settles a service's post-action state (container health + optional manifest `healthUrl` probe through a driven `HealthProbePort`); `core/` never does inline HTTP. A post-switch restart is a second use-case call after a successful switch (`core/edt/switch-restart.ts` over `runPool`), leaving `switchActiveEdt` unchanged.
 - **Settings:** new `switch.restartMode` (`none` default) alongside the `sharedTypes` group (`historyDepth`, `maxCommitsScanned`, option defaults), `logs.restartMode`, Update global defaults — every zod default equals today's behaviour.
+
+### AD-22 — Shell session port (added 2026-11-04)
+
+- **Binds:** FR-39, FR-40, Stories 9.1, 9.2, 9.4
+- **Prevents:** `child_process` leaking into `core/` or the TUI; unbounded terminal output; a terminal hanging on a TTY-only command.
+- **Rule:** `core/ports/shell-session.ts` with a driven adapter in `adapters/driven/shell-session/`. Line-oriented: each command runs in the service directory (`sh -c`) or via `docker exec` (no TTY) for the container; cwd persists across commands in the service shell; output streams as stdout/stderr-tagged lines; `cancel()` terminates the process group; retained output is a bounded ring buffer. `core/shell` use-cases return `Result`. Not a PTY; a PTY adapter could replace the driven adapter later without touching core.
+- **AD-21 extension:** the service action registry also lists `terminal-service` and `terminal-container` (availability: `no container`, `container not running`).
+
+### AD-23 — Service status resolution (added 2026-11-04, SCP 2)
+
+- **Binds:** FR-42, FR-43, FR-45, FR-29, Stories 9.7, 9.8, 9.9, 9.11
+- **Prevents:** each view combining health probe and container state its own way; a service shown `up` while it does not answer; a Docker outage marking every service inconsistent.
+- **Rule:** `core/service-status/resolveServiceStatus(repoPath)` is the only producer of a service's displayed state. Order: manifest `healthUrl` probe first (`HealthProbePort`), then container (`DockerPort.getContainerHealth`). Closed set: `up | unhealthy | inconsistent | restarting | down | no-container`, plus `Probed` error. The combination table lives in the resolver and nowhere else. `healthUrl` stays the only probe kind; a new kind (command, TCP) is added inside the resolver, not in consumers. Returns `Result`, never rejects.
+- **Extension (2026-11-04, SCP 3, FR-45, Story 9.11):** whether a declared `healthUrl` is probed is decided inside the resolver from the local setting `services.healthCheckDisabled` (manifest service names, default empty = probe). A disabled check takes the "no `healthUrl`" rows of the table and marks the status `healthCheck: 'disabled'`. `verifyService` uses the same decision. No consumer reads the setting.
+
+### AD-24 — The installer is a driving-adapter concern (added 2026-11-05)
+
+- **Binds:** FR-47, Stories 10.2, 10.3
+- **Prevents:** distribution logic (spawning `npm`, editing shell rc files) leaking into `core/`, and tests touching a developer's real `~/.bashrc`.
+- **Rule:** `install` and `completion` live in `adapters/driving/cli`. They are not Must-scope actions, so FR-1 script/CLI parity does not apply, but they use the AD-3 envelope like any subcommand. Paths come from the XDG helper so tests redirect them; the rc-file block is delimited by fixed markers and is idempotent. The completion generator is a pure function over the subcommand registry, called in-process by `install`.
+- **Extension (2026-11-05):** the MCP adapter (AD-25) is also a driving adapter; the installer only prints MCP registration commands and never edits client config.
+
+### AD-25 — MCP exposure and human authorization (added 2026-11-05)
+
+- **Binds:** FR-48, Epic 11
+- **Prevents:** an agent changing or deleting a developer's workspace without a human decision, and a new subcommand becoming reachable over MCP by accident.
+- **Rule:** the MCP server is a driving adapter (`adapters/driving/mcp/`) over the same subcommand registry as the CLI, in-process. Each tool declares a safety class (`read | write | destructive`) in one registry; an unclassified subcommand fails a guard test. The server itself enforces authorization: `write` and `destructive` calls go through MCP elicitation, per call, with the exact arguments shown, and are refused (fail closed) when the client cannot elicit. Tool annotations are set for clients but never relied on. Stdout carries protocol messages only. Secrets (dev-auth tokens) never appear in results or prompts.
+### AD-26 — Generated-file conflict resolution is manifest-declared (added 2026-11-16, SCP 2)
+
+- **Binds:** FR-52, FR-31
+- **Prevents:** stack- or service-specific merge rules entering `core/` or a compiled-in module when a manifest line can carry them.
+- **Rule:** a repo declares `generatedFiles: [{glob, command}]` in its manifest (AD-4). On an update merge conflict, core runs the declared command (once per distinct command, in the repo directory, through a command-runner port shaped like `RestartPort`) only when every other conflicted path is settled, verifies no conflict marker remains in the matched files, and stages only files matching a declared glob (`GitPort.stagePaths`, AD-8). Resolvers compose behind the single `AutoResolveConflict` seam: each settles only its own files, the row is `auto-resolved` only if together they settled every conflicted path. Core never names a language, a tool or `shared-types`; a stack-specific understanding of a file (a lockfile, a dependency line) stays in a compiled-in module (AD-5, AD-18) behind the same seam. The CLI, MCP and TUI share one builder of the composed resolver. The command is manifest text run in its own repo, the same trust model as `migrationCommand` / `restartCommands`.
+
+### AD-27 — System EDTs are synthesized, never persisted (added 2026-11-16, SCP 3)
+
+- **Binds:** FR-53, FR-6, FR-7, FR-24
+- **Prevents:** a hand-made or stale copy of the "shared branches" EDT drifting from the registry of managed repos, and a second EDT claiming shared branches.
+- **Rule:** the shared-branches EDT is built in memory from `RegistryPort` + each repo's manifest (`members = {service, repoPath, branch: sharedBranch}`), appended by the EDT registry adapter's `list()` only while `edts.sharedBranchesEdtEnabled` is on, and never written to `edts.yaml`. `EdtRegistryEntry.kind = 'system-shared'` marks it (fixed ulid `shared-branches`); every mutation (create under its name, modify, rename, add/remove member, delete) fails `edt-system-readonly` before any write. Core switch and update treat it as any EDT, except that uncommitted work cannot be adopted into it. Turning the setting off while it is the active EDT is refused; an active-EDT pointer naming it while the setting is off falls back to no active EDT with a warning.
 

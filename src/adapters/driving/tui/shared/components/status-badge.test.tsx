@@ -17,6 +17,8 @@ const ALL_STATES = [
   'awaiting',
   'error',
   'no-container',
+  'unhealthy',
+  'inconsistent',
 ] as const;
 
 describe('STATUS_BADGES', () => {
@@ -58,6 +60,12 @@ describe('STATUS_BADGES', () => {
     expect(STATUS_BADGES.error).toEqual({ glyph: '✖', color: colors.error });
     // Dim hollow like down, but dimmed rather than red — "no runtime" is not "runtime down".
     expect(STATUS_BADGES['no-container']).toEqual({ glyph: '○', color: colors['text-dim'] });
+  });
+
+  it('gives the health-first states their own warning glyphs (AD-23)', () => {
+    const { colors } = theme;
+    expect(STATUS_BADGES.unhealthy).toEqual({ glyph: '◐', color: colors.warning });
+    expect(STATUS_BADGES.inconsistent).toEqual({ glyph: '⚠', color: colors.warning });
     expect(STATUS_BADGES['no-container'].color).not.toBe(STATUS_BADGES.down.color);
     const newGlyphs = [STATUS_BADGES.restarting.glyph, STATUS_BADGES.updating.glyph, STATUS_BADGES.migrating.glyph];
     expect(new Set(newGlyphs).size).toBe(newGlyphs.length);

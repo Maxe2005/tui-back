@@ -8,6 +8,7 @@ import {
 import type { TextInputState } from '../../../../shared/components/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
+import { ownerAnnotations } from '../../../../shared/branch-owners-text.js';
 import { isProtectedTarget } from './wizard.logic.js';
 import {
   overrideBoxBranches,
@@ -51,6 +52,7 @@ function BoxField({
           branchesStatus={status}
           maxLines={maxRows}
           focused={true}
+          annotations={ownerAnnotations(context.owners)}
         />
       </Box>
     );

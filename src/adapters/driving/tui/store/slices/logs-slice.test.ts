@@ -7,7 +7,8 @@ import type { DockerPort } from '../../../../../core/ports/docker.js';
 import type { ManifestPort } from '../../../../../core/ports/manifest.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
-import { LOGS_LISTED_HEALTH_POLL_INTERVAL_MS } from './logs-slice.js';
+import { isPaneEngagedInGlobalFilter, resolveEffectiveLines } from '../../zones/logs/logs-zone.logic.js';
+import { LOGS_HEALTH_POLL_INTERVAL_MS, LOGS_LISTED_HEALTH_POLL_INTERVAL_MS } from './logs-slice.js';
 
 async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 10));
@@ -33,6 +34,10 @@ function fakeState(): StatePort {
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
   };
 }
 
@@ -407,8 +412,238 @@ describe('logs slice: listed-row health polling', () => {
   });
 });
 
+describe('logs slice: health-first status', () => {
+  function manifestWithHealth(container: boolean): ManifestPort {
+    return {
+      load: vi.fn(async (repoPath: string) =>
+        ok({
+          service: repoPath.split('/').pop() ?? repoPath,
+          ...(container ? { container: `ctr-${repoPath.split('/').pop()}` } : {}),
+          healthUrl: 'http://svc/health',
+          sharedBranch: 'development',
+          modules: {},
+        }),
+      ),
+    };
+  }
+
+  it('a listed row whose container runs but whose route fails reads unhealthy', async () => {
+    const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
+    const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+    store.getState().startLogsListedHealthPolling(['/repo/a']);
+    await flush();
+    expect(probe).toHaveBeenCalledWith('http://svc/health', expect.any(Number));
+    expect(store.getState().logsListedHealth['/repo/a']).toBe('unhealthy');
+    store.getState().stopLogsListedHealthPolling();
+  });
+
+  it('a container-less row declaring a healthUrl gets a real up/down state', async () => {
+    const docker = fakeDocker();
+    const probe = vi.fn(async () => ok({ healthy: true, status: 200 }));
+    const store = createAppStore(fakeDeps({ docker, manifest: manifestWithHealth(false), healthProbe: { probe } }));
+    store.getState().resolveLogsContainerPresence(['/repo/lib']);
+    await flush();
+    store.getState().startLogsListedHealthPolling(['/repo/lib']);
+    await flush();
+    expect(store.getState().logsNoContainer['/repo/lib']).toBe(true);
+    expect(store.getState().logsListedHealth['/repo/lib']).toBe('up');
+    expect(docker.getContainerHealth).not.toHaveBeenCalled();
+    store.getState().stopLogsListedHealthPolling();
+  });
+
+  it('skips a tick while the previous probe for that repo is still awaiting, keeping the last state', async () => {
+    vi.useFakeTimers();
+    try {
+      let release: (() => void) | null = null;
+      const probe = vi.fn(
+        () =>
+          new Promise<ReturnType<typeof ok<{ healthy: boolean }>>>((resolve) => {
+            release = () => resolve(ok({ healthy: true }));
+          }),
+      );
+      const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+      store.setState({ logsListedHealth: { '/repo/a': 'down' } });
+      store.getState().startLogsListedHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(probe).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(LOGS_LISTED_HEALTH_POLL_INTERVAL_MS * 2);
+      expect(probe).toHaveBeenCalledTimes(1);
+      expect(store.getState().logsListedHealth['/repo/a']).toBe('down');
+
+      release!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsListedHealth['/repo/a']).toBe('up');
+      await vi.advanceTimersByTimeAsync(LOGS_LISTED_HEALTH_POLL_INTERVAL_MS);
+      expect(probe).toHaveBeenCalledTimes(2);
+      store.getState().stopLogsListedHealthPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pane poll is guarded per repo too', async () => {
+    vi.useFakeTimers();
+    try {
+      const probe = vi.fn(() => new Promise<never>(() => {}));
+      const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+      await store.getState().subscribeLogsPane('/repo/a', 'a');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(probe).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(LOGS_HEALTH_POLL_INTERVAL_MS * 3);
+      expect(probe).toHaveBeenCalledTimes(1);
+      expect(store.getState().logsPanes['/repo/a']?.health).toBe('down');
+      store.getState().stopAllLogsPanes();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a container-less pane declaring a healthUrl polls a real up/down and keeps its timer', async () => {
+    vi.useFakeTimers();
+    try {
+      const docker = fakeDocker();
+      let healthy = true;
+      const probe = vi.fn(async () => ok(healthy ? { healthy: true } : { healthy: false, reason: 'timeout' }));
+      const store = createAppStore(fakeDeps({ docker, manifest: manifestWithHealth(false), healthProbe: { probe } }));
+      await store.getState().subscribeLogsPane('/repo/lib', 'lib');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes['/repo/lib']).toMatchObject({ health: 'up', noContainer: true });
+
+      healthy = false;
+      await vi.advanceTimersByTimeAsync(LOGS_HEALTH_POLL_INTERVAL_MS);
+      expect(store.getState().logsPanes['/repo/lib']?.health).toBe('down');
+      expect(docker.getContainerHealth).not.toHaveBeenCalled();
+      expect(docker.streamLogs).not.toHaveBeenCalled();
+
+      // Container-less: R stays a no-op whatever the status.
+      await store.getState().restartLogsPane('/repo/lib');
+      expect(store.getState().logsPanes['/repo/lib']?.streamError).toBeNull();
+      store.getState().stopAllLogsPanes();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a listed row whose health check is disabled reads its container state without probing', async () => {
+    const probe = vi.fn(async () => ok({ healthy: false, status: 503, reason: 'HTTP 503' }));
+    const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+    store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: ['a'] } } }));
+    store.getState().startLogsListedHealthPolling(['/repo/a']);
+    await flush();
+    expect(store.getState().logsListedHealth['/repo/a']).toBe('up');
+    expect(probe).not.toHaveBeenCalled();
+    store.getState().stopLogsListedHealthPolling();
+  });
+
+  it('a disabled container-less pane reads no-container, and re-enabling probes it at the next poll', async () => {
+    vi.useFakeTimers();
+    try {
+      const probe = vi.fn(async () => ok({ healthy: true }));
+      const store = createAppStore(fakeDeps({ docker: fakeDocker(), manifest: manifestWithHealth(false), healthProbe: { probe } }));
+      store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: ['lib'] } } }));
+      await store.getState().subscribeLogsPane('/repo/lib', 'lib');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes['/repo/lib']).toMatchObject({ health: 'no-container', noContainer: true });
+      expect(probe).not.toHaveBeenCalled();
+
+      store.setState((state) => ({ settings: { ...state.settings, services: { healthCheckDisabled: [] } } }));
+      await vi.advanceTimersByTimeAsync(LOGS_HEALTH_POLL_INTERVAL_MS);
+      expect(store.getState().logsPanes['/repo/lib']?.health).toBe('up');
+      expect(probe).toHaveBeenCalled();
+      store.getState().stopAllLogsPanes();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases the listed-row guard after a rejected poll, so the next tick polls again', async () => {
+    vi.useFakeTimers();
+    try {
+      const load = vi.fn(async (): Promise<never> => {
+        throw new Error('io');
+      });
+      const store = createAppStore(fakeDeps({ manifest: { load } }));
+      store.getState().startLogsListedHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(load).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(LOGS_LISTED_HEALTH_POLL_INTERVAL_MS);
+      expect(load).toHaveBeenCalledTimes(2);
+      store.getState().stopLogsListedHealthPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a listed poll settling after stop writes nothing, and a restarted poll is not blocked by it', async () => {
+    vi.useFakeTimers();
+    try {
+      const releases: Array<() => void> = [];
+      const probe = vi.fn(
+        () =>
+          new Promise<ReturnType<typeof ok<{ healthy: boolean }>>>((resolve) => {
+            releases.push(() => resolve(ok({ healthy: true })));
+          }),
+      );
+      const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+      store.getState().startLogsListedHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      store.getState().stopLogsListedHealthPolling();
+
+      store.getState().startLogsListedHealthPolling(['/repo/a']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(probe).toHaveBeenCalledTimes(2);
+
+      store.setState({ logsListedHealth: { '/repo/a': 'down' } });
+      releases[0]!();
+      await vi.advanceTimersByTimeAsync(0);
+      // The stale poll neither wrote nor freed the live poll's entry.
+      expect(store.getState().logsListedHealth['/repo/a']).toBe('down');
+      await vi.advanceTimersByTimeAsync(LOGS_LISTED_HEALTH_POLL_INTERVAL_MS);
+      expect(probe).toHaveBeenCalledTimes(2);
+
+      releases[1]!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsListedHealth['/repo/a']).toBe('up');
+      store.getState().stopLogsListedHealthPolling();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pane poll settling after the pane stopped writes nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      const releases: Array<() => void> = [];
+      const probe = vi.fn(
+        () =>
+          new Promise<ReturnType<typeof ok<{ healthy: boolean }>>>((resolve) => {
+            releases.push(() => resolve(ok({ healthy: true })));
+          }),
+      );
+      const store = createAppStore(fakeDeps({ manifest: manifestWithHealth(true), healthProbe: { probe } }));
+      await store.getState().subscribeLogsPane('/repo/a', 'a');
+      await vi.advanceTimersByTimeAsync(0);
+      store.getState().unsubscribeLogsPane('/repo/a');
+      await store.getState().subscribeLogsPane('/repo/a', 'a');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(probe).toHaveBeenCalledTimes(2);
+      store.setState((state) => ({ logsPanes: { ...state.logsPanes, '/repo/a': { ...state.logsPanes['/repo/a']!, health: 'unhealthy' } } }));
+      releases[0]!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes['/repo/a']?.health).toBe('unhealthy');
+      releases[1]!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().logsPanes['/repo/a']?.health).toBe('up');
+      store.getState().stopAllLogsPanes();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('logs display settings (session-only)', () => {
-  const spec = { mode: 'text' as const, query: 'boom', level: null };
+  const spec = { level: null, rules: [{ mode: 'text' as const, query: 'boom', action: 'show' as const, target: 'line' as const, enabled: true }] };
 
   function seed() {
     const store = createAppStore();
@@ -423,23 +658,25 @@ describe('logs display settings (session-only)', () => {
     return store;
   }
 
-  it('deselecting a service drops its own settings but keeps the global ones and other services', () => {
+  it('deselecting a service drops its own settings (its rules stay) but keeps the global ones and other services', () => {
     const store = seed();
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { ...spec, level: 'ERROR' } }));
     store.getState().toggleLogsEdtSelection('/repo/api');
     const state = store.getState();
     expect(state.logsPaneWrap).toEqual({ '/repo/web': true });
     expect(state.logsPaneFilterEngaged).toEqual({});
-    expect(state.logsPaneFilters).toEqual({ '/repo/web': spec });
+    expect(state.logsPaneFilters).toEqual({ '/repo/api': spec, '/repo/web': spec });
     expect(state.logsVisibility.showTimestamps).toBe(false);
     expect(state.logsGlobalFilter).toEqual(spec);
   });
 
-  it('deselect-all and select-all drop the settings of every service that leaves the selection', () => {
+  it('deselect-all and select-all drop the settings of every service that leaves the selection, keeping rules', () => {
     const store = seed();
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { ...spec, level: 'WARN' } }));
     store.getState().selectAllLogsEdtServices(['/repo/web']);
-    expect(Object.keys(store.getState().logsPaneFilters)).toEqual(['/repo/web']);
+    expect(store.getState().logsPaneFilters['/repo/api']).toEqual(spec);
     store.getState().deselectAllLogsEdtServices();
-    expect(store.getState().logsPaneFilters).toEqual({});
+    expect(store.getState().logsPaneFilters).toEqual({ '/repo/api': spec, '/repo/web': spec });
     expect(store.getState().logsPaneWrap).toEqual({});
     expect(store.getState().logsVisibility.showTimestamps).toBe(false);
   });
@@ -453,5 +690,159 @@ describe('logs display settings (session-only)', () => {
     store.getState().openLogsFullscreen('/repo/web', 'web');
     store.getState().closeLogsFullscreen();
     expect(store.getState().logsPaneWrap['/repo/web']).toBe(true);
+  });
+});
+
+describe('persisted filter rules and rule sets', () => {
+  const rule = (query: string, patch: Record<string, unknown> = {}) => ({
+    mode: 'text' as const,
+    query,
+    action: 'hide' as const,
+    target: 'line' as const,
+    enabled: true,
+    ...patch,
+  });
+
+  function storeWith(disk: { rules?: unknown; sets?: unknown } = {}) {
+    const state = fakeState();
+    state.readLogRules = vi.fn(async () => ok(disk.rules ?? null));
+    state.readLogRuleSets = vi.fn(async () => ok(disk.sets ?? null));
+    const store = createAppStore(fakeDeps({ state }));
+    return { store, state };
+  }
+
+  it('restores each scope with order and enabled state, and the library', async () => {
+    const lists = { global: [rule('a'), rule('b', { enabled: false })], '/repo/api': [rule('c')] };
+    const { store } = storeWith({ rules: lists, sets: [{ name: 'noise', rules: [rule('a')] }] });
+    await store.getState().loadLogsRules();
+    const s = store.getState();
+    expect(s.logsGlobalFilter).toEqual({ level: null, rules: lists.global });
+    expect(s.logsPaneFilters['/repo/api']).toEqual({ level: null, rules: lists['/repo/api'] });
+    expect(s.logsRuleSets).toHaveLength(1);
+    expect(s.logsRulesWarning).toBeNull();
+  });
+
+  it('drops an uncompilable rule or a corrupt value and warns naming the field, still loading the rest', async () => {
+    const { store } = storeWith({ rules: { global: [rule('ok'), rule('(', { mode: 'regex' })] }, sets: 'oops' });
+    await store.getState().loadLogsRules();
+    const s = store.getState();
+    expect(s.logsGlobalFilter.rules.map((r) => r.query)).toEqual(['ok']);
+    expect(s.logsRuleSets).toEqual([]);
+    expect(s.logsRulesWarning).toContain('logRules.global[1]');
+    expect(s.logsRulesWarning).toContain('(+1 more)');
+  });
+
+  it('persists every rule change, never the level, and skips writes for level-only changes', async () => {
+    const { store, state } = storeWith();
+    await store.getState().loadLogsRules();
+    store.getState().setLogsGlobalFilter({ level: 'ERROR', rules: [rule('a')] });
+    await flush();
+    expect(state.writeLogRules).toHaveBeenLastCalledWith({ global: [rule('a')] });
+    const writes = vi.mocked(state.writeLogRules).mock.calls.length;
+    store.getState().setLogsGlobalFilter((current) => ({ ...current, level: 'WARN' }));
+    await flush();
+    expect(vi.mocked(state.writeLogRules).mock.calls.length).toBe(writes);
+  });
+
+  it('keeps persisted lists of unselected or unregistered services untouched across other edits', async () => {
+    const { store, state } = storeWith({ rules: { '/gone': [rule('x')] } });
+    await store.getState().loadLogsRules();
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { level: null, rules: [rule('y')] } }));
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    store.getState().setLogsGlobalFilter({ level: null, rules: [rule('g')] });
+    await flush();
+    expect(state.writeLogRules).toHaveBeenLastCalledWith({ global: [rule('g')], '/gone': [rule('x')], '/repo/api': [rule('y')] });
+  });
+
+  it('clearLogsScopeRules empties only that scope, keeping its level', async () => {
+    const { store, state } = storeWith({ rules: { global: [rule('g')], '/repo/api': [rule('y')] } });
+    await store.getState().loadLogsRules();
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { level: 'ERROR', rules: current['/repo/api'].rules } }));
+    store.getState().clearLogsScopeRules('/repo/api');
+    await flush();
+    expect(store.getState().logsPaneFilters['/repo/api']).toEqual({ level: 'ERROR', rules: [] });
+    expect(store.getState().logsGlobalFilter.rules).toHaveLength(1);
+    expect(state.writeLogRules).toHaveBeenLastCalledWith({ global: [rule('g')] });
+  });
+
+  it('library operations persist, never touch active lists, and clearLogsRuleSets leaves them alone', async () => {
+    const { store, state } = storeWith({ rules: { global: [rule('g')] } });
+    await store.getState().loadLogsRules();
+    expect(store.getState().saveLogsRuleSet('noise', store.getState().logsGlobalFilter.rules).ok).toBe(true);
+    expect(store.getState().saveLogsRuleSet('noise', [rule('z')]).ok).toBe(false);
+    expect(store.getState().saveLogsRuleSet('noise', [rule('z')], { overwrite: true }).ok).toBe(true);
+    expect(store.getState().renameLogsRuleSet(0, 'quiet').ok).toBe(true);
+    await flush();
+    expect(state.writeLogRuleSets).toHaveBeenLastCalledWith([{ name: 'quiet', rules: [rule('z')] }]);
+    expect(store.getState().deleteLogsRuleSet(0).ok).toBe(true);
+    expect(store.getState().logsGlobalFilter.rules).toEqual([rule('g')]);
+    store.getState().saveLogsRuleSet('again', [rule('a')]);
+    store.getState().clearLogsRuleSets();
+    await flush();
+    expect(store.getState().logsRuleSets).toEqual([]);
+    expect(state.writeLogRuleSets).toHaveBeenLastCalledWith([]);
+    expect(store.getState().logsGlobalFilter.rules).toEqual([rule('g')]);
+  });
+
+  it('clearLogsRulesAndDrainSaves empties lists and library in memory, keeping levels', async () => {
+    const { store } = storeWith({ rules: { global: [rule('g')] }, sets: [{ name: 'n', rules: [rule('a')] }] });
+    await store.getState().loadLogsRules();
+    store.getState().setLogsGlobalFilter((current) => ({ ...current, level: 'INFO' }));
+    await store.getState().clearLogsRulesAndDrainSaves();
+    expect(store.getState().logsGlobalFilter).toEqual({ level: 'INFO', rules: [] });
+    expect(store.getState().logsRuleSets).toEqual([]);
+  });
+
+  it('a rule edit made while the load is in flight keeps the not-yet-hydrated scopes in what it persists', async () => {
+    const { store, state } = storeWith({ rules: { global: [rule('g')], '/repo/api': [rule('y')] } });
+    const loading = store.getState().loadLogsRules();
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/web': { level: null, rules: [rule('w')] } }));
+    await loading;
+    await flush();
+    expect(state.writeLogRules).toHaveBeenLastCalledWith({ global: [rule('g')], '/repo/api': [rule('y')], '/repo/web': [rule('w')] });
+    expect(store.getState().logsGlobalFilter.rules).toEqual([rule('g')]);
+  });
+
+  it('a library edit made while the load is in flight is replayed on the loaded library', async () => {
+    const { store, state } = storeWith({ sets: [{ name: 'disk', rules: [rule('d')] }] });
+    const loading = store.getState().loadLogsRules();
+    expect(store.getState().saveLogsRuleSet('mine', [rule('m')]).ok).toBe(true);
+    await loading;
+    await flush();
+    expect(store.getState().logsRuleSets.map((set) => set.name)).toEqual(['disk', 'mine']);
+    expect(state.writeLogRuleSets).toHaveBeenLastCalledWith(store.getState().logsRuleSets);
+  });
+
+  it('never overwrites an unreadable field blindly: writes wait until the file reads again', async () => {
+    const state = fakeState();
+    state.readLogRules = vi.fn(async () => err('state-invalid-json', 'broken'));
+    const store = createAppStore(fakeDeps({ state }));
+    await store.getState().loadLogsRules();
+    expect(store.getState().logsRulesWarning).toContain('could not be read');
+    store.getState().setLogsGlobalFilter({ level: null, rules: [rule('a')] });
+    await flush();
+    expect(state.writeLogRules).not.toHaveBeenCalled();
+    state.readLogRules = vi.fn(async () => ok(null));
+    store.getState().setLogsGlobalFilter({ level: null, rules: [rule('a'), rule('b')] });
+    await flush();
+    expect(state.writeLogRules).toHaveBeenCalledTimes(1);
+  });
+
+  it('a deselected service keeps its rules and applies them again when reselected', () => {
+    const { store } = storeWith();
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    store.getState().setLogsPaneFilters((current) => ({ ...current, '/repo/api': { level: 'ERROR', rules: [rule('y')] } }));
+    store.getState().setLogsPaneFilterEngaged(() => ({ '/repo/api': false }));
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    store.getState().toggleLogsEdtSelection('/repo/api');
+    const s = store.getState();
+    expect(s.logsEdtSelected).toEqual(['/repo/api']);
+    expect(s.logsPaneFilters['/repo/api']).toEqual({ level: null, rules: [rule('y')] });
+    expect(isPaneEngagedInGlobalFilter(s.logsPaneFilterEngaged, '/repo/api')).toBe(true);
+    const lines = [{ text: 'y here' }, { text: 'other' }] as never;
+    expect(
+      resolveEffectiveLines({ lines }, { showTimestamps: true, showStdout: true, showStderr: true }, s.logsGlobalFilter, true, s.logsPaneFilters['/repo/api']),
+    ).toHaveLength(1);
   });
 });

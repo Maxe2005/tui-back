@@ -15,12 +15,22 @@ export function TopBar({
   return (
     <Box backgroundColor={colors.background} paddingLeft={spacing['1']} flexShrink={0}>
       <Box flexShrink={0}>
-        <Text color={colors.text}>tui-back</Text>
+        <Text color={colors.text} bold>
+          tui-back
+        </Text>
       </Box>
-      <Text color={colors['text-dim']} wrap="truncate-end">
-        {' '}
-        {topic ? normalizeMessage(topic, 60) : 'no active EDT'}
-      </Text>
+      {topic ? (
+        <Text wrap="truncate-end">
+          <Text color={colors['text-dim']}>{'  EDT · '}</Text>
+          <Text color={colors.text} bold>
+            {normalizeMessage(topic, 60)}
+          </Text>
+        </Text>
+      ) : (
+        <Text color={colors['text-dim']} wrap="truncate-end">
+          {'  no active EDT'}
+        </Text>
+      )}
       <Box flexGrow={1} flexShrink={0} />
       <Box flexShrink={0}>
         <Text color={colors['text-dim']}>{formatHints([[':', 'cmd']])}</Text>

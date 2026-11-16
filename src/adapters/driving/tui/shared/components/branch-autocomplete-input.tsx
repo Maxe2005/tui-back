@@ -169,6 +169,9 @@ export type BranchAutocompleteInputProps = {
   maxLines: number;
   // The row cursor sits on the field (accent label) even when not editing.
   focused?: boolean;
+  // Optional per-branch advisory text rendered as `⚠ <text>` (warning color) after the row's
+  // branch name. Generic on purpose — this component stays EDT-agnostic.
+  annotations?: Readonly<Record<string, string>>;
   // The field owns the keys: caret, list and validity are shown only then. Defaults to true.
   editing?: boolean;
   // Dim text standing for "use the default" while the field is empty; its presence also hides
@@ -186,7 +189,7 @@ export function branchAutocompleteShowsHighlight(state: { value: string; highlig
 }
 
 export function BranchAutocompleteInput(props: BranchAutocompleteInputProps) {
-  const { label, state, branches, branchesStatus, maxLines, focused = false, editing = true, placeholder, labelWidth, retry, subject = 'branches' } = props;
+  const { label, state, branches, branchesStatus, maxLines, focused = false, editing = true, placeholder, labelWidth, retry, subject = 'branches', annotations } = props;
   const hasPlaceholder = placeholder !== undefined;
   const empty = state.value === '';
   const ready = branchesStatus === 'ready';
@@ -222,6 +225,7 @@ export function BranchAutocompleteInput(props: BranchAutocompleteInputProps) {
         <Text key={`${index}:${item}`} wrap="truncate-end" color={index === window.highlight ? colors.accent : colors.text}>
           {index === window.highlight ? '  › ' : '    '}
           {item}
+          {annotations !== undefined && Object.hasOwn(annotations, item) ? <Text color={colors.warning}>{`  ⚠ ${annotations[item]}`}</Text> : null}
         </Text>
       ))}
       {window !== null && window.hiddenBelow > 0 ? <Text color={colors['text-dim']}>  ↓ {window.hiddenBelow} more</Text> : null}

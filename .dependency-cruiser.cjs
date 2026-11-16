@@ -28,6 +28,17 @@ module.exports = {
       },
       to: { path: 'tui(/|$)' },
     },
+    {
+      name: 'no-child-process-outside-driven-adapters',
+      comment:
+        'Spawning processes is a driven-adapter concern (AD-22): core and the driving ' +
+        'adapters reach the OS only through ports (e.g. ShellSessionPort), never by ' +
+        'importing child_process themselves. Core modules (node builtins) are matched by ' +
+        'their bare module name, with or without the "node:" prefix.',
+      severity: 'error',
+      from: { path: '^src/(core|adapters/driving)(/|$)' },
+      to: { path: '^(node:)?child_process$' },
+    },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },

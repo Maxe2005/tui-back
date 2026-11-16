@@ -36,6 +36,11 @@ describe('dialog registry', () => {
 
   it('has no entry pointing at a file that no longer renders a dialog', () => {
     for (const entry of DIALOG_REGISTRY) {
+      // An app-level overlay that is not a ModalDialog (the Terminal) is registered for the matrix only.
+      if ('overlay' in entry && entry.overlay === true) {
+        expect(readFileSync(join(TUI_ROOT, entry.file), 'utf8'), entry.id).not.toContain('<ModalDialog');
+        continue;
+      }
       expect(readFileSync(join(TUI_ROOT, entry.file), 'utf8'), entry.id).toContain('<ModalDialog');
     }
   });

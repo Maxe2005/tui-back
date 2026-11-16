@@ -1,496 +1,46 @@
 // tui/shared/settings-screen: the `:settings` overlay — a tab-organized modal (General / EDTs /
-// Command Palette / Logs) reachable only through the `settings` command. Every change applies
+// Command Palette / Logs / Update / st / Services) reachable only through the `settings` command. Every change applies
 // to the live store and persists immediately via `updateSettings` (no save step, no dirty
 // state). The EDTs and Logs tabs open on a group list that Enter drills into, so Esc handling
 // lives here (`onClose`): only this component knows whether Esc steps back or closes.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
-import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
 import { ModalDialog } from './components/modal-dialog.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/text-edit.js';
-import { TextInputLine } from './components/text-input-line.js';
-import { formatHint } from './components/hints.js';
+import type { TextInputState } from './components/text-edit.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
-import { resolveFocusStep, stepFocus } from './keys/focus-navigation.js';
+import { resolveFocusStep } from './keys/focus-navigation.js';
 import { nextCursorForKey } from './keys/list-cursor.js';
-import type { FooterContextId } from '../keybindings/index.js';
-import { colors, spacing, typography } from './theme/theme.js';
+import { spacing } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
-import {
-  MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
-  MAX_FILTER_HISTORY_GRID_MAX_ROWS,
-  MAX_HISTORY_DEPTH,
-  MAX_INPUT_HISTORY_SIZE,
-  MAX_MAX_COMMITS_SCANNED,
-  MIN_HISTORY_DEPTH,
-  MIN_MAX_COMMITS_SCANNED,
-  MAX_GRID_MAX_ROWS,
-  MAX_LOG_BUFFER_SIZE,
-  MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
-  MIN_FILTER_HISTORY_GRID_MAX_ROWS,
-  MIN_INPUT_HISTORY_SIZE,
-  MIN_GRID_MAX_ROWS,
-  MIN_LOG_BUFFER_SIZE,
-  MAX_UPDATE_CONCURRENCY,
-  MIN_UPDATE_CONCURRENCY,
-  type Settings,
-  type UpdateMergeSourceDefault,
-} from '../../../../core/ports/settings.js';
-import { StateLine } from './components/state-line.js';
-import { BoundedList } from './components/bounded-list.js';
-
-export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update' | 'shared-types';
-
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types'];
-
-export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
-  general: 'General',
-  edts: 'EDTs',
-  'command-palette': 'Command Palette',
-  logs: 'Logs',
-  update: 'Update',
-  'shared-types': 'st',
-};
-
-// st tab: a flat Up/Down list of the shared-types zone's option defaults (Space toggles the
-// checkboxes) followed by the History view's two numeric bounds (+/- step them, always clamped to
-// the schema's range).
-export type SharedTypesCheckboxRowId = 'install' | 'cleanRestart' | 'commit';
-export type SharedTypesNumberRowId = 'historyDepth' | 'maxCommitsScanned';
-export type SharedTypesSettingsRowId = SharedTypesCheckboxRowId | SharedTypesNumberRowId;
-
-export const SHARED_TYPES_SETTINGS_ROWS: readonly (
-  | { id: SharedTypesCheckboxRowId; label: string; kind: 'checkbox' }
-  | { id: SharedTypesNumberRowId; label: string; kind: 'number'; min: number; max: number; step: number; hint: string }
-)[] = [
-  { id: 'install', label: 'Run npm i', kind: 'checkbox' },
-  { id: 'cleanRestart', label: 'Clean restart', kind: 'checkbox' },
-  { id: 'commit', label: 'Commit package.json + package-lock.json', kind: 'checkbox' },
-  { id: 'historyDepth', label: 'History depth', kind: 'number', min: MIN_HISTORY_DEPTH, max: MAX_HISTORY_DEPTH, step: 1, hint: 'Version bumps a by-branch History search lists at most (+/-).' },
-  { id: 'maxCommitsScanned', label: 'History max commits scanned', kind: 'number', min: MIN_MAX_COMMITS_SCANNED, max: MAX_MAX_COMMITS_SCANNED, step: 100, hint: 'Commits touching package.json a by-branch History search scans at most (+/-).' },
-];
-
-export type SharedTypesSettingsStep =
-  | { type: 'move'; cursor: number }
-  | { type: 'toggle'; id: SharedTypesCheckboxRowId }
-  | { type: 'set-number'; id: SharedTypesNumberRowId; value: number }
-  | { type: 'ignore' };
-
-export function clampSharedTypesNumber(id: SharedTypesNumberRowId, value: number): number {
-  const row = SHARED_TYPES_SETTINGS_ROWS.find((candidate) => candidate.id === id);
-  return row?.kind === 'number' ? Math.min(Math.max(value, row.min), row.max) : value;
-}
-
-export function resolveSharedTypesSettingsKey(
-  input: string,
-  key: TextEditKey,
-  cursor: number,
-  current: { historyDepth: number; maxCommitsScanned: number },
-): SharedTypesSettingsStep {
-  const moved = nextCursorForKey(key, cursor, SHARED_TYPES_SETTINGS_ROWS.length);
-  if (moved !== null) {
-    return { type: 'move', cursor: moved };
-  }
-  const row = SHARED_TYPES_SETTINGS_ROWS[cursor];
-  if (row === undefined) {
-    return { type: 'ignore' };
-  }
-  if (row.kind === 'checkbox') {
-    return input === ' ' ? { type: 'toggle', id: row.id } : { type: 'ignore' };
-  }
-  const value = current[row.id];
-  if (input === '+') {
-    return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, value + row.step) };
-  }
-  if (input === '-') {
-    return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, value - row.step) };
-  }
-  return { type: 'ignore' };
-}
-
-// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> Logs -> Update -> st -> General order
-// (SETTINGS_TABS' declared order) — Left and Tab both step forward, simpler than zones.ts's
-// nextZoneId since every settings tab is always reachable.
-export function nextSettingsTab(current: SettingsTab, direction: 1 | -1): SettingsTab {
-  const index = SETTINGS_TABS.indexOf(current);
-  return stepFocus(SETTINGS_TABS, SETTINGS_TABS[index] ?? SETTINGS_TABS[0]!, direction === 1 ? 'next' : 'back');
-}
-
-export type SettingsTabState = {
-  active: boolean;
-  labelColor: string;
-  backgroundColor: string;
-  bold: boolean;
-};
-
-// Mirrors zone-tab-bar.tsx's active/inactive treatment at a smaller scale — no
-// strikethrough/badge, since settings tabs are never manifest-gated or event-badged.
-export function resolveSettingsTabState(tab: SettingsTab, activeTab: SettingsTab): SettingsTabState {
-  const active = tab === activeTab;
-  return {
-    active,
-    labelColor: active ? colors.background : colors['text-dim'],
-    backgroundColor: active ? colors.accent : colors.background,
-    bold: active ? typography['active-tab'].bold : typography.label.bold,
-  };
-}
-
-// Command Palette tab: the grid rows per column. Clamped to a sane, always-positive range —
-// 0/negative would break groupCommandsByColumn's `Math.max(1, maxRows)` floor, and the zod
-// schema enforces the same [MIN, MAX] bound (core/ports/settings.ts holds both). Re-exported
-// here for existing importers.
-export { MIN_GRID_MAX_ROWS, MAX_GRID_MAX_ROWS };
-
-export function clampGridMaxRows(value: number): number {
-  return Math.min(Math.max(value, MIN_GRID_MAX_ROWS), MAX_GRID_MAX_ROWS);
-}
-
-export function adjustGridMaxRows(current: number, direction: 'up' | 'down'): number {
-  return clampGridMaxRows(current + (direction === 'up' ? 1 : -1));
-}
-
-// A typed digit sets the value directly. Only a single digit 1-9 is meaningful — '0' is never a
-// valid gridMaxRows (zod's `.positive()`), and any non-digit is ignored rather than appended
-// (this is a value-set field, not free text).
-export function parseGridMaxRowsDigit(input: string): number | null {
-  if (!/^[1-9]$/.test(input)) {
-    return null;
-  }
-  return clampGridMaxRows(Number(input));
-}
-
-// Logs tab: settings.logs.bufferSize, with the Command Palette tab's clamp/adjust/parse-digit
-// idiom rescaled to its wider range (50-5000 vs. 1-99): Up/Down steps by LOG_BUFFER_SIZE_STEP,
-// and a typed digit 1-9 is a quick preset (digit x 100, e.g. '5' -> 500) since the literal
-// digit is never a meaningful buffer size.
-export const LOG_BUFFER_SIZE_STEP = 50;
-export { MIN_LOG_BUFFER_SIZE, MAX_LOG_BUFFER_SIZE };
-
-export function clampLogBufferSize(value: number): number {
-  return Math.min(Math.max(value, MIN_LOG_BUFFER_SIZE), MAX_LOG_BUFFER_SIZE);
-}
-
-export function adjustLogBufferSize(current: number, direction: 'up' | 'down'): number {
-  return clampLogBufferSize(current + (direction === 'up' ? LOG_BUFFER_SIZE_STEP : -LOG_BUFFER_SIZE_STEP));
-}
-
-export function parseLogBufferSizeDigit(input: string): number | null {
-  if (!/^[1-9]$/.test(input)) {
-    return null;
-  }
-  return clampLogBufferSize(Number(input) * 100);
-}
-
-// Logs tab: settings.logs.filterHistorySize/filterHistoryGridMaxRows, same clamp/adjust idiom
-// as bufferSize/gridMaxRows above. filterHistorySize has no digit preset — Left/Right (see the
-// group model below) is its only adjustment.
-export const FILTER_HISTORY_SIZE_STEP = 5;
-export { MIN_INPUT_HISTORY_SIZE as MIN_FILTER_HISTORY_SIZE, MAX_INPUT_HISTORY_SIZE as MAX_FILTER_HISTORY_SIZE };
-
-export function clampFilterHistorySize(value: number): number {
-  return Math.min(Math.max(value, MIN_INPUT_HISTORY_SIZE), MAX_INPUT_HISTORY_SIZE);
-}
-
-export function adjustFilterHistorySize(current: number, direction: 'up' | 'down'): number {
-  return clampFilterHistorySize(current + (direction === 'up' ? FILTER_HISTORY_SIZE_STEP : -FILTER_HISTORY_SIZE_STEP));
-}
-
-// filterHistoryGridMaxRows mirrors gridMaxRows' [1, 99] range and digit-preset convention, but
-// through its own constants (the two settings are independent).
-export { MIN_FILTER_HISTORY_GRID_MAX_ROWS, MAX_FILTER_HISTORY_GRID_MAX_ROWS };
-
-export function clampFilterHistoryGridMaxRows(value: number): number {
-  return Math.min(Math.max(value, MIN_FILTER_HISTORY_GRID_MAX_ROWS), MAX_FILTER_HISTORY_GRID_MAX_ROWS);
-}
-
-export function adjustFilterHistoryGridMaxRows(current: number, direction: 'up' | 'down'): number {
-  return clampFilterHistoryGridMaxRows(current + (direction === 'up' ? 1 : -1));
-}
-
-export function parseFilterHistoryGridMaxRowsDigit(input: string): number | null {
-  if (!/^[1-9]$/.test(input)) {
-    return null;
-  }
-  return clampFilterHistoryGridMaxRows(Number(input));
-}
-
-// General tab: a small Up/Down row list — the quit-shortcut checkbox (Space toggles; the cursor
-// starts on it) and the editor command, a free-text field (Enter opens it for editing, Enter
-// again commits, Esc cancels the edit).
-export type GeneralSettingsRowId = 'quit-shortcut' | 'editor-command';
-
-export const GENERAL_SETTINGS_ROWS: readonly GeneralSettingsRowId[] = ['quit-shortcut', 'editor-command'];
-
-export const EDITOR_COMMAND_PLACEHOLDER_TEXT = '(not set — $EDITOR, else vi)';
-
-export type GeneralSettingsView = { cursor: number; editing: TextInputState | null };
-
-export type GeneralSettingsStep =
-  | { type: 'move'; cursor: number }
-  | { type: 'toggle-quit' }
-  | { type: 'begin-edit' }
-  | { type: 'edit'; editing: TextInputState }
-  | { type: 'commit-edit'; value: string }
-  | { type: 'ignore' };
-
-// The General tab's whole key mapping as one pure step (Esc is handled by the screen's own
-// tab-aware Esc branch: it cancels an open edit before it closes anything). While the
-// editor command is being edited every key belongs to the text field — a typed space or
-// `q` is a literal character, never the quit toggle. The committed value is trimmed: a
-// blank command means "not set".
-export function resolveGeneralSettingsKey(
-  input: string,
-  key: TextEditKey,
-  view: GeneralSettingsView,
-): GeneralSettingsStep {
-  if (view.editing !== null) {
-    if (key.return) {
-      return { type: 'commit-edit', value: view.editing.value.trim() };
-    }
-    return { type: 'edit', editing: nextTextInputValue(view.editing, input, key) };
-  }
-  const cursor = nextCursorForKey(key, view.cursor, GENERAL_SETTINGS_ROWS.length);
-  if (cursor !== null) {
-    return { type: 'move', cursor };
-  }
-  const row = GENERAL_SETTINGS_ROWS[view.cursor];
-  if (row === 'quit-shortcut' && input === ' ') {
-    return { type: 'toggle-quit' };
-  }
-  if (row === 'editor-command' && key.return) {
-    return { type: 'begin-edit' };
-  }
-  return { type: 'ignore' };
-}
-
-// Update tab: the group-update defaults — concurrency (moved here from General), and the three
-// global defaults the 3.7 config screen and the CLI start from. A flat Up/Down row list; edits
-// persist immediately. Per-run changes in the config screen are never written back here.
-export type UpdateSettingsRowId = 'concurrency' | 'run-migrations' | 'clean-restart' | 'merge-source';
-
-export const UPDATE_SETTINGS_ROWS: readonly UpdateSettingsRowId[] = ['concurrency', 'run-migrations', 'clean-restart', 'merge-source'];
-
-export const UPDATE_SETTINGS_ROW_HINTS: Record<UpdateSettingsRowId, string> = {
-  concurrency: 'Services a group update processes at once (+/- or a digit). 1 = one after the other.',
-  'run-migrations': 'Whether a group update runs migrations by default (config screen and CLI); a per-run change is never saved here.',
-  'clean-restart': 'Whether a group update does a clean restart by default (config screen and CLI); a per-run change is never saved here.',
-  'merge-source': 'Space toggles. From EDT applies to the EDT-scoped config screen only (the all-repos and single-service screens have no merge-source line).',
-};
-
-// update.concurrency: how many services a group update processes at once. `+`/`-` step it, a typed
-// digit sets it; the schema enforces the same [MIN, MAX] bound.
-export function clampUpdateConcurrency(value: number): number {
-  return Math.min(Math.max(value, MIN_UPDATE_CONCURRENCY), MAX_UPDATE_CONCURRENCY);
-}
-
-export function adjustUpdateConcurrency(current: number, direction: 'up' | 'down'): number {
-  return clampUpdateConcurrency(current + (direction === 'up' ? 1 : -1));
-}
-
-export function parseUpdateConcurrencyDigit(input: string): number | null {
-  return /^[1-9]$/.test(input) ? clampUpdateConcurrency(Number(input)) : null;
-}
-
-export type UpdateSettingsStep =
-  | { type: 'move'; cursor: number }
-  | { type: 'set-concurrency'; value: number }
-  | { type: 'toggle-run-migrations' }
-  | { type: 'toggle-clean-restart' }
-  | { type: 'set-merge-source'; value: UpdateMergeSourceDefault }
-  | { type: 'ignore' };
-
-export function nextMergeSourceDefault(current: UpdateMergeSourceDefault): UpdateMergeSourceDefault {
-  return current === 'shared' ? 'edt-pending' : 'shared';
-}
-
-export function resolveUpdateSettingsKey(
-  input: string,
-  key: TextEditKey,
-  cursor: number,
-  update: Settings['update'],
-): UpdateSettingsStep {
-  const moved = nextCursorForKey(key, cursor, UPDATE_SETTINGS_ROWS.length);
-  if (moved !== null) {
-    return { type: 'move', cursor: moved };
-  }
-  const row = UPDATE_SETTINGS_ROWS[cursor];
-  if (row === 'concurrency') {
-    if (input === '+') {
-      return { type: 'set-concurrency', value: adjustUpdateConcurrency(update.concurrency, 'up') };
-    }
-    if (input === '-') {
-      return { type: 'set-concurrency', value: adjustUpdateConcurrency(update.concurrency, 'down') };
-    }
-    const digit = parseUpdateConcurrencyDigit(input);
-    return digit !== null ? { type: 'set-concurrency', value: digit } : { type: 'ignore' };
-  }
-  if (row === 'run-migrations' && input === ' ') {
-    return { type: 'toggle-run-migrations' };
-  }
-  if (row === 'clean-restart' && input === ' ') {
-    return { type: 'toggle-clean-restart' };
-  }
-  if (row === 'merge-source' && (input === ' ' || key.return)) {
-    return { type: 'set-merge-source', value: nextMergeSourceDefault(update.mergeSource) };
-  }
-  return { type: 'ignore' };
-}
-
-// EDTs tab: the hideable per-context action hints (formatAvailableActionsHint's contexts).
-export type HideableActionHint = { id: string; label: string };
-
-export const HIDEABLE_ACTION_HINTS: readonly HideableActionHint[] = [
-  { id: 'edts', label: `EDT selector — "${formatHint(['Enter', 'Switch'])}" / "${formatHint(['Enter', 'Modify'])}"` },
-  { id: 'edt-services', label: `EDT services — "${formatHint(['Enter', 'Remove / Change branch'])}"` },
-  { id: 'other-services', label: `Other services — "${formatHint(['Enter', 'Add to EDT'])}"` },
-];
-
-// Toggles `id` in `hidden`, never mutating the input array (Settings.edts.hiddenActionHints and
-// hiddenActionTypes are each a string[], not a Set). Shared by both EDTs checkbox groups.
-export function toggleHiddenHint(hidden: readonly string[], id: string): string[] {
-  return hidden.includes(id) ? hidden.filter((existing) => existing !== id) : [...hidden, id];
-}
-
-// The "Recent action types" group's rows — the literal `EdtActionLogEntry['actionType']`
-// domain, closed and hardcoded, never derived from `edtActionLog` at runtime (an EDT with no
-// `modify` entries yet must still offer to hide `modify`).
-export type HideableActionType = { id: string; label: string };
-
-export const HIDEABLE_ACTION_TYPES: readonly HideableActionType[] = [
-  { id: 'create', label: 'Create' },
-  { id: 'switch', label: 'Switch' },
-  { id: 'modify', label: 'Modify' },
-];
-
-// The EDTs tab's group-list level, ahead of its two checkbox lists (one flat list would
-// conflate two unrelated toggles).
-//
-// Branch autocomplete dropdown rows (shared BranchAutocompleteInput): the visible row count
-// before the `… N more` overflow line, with the gridMaxRows clamp/adjust/parse-digit idiom
-// (bounds from core's MIN/MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS, shared with the schema).
-export { MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS, MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS };
-
-export function clampBranchDropdownMaxRows(value: number): number {
-  return Math.min(Math.max(value, MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS), MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
-}
-
-export function adjustBranchDropdownMaxRows(current: number, direction: 'up' | 'down'): number {
-  return clampBranchDropdownMaxRows(current + (direction === 'up' ? 1 : -1));
-}
-
-// A typed digit sets the value directly (same value-set convention as parseGridMaxRowsDigit:
-// single digit 1-9 only; '0' is never valid and non-digits are ignored rather than appended).
-export function parseBranchDropdownMaxRowsDigit(input: string): number | null {
-  if (!/^[1-9]$/.test(input)) {
-    return null;
-  }
-  return clampBranchDropdownMaxRows(Number(input));
-}
-
-export type SettingsGroupId = 'hint-visibility' | 'action-types' | 'branch-dropdown-rows';
-
-export type SettingsGroup = { id: SettingsGroupId; label: string };
-
-export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
-  { id: 'hint-visibility', label: 'Hint visibility' },
-  { id: 'action-types', label: 'Recent action types' },
-  { id: 'branch-dropdown-rows', label: 'Branch dropdown rows' },
-];
-
-// The Logs tab's group list: one field (or a small related cluster) per group, so no screen
-// renders more than a handful of lines. ModalDialog has no height cap, and a flat list of every
-// field overflowed short terminals — Ink's diff-render then corrupted the border and title.
-// Five groups: four single-field ones plus "Clear history" holding both clear actions.
-export type LogsSettingsGroupId =
-  | 'buffer-size'
-  | 'start-with-history'
-  | 'filter-history-size'
-  | 'filter-history-grid'
-  | 'filter-history-dedup'
-  | 'restart-mode'
-  | 'clear-history';
-
-export type LogsSettingsGroup = { id: LogsSettingsGroupId; label: string };
-
-export const LOGS_SETTINGS_GROUPS: readonly LogsSettingsGroup[] = [
-  { id: 'buffer-size', label: 'Buffer size' },
-  { id: 'start-with-history', label: 'Start with history' },
-  { id: 'filter-history-size', label: 'Filter history size' },
-  { id: 'filter-history-grid', label: 'Filter history grid' },
-  { id: 'filter-history-dedup', label: 'Filter history dedup' },
-  { id: 'restart-mode', label: 'Restart mode' },
-  { id: 'clear-history', label: 'Clear history' },
-];
-
-// The Command Palette tab's group list, same two-level shape as the Logs tab: the grid height
-// plus the command-history controls (size, dedup, clear), one group each.
-export type PaletteSettingsGroupId = 'grid-max-rows' | 'history-size' | 'history-dedup' | 'clear-history';
-
-export type PaletteSettingsGroup = { id: PaletteSettingsGroupId; label: string };
-
-export const PALETTE_SETTINGS_GROUPS: readonly PaletteSettingsGroup[] = [
-  { id: 'grid-max-rows', label: 'Command grid max rows' },
-  { id: 'history-size', label: 'Command history size' },
-  { id: 'history-dedup', label: 'Deduplicate command history' },
-  { id: 'clear-history', label: 'Clear command history' },
-];
-
-const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | PaletteSettingsGroupId, FooterContextId> = {
-  'grid-max-rows': 'settings-adjust',
-  'history-size': 'settings-adjust',
-  'history-dedup': 'settings-toggle',
-  'hint-visibility': 'settings-toggle',
-  'action-types': 'settings-toggle',
-  'branch-dropdown-rows': 'settings-adjust',
-  'buffer-size': 'settings-adjust',
-  'start-with-history': 'settings-toggle',
-  'filter-history-size': 'settings-adjust',
-  'filter-history-grid': 'settings-adjust',
-  'filter-history-dedup': 'settings-toggle',
-  'restart-mode': 'settings-toggle',
-  'clear-history': 'settings-run',
-};
-
-// The footer context of the current tab and drill-down level: a text edit is a plain
-// confirm/cancel, a group list opens groups, and each group advertises its own control.
-export function settingsFooterContext(
-  tab: SettingsTab,
-  state: {
-    generalEditing: boolean;
-    edtsGroup: SettingsGroupId | null;
-    logsGroup: LogsSettingsGroupId | null;
-    paletteGroup?: PaletteSettingsGroupId | null;
-  },
-): FooterContextId {
-  switch (tab) {
-    case 'general':
-      return state.generalEditing ? 'confirm' : 'settings-general';
-    case 'update':
-      return 'settings-update';
-    case 'command-palette':
-      return state.paletteGroup == null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.paletteGroup];
-    case 'edts':
-      return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
-    case 'shared-types':
-      return 'settings-shared-types';
-    case 'logs':
-      return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
-  }
-}
-
-// "Clear history" is the one Logs group holding more than a single field — its own small
-// Up/Down row list, one level below the group list, mirroring the EDTs tab's own two-level
-// depth (group list -> checkbox list) rather than growing a third top-level list.
-export type LogsClearRowId = 'clear-global' | 'clear-service';
-
-export const LOGS_CLEAR_ROWS: readonly LogsClearRowId[] = ['clear-global', 'clear-service'];
-
-export const LOGS_CLEAR_ROW_LABELS: Record<LogsClearRowId, string> = {
-  'clear-global': 'Clear global filter history',
-  'clear-service': "Clear a service's filter history",
-};
+import { cycleSwitchRestartMode, cycleRealignScope } from '../../../../core/ports/settings.js';
+import { GLOBAL_RULES_KEY } from '../../../../core/logs/rule-sets.js';
+import { SETTINGS_TABS, SETTINGS_TAB_LABELS, nextSettingsTab, resolveSettingsTabState, type SettingsTab } from './settings/settings-tabs.logic.js';
+import { buildServicesSettingsRows, resolveServicesSettingsKey } from './settings/services.logic.js';
+import { resolveSharedTypesSettingsKey } from './settings/shared-types.logic.js';
+import { GENERAL_SETTINGS_ROWS, resolveGeneralSettingsKey } from './settings/general.logic.js';
+import { resolveUpdateSettingsKey } from './settings/update.logic.js';
+import { PALETTE_SETTINGS_GROUPS, type PaletteSettingsGroupId, adjustFilterHistoryGridMaxRows, adjustFilterHistorySize, adjustGridMaxRows, parseFilterHistoryGridMaxRowsDigit, parseGridMaxRowsDigit } from './settings/palette.logic.js';
+import { LOGS_CLEAR_ROWS, LOGS_RULES_ROWS, LOGS_SETTINGS_GROUPS, type LogsRulesConfirm, type LogsSettingsGroupId, adjustLogBufferSize, parseLogBufferSizeDigit } from './settings/logs.logic.js';
+import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, SETTINGS_GROUPS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
+import { settingsFooterContext } from './settings/footer-context.logic.js';
+import { SharedTypesTab } from './settings/shared-types-tab.js';
+import { ServicesTab } from './settings/services-tab.js';
+import { GeneralTab } from './settings/general-tab.js';
+import { UpdateTab } from './settings/update-tab.js';
+import { PaletteTab } from './settings/palette-tab.js';
+import { LogsTab } from './settings/logs-tab.js';
+import { EdtsTab } from './settings/edts-tab.js';
+export * from './settings/footer-context.logic.js';
+export * from './settings/edts.logic.js';
+export * from './settings/logs.logic.js';
+export * from './settings/palette.logic.js';
+export * from './settings/update.logic.js';
+export * from './settings/general.logic.js';
+export * from './settings/shared-types.logic.js';
+export * from './settings/services.logic.js';
+export * from './settings/settings-tabs.logic.js';
 
 // Self-contained Esc handling (like command-bar.tsx's `onClose`): the drill-down state is local
 // to this component, so only it can decide whether Esc steps back a level or closes the whole
@@ -517,9 +67,6 @@ export type SettingsScreenProps = {
   initialGeneralEditing?: boolean;
 };
 
-// Rows the settings frame, tab strip, heading and hint keep around a drill-down list.
-const SETTINGS_LIST_CHROME_ROWS = 14;
-
 export function SettingsScreen({
   useStore = useAppStore,
   onClose = () => {},
@@ -538,7 +85,14 @@ export function SettingsScreen({
   const clearGlobalFilterHistory = useStore((state) => state.clearGlobalFilterHistory);
   const clearServiceFilterHistory = useStore((state) => state.clearServiceFilterHistory);
   const clearCommandHistory = useStore((state) => state.clearCommandHistory);
+  const clearLogsScopeRules = useStore((state) => state.clearLogsScopeRules);
+  const clearLogsRuleSets = useStore((state) => state.clearLogsRuleSets);
+  const logsRuleSets = useStore((state) => state.logsRuleSets);
+  const logsGlobalFilter = useStore((state) => state.logsGlobalFilter);
+  const logsPaneFilters = useStore((state) => state.logsPaneFilters);
   const edtsBranches = useStore((state) => state.edtsBranches);
+  const edtsErrors = useStore((state) => state.edtsErrors);
+  const loadEdtsBranches = useStore((state) => state.loadEdtsBranches);
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   // The General tab's row cursor + in-progress editor-command edit (null when browsing).
@@ -564,9 +118,37 @@ export function SettingsScreen({
   const [logsClearServiceOpen, setLogsClearServiceOpen] = useState(initialLogsClearServiceOpen);
   const [logsClearServiceCursor, setLogsClearServiceCursor] = useState(0);
   const logsServices = edtsBranches ?? [];
+  // The "persisted filter rules" group: its two-row list, the scope picker below the first row,
+  // and the confirmation every action waits for.
+  const [logsRulesRowCursor, setLogsRulesRowCursor] = useState(0);
+  const [logsRulesScopeOpen, setLogsRulesScopeOpen] = useState(false);
+  const [logsRulesScopeCursor, setLogsRulesScopeCursor] = useState(0);
+  const [logsRulesConfirm, setLogsRulesConfirm] = useState<LogsRulesConfirm | null>(null);
+  // Every scope with a persisted list: global, each listed service, and (so they can still be
+  // cleared) services that are no longer listed.
+  const listedPaths = new Set(logsServices.map((service) => service.path));
+  const logsRulesScopes = [
+    { key: GLOBAL_RULES_KEY, label: 'Global filter', count: logsGlobalFilter.rules.length },
+    ...logsServices.map((service) => ({ key: service.path, label: service.service, count: logsPaneFilters[service.path]?.rules.length ?? 0 })),
+    ...Object.entries(logsPaneFilters)
+      .filter(([path, scope]) => !listedPaths.has(path) && scope.rules.length > 0)
+      .map(([path, scope]) => ({ key: path, label: `${path} (not listed)`, count: scope.rules.length })),
+  ];
+  const logsRulesScopeIndex = Math.min(logsRulesScopeCursor, Math.max(logsRulesScopes.length - 1, 0));
   // The Command Palette tab's group list (same shape as the Logs tab's).
   const [paletteGroup, setPaletteGroup] = useState<PaletteSettingsGroupId | null>(initialPaletteGroup);
   const [paletteGroupCursor, setPaletteGroupCursor] = useState(0);
+  // The Services tab's flat row list (clamped: a reload can shrink it under the cursor).
+  const servicesRows = buildServicesSettingsRows(edtsBranches, edtsErrors);
+  const [servicesCursorRaw, setServicesCursor] = useState(0);
+  const servicesCursor = Math.min(servicesCursorRaw, Math.max(0, servicesRows.length - 1));
+  // The Services tab owns its data: opened before any zone listed the services, it loads them
+  // once on arrival (the slice ignores a call while a load is already in flight).
+  useEffect(() => {
+    if (tab === 'services' && useStore.getState().edtsBranches === null) {
+      void loadEdtsBranches();
+    }
+  }, [tab, useStore, loadEdtsBranches]);
 
   // Drilled in on the EDTs tab's own group, or on any Logs tab group (single-field group,
   // "Clear history"'s row list, or its "clear a service's history" sub-list) — every other
@@ -579,7 +161,13 @@ export function SettingsScreen({
 
   useFooterContext(
     'settings',
-    settingsFooterContext(tab, { generalEditing: generalEditing !== null, edtsGroup, logsGroup, paletteGroup }),
+    settingsFooterContext(tab, {
+      generalEditing: generalEditing !== null,
+      edtsGroup,
+      logsGroup,
+      paletteGroup,
+      logsRulesConfirming: logsRulesConfirm !== null,
+    }),
     useStore,
   );
 
@@ -597,6 +185,14 @@ export function SettingsScreen({
       }
       if (tab === 'command-palette' && paletteGroup !== null) {
         setPaletteGroup(null);
+        return;
+      }
+      if (tab === 'logs' && logsRulesConfirm !== null) {
+        setLogsRulesConfirm(null);
+        return;
+      }
+      if (tab === 'logs' && logsRulesScopeOpen) {
+        setLogsRulesScopeOpen(false);
         return;
       }
       if (tab === 'logs' && logsClearServiceOpen) {
@@ -623,6 +219,8 @@ export function SettingsScreen({
       setLogsGroup(null);
       setLogsGroupCursor(0);
       setLogsClearServiceOpen(false);
+      setLogsRulesScopeOpen(false);
+      setLogsRulesConfirm(null);
       setPaletteGroup(null);
       setPaletteGroupCursor(0);
       setTab((current) => nextSettingsTab(current, tabStep === 'back' ? -1 : 1));
@@ -682,6 +280,20 @@ export function SettingsScreen({
         void updateSettings({ sharedTypes: { [step.id]: step.value } });
       } else if (step.type === 'toggle') {
         void updateSettings({ sharedTypes: { [step.id]: !settings.sharedTypes[step.id] } });
+      }
+      return;
+    }
+
+    if (tab === 'services') {
+      const step = resolveServicesSettingsKey(input, key, servicesCursor, servicesRows);
+      if (step.type === 'move') {
+        setServicesCursor(step.cursor);
+      } else if (step.type === 'toggle') {
+        // Checked = enabled, so the stored list holds the unchecked ones; persisted at once. Read
+        // from the live store, not this render's snapshot: two quick presses before a re-render
+        // must each toggle on top of the previous one.
+        const disabled = useStore.getState().settings.services.healthCheckDisabled;
+        void updateSettings({ services: { healthCheckDisabled: toggleHiddenHint(disabled, step.service) } });
       }
       return;
     }
@@ -762,6 +374,48 @@ export function SettingsScreen({
           if (service) {
             clearServiceFilterHistory(service.path);
           }
+        }
+        return;
+      }
+
+      // "Persisted filter rules": every action asks first (y/Enter accepts, anything else cancels),
+      // and each clears only what it targets — one scope's list, or the library.
+      if (logsGroup === 'filter-rules') {
+        if (logsRulesConfirm !== null) {
+          if (input === 'y' || input === 'Y' || key.return) {
+            if (logsRulesConfirm.kind === 'scope') {
+              clearLogsScopeRules(logsRulesConfirm.key);
+              setLogsRulesScopeOpen(false);
+            } else {
+              clearLogsRuleSets();
+            }
+          }
+          setLogsRulesConfirm(null);
+          return;
+        }
+        if (logsRulesScopeOpen) {
+          const moved = nextCursorForKey(key, logsRulesScopeIndex, logsRulesScopes.length);
+          if (moved !== null) {
+            setLogsRulesScopeCursor(moved);
+            return;
+          }
+          const scope = logsRulesScopes[logsRulesScopeIndex];
+          if (key.return && scope !== undefined && scope.count > 0) {
+            setLogsRulesConfirm({ kind: 'scope', key: scope.key, label: scope.label });
+          }
+          return;
+        }
+        const moved = nextCursorForKey(key, logsRulesRowCursor, LOGS_RULES_ROWS.length);
+        if (moved !== null) {
+          setLogsRulesRowCursor(moved);
+          return;
+        }
+        const row = LOGS_RULES_ROWS[logsRulesRowCursor];
+        if (row === 'clear-scope' && key.return) {
+          setLogsRulesScopeOpen(true);
+          setLogsRulesScopeCursor(0);
+        } else if (row === 'delete-library' && key.return && logsRuleSets.length > 0) {
+          setLogsRulesConfirm({ kind: 'library' });
         }
         return;
       }
@@ -930,6 +584,37 @@ export function SettingsScreen({
       return;
     }
 
+    if (edtsGroup === 'switch-restart') {
+      if (key.leftArrow) {
+        void updateSettings({ switch: { restartMode: cycleSwitchRestartMode(settings.switch.restartMode, -1) } });
+      } else if (key.rightArrow || input === ' ') {
+        void updateSettings({ switch: { restartMode: cycleSwitchRestartMode(settings.switch.restartMode, 1) } });
+      }
+      return;
+    }
+
+    if (edtsGroup === 'heal-restart') {
+      // Two values only: Left, Right and Space all flip simple ↔ clean.
+      if (key.leftArrow || key.rightArrow || input === ' ') {
+        void updateSettings({ dashboard: { restartMode: settings.dashboard.restartMode === 'clean' ? 'simple' : 'clean' } });
+      }
+      return;
+    }
+
+    if (edtsGroup === 'realign-scope' || edtsGroup === 'realign-restart') {
+      const direction = key.leftArrow ? -1 : key.rightArrow || input === ' ' ? 1 : null;
+      if (direction === null) {
+        return;
+      }
+      void updateSettings({
+        realign:
+          edtsGroup === 'realign-scope'
+            ? { defaultScope: cycleRealignScope(settings.realign.defaultScope, direction) }
+            : { restartMode: cycleSwitchRestartMode(settings.realign.restartMode, direction) },
+      });
+      return;
+    }
+
     // edtsGroup === 'action-types'
     const moved = nextCursorForKey(key, actionTypeCursor, HIDEABLE_ACTION_TYPES.length);
     if (moved !== null) {
@@ -965,326 +650,45 @@ export function SettingsScreen({
         {settingsWarning ? <DimAnnotation text={settingsWarning} /> : null}
 
         {tab === 'shared-types' ? (
-          <Box flexDirection="column">
-            {SHARED_TYPES_SETTINGS_ROWS.map((row, index) => (
-              <Box key={row.id} flexDirection="row">
-                <Text color={colors.accent} wrap="truncate-end">{index === sharedTypesCursor ? '›' : ' '}</Text>
-                {row.kind === 'checkbox' ? (
-                  <CheckboxListItem label={row.label} selected={index === sharedTypesCursor} state={settings.sharedTypes[row.id] ? 'checked' : 'unchecked'} />
-                ) : (
-                  <Text color={index === sharedTypesCursor ? colors.accent : colors.text} wrap="truncate-end">
-                    {row.label}: <Text color={colors.accent}>{settings.sharedTypes[row.id]}</Text>
-                  </Text>
-                )}
-              </Box>
-            ))}
-            {(() => {
-              const focused = SHARED_TYPES_SETTINGS_ROWS[sharedTypesCursor];
-              return focused?.kind === 'number' ? <DimAnnotation text={focused.hint} /> : null;
-            })()}
-          </Box>
+          <SharedTypesTab settings={settings} cursor={sharedTypesCursor} />
+        ) : null}
+
+        {tab === 'services' ? (
+          <ServicesTab settings={settings} rows={servicesRows} cursor={servicesCursor} />
         ) : null}
 
         {tab === 'general' ? (
-          <Box flexDirection="column">
-            <Box flexDirection="row">
-              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? '›' : ' '}</Text>
-              <CheckboxListItem
-                label="Enable 'q' to quit"
-                selected={GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut'}
-                state={settings.general.quitShortcutEnabled ? 'checked' : 'unchecked'}
-              />
-            </Box>
-            <Box flexDirection="row">
-              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? '›' : ' '}</Text>
-              {generalEditing !== null ? (
-                <TextInputLine label="Editor command" value={generalEditing.value} cursor={generalEditing.cursor} focused />
-              ) : (
-                <Text color={GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? colors.accent : colors.text} wrap="truncate-end">
-                  Editor command:{' '}
-                  {settings.general.editorCommand !== '' ? (
-                    <Text color={colors.accent}>{settings.general.editorCommand}</Text>
-                  ) : (
-                    <Text color={colors['text-dim']} wrap="truncate-end">{EDITOR_COMMAND_PLACEHOLDER_TEXT}</Text>
-                  )}
-                </Text>
-              )}
-            </Box>
-            {GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
-              <DimAnnotation text="Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
-            ) : generalEditing !== null ? (
-              <DimAnnotation text="<repo> is replaced by the repo path (appended when absent), e.g. code <repo>. Empty: $EDITOR, else vi." />
-            ) : (
-              <DimAnnotation text="Run by the Update zone's “Open in editor” choice on a blocked repo, e.g. code <repo>." />
-            )}
-          </Box>
+          <GeneralTab settings={settings} cursor={generalCursor} editing={generalEditing} />
         ) : null}
 
         {tab === 'update' ? (
-          <Box flexDirection="column">
-            {UPDATE_SETTINGS_ROWS.map((row, index) => {
-              const highlighted = index === updateCursor;
-              const cursorGlyph = <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>;
-              if (row === 'concurrency') {
-                return (
-                  <Box key={row} flexDirection="row">
-                    {cursorGlyph}
-                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">
-                      Update concurrency: <Text color={colors.accent}>{settings.update.concurrency}</Text>
-                    </Text>
-                  </Box>
-                );
-              }
-              if (row === 'merge-source') {
-                return (
-                  <Box key={row} flexDirection="row">
-                    {cursorGlyph}
-                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">
-                      Merge source:{' '}
-                      <Text color={colors.accent}>{settings.update.mergeSource === 'shared' ? 'Shared branch' : 'From EDT (pick at run time)'}</Text>
-                    </Text>
-                  </Box>
-                );
-              }
-              return (
-                <Box key={row} flexDirection="row">
-                  {cursorGlyph}
-                  <CheckboxListItem
-                    label={row === 'run-migrations' ? 'Run migrations' : 'Clean restart'}
-                    selected={highlighted}
-                    state={(row === 'run-migrations' ? settings.update.runMigrations : settings.update.cleanRestart) ? 'checked' : 'unchecked'}
-                  />
-                </Box>
-              );
-            })}
-            <DimAnnotation text={UPDATE_SETTINGS_ROW_HINTS[UPDATE_SETTINGS_ROWS[updateCursor] ?? 'concurrency']} />
-          </Box>
+          <UpdateTab settings={settings} cursor={updateCursor} />
         ) : null}
 
-        {tab === 'command-palette' && paletteGroup === null ? (
-          <Box flexDirection="column">
-            {PALETTE_SETTINGS_GROUPS.map((group, index) => {
-              const highlighted = index === paletteGroupCursor;
-              return (
-                <Box key={group.id} flexDirection="row">
-                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{group.label}</Text>
-                </Box>
-              );
-            })}
-          </Box>
+        {tab === 'command-palette' ? (
+          <PaletteTab settings={settings} paletteGroup={paletteGroup} paletteGroupCursor={paletteGroupCursor} />
         ) : null}
 
-        {tab === 'command-palette' && paletteGroup === 'grid-max-rows' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
-            </Text>
-            <DimAnnotation text="Rows of the command grid before it scrolls." />
-          </Box>
+        {tab === 'logs' ? (
+          <LogsTab
+            settings={settings}
+            logsGroup={logsGroup}
+            logsGroupCursor={logsGroupCursor}
+            logsClearRowCursor={logsClearRowCursor}
+            logsClearServiceOpen={logsClearServiceOpen}
+            logsClearServiceCursor={logsClearServiceCursor}
+            logsServices={logsServices}
+            logsRulesRowCursor={logsRulesRowCursor}
+            logsRulesScopeOpen={logsRulesScopeOpen}
+            logsRulesScopes={logsRulesScopes}
+            logsRulesScopeIndex={logsRulesScopeIndex}
+            logsRulesConfirm={logsRulesConfirm}
+            logsRuleSetCount={logsRuleSets.length}
+          />
         ) : null}
 
-        {tab === 'command-palette' && paletteGroup === 'history-size' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Command history size: <Text color={colors.accent}>{settings.commandPalette.historySize}</Text>
-            </Text>
-            <DimAnnotation text={`Steps of ${FILTER_HISTORY_SIZE_STEP} entries.`} />
-          </Box>
-        ) : null}
-
-        {tab === 'command-palette' && paletteGroup === 'history-dedup' ? (
-          <Box flexDirection="column">
-            <CheckboxListItem
-              label="Deduplicate command history"
-              state={settings.commandPalette.historyDedup ? 'checked' : 'unchecked'}
-            />
-            <DimAnnotation text="On: a repeated command moves to the front. Off: only a repeat of the latest is merged." />
-          </Box>
-        ) : null}
-
-        {tab === 'command-palette' && paletteGroup === 'clear-history' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">Clear the command history</Text>
-            <DimAnnotation text="Empties the `:` bar's recall list; the filter histories are untouched." />
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === null ? (
-          // The Logs tab's group-list level, mirroring the EDTs tab's group list — every field
-          // lives behind its own (or a shared) group, so no single screen overflows the modal.
-          <Box flexDirection="column">
-            {LOGS_SETTINGS_GROUPS.map((group, index) => {
-              const highlighted = index === logsGroupCursor;
-              return (
-                <Box key={group.id} flexDirection="row">
-                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{group.label}</Text>
-                </Box>
-              );
-            })}
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === 'buffer-size' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Log buffer size (lines per pane): <Text color={colors.accent}>{settings.logs.bufferSize}</Text>
-            </Text>
-            <DimAnnotation
-              text={`Steps of ${LOG_BUFFER_SIZE_STEP} lines; a digit sets a x100 preset. Applies to new streams only — already-running panes keep their current buffer size.`}
-            />
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === 'start-with-history' ? (
-          <Box flexDirection="column">
-            <CheckboxListItem
-              label="Start streaming with the most recent history"
-              state={settings.logs.startWithHistory ? 'checked' : 'unchecked'}
-            />
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === 'filter-history-size' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Filter history size (entries per list): <Text color={colors.accent}>{settings.logs.filterHistorySize}</Text>
-            </Text>
-            <DimAnnotation text={`Steps of ${FILTER_HISTORY_SIZE_STEP} entries.`} />
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === 'filter-history-grid' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Filter history grid max rows: <Text color={colors.accent}>{settings.logs.filterHistoryGridMaxRows}</Text>
-            </Text>
-            <DimAnnotation text="Steps of 1 row; a digit sets the value." />
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === 'filter-history-dedup' ? (
-          <Box flexDirection="column">
-            <CheckboxListItem
-              label="Dedup filter history (one instance per filter)"
-              state={settings.logs.filterHistoryDedup ? 'checked' : 'unchecked'}
-            />
-            <DimAnnotation text="Checked: reusing a filter moves it to the most recent place instead of storing it twice." />
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === 'restart-mode' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Restart mode (R in Logs): <Text color={colors.accent}>{settings.logs.restartMode}</Text>
-            </Text>
-            <DimAnnotation text="simple: plain container restart. clean: run the manifest's clean-restart recipe, falling back to a simple restart when none is declared." />
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === 'clear-history' && !logsClearServiceOpen ? (
-          // "Clear history" is the one Logs group holding both clear actions — its own small
-          // Up/Down row list, one level below the group list.
-          <Box flexDirection="column">
-            {LOGS_CLEAR_ROWS.map((row, index) => {
-              const highlighted = index === logsClearRowCursor;
-              return (
-                <Box key={row} flexDirection="row">
-                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{LOGS_CLEAR_ROW_LABELS[row]}</Text>
-                </Box>
-              );
-            })}
-          </Box>
-        ) : null}
-
-        {tab === 'logs' && logsGroup === 'clear-history' && logsClearServiceOpen ? (
-          // The "clear a service's history" row's drill-down — a plain Up/Down list over every
-          // manifest service, never limited to the active EDT's own members.
-          <Box flexDirection="column">
-            {logsServices.length === 0 ? <StateLine kind="empty" subject="manifest services loaded" /> : null}
-            <BoundedList
-              items={logsServices}
-              chromeRows={SETTINGS_LIST_CHROME_ROWS}
-              cursorIndex={logsClearServiceCursor}
-              renderItem={(service, index) => {
-                const highlighted = index === logsClearServiceCursor;
-                return (
-                  <Box key={service.path} flexDirection="row">
-                    <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                    <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{service.service}</Text>
-                  </Box>
-                );
-              }}
-            />
-            <DimAnnotation text="Clears that service's filter history (text + regex)." />
-          </Box>
-        ) : null}
-
-        {tab === 'edts' && !drilledIn ? (
-          // Opening the EDTs tab (or stepping back out of a group via Esc) shows this
-          // Up/Down-navigable group list — no checkboxes at this level.
-          <Box flexDirection="column">
-            {SETTINGS_GROUPS.map((group, index) => {
-              const highlighted = index === groupCursor;
-              return (
-                <Box key={group.id} flexDirection="row">
-                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{group.label}</Text>
-                </Box>
-              );
-            })}
-          </Box>
-        ) : null}
-
-        {tab === 'edts' && edtsGroup === 'hint-visibility' ? (
-          <Box flexDirection="column">
-            {HIDEABLE_ACTION_HINTS.map((token, index) => {
-              const highlighted = index === hintCursor;
-              return (
-                // checkbox-list-item's own `selected` prop has no visible effect on its own — the
-                // highlighted row needs its own `›` cursor glyph, rendered as a sibling column.
-                <Box key={token.id} flexDirection="row">
-                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                  <CheckboxListItem
-                    label={token.label}
-                    selected={highlighted}
-                    state={settings.edts.hiddenActionHints.includes(token.id) ? 'checked' : 'unchecked'}
-                  />
-                </Box>
-              );
-            })}
-            <DimAnnotation text="Checked hides that hint from the EDT detail pane." />
-          </Box>
-        ) : null}
-
-        {tab === 'edts' && edtsGroup === 'action-types' ? (
-          <Box flexDirection="column">
-            {HIDEABLE_ACTION_TYPES.map((token, index) => {
-              const highlighted = index === actionTypeCursor;
-              return (
-                <Box key={token.id} flexDirection="row">
-                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                  <CheckboxListItem
-                    label={token.label}
-                    selected={highlighted}
-                    state={settings.edts.hiddenActionTypes.includes(token.id) ? 'checked' : 'unchecked'}
-                  />
-                </Box>
-              );
-            })}
-            <DimAnnotation text="Checked hides that action type from the Recent actions log." />
-          </Box>
-        ) : null}
-
-        {tab === 'edts' && edtsGroup === 'branch-dropdown-rows' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Branch dropdown max rows: <Text color={colors.accent}>{settings.edts.branchDropdownMaxRows}</Text>
-            </Text>
-            <DimAnnotation text="Caps the lines of the autocomplete dropdown, “N more” indicators included." />
-          </Box>
+        {tab === 'edts' ? (
+          <EdtsTab settings={settings} edtsGroup={edtsGroup} groupCursor={groupCursor} hintCursor={hintCursor} actionTypeCursor={actionTypeCursor} />
         ) : null}
       </Box>
     </ModalDialog>

@@ -169,7 +169,28 @@ async function resetHistories(state: StatePort): Promise<Result<void>> {
       return written;
     }
   }
-  return command.data === null ? ok(undefined) : state.writeCommandHistory([]);
+  const rules = await state.readLogRules();
+  if (!rules.ok) {
+    return rules;
+  }
+  const sets = await state.readLogRuleSets();
+  if (!sets.ok) {
+    return sets;
+  }
+  if (command.data !== null) {
+    const written = await state.writeCommandHistory([]);
+    if (!written.ok) {
+      return written;
+    }
+  }
+  // The persisted filter rules (active lists and the named-set library) go with the histories.
+  if (rules.data !== null) {
+    const written = await state.writeLogRules({});
+    if (!written.ok) {
+      return written;
+    }
+  }
+  return sets.data === null ? ok(undefined) : state.writeLogRuleSets([]);
 }
 
 async function resetServices(params: ResetToolParams): Promise<Result<void>> {

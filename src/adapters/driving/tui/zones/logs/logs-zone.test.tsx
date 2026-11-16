@@ -7,6 +7,7 @@ import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { createAppStore } from '../../store/app-store.js';
 import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
+import { STATUS_BADGES } from '../../shared/components/status-badge.js';
 import { LogsZone } from './logs-zone.js';
 
 function service(overrides: Partial<ServiceBranchDivergence> = {}): ServiceBranchDivergence {
@@ -418,6 +419,28 @@ describe('LogsZone', () => {
     expect(output.split('lib-b').length - 1).toBe(1);
     expect(flat).toContain('No services in the active EDT.');
     expect(output).toContain('api-gateway');
+  });
+
+  it.each(['up', 'down'] as const)('a container-less row with a probed healthUrl shows its real %s status', async (health) => {
+    const store = createAppStore();
+    store.setState({
+      edts: [],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [service({ service: 'lib-a', path: '/repos/lib-a', isMember: false })],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      logsNoContainer: { '/repos/lib-a': true },
+      logsListedHealth: { '/repos/lib-a': health },
+    });
+
+    const output = await renderToString(<LogsZone useStore={store} />);
+    const flat = output.replace(/\s+/g, ' ');
+
+    expect(output).toContain('SERVICES WITHOUT CONTAINER');
+    expect(flat).toContain(`${STATUS_BADGES[health].glyph} ${health}`);
+    expect(flat).not.toContain('no container');
   });
 
   it('rows with unresolved presence stay in their membership list and no third section renders', async () => {

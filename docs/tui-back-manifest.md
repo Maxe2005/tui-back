@@ -21,11 +21,14 @@ Le chargement/parsing est fait par
 # Obligatoire
 service: <chaîne non vide>
 
-# Optionnel — absent = service sans conteneur (pas de redémarrage simple, de santé ni de logs)
+# Optionnel — absent = service sans conteneur (pas de redémarrage simple ni de logs ; statut via healthUrl seulement)
 container: <chaîne non vide>
 
 # Optionnel
 migrationCommand: <chaîne non vide>   # omettre la clé si aucune commande
+
+# Optionnel — URL http(s) sondée (GET) pour le statut affiché du service (et après un redémarrage)
+healthUrl: <http:// ou https:// URL>
 
 # Optionnel — recette de « clean restart » (commandes shell exécutées dans l'ordre)
 restartCommands: [<chaîne non vide>, ...]
@@ -58,8 +61,9 @@ modules:
 - **Type** : `string`
 - **Validation** : `trim().min(1)` — mêmes règles que `service`.
 - **Comportement si absent** : le service n'a pas de runtime Docker (pas de
-  redémarrage simple, de santé ni de flux de logs). Il reste un membre valide
-  d'un EDT. Omettre la clé : `null` ou une chaîne vide sont rejetés.
+  redémarrage simple ni de flux de logs). Il reste un membre valide d'un EDT.
+  Son statut vaut `no-container`, sauf s'il déclare un `healthUrl` : il reçoit
+  alors un vrai statut `up` / `down` (voir `healthUrl`). Omettre la clé : `null` ou une chaîne vide sont rejetés.
 - **Rôle** : nom du conteneur Docker associé au service (généralement le
   premier service déclaré dans `docker-compose.yml`).
 
@@ -123,6 +127,54 @@ modules:
   erreur plutôt que d'utiliser le défaut).
 - **Rôle** : nom de la branche Git partagée/de référence pour le dépôt.
   Elle est **toujours** protégée (voir `protectedBranches`).
+
+### `healthUrl` (optionnel)
+
+- **Type** : `string`
+- **Validation** : chaîne rognée, non vide, commençant par `http://` ou
+  `https://` ; toute autre valeur (vide, blanche, sans schéma, `ftp://`…)
+  provoque un échec `manifest-validation-failed` nommant `healthUrl`.
+- **Comportement si absent** : `undefined` — aucune sonde n'est émise. Le
+  statut affiché est l'état brut du conteneur, et un `up` reste **non vérifié**
+  (`verified: false`, visible seulement dans les données et le JSON de la CLI) ;
+  après un redémarrage post-switch, un conteneur démarré est rapporté
+  `up-unverified` au lieu de `functional`.
+- **Rôle** : c'est la **sonde de statut au quotidien**. Toute vue qui affiche
+  l'état d'un service (Dashboard, panneaux et badges de Logs, liste de l'onglet
+  Update, CLI `tui-back dashboard`) le calcule par une seule règle
+  (`src/core/service-status`) : la `healthUrl` est sondée d'abord (`GET`, délai
+  maximal de 2 s, redirections non suivies : un 3xx n'est pas un 2xx), puis le
+  résultat est combiné avec l'état du conteneur :
+
+  | Sonde `healthUrl`        | Conteneur                 | Statut                                              |
+  |--------------------------|---------------------------|-----------------------------------------------------|
+  | 2xx                      | `up` ou pas de conteneur  | `up` (vérifié)                                      |
+  | 2xx                      | `down` ou `restarting`    | `inconsistent` (élément d'Attention du Dashboard)   |
+  | 2xx                      | erreur Docker             | `up` (vérifié), l'erreur conteneur est conservée — jamais `inconsistent` |
+  | non-2xx ou délai dépassé | `up`                      | `unhealthy` (raison de la sonde conservée)          |
+  | non-2xx ou délai dépassé | `down` / `restarting`     | `down` / `restarting`                               |
+  | non-2xx ou délai dépassé | pas de conteneur          | `down`                                              |
+  | non-2xx ou délai dépassé | erreur Docker             | erreur (celle de Docker, raison de la sonde en détail) |
+  | pas de `healthUrl`       | `up` / `down` / `restarting` | même état ; `up` non vérifié                     |
+  | pas de `healthUrl`       | pas de conteneur          | `no-container`                                      |
+
+  Un **service sans conteneur** qui déclare `healthUrl` obtient donc un vrai
+  statut `up` / `down`. Les sondages de Logs et d'Update ne lancent jamais une
+  nouvelle sonde pour un dépôt dont la précédente est encore en cours, et
+  gardent le dernier état connu en cas d'échec.
+
+  Après le redémarrage optionnel d'un EDT switch (`switch.restartMode` ≠
+  `none`), la même règle décide chaque tentative de vérification (sonde de 5 s
+  au plus, une fois par seconde, jusqu'à 30 s au total) : `up` vérifié donne
+  `functional`, `up` non vérifié `up-unverified`, `down` s'arrête aussitôt ;
+  `restarting`, `inconsistent` et `unhealthy` continuent jusqu'au délai, puis
+  un `unhealthy` persistant est rapporté `unhealthy`.
+  Un développeur peut désactiver localement la sonde pour un service
+  (`:settings` → onglet Services, `services.healthCheckDisabled` dans
+  `settings.yaml`) : le service est alors traité partout comme sans
+  `healthUrl` (statut, heal, vérification après redémarrage), et son statut
+  porte `healthCheck: "disabled"`.
+- **Exemple** : `healthUrl: http://localhost:3000/health`
 
 ### `protectedBranches` (optionnel)
 
@@ -299,11 +351,29 @@ update:
 - Le TUI initialise l'écran de configuration pré-run avec ces valeurs ; les changements faits dans l'écran ne sont jamais réécrits dans `settings.yaml`. `mergeSource: edt-pending` ouvre la source de merge sur « From EDT » (aucun EDT choisi) uniquement dans l'écran EDT.
 - La CLI (`tui-back update`) utilise `runMigrations` et `cleanRestart` de `settings.yaml` ; **elle ignore `mergeSource`** (utiliser `--from-edt <topic>`). Les flags explicites l'emportent : `--migrations` / `--no-migrations` et `--clean-restart` / `--no-clean-restart` (un flag et sa négation ensemble : `invalid-argument`). Si `settings.yaml` est illisible ou invalide, un avertissement est écrit sur stderr et les défauts intégrés s'appliquent.
 
+### Mode de redémarrage du heal (`dashboard.restartMode`)
+
+```yaml
+dashboard:
+  restartMode: simple   # simple | clean — défaut : simple
+```
+
+- Mode utilisé par le heal (action Dashboard et `tui-back heal`) quand `--restart` est absent.
+  `clean` lance la recette `restartCommands` du manifeste et retombe sur un redémarrage simple
+  quand aucune recette n'est déclarée.
+- Éditable dans `:settings`, onglet **EDTs**, groupe « Heal restart mode » (Gauche/Droite/Espace
+  basculent entre `simple` et `clean`). Jamais réécrit par un run.
+- Groupe optionnel. Une **valeur** inconnue de `restartMode` retombe silencieusement sur `simple`,
+  sans toucher au reste du fichier. Une **clé** inconnue sous `dashboard:` invalide en revanche
+  tout le fichier, comme pour tout autre groupe : tous les défauts s'appliquent, avec un
+  avertissement.
+
 ## Exemple complet — service `api-gateway` avec `route-explorer`
 
 ```yaml
 service: api-gateway
 container: api-gateway
+healthUrl: http://localhost:3000/health
 migrationCommand: docker exec api-gateway npx prisma migrate deploy
 restartCommands:
   - docker compose down
@@ -356,6 +426,94 @@ sur le redémarrage simple du conteneur —, `sharedBranch` explicite ici mais p
 être omis pour hériter de `"development"`. `protectedBranches` omis : seule
 `master` est protégée.)
 
+## CLI `dashboard` — JSON
+
+`tui-back dashboard` écrit l'enveloppe standard (`{ ok, data }` / `{ ok, error }`). Chaque
+service de `data.services` porte un champ **`status`** (anciennement `container`), le statut
+calculé à partir de `healthUrl` et du conteneur selon le tableau ci-dessus :
+
+```json
+"status": {
+  "ok": true,
+  "value": {
+    "state": "unhealthy",
+    "verified": true,
+    "container": "up",
+    "probeReason": "HTTP 503"
+  }
+}
+```
+
+- `state` : `up | unhealthy | inconsistent | restarting | down | no-container`.
+- `verified` : `true` quand l'état a été décidé par une sonde `healthUrl` ; un `up` sans
+  `healthUrl` vaut `false`.
+- `container` : état brut du conteneur (`up | down | restarting`), `no-container` si aucun
+  conteneur n'est déclaré, `null` quand Docker a échoué.
+- `containerError` (optionnel) : `{ code, message }` de Docker quand la sonde a tout de même
+  décidé de l'état (2xx malgré une erreur Docker).
+- `probeReason` (optionnel) : pourquoi la sonde n'a pas répondu 2xx.
+- `healthCheck` (optionnel) : `"disabled"` quand le manifeste déclare `healthUrl` mais que la
+  sonde est désactivée localement pour ce service (`services.healthCheckDisabled` dans
+  `settings.yaml`, `:settings` → onglet Services). L'état est alors calculé comme sans
+  `healthUrl` (`verified: false`) et la route n'est jamais sondée. Absent sinon.
+- Quand le statut ne peut pas être calculé (manifeste illisible, ou Docker en erreur sans sonde
+  2xx), `status` vaut `{ "ok": false, "error": { "code", "message" } }`. Quand Docker et la
+  sonde ont tous deux échoué, `error.details.probeReason` porte la raison de la sonde.
+
+## CLI `heal` — JSON
+
+`tui-back heal [--restart simple|clean]` redémarre, puis vérifie, chaque service de l'EDT actif
+dont le statut (tableau ci-dessus, le même que `tui-back dashboard`) est `down` ou `unhealthy` et
+qui déclare un `container`. Aucune confirmation n'est demandée. `--restart` retombe sur
+`dashboard.restartMode` ; les services sont traités `update.concurrency` à la fois. Un service
+listé dans `services.healthCheckDisabled` n'est jamais sondé, ni au calcul des cibles ni à la
+vérification après redémarrage : il n'est donc jamais ciblé comme `unhealthy`. L'enveloppe
+est l'enveloppe standard :
+
+```json
+{
+  "ok": true,
+  "data": {
+    "edt": { "ulid": "01J…", "topic": "feature-x" },
+    "mode": "simple",
+    "targets": ["orders-api"],
+    "skipped": [
+      { "service": "api-gateway", "reason": "up" },
+      { "service": "shared-types", "reason": "no container" }
+    ],
+    "restart": [{ "service": "orders-api", "state": "functional" }],
+    "summary": { "functional": 1, "up-unverified": 0, "unhealthy": 0, "restarting": 0, "down": 0, "failed": 0, "skipped": 2 }
+  }
+}
+```
+
+- `targets` : les services redémarrés, dans l'ordre des membres de l'EDT.
+- `skipped[].reason` : `up` (déjà fonctionnel), `already restarting` (conteneur en cours de
+  redémarrage), `inconsistent` (route 2xx mais conteneur arrêté), `no container` (aucun
+  conteneur déclaré, y compris un service `down` décidé par sa seule `healthUrl`),
+  `status unknown` (statut impossible à calculer : manifeste illisible, Docker et la sonde en
+  échec, ou `repoPath` vide dans le registre des EDT).
+- `skipped[].detail` (optionnel) : la cause d'un `status unknown` (message d'erreur du calcul du
+  statut).
+- `restart[]` : une ligne par cible (les lignes non vertes d'abord), avec `state` parmi
+  `functional | up-unverified | unhealthy | restarting | down | failed` et un `detail`
+  optionnel (raison de l'état, message d'échec, ou notice « pas de recette clean »).
+- Verrous : avant chaque redémarrage, le verrou de redémarrage du service, celui de la mise à
+  jour de groupe et celui de mise à jour/switch de l'EDT actif sont vérifiés. Un verrou tenu met
+  **cette ligne** en `failed` avec `detail` `<nom du verrou> in progress` (`service restart`,
+  `group update`, `EDT update/switch`) ; les autres cibles sont tout de même traitées.
+- Aucune cible : `ok`, `targets` et `restart` vides, et `message: "every service is up"`.
+- Code de sortie : `1` dès qu'une cible finit `failed`, `down` ou `unhealthy`, avec l'erreur
+  `heal-needs-attention` dont `error.details` porte les mêmes données complètes ; `0` sinon
+  (cibles `functional`, `up-unverified`, ou encore `restarting` à la fin de la vérification).
+- Autres erreurs (code de sortie `1`) :
+  - `invalid-argument` : valeur de `--restart` inconnue, option inconnue, valeur manquante ou
+    flag répété — rien n'est lu ni redémarré ;
+  - `restart-unavailable` : sonde de santé non câblée ;
+  - `no-active-edt` : aucun EDT actif, ou l'ulid actif est inconnu du registre des EDT ;
+  - erreurs de lecture de l'état ou du registre des EDT, renvoyées telles quelles ;
+  - `heal-plan-failed` / `heal-failed` : échec inattendu pendant le plan ou le run.
+
 ## Erreurs de chargement possibles
 
 Le loader (`loadManifest`) peut renvoyer les codes d'erreur suivants :
@@ -378,6 +536,7 @@ du fichier sur la branche cible. Il apparaît alors modifié par rapport à cett
 
 - Schéma Zod : `src/adapters/driven/manifest/schema.ts`
 - Type `Manifest` : `src/core/ports/manifest.ts`
+- Statut des services (`healthUrl` + conteneur) : `src/core/service-status/index.ts`
 - Loader : `src/adapters/driven/manifest/index.ts`
 - Clean restart (recette `restartCommands`) : `src/core/scripts/group-update.ts` (`runRestartStep`),
   `src/core/scripts/service-restart.ts`, `src/core/ports/restart.ts`,

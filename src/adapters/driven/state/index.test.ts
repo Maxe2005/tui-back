@@ -625,3 +625,47 @@ describe('state readCommandHistory()/writeCommandHistory()', () => {
     expect(await createStatePort(file).readCommandHistory()).toEqual({ ok: true, data: ['settings'] });
   });
 });
+
+describe('state readLogRules()/writeLogRules()/readLogRuleSets()/writeLogRuleSets()', () => {
+  const rule = { mode: 'regex', query: 'a+', action: 'hide', target: 'match', enabled: false } as const;
+
+  it('reads null when nothing is persisted', async () => {
+    const port = createStatePort(await makeStateFile());
+    expect(await port.readLogRules()).toEqual({ ok: true, data: null });
+    expect(await port.readLogRuleSets()).toEqual({ ok: true, data: null });
+  });
+
+  it('round-trips the rule lists and the library, preserving order and enabled state', async () => {
+    const stateFile = await makeStateFile();
+    const port = createStatePort(stateFile);
+    const lists = { global: [rule, { ...rule, enabled: true, query: 'b' }], '/repo/a': [rule] };
+    const sets = [{ name: 'noise', rules: [rule] }, { name: 'other', rules: [] }];
+    expect((await port.writeLogRules(lists)).ok).toBe(true);
+    expect((await port.writeLogRuleSets(sets)).ok).toBe(true);
+    expect(await port.readLogRules()).toEqual({ ok: true, data: lists });
+    expect(await port.readLogRuleSets()).toEqual({ ok: true, data: sets });
+  });
+
+  it('keeps sibling fields when writing rules or sets', async () => {
+    const stateFile = await makeStateFile();
+    const port = createStatePort(stateFile);
+    await port.writeActiveEdt('01ABC');
+    await port.writeCommandHistory(['settings']);
+    await port.writeLogRules({ global: [rule] });
+    await port.writeLogRuleSets([{ name: 'n', rules: [rule] }]);
+    await port.writeFilterHistory({ 'global:text': ['x'] });
+    expect(await port.readActiveEdt()).toEqual({ ok: true, data: '01ABC' });
+    expect(await port.readCommandHistory()).toEqual({ ok: true, data: ['settings'] });
+    expect(await port.readLogRules()).toEqual({ ok: true, data: { global: [rule] } });
+    expect(await port.readLogRuleSets()).toEqual({ ok: true, data: [{ name: 'n', rules: [rule] }] });
+  });
+
+  it('returns a corrupt value as stored (core sanitizes it) without failing sibling reads', async () => {
+    const stateFile = await makeStateFile();
+    await writeFile(stateFile, JSON.stringify({ activeEdt: '01ABC', logRules: 'oops', logRuleSets: { a: 1 } }), 'utf8');
+    const port = createStatePort(stateFile);
+    expect(await port.readLogRules()).toEqual({ ok: true, data: 'oops' });
+    expect(await port.readLogRuleSets()).toEqual({ ok: true, data: { a: 1 } });
+    expect(await port.readActiveEdt()).toEqual({ ok: true, data: '01ABC' });
+  });
+});

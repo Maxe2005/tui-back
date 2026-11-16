@@ -68,6 +68,10 @@ function fakeState(active: string | null = null, overrides: Partial<StatePort> =
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
     ...overrides,
   };
 }
@@ -245,7 +249,7 @@ describe('activateEdt — clean first activation', () => {
 
   it('diffs from HEAD when the current branch is unreadable', async () => {
     const git = fakeGit({
-      currentBranch: vi.fn(async () => err('git-current-branch-error', 'detached')),
+      currentBranch: vi.fn(async () => err('git-detached-head', 'detached')),
       listDirtyPaths: vi.fn(async () => ok(['x'])),
     });
 

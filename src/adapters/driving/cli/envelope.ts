@@ -10,9 +10,14 @@ export interface RenderedResult {
   exitCode: 0 | 1;
 }
 
-export function renderResult(result: Result<unknown>, isTTY: boolean): RenderedResult {
+export function renderResult(
+  result: Result<unknown>,
+  isTTY: boolean,
+  humanText?: (data: unknown) => string | undefined,
+): RenderedResult {
   const exitCode: 0 | 1 = result.ok ? 0 : 1;
-  const output = isTTY ? renderHuman(result) : renderJsonLine(result);
+  const raw = isTTY && result.ok ? humanText?.(result.data) : undefined;
+  const output = raw ?? (isTTY ? renderHuman(result) : renderJsonLine(result));
   return { output, exitCode };
 }
 

@@ -1,10 +1,12 @@
 // tui/zones/logs: real-keypress interactions — renderToString's fake stdin never emits data, so
 // Tab/Space/Enter/Escape/Ctrl+A's dispatch through a real `useInput` round-trip is only
 // observable here (shared/test-support/fake-tty.ts).
+import { encodeFilterHistoryEntry } from './logs-zone.logic.js';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { ServiceAction } from '../../../../../core/service-actions/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { LogsZone } from './logs-zone.js';
@@ -35,6 +37,12 @@ async function pressEscape(instance: ReturnType<typeof render>, stdin: NodeJS.Re
   await press(instance, stdin, KEYS.escape);
   await new Promise((resolve) => setTimeout(resolve, 30));
   await instance.waitUntilRenderFlush();
+}
+
+// `/` or `f` opens the editor on the rule list; `a` there starts a new rule.
+async function openRuleEditor(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, key = '/'): Promise<void> {
+  await press(instance, stdin, key);
+  await press(instance, stdin, 'a');
 }
 
 function mount(store: ReturnType<typeof createAppStore>) {
@@ -191,7 +199,7 @@ describe('LogsZone real-keypress interactions', () => {
   });
 
   // `/` opens the global-filter editor from any Logs-zone focus.
-  it('"/" opens the global filter editor from list focus, and typed characters update the draft live', async () => {
+  it('"/" opens the global filter editor on its rule list from list focus; "a" starts a new rule whose typed characters show in the draft', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -199,9 +207,14 @@ describe('LogsZone real-keypress interactions', () => {
 
       await press(instance, stdin, '/');
       expect(stdout.output).toContain('GLOBAL LOG FILTER');
+      expect(stdout.output).toContain('No rules');
 
+      await press(instance, stdin, 'a');
+      expect(stdout.output).toContain('NEW RULE');
       await press(instance, stdin, 'boom');
       expect(stdout.output).toContain('boom');
+      // Nothing is applied until Enter.
+      expect(store.getState().logsGlobalFilter.rules).toEqual([]);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -304,7 +317,7 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  it('Esc in the global filter editor discards the draft and restores the previous filter', async () => {
+  it('Esc in the rule editor discards the draft and returns to the list; Esc in the list closes the editor keeping every rule', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -312,18 +325,23 @@ describe('LogsZone real-keypress interactions', () => {
       await press(instance, stdin, KEYS.tab);
       await press(instance, stdin, ' '); // select api-gateway so a pane shows the filter state
       await press(instance, stdin, KEYS.tab);
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, 'apple');
       await press(instance, stdin, KEYS.enter);
-      expect(stdout.output.slice(stdout.output.lastIndexOf('LOGS'))).toContain('global filter: text "apple"');
+      expect(store.getState().logsGlobalFilter.rules).toMatchObject([{ query: 'apple', enabled: true }]);
+      expect(stdout.output).toContain('[x] show line text "apple"');
 
-      await press(instance, stdin, '/');
+      await press(instance, stdin, 'a');
       await press(instance, stdin, 'x');
-      expect(stdout.output.slice(stdout.output.lastIndexOf('LOGS'))).toContain('global filter: text "applex"');
-      await pressEscape(instance, stdin);
+      await pressEscape(instance, stdin); // back to the list, draft discarded
+      expect(stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'))).toContain('RULES');
+      expect(store.getState().logsGlobalFilter.rules).toHaveLength(1);
+
+      await pressEscape(instance, stdin); // closes the editor
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
-      expect(lastFrame).toContain('global filter: text "apple"');
+      expect(lastFrame).toContain('global filter: 1 rule');
       expect(lastFrame).not.toContain('GLOBAL LOG FILTER');
+      expect(store.getState().logsGlobalFilter.rules).toHaveLength(1);
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -335,7 +353,7 @@ describe('LogsZone real-keypress interactions', () => {
     const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, KEYS.shiftTab);
       expect(stdout.output).toContain('Regex:');
       await press(instance, stdin, KEYS.shiftTab);
@@ -356,7 +374,7 @@ describe('LogsZone real-keypress interactions', () => {
     try {
       await instance.waitUntilRenderFlush();
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, KEYS.tab);
       expect(stdout.output).toContain('Regex:');
 
@@ -368,8 +386,7 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // Ctrl+Left/Right cycle the editor's level restriction — Ctrl disambiguates it from a bare
-  // arrow, which the text caret owns (see logs-zone.logic.ts's
+  // Ctrl+Left/Right cycle the scope's level restriction on the rule list (see logs-zone.logic.ts's
   // cycleFilterLevel/LOG_FILTER_LEVEL_CYCLE).
   it('the filter editor cycles its level restriction with Ctrl+Right/Ctrl+Left', async () => {
     const store = seedStore();
@@ -396,21 +413,19 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // Bare Left/Right are the TextInputLine caret (Ctrl+Left/Right above is the only binding for
-  // the level restriction) and never touch it.
-  it('bare Left/Right no longer cycle the level restriction or alter the query', async () => {
+  // Bare Left/Right are the TextInputLine caret and never touch the query.
+  it('bare Left/Right only move the caret and never alter the query or the level', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
       await instance.waitUntilRenderFlush();
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, 'boom');
       await press(instance, stdin, KEYS.right);
       await press(instance, stdin, KEYS.left);
 
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
-      expect(lastFrame).toContain('Level: ALL');
       expect(lastFrame).toContain('Text: boom');
     } finally {
       instance.unmount();
@@ -426,7 +441,7 @@ describe('LogsZone real-keypress interactions', () => {
     try {
       await instance.waitUntilRenderFlush();
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, 'abd');
       await press(instance, stdin, KEYS.left); // caret after 'b', before 'd'
       await press(instance, stdin, 'c');
@@ -445,7 +460,7 @@ describe('LogsZone real-keypress interactions', () => {
     try {
       await instance.waitUntilRenderFlush();
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, 'bcd');
       await press(instance, stdin, KEYS.home);
       await press(instance, stdin, 'a');
@@ -464,7 +479,7 @@ describe('LogsZone real-keypress interactions', () => {
     try {
       await instance.waitUntilRenderFlush();
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, 'abcd');
       await press(instance, stdin, KEYS.left);
       await press(instance, stdin, KEYS.left); // caret between 'b' and 'c'
@@ -484,7 +499,7 @@ describe('LogsZone real-keypress interactions', () => {
     try {
       await instance.waitUntilRenderFlush();
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, 'abcd');
       await press(instance, stdin, KEYS.home);
       await press(instance, stdin, KEYS.left); // already at 0, no-op
@@ -499,6 +514,121 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
+  it('Ctrl+X / Ctrl+T switch action and target, Enter saves the rule and records history, and recall restores all three', async () => {
+    const store = seedStore();
+    const { instance, stdin, stdout } = mount(store);
+    const lastFrame = () => stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+    try {
+      await instance.waitUntilRenderFlush();
+
+      await openRuleEditor(instance, stdin, '/');
+      expect(lastFrame()).toContain('Filter: show line');
+      await press(instance, stdin, 'noise');
+      await press(instance, stdin, '\x18');
+      expect(lastFrame()).toContain('Filter: hide line');
+      await press(instance, stdin, '\x14');
+      expect(lastFrame()).toContain('Filter: hide match');
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().logsGlobalFilter.rules).toMatchObject([{ query: 'noise', action: 'hide', target: 'match', enabled: true }]);
+
+      const history = store.getState().filterHistory['global:text'];
+      expect(history).toHaveLength(1);
+
+      await press(instance, stdin, 'a');
+      expect(lastFrame()).toContain('Filter: show line');
+      await press(instance, stdin, KEYS.up);
+      expect(lastFrame()).toContain('Text: noise');
+      expect(lastFrame()).toContain('Filter: hide match');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  describe('action/target in the filter editor', () => {
+    const hidden = encodeFilterHistoryEntry({ query: 'recalled', action: 'hide', target: 'match' });
+    const lastGlobalFrame = (out: string) => out.slice(out.lastIndexOf('GLOBAL LOG FILTER'));
+
+    it('after recalling a hide/match entry, typing, Backspace or Tab restores the draft own action and target', async () => {
+      for (const keystroke of ['X', KEYS.backspace, KEYS.tab]) {
+        const store = seedStore({ filterHistory: { 'global:text': [hidden] } });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await openRuleEditor(instance, stdin, '/');
+          await press(instance, stdin, 'draft');
+          await press(instance, stdin, KEYS.up);
+          expect(lastGlobalFrame(stdout.output)).toContain('Filter: hide match');
+          await press(instance, stdin, keystroke);
+          expect(lastGlobalFrame(stdout.output)).toContain('Filter: show line');
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      }
+    });
+
+    it('Enter on a hide/match grid entry recalls its query, action and target into the draft', async () => {
+      const store = seedStore({ filterHistory: { 'global:text': [hidden] } });
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await openRuleEditor(instance, stdin, '/');
+        await press(instance, stdin, KEYS.down);
+        await press(instance, stdin, KEYS.enter); // recall into the draft
+        expect(lastGlobalFrame(stdout.output)).toContain('Filter: hide match');
+        await press(instance, stdin, KEYS.enter); // save the rule
+        expect(store.getState().logsGlobalFilter.rules).toMatchObject([{ query: 'recalled', action: 'hide', target: 'match' }]);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('the pane editor stores action/target, annotates the pane and shows them again when the rule is edited', async () => {
+      const store = seedStore();
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.tab);
+        await press(instance, stdin, ' ');
+        await press(instance, stdin, KEYS.tab);
+        await openRuleEditor(instance, stdin, 'f');
+        await press(instance, stdin, 'boom');
+        await press(instance, stdin, '\x18');
+        await press(instance, stdin, '\x14');
+        await press(instance, stdin, KEYS.enter);
+        expect(store.getState().logsPaneFilters['/repos/api-gateway'].rules).toMatchObject([{ query: 'boom', action: 'hide', target: 'match' }]);
+        expect(stdout.output.slice(stdout.output.lastIndexOf('PANE LOG FILTER'))).toContain('[x] hide match text "boom"');
+        await pressEscape(instance, stdin);
+        expect(stdout.output.slice(stdout.output.lastIndexOf('LOGS'))).toContain('pane filter: 1 rule');
+        await press(instance, stdin, 'f');
+        await press(instance, stdin, KEYS.enter); // edit the rule again
+        expect(stdout.output.slice(stdout.output.lastIndexOf('PANE LOG FILTER'))).toContain('Filter: hide match');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('Escape after Ctrl+X / Ctrl+T discards the draft: no rule is added', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await openRuleEditor(instance, stdin, '/');
+        await press(instance, stdin, 'boom');
+        await press(instance, stdin, '\x18');
+        await press(instance, stdin, '\x14');
+        await pressEscape(instance, stdin);
+        expect(store.getState().logsGlobalFilter.rules).toEqual([]);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+  });
+
   // A pure caret move while browsing history must not snap the draft back — only typing/
   // Backspace does that.
   it('Left/Right while browsing a recalled history entry moves the caret without snapping back to the draft', async () => {
@@ -507,7 +637,7 @@ describe('LogsZone real-keypress interactions', () => {
     try {
       await instance.waitUntilRenderFlush();
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, 'draft');
       await press(instance, stdin, KEYS.up); // now showing "recalled", saved draft "draft"
       await press(instance, stdin, KEYS.left);
@@ -535,7 +665,7 @@ describe('LogsZone real-keypress interactions', () => {
     try {
       await instance.waitUntilRenderFlush();
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       expect(stdout.output).toContain('GLOBAL LOG FILTER');
 
       await press(instance, stdin, '/fi');
@@ -550,9 +680,8 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // Escape while the editor is open is a true cancel — TextInputLine's own hint text
-  // ("[Enter] confirm  [Esc] cancel") must mean what it says.
-  it('Escape while the filter editor is open reverts the pane filter to what it was before the edit', async () => {
+  // Esc in the rule editor is a true cancel of the draft: nothing enters the list.
+  it('Escape in the pane rule editor leaves the pane without a filter', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -561,12 +690,12 @@ describe('LogsZone real-keypress interactions', () => {
       await press(instance, stdin, ' '); // select api-gateway
       await press(instance, stdin, KEYS.tab); // other-list -> panes
 
-      // No own filter yet — open the pane's editor and type a query that compiles cleanly.
-      await press(instance, stdin, 'f');
+      await openRuleEditor(instance, stdin, 'f');
       await press(instance, stdin, 'boom');
-      expect(stdout.output).toContain('pane filter: text "boom"');
+      expect(stdout.output).not.toContain('pane filter: 1 rule');
 
-      await pressEscape(instance, stdin);
+      await pressEscape(instance, stdin); // draft discarded, back on the list
+      await pressEscape(instance, stdin); // editor closed
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
       expect(lastFrame).not.toContain('pane filter:');
       expect(lastFrame).not.toContain('PANE LOG FILTER');
@@ -576,9 +705,8 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // Enter is a true confirm — it keeps whatever was last committed while editing, unlike Escape
-  // just above.
-  it('Enter while the filter editor is open keeps the edit and closes the editor', async () => {
+  // Enter saves the rule into the list and returns to it; Esc then closes, keeping the rule.
+  it('Enter in the rule editor saves the rule and returns to the list; Esc closes keeping it', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -587,13 +715,14 @@ describe('LogsZone real-keypress interactions', () => {
       await press(instance, stdin, ' '); // select api-gateway
       await press(instance, stdin, KEYS.tab); // other-list -> panes
 
-      await press(instance, stdin, 'f');
+      await openRuleEditor(instance, stdin, 'f');
       await press(instance, stdin, 'boom');
-      expect(stdout.output).toContain('pane filter: text "boom"');
-
       await press(instance, stdin, KEYS.enter);
+      expect(stdout.output.slice(stdout.output.lastIndexOf('PANE LOG FILTER'))).toContain('[x] show line text "boom"');
+
+      await pressEscape(instance, stdin);
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
-      expect(lastFrame).toContain('pane filter: text "boom"');
+      expect(lastFrame).toContain('pane filter: 1 rule');
       expect(lastFrame).not.toContain('PANE LOG FILTER');
     } finally {
       instance.unmount();
@@ -625,10 +754,9 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
-  // The "pane filter: ..." annotation and resolveFilterClearTarget's hasOwnFilter check both key
-  // off entry *presence* in paneFilters, not content — committing a vacuous draft (query
-  // backspaced to empty) must remove the entry, not leave a no-op-but-present one behind.
-  it('backspacing a pane filter\'s query back to empty removes the "pane filter: ..." annotation', async () => {
+  // The "pane filter: ..." annotation and resolveFilterClearTarget's hasOwnFilter check key off
+  // entry *presence* in paneFilters — deleting the last rule must remove the entry.
+  it('deleting a pane\'s last rule removes the "pane filter: ..." annotation', async () => {
     const store = seedStore();
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -637,18 +765,17 @@ describe('LogsZone real-keypress interactions', () => {
       await press(instance, stdin, ' '); // select api-gateway
       await press(instance, stdin, KEYS.tab); // other-list -> panes
 
-      await press(instance, stdin, 'f');
+      await openRuleEditor(instance, stdin, 'f');
       await press(instance, stdin, 'boom');
-      await press(instance, stdin, KEYS.enter); // confirm, close the editor
-      expect(stdout.output).toContain('pane filter: text "boom"');
+      await press(instance, stdin, KEYS.enter);
+      await pressEscape(instance, stdin);
+      expect(stdout.output).toContain('pane filter: 1 rule');
+      expect(Object.keys(store.getState().logsPaneFilters)).toEqual(['/repos/api-gateway']);
 
-      // Reopen the same pane's editor and backspace the query back to empty.
       await press(instance, stdin, 'f');
-      await press(instance, stdin, KEYS.backspace);
-      await press(instance, stdin, KEYS.backspace);
-      await press(instance, stdin, KEYS.backspace);
-      await press(instance, stdin, KEYS.backspace);
-      await press(instance, stdin, KEYS.enter); // confirm the now-empty draft, close
+      await press(instance, stdin, 'd'); // delete the rule under the cursor
+      expect(store.getState().logsPaneFilters).toEqual({});
+      await pressEscape(instance, stdin);
 
       const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
       expect(lastFrame).not.toContain('pane filter:');
@@ -659,7 +786,7 @@ describe('LogsZone real-keypress interactions', () => {
   });
 
   // The filter actually narrows what's rendered, not just its own draft text echo.
-  it('the global filter editor narrows rendered log lines end-to-end', async () => {
+  it('a saved global rule narrows rendered log lines end-to-end', async () => {
     const subscribeLogsPane = vi.fn(async () => {});
     const unsubscribeLogsPane = vi.fn();
     const store = seedStore({
@@ -690,8 +817,9 @@ describe('LogsZone real-keypress interactions', () => {
       expect(stdout.output).toContain('banana line');
       expect(stdout.output).toContain('cherry line');
 
-      await press(instance, stdin, '/');
+      await openRuleEditor(instance, stdin, '/');
       await press(instance, stdin, 'banana');
+      await press(instance, stdin, KEYS.enter);
 
       // The grid (with the log lines) renders *above* the filter-editor modal in the same
       // frame — slice from the frame's own top marker ('LOGS'), not from 'GLOBAL LOG FILTER'
@@ -702,7 +830,7 @@ describe('LogsZone real-keypress interactions', () => {
       expect(lastFrame).not.toContain('cherry line');
       // An engaged pane with an active global filter shows what that filter actually is, not
       // just a boolean — so a pane's own annotation and the editor draft never disagree.
-      expect(lastFrame).toContain('global filter: text "banana"');
+      expect(lastFrame).toContain('global filter: 1 rule');
     } finally {
       instance.unmount();
       await instance.waitUntilExit();
@@ -716,7 +844,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, 'boom');
         await press(instance, stdin, KEYS.enter);
 
@@ -733,10 +861,10 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, 'boom');
         await press(instance, stdin, KEYS.enter);
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.enter); // re-commit the same, already-applied query
 
         expect(store.getState().filterHistory['global:text']).toEqual(['boom']);
@@ -753,12 +881,12 @@ describe('LogsZone real-keypress interactions', () => {
         await instance.waitUntilRenderFlush();
 
         // Empty draft.
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.enter);
         expect(store.getState().filterHistory['global:text']).toBeUndefined();
 
         // Non-compiling regex draft.
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.tab); // text -> regex
         await press(instance, stdin, '(');
         await press(instance, stdin, KEYS.enter);
@@ -775,7 +903,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.up);
         let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
         expect(lastFrame).toContain('Text: newest');
@@ -804,7 +932,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, 'unsaved-draft');
         await press(instance, stdin, KEYS.up); // -> "newest", saving "unsaved-draft"
         await press(instance, stdin, KEYS.up); // -> "older"
@@ -828,7 +956,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, 'draft');
         await press(instance, stdin, KEYS.up); // now showing "recalled", saved draft "draft"
 
@@ -847,7 +975,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, 'draft');
         await press(instance, stdin, KEYS.up); // now showing "recalled", saved draft "draft"
 
@@ -861,20 +989,21 @@ describe('LogsZone real-keypress interactions', () => {
       }
     });
 
-    it('↓ on an untouched draft opens a grid listing the full history, then Esc closes the whole editor', async () => {
+    it('↓ on an untouched draft opens a grid listing the full history, then Esc goes back to the rule list', async () => {
       const store = seedStore({ filterHistory: { 'global:text': ['alpha', 'beta'] } });
       const { instance, stdin, stdout } = mount(store);
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.down);
         expect(stdout.output).toContain('alpha');
         expect(stdout.output).toContain('beta');
 
         await pressEscape(instance, stdin);
-        const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
-        expect(lastFrame).not.toContain('GLOBAL LOG FILTER');
+        const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+        expect(lastFrame).toContain('RULES');
+        expect(lastFrame).not.toContain('NEW RULE');
       } finally {
         instance.unmount();
         await instance.waitUntilExit();
@@ -887,7 +1016,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.down);
         const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
         expect(lastFrame).not.toContain('No history');
@@ -904,7 +1033,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.down); // opens the grid, cursor on the top (most-recent) entry
         await press(instance, stdin, KEYS.enter);
 
@@ -930,7 +1059,7 @@ describe('LogsZone real-keypress interactions', () => {
         await press(instance, stdin, ' '); // select api-gateway
         await press(instance, stdin, KEYS.tab); // other-list -> panes
 
-        await press(instance, stdin, 'f'); // pane's own filter editor
+        await openRuleEditor(instance, stdin, 'f'); // pane's own filter editor
         await press(instance, stdin, KEYS.up);
 
         const lastFrame = stdout.output.slice(stdout.output.lastIndexOf('PANE LOG FILTER'));
@@ -955,7 +1084,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.up); // browsing text history, now showing "text-newest"
         let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
         expect(lastFrame).toContain('Text: text-newest');
@@ -983,7 +1112,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.down); // opens the grid on an untouched (empty) draft
 
         await press(instance, stdin, 'z');
@@ -1022,12 +1151,12 @@ describe('LogsZone real-keypress interactions', () => {
 
         await press(instance, stdin, KEYS.tab); // edt-list -> other-list
         await press(instance, stdin, KEYS.tab); // other-list -> panes
-        await press(instance, stdin, 'f'); // pane's own filter editor
+        await openRuleEditor(instance, stdin, 'f'); // pane's own filter editor
         await press(instance, stdin, KEYS.up); // arrow-recall
         await press(instance, stdin, KEYS.up); // walk further back
         await press(instance, stdin, KEYS.down); // browse back down
         await pressEscape(instance, stdin); // cancel, close editor
-        await press(instance, stdin, 'f');
+        await openRuleEditor(instance, stdin, 'f');
         await press(instance, stdin, KEYS.down); // open the grid
         await press(instance, stdin, KEYS.enter); // recall highlighted entry
 
@@ -1057,12 +1186,12 @@ describe('LogsZone real-keypress interactions', () => {
       };
     }
 
-    it('"R" on a sub-focused grid pane triggers restartLogsPane for that pane only', async () => {
-      const restartLogsPane = vi.fn(async () => {});
+    it('"R" on a sub-focused grid pane runs the registry restart shortcut for that pane only', async () => {
+      const runLogsPaneShortcut = vi.fn(async () => {});
       const store = seedStore({
         subscribeLogsPane: vi.fn(async () => {}),
         unsubscribeLogsPane: vi.fn(),
-        restartLogsPane,
+        runLogsPaneShortcut,
         logsOtherSelected: ['/repos/api-gateway'],
         logsPanes: { '/repos/api-gateway': paneFor('/repos/api-gateway') },
       });
@@ -1076,20 +1205,20 @@ describe('LogsZone real-keypress interactions', () => {
 
         await press(instance, stdin, 'R');
 
-        expect(restartLogsPane).toHaveBeenCalledTimes(1);
-        expect(restartLogsPane).toHaveBeenCalledWith('/repos/api-gateway');
+        expect(runLogsPaneShortcut).toHaveBeenCalledTimes(1);
+        expect(runLogsPaneShortcut).toHaveBeenCalledWith('/repos/api-gateway', 'restart', 'api-gateway');
       } finally {
         instance.unmount();
         await instance.waitUntilExit();
       }
     });
 
-    it('"R" is a no-op while that pane is already restarting (disabled control)', async () => {
-      const restartLogsPane = vi.fn(async () => {});
+    it('a restarting pane renders its disabled restart control; `R` still defers to the registry and the slice guard', async () => {
+      const runLogsPaneShortcut = vi.fn(async () => {});
       const store = seedStore({
         subscribeLogsPane: vi.fn(async () => {}),
         unsubscribeLogsPane: vi.fn(),
-        restartLogsPane,
+        runLogsPaneShortcut,
         logsOtherSelected: ['/repos/api-gateway'],
         logsPanes: { '/repos/api-gateway': paneFor('/repos/api-gateway', { restarting: true }) },
       });
@@ -1107,43 +1236,20 @@ describe('LogsZone real-keypress interactions', () => {
 
         await press(instance, stdin, 'R');
 
-        expect(restartLogsPane).not.toHaveBeenCalled();
+        // No availability rule in the zone: the registry/slice decide (the slice no-ops).
+        expect(runLogsPaneShortcut).toHaveBeenCalledWith('/repos/api-gateway', 'restart', 'api-gateway');
       } finally {
         instance.unmount();
         await instance.waitUntilExit();
       }
     });
 
-    it('"R" is a no-op while docker reports the pane as restarting (HEALTH_RESTARTING disables the control)', async () => {
-      const restartLogsPane = vi.fn(async () => {});
+    it('"R" on a fullscreen pane runs the registry restart shortcut for that pane\'s service', async () => {
+      const runLogsPaneShortcut = vi.fn(async () => {});
       const store = seedStore({
         subscribeLogsPane: vi.fn(async () => {}),
         unsubscribeLogsPane: vi.fn(),
-        restartLogsPane,
-        logsOtherSelected: ['/repos/api-gateway'],
-        logsPanes: { '/repos/api-gateway': paneFor('/repos/api-gateway', { health: 'restarting' }) },
-      });
-      const { instance, stdin } = mount(store);
-      try {
-        await instance.waitUntilRenderFlush();
-        await press(instance, stdin, KEYS.tab); // edt-list -> other-list
-        await press(instance, stdin, KEYS.tab); // other-list -> panes
-
-        await press(instance, stdin, 'R');
-
-        expect(restartLogsPane).not.toHaveBeenCalled();
-      } finally {
-        instance.unmount();
-        await instance.waitUntilExit();
-      }
-    });
-
-    it('"R" on a fullscreen pane restarts that pane\'s service', async () => {
-      const restartLogsPane = vi.fn(async () => {});
-      const store = seedStore({
-        subscribeLogsPane: vi.fn(async () => {}),
-        unsubscribeLogsPane: vi.fn(),
-        restartLogsPane,
+        runLogsPaneShortcut,
         logsPanes: { '/repos/api-gateway': paneFor('/repos/api-gateway', { health: 'up' }) },
       });
       const { instance, stdin } = mount(store);
@@ -1155,8 +1261,8 @@ describe('LogsZone real-keypress interactions', () => {
 
         await press(instance, stdin, 'R');
 
-        expect(restartLogsPane).toHaveBeenCalledTimes(1);
-        expect(restartLogsPane).toHaveBeenCalledWith('/repos/api-gateway');
+        expect(runLogsPaneShortcut).toHaveBeenCalledTimes(1);
+        expect(runLogsPaneShortcut).toHaveBeenCalledWith('/repos/api-gateway', 'restart', 'api-gateway');
       } finally {
         instance.unmount();
         await instance.waitUntilExit();
@@ -1179,12 +1285,12 @@ describe('LogsZone real-keypress interactions', () => {
       };
     }
 
-    it('"O" on a sub-focused grid pane opens that pane in the IDE, including a container-less one', async () => {
-      const openLogsPaneInIde = vi.fn();
+    it('"O" on a sub-focused grid pane runs the registry open-in-IDE shortcut, including a container-less one', async () => {
+      const runLogsPaneShortcut = vi.fn(async () => {});
       const store = seedStore({
         subscribeLogsPane: vi.fn(async () => {}),
         unsubscribeLogsPane: vi.fn(),
-        openLogsPaneInIde,
+        runLogsPaneShortcut,
         logsOtherSelected: ['/repos/api-gateway'],
         logsPanes: { '/repos/api-gateway': pane('/repos/api-gateway', { health: 'no-container' }) },
       });
@@ -1196,7 +1302,7 @@ describe('LogsZone real-keypress interactions', () => {
 
         await press(instance, stdin, 'O');
 
-        expect(openLogsPaneInIde).toHaveBeenCalledWith('/repos/api-gateway');
+        expect(runLogsPaneShortcut).toHaveBeenCalledWith('/repos/api-gateway', 'ide', 'api-gateway');
       } finally {
         instance.unmount();
         await instance.waitUntilExit();
@@ -1204,11 +1310,11 @@ describe('LogsZone real-keypress interactions', () => {
     });
 
     it('"O" in fullscreen opens the IDE while lowercase "o" still only toggles stdout', async () => {
-      const openLogsPaneInIde = vi.fn();
+      const runLogsPaneShortcut = vi.fn(async () => {});
       const store = seedStore({
         subscribeLogsPane: vi.fn(async () => {}),
         unsubscribeLogsPane: vi.fn(),
-        openLogsPaneInIde,
+        runLogsPaneShortcut,
         logsPanes: { '/repos/api-gateway': pane('/repos/api-gateway') },
       });
       const { instance, stdin } = mount(store);
@@ -1219,9 +1325,9 @@ describe('LogsZone real-keypress interactions', () => {
         expect(store.getState().logsFullscreenTarget).toBe('/repos/api-gateway');
 
         await press(instance, stdin, 'o');
-        expect(openLogsPaneInIde).not.toHaveBeenCalled();
+        expect(runLogsPaneShortcut).not.toHaveBeenCalled();
         await press(instance, stdin, 'O');
-        expect(openLogsPaneInIde).toHaveBeenCalledWith('/repos/api-gateway');
+        expect(runLogsPaneShortcut).toHaveBeenCalledWith('/repos/api-gateway', 'ide', 'api-gateway');
       } finally {
         instance.unmount();
         await instance.waitUntilExit();
@@ -1377,6 +1483,463 @@ describe('LogsZone real-keypress interactions', () => {
     }
   });
 
+  describe('stackable filter rules', () => {
+    const ctrlUp = '\x1b[1;5A';
+    const ctrlDown = '\x1b[1;5B';
+    const queries = (store: ReturnType<typeof createAppStore>) => store.getState().logsGlobalFilter.rules.map((r) => r.query);
+    async function addRules(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, names: string[]): Promise<void> {
+      await press(instance, stdin, '/');
+      for (const name of names) {
+        await press(instance, stdin, 'a');
+        await press(instance, stdin, name);
+        await press(instance, stdin, KEYS.enter);
+      }
+    }
+
+    it('lists the rules, edits one in place, toggles it off and deletes it, each applied immediately', async () => {
+      const store = seedStore();
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await addRules(instance, stdin, ['one', 'two']);
+        expect(queries(store)).toEqual(['one', 'two']);
+        expect(stdout.output).toContain('1. [x] show line text "one"');
+        expect(stdout.output).toContain('2. [x] show line text "two"');
+
+        await press(instance, stdin, KEYS.up);
+        await press(instance, stdin, KEYS.enter); // edit "one"
+        await press(instance, stdin, '!');
+        await press(instance, stdin, KEYS.enter);
+        expect(queries(store)).toEqual(['one!', 'two']);
+
+        await press(instance, stdin, ' ');
+        expect(store.getState().logsGlobalFilter.rules[0].enabled).toBe(false);
+        expect(stdout.output).toContain('[ ] show line text "one!"');
+
+        await press(instance, stdin, 'd');
+        expect(queries(store)).toEqual(['two']);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('Ctrl+Up / Ctrl+Down move the highlighted rule, the cursor following it', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await addRules(instance, stdin, ['a', 'b', 'c']); // cursor on "c"
+        await press(instance, stdin, ctrlUp);
+        expect(queries(store)).toEqual(['a', 'c', 'b']);
+        await press(instance, stdin, ctrlUp);
+        expect(queries(store)).toEqual(['c', 'a', 'b']);
+        await press(instance, stdin, ctrlUp); // already first
+        expect(queries(store)).toEqual(['c', 'a', 'b']);
+        await press(instance, stdin, ctrlDown);
+        expect(queries(store)).toEqual(['a', 'c', 'b']);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('Ctrl+Left/Right cycle the scope level from the list', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, '/');
+        await press(instance, stdin, KEYS.ctrlRight);
+        expect(store.getState().logsGlobalFilter.level).toBe('ERROR');
+        await press(instance, stdin, KEYS.ctrlLeft);
+        expect(store.getState().logsGlobalFilter.level).toBeNull();
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('an invalid regex is refused inline on Enter and never enters the list', async () => {
+      const store = seedStore();
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await openRuleEditor(instance, stdin, '/');
+        await press(instance, stdin, KEYS.tab); // regex
+        await press(instance, stdin, '(');
+        await press(instance, stdin, KEYS.enter);
+        expect(stdout.output).toContain('Invalid regular expression');
+        expect(stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'))).toContain('NEW RULE');
+        expect(store.getState().logsGlobalFilter.rules).toEqual([]);
+        expect(store.getState().filterHistory['global:regex']).toBeUndefined();
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('an empty draft is refused and never enters the list', async () => {
+      const store = seedStore();
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await openRuleEditor(instance, stdin, '/');
+        await press(instance, stdin, KEYS.enter);
+        expect(stdout.output).toContain('Enter a query for this rule.');
+        expect(store.getState().logsGlobalFilter.rules).toEqual([]);
+        expect(store.getState().filterHistory['global:text']).toBeUndefined();
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('refuses an 11th rule with a visible message and leaves the list unchanged', async () => {
+      const store = seedStore();
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await addRules(instance, stdin, Array.from({ length: 10 }, (_, i) => `r${i}`));
+        expect(store.getState().logsGlobalFilter.rules).toHaveLength(10);
+        await press(instance, stdin, 'a');
+        expect(stdout.output).toContain('Rule limit reached');
+        expect(stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'))).not.toContain('NEW RULE');
+        expect(store.getState().logsGlobalFilter.rules).toHaveLength(10);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('"X" asks for confirmation: Esc keeps the rules, y clears them all; Esc alone never clears', async () => {
+      const store = seedStore();
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await addRules(instance, stdin, ['a', 'b']);
+        await press(instance, stdin, 'X');
+        expect(stdout.output).toContain('Clear all 2 rules?');
+        await pressEscape(instance, stdin);
+        expect(queries(store)).toEqual(['a', 'b']);
+        expect(stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'))).not.toContain('Clear all');
+
+        await press(instance, stdin, 'X');
+        await press(instance, stdin, 'y');
+        expect(queries(store)).toEqual([]);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('shows the stored-rules warning on the title row and drops it once a filter editor opens (/ or f)', async () => {
+      for (const key of ['/', 'f']) {
+        const store = seedStore({
+          logsRulesWarning: 'Saved filter rules: logRules.global[1]: bad — rule dropped',
+          ...(key === 'f' ? { logsFullscreenTarget: '/repos/api-gateway', logsFullscreenServiceName: 'api-gateway' } : {}),
+        });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          if (key === '/') {
+            expect(stdout.output).toContain('logRules.global[1]');
+          }
+          expect(store.getState().logsRulesWarning).not.toBeNull();
+          await press(instance, stdin, key);
+          expect(store.getState().logsRulesWarning).toBeNull();
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      }
+    });
+
+    describe('named rule sets', () => {
+      const lastView = (stdout: FakeTtyStdout) => stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
+      const setNames = (store: ReturnType<typeof createAppStore>) => store.getState().logsRuleSets.map((set) => set.name);
+
+      it('s asks for a name: empty is refused, a new name saves a snapshot, an existing one asks before overwriting', async () => {
+        const store = seedStore();
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await addRules(instance, stdin, ['a', 'b']);
+          await press(instance, stdin, 's');
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('Enter a name for this set.');
+          expect(setNames(store)).toEqual([]);
+
+          await press(instance, stdin, 'n');
+          await press(instance, stdin, 'x');
+          await press(instance, stdin, KEYS.enter);
+          expect(setNames(store)).toEqual(['nx']);
+          expect(lastView(stdout)).toContain('Saved set "nx".');
+
+          // The set is a snapshot: later edits to the active list never reach it.
+          await press(instance, stdin, 'd');
+          expect(store.getState().logsRuleSets[0].rules.map((r) => r.query)).toEqual(['a', 'b']);
+
+          await press(instance, stdin, 's');
+          for (const ch of 'nx') {
+            await press(instance, stdin, ch);
+          }
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('Overwrite set "nx"?');
+          await pressEscape(instance, stdin);
+          expect(store.getState().logsRuleSets[0].rules).toHaveLength(2);
+          await press(instance, stdin, KEYS.enter);
+          await press(instance, stdin, 'y');
+          expect(store.getState().logsRuleSets[0].rules.map((r) => r.query)).toEqual(['a']);
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      });
+
+      it('refuses a new set visibly once the library holds 20', async () => {
+        const store = seedStore();
+        store.setState({ logsRuleSets: Array.from({ length: 20 }, (_, i) => ({ name: `s${i}`, rules: [] })) });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await addRules(instance, stdin, ['a']);
+          await press(instance, stdin, 's');
+          await press(instance, stdin, 'z');
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('library is full');
+          expect(store.getState().logsRuleSets).toHaveLength(20);
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      });
+
+      it('l opens the library: Enter applies directly on an empty list, replaces after confirmation otherwise', async () => {
+        const rules = [{ mode: 'text' as const, query: 'from-set', action: 'hide' as const, target: 'line' as const, enabled: true }];
+        const store = seedStore();
+        store.setState({ logsRuleSets: [{ name: 'noise', rules }] });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await press(instance, stdin, '/');
+          await press(instance, stdin, 'l');
+          expect(lastView(stdout)).toContain('noise (1 rule)');
+          await press(instance, stdin, KEYS.enter);
+          expect(queries(store)).toEqual(['from-set']);
+          // Applied as a copy: toggling the active rule never alters the stored set.
+          await press(instance, stdin, ' ');
+          expect(store.getState().logsGlobalFilter.rules[0].enabled).toBe(false);
+          expect(store.getState().logsRuleSets[0].rules[0].enabled).toBe(true);
+
+          await press(instance, stdin, 'l');
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('Replace the 1 active rule with set "noise"?');
+          await pressEscape(instance, stdin);
+          expect(store.getState().logsGlobalFilter.rules[0].enabled).toBe(false);
+          await press(instance, stdin, KEYS.enter);
+          await press(instance, stdin, 'y');
+          expect(store.getState().logsGlobalFilter.rules[0].enabled).toBe(true);
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      });
+
+      it('renames and deletes only the targeted set (delete confirmed), never touching the active list', async () => {
+        const rule = (query: string) => ({ mode: 'text' as const, query, action: 'hide' as const, target: 'line' as const, enabled: true });
+        const store = seedStore();
+        store.setState({
+          logsRuleSets: [{ name: 'one', rules: [rule('1')] }, { name: 'two', rules: [rule('2')] }],
+          logsGlobalFilter: { level: null, rules: [rule('active')] },
+        });
+        const { instance, stdin, stdout } = mount(store);
+        try {
+          await instance.waitUntilRenderFlush();
+          await press(instance, stdin, '/');
+          await press(instance, stdin, 'l');
+          await press(instance, stdin, 'r');
+          await press(instance, stdin, '!');
+          await press(instance, stdin, KEYS.enter);
+          expect(setNames(store)).toEqual(['one!', 'two']);
+          // A name already used by another set is refused.
+          await press(instance, stdin, 'r');
+          await press(instance, stdin, KEYS.backspace);
+          await press(instance, stdin, KEYS.backspace);
+          await press(instance, stdin, KEYS.backspace);
+          await press(instance, stdin, KEYS.backspace);
+          for (const ch of 'two') {
+            await press(instance, stdin, ch);
+          }
+          await press(instance, stdin, KEYS.enter);
+          expect(lastView(stdout)).toContain('already exists');
+          await pressEscape(instance, stdin);
+
+          await press(instance, stdin, 'd');
+          expect(lastView(stdout)).toContain('Delete set "one!"?');
+          await pressEscape(instance, stdin);
+          expect(setNames(store)).toEqual(['one!', 'two']);
+          await press(instance, stdin, 'd');
+          await press(instance, stdin, 'y');
+          expect(setNames(store)).toEqual(['two']);
+          expect(queries(store)).toEqual(['active']);
+        } finally {
+          instance.unmount();
+          await instance.waitUntilExit();
+        }
+      });
+    });
+
+    it('Esc from the list closes the editor and keeps every rule', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await addRules(instance, stdin, ['a', 'b']);
+        await pressEscape(instance, stdin);
+        expect(queries(store)).toEqual(['a', 'b']);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('stacked rules apply in order to the rendered lines, without interrupting the stream', async () => {
+      const subscribeLogsPane = vi.fn(async () => {});
+      const unsubscribeLogsPane = vi.fn();
+      const store = seedStore({
+        subscribeLogsPane,
+        unsubscribeLogsPane,
+        logsOtherSelected: ['/repos/api-gateway'],
+        logsPanes: {
+          '/repos/api-gateway': {
+            repoPath: '/repos/api-gateway',
+            service: 'api-gateway',
+            lines: [
+              { timestamp: 't0', stream: 'stdout', text: 'WARN Affectation ok' },
+              { timestamp: 't1', stream: 'stdout', text: 'WARN Aucun service ici' },
+              { timestamp: 't2', stream: 'stdout', text: 'INFO Affectation fine' },
+            ],
+            streamError: null,
+            noMoreHistory: false,
+            scrollOffset: 0,
+            health: 'up',
+            restarting: false,
+          },
+        },
+      });
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        const subscribed = subscribeLogsPane.mock.calls.length;
+        await addRules(instance, stdin, ['WARN', 'Affectation']);
+        const frame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
+        expect(frame).toContain('WARN Affectation ok');
+        expect(frame).not.toContain('WARN Aucun service ici');
+        expect(frame).not.toContain('INFO Affectation fine');
+
+        await press(instance, stdin, ' '); // disable the second rule
+        const relaxed = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
+        expect(relaxed).toContain('WARN Aucun service ici');
+        expect(subscribeLogsPane.mock.calls.length).toBe(subscribed);
+        expect(unsubscribeLogsPane).not.toHaveBeenCalled();
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+    it('Ctrl+D, Ctrl+A and other modified letters do not delete, add or toggle', async () => {
+      const store = seedStore();
+      const { instance, stdin, stdout } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await addRules(instance, stdin, ['keep']);
+        await press(instance, stdin, '\x04'); // Ctrl+D
+        await press(instance, stdin, '\x01'); // Ctrl+A
+        expect(queries(store)).toEqual(['keep']);
+        expect(stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'))).not.toContain('NEW RULE');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('Enter confirms clear-all, like y', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await addRules(instance, stdin, ['a', 'b']);
+        await press(instance, stdin, 'X');
+        await press(instance, stdin, KEYS.enter);
+        expect(queries(store)).toEqual([]);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('the pane scope level cycle creates, then removes, the pane\'s filter entry', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.tab);
+        await press(instance, stdin, ' ');
+        await press(instance, stdin, KEYS.tab);
+        await press(instance, stdin, 'f');
+        await press(instance, stdin, KEYS.ctrlRight);
+        expect(store.getState().logsPaneFilters['/repos/api-gateway']).toEqual({ level: 'ERROR', rules: [] });
+        await press(instance, stdin, KEYS.ctrlLeft);
+        expect(store.getState().logsPaneFilters).toEqual({});
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('the footer shows the rules list hints, then the clear-all confirmation hints', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      const footer = () => store.getState().footerContexts.at(-1)?.id;
+      try {
+        await instance.waitUntilRenderFlush();
+        await addRules(instance, stdin, ['a']);
+        expect(footer()).toBe('logs-filter-rules');
+        await press(instance, stdin, 'X');
+        expect(footer()).toBe('logs-filter-rules-confirm');
+        await pressEscape(instance, stdin);
+        expect(footer()).toBe('logs-filter-rules');
+        await press(instance, stdin, 'a');
+        expect(footer()).toBe('logs-filter-edit');
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+
+    it('closes the editor instead of recreating a pane entry when the pane was deselected', async () => {
+      const store = seedStore();
+      const { instance, stdin } = mount(store);
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.tab);
+        await press(instance, stdin, ' ');
+        await press(instance, stdin, KEYS.tab);
+        await openRuleEditor(instance, stdin, 'f');
+        await press(instance, stdin, 'boom');
+        store.getState().toggleLogsOtherSelection('/repos/api-gateway');
+        await instance.waitUntilRenderFlush();
+        await press(instance, stdin, KEYS.enter);
+        expect(store.getState().logsPaneFilters).toEqual({});
+        expect(store.getState().zoneInputCaptured).toBe(false);
+      } finally {
+        instance.unmount();
+        await instance.waitUntilExit();
+      }
+    });
+  });
+
   // Bounds the filter-history grid browser's vertical extent to the terminal's actual row count,
   // like its horizontal truncation/scroll, recomputed live off useWindowSize() on every resize.
   describe('history grid vertical pagination', () => {
@@ -1387,7 +1950,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.down); // opens the grid, cursor at column 0 row 0
         let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('GLOBAL LOG FILTER'));
         expect(lastFrame).toContain('entry-0');
@@ -1429,7 +1992,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.down); // opens the grid, cursor at column 0 row 0
 
         // Shrinks enough that the 8-row column can't fit without vertical pagination.
@@ -1469,7 +2032,7 @@ describe('LogsZone real-keypress interactions', () => {
       try {
         await instance.waitUntilRenderFlush();
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         await press(instance, stdin, KEYS.down); // opens the grid, cursor at column 0 row 0 — the wide entry is visible here
 
         stdout.rows = 12; // the 12-row minimum still forces vertical pagination on the 5-row-tall column 0
@@ -1515,7 +2078,7 @@ describe('LogsZone real-keypress interactions', () => {
         let lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
         expect(lastFrame).toContain('more below');
 
-        await press(instance, stdin, '/');
+        await openRuleEditor(instance, stdin, '/');
         lastFrame = stdout.output.slice(stdout.output.lastIndexOf('LOGS'));
         expect(lastFrame).toContain('GLOBAL LOG FILTER');
 
@@ -1596,5 +2159,299 @@ describe('LogsZone real-keypress interactions', () => {
         await instance.waitUntilExit();
       }
     });
+  });
+});
+
+// The `a` actions menu: the service-action registry's rows for the focused pane, in a MenuList.
+describe('LogsZone actions menu (a)', () => {
+  function pane(path: string, overrides: Record<string, unknown> = {}) {
+    return {
+      repoPath: path,
+      service: path.split('/').pop() ?? path,
+      lines: [],
+      streamError: null,
+      noMoreHistory: false,
+      scrollOffset: 0,
+      health: 'up',
+      restarting: false,
+      ...overrides,
+    };
+  }
+
+  const AVAILABLE = { available: true as const };
+  function registryActions(containerLess = false): ServiceAction[] {
+    const blocked = containerLess ? { available: false as const, reason: 'no container' } : AVAILABLE;
+    return [
+      { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: AVAILABLE },
+      { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: blocked },
+      { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: blocked },
+      { id: 'terminal-service', label: 'Terminal', key: 'Ctrl+T', availability: AVAILABLE },
+      { id: 'terminal-container', label: 'Container terminal', key: 'Ctrl+X', availability: blocked },
+    ];
+  }
+
+  function gridStore(overrides: Record<string, unknown> = {}) {
+    return seedStore({
+      subscribeLogsPane: vi.fn(async () => {}),
+      unsubscribeLogsPane: vi.fn(),
+      logsOtherSelected: ['/repos/api-gateway'],
+      logsPanes: { '/repos/api-gateway': pane('/repos/api-gateway') },
+      ...overrides,
+    });
+  }
+
+  async function focusPanes(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream): Promise<void> {
+    await press(instance, stdin, KEYS.tab); // edt-list -> other-list
+    await press(instance, stdin, KEYS.tab); // other-list -> panes
+  }
+
+  it('`a` on a sub-focused pane lists the five registry actions, and captures input', async () => {
+    const listLogsPaneActions = vi.fn(async () => registryActions());
+    const store = gridStore({ listLogsPaneActions });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await focusPanes(instance, stdin);
+      await press(instance, stdin, 'a');
+      await instance.waitUntilRenderFlush();
+
+      expect(listLogsPaneActions).toHaveBeenCalledWith('/repos/api-gateway');
+      expect(store.getState().zoneInputCaptured).toBe(true);
+      const frame = stdout.output;
+      expect(frame).toContain('SERVICE ACTIONS');
+      for (const label of ['Open in IDE', 'Restart', 'Clean restart', 'Terminal', 'Container terminal']) {
+        expect(frame).toContain(label);
+      }
+      // The Dashboard's Ctrl keys do nothing in Logs, so the menu never shows them.
+      for (const dashboardKey of ['Ctrl+O', 'Ctrl+R', 'Ctrl+L', 'Ctrl+T', 'Ctrl+X']) {
+        expect(frame).not.toContain(dashboardKey);
+      }
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('`a` from the service lists never opens the menu', async () => {
+    const listLogsPaneActions = vi.fn(async () => registryActions());
+    const store = gridStore({ listLogsPaneActions });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'a');
+      await press(instance, stdin, KEYS.tab); // other-list
+      await press(instance, stdin, 'a');
+      expect(listLogsPaneActions).not.toHaveBeenCalled();
+      expect(store.getState().zoneInputCaptured).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on Clean restart closes the menu and runs that registry action on the pane', async () => {
+    const runLogsPaneAction = vi.fn(async () => {});
+    const store = gridStore({ listLogsPaneActions: vi.fn(async () => registryActions()), runLogsPaneAction });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await focusPanes(instance, stdin);
+      await press(instance, stdin, 'a');
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.down);
+      await press(instance, stdin, KEYS.enter);
+
+      expect(runLogsPaneAction).toHaveBeenCalledWith('/repos/api-gateway', 'restart-clean', 'api-gateway');
+      expect(store.getState().zoneInputCaptured).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on Terminal runs the terminal entry (End jumps to the last row, the container terminal)', async () => {
+    const runLogsPaneAction = vi.fn(async () => {});
+    const store = gridStore({ listLogsPaneActions: vi.fn(async () => registryActions()), runLogsPaneAction });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await focusPanes(instance, stdin);
+      await press(instance, stdin, 'a');
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, KEYS.up);
+      await press(instance, stdin, KEYS.enter);
+
+      expect(runLogsPaneAction).toHaveBeenCalledWith('/repos/api-gateway', 'terminal-service', 'api-gateway');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a container-less pane shows the restarts and the container terminal disabled with `no container`; Enter on them is ignored', async () => {
+    const runLogsPaneAction = vi.fn(async () => {});
+    const store = gridStore({
+      listLogsPaneActions: vi.fn(async () => registryActions(true)),
+      runLogsPaneAction,
+      logsPanes: { '/repos/api-gateway': pane('/repos/api-gateway', { health: 'no-container', noContainer: true }) },
+    });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await focusPanes(instance, stdin);
+      await press(instance, stdin, 'a');
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('no container');
+      expect(stdout.output).toContain('Terminal');
+
+      await press(instance, stdin, KEYS.down); // Restart (disabled)
+      await press(instance, stdin, KEYS.enter);
+      await press(instance, stdin, KEYS.end); // Container terminal (disabled)
+      await press(instance, stdin, KEYS.enter);
+
+      expect(runLogsPaneAction).not.toHaveBeenCalled();
+      expect(store.getState().zoneInputCaptured).toBe(true);
+
+      // Open in IDE and Terminal stay enabled on a container-less pane.
+      await press(instance, stdin, KEYS.home); // Open in IDE
+      await press(instance, stdin, KEYS.enter);
+      expect(runLogsPaneAction).toHaveBeenLastCalledWith('/repos/api-gateway', 'open-in-ide', 'api-gateway');
+      await press(instance, stdin, 'a');
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.end);
+      await press(instance, stdin, KEYS.up); // Terminal
+      await press(instance, stdin, KEYS.enter);
+      expect(runLogsPaneAction).toHaveBeenLastCalledWith('/repos/api-gateway', 'terminal-service', 'api-gateway');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a failed listing shows one error line and Esc closes the menu', async () => {
+    const store = gridStore({ listLogsPaneActions: vi.fn(async () => null) });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await focusPanes(instance, stdin);
+      await press(instance, stdin, 'a');
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('The service actions could not be loaded.');
+
+      await pressEscape(instance, stdin);
+      expect(store.getState().zoneInputCaptured).toBe(false);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('while open, zone keys (c, f, R, O, /) do nothing and the menu stays open', async () => {
+    const runLogsPaneShortcut = vi.fn(async () => {});
+    const clearLogsPane = vi.fn();
+    const store = gridStore({ listLogsPaneActions: vi.fn(async () => registryActions()), runLogsPaneShortcut, clearLogsPane });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await focusPanes(instance, stdin);
+      await press(instance, stdin, 'a');
+      for (const key of ['c', 'f', 'R', 'O', '/', 'q', ':', 'l']) {
+        await press(instance, stdin, key);
+      }
+      expect(runLogsPaneShortcut).not.toHaveBeenCalled();
+      expect(clearLogsPane).not.toHaveBeenCalled();
+      expect(store.getState().zoneInputCaptured).toBe(true);
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('`a` in fullscreen opens the menu on the fullscreen pane', async () => {
+    const listLogsPaneActions = vi.fn(async () => registryActions());
+    const runLogsPaneAction = vi.fn(async () => {});
+    const store = gridStore({ listLogsPaneActions, runLogsPaneAction, logsOtherSelected: [] });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.tab);
+      await press(instance, stdin, KEYS.enter); // ad hoc fullscreen preview on api-gateway
+      expect(store.getState().logsFullscreenTarget).toBe('/repos/api-gateway');
+      await press(instance, stdin, 'a');
+      await instance.waitUntilRenderFlush();
+      expect(listLogsPaneActions).toHaveBeenCalledWith('/repos/api-gateway');
+      expect(stdout.output).toContain('SERVICE ACTIONS');
+
+      await press(instance, stdin, KEYS.enter); // Open in IDE
+      expect(runLogsPaneAction).toHaveBeenCalledWith('/repos/api-gateway', 'open-in-ide', 'api-gateway');
+      // Closing the menu leaves fullscreen open.
+      expect(store.getState().logsFullscreenTarget).toBe('/repos/api-gateway');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a slow listing from an earlier open is dropped once the menu was closed and reopened on another pane', async () => {
+    const pending = new Map<string, (actions: ServiceAction[] | null) => void>();
+    const listLogsPaneActions = vi.fn(
+      (repoPath: string) => new Promise<ServiceAction[] | null>((resolve) => pending.set(repoPath, resolve)),
+    );
+    const store = gridStore({
+      listLogsPaneActions,
+      logsOtherSelected: ['/repos/api-gateway', '/repos/route-explorer'],
+      logsPanes: {
+        '/repos/api-gateway': pane('/repos/api-gateway'),
+        '/repos/route-explorer': pane('/repos/route-explorer'),
+      },
+    });
+    const { instance, stdin, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await focusPanes(instance, stdin);
+      await press(instance, stdin, 'a'); // api-gateway, listing hangs
+      await pressEscape(instance, stdin);
+      await press(instance, stdin, KEYS.right); // sub-focus route-explorer
+      await press(instance, stdin, 'a');
+      expect(listLogsPaneActions).toHaveBeenLastCalledWith('/repos/route-explorer');
+
+      // The first listing lands late with an error: the open menu must not show it.
+      const before = stdout.output.length;
+      pending.get('/repos/api-gateway')?.(null);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output.slice(before)).not.toContain('could not be loaded');
+      pending.get('/repos/route-explorer')?.(registryActions());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output.slice(before)).toContain('Container terminal');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('a fullscreen pane with no captured or listed name passes its directory name, never the path', async () => {
+    const listLogsPaneActions = vi.fn(async () => registryActions());
+    const runLogsPaneShortcut = vi.fn(async () => {});
+    const store = gridStore({
+      listLogsPaneActions,
+      runLogsPaneShortcut,
+      logsOtherSelected: [],
+      logsFullscreenTarget: '/repos/unlisted-svc',
+      logsFullscreenServiceName: null,
+      logsPanes: { '/repos/unlisted-svc': pane('/repos/unlisted-svc') },
+    });
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'R');
+      expect(runLogsPaneShortcut).toHaveBeenCalledWith('/repos/unlisted-svc', 'restart', 'unlisted-svc');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
   });
 });

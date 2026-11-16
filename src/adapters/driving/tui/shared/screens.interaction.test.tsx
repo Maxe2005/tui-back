@@ -152,4 +152,108 @@ describe('SettingsScreen (real keypress)', () => {
       await stop();
     }
   });
+
+  describe('persisted filter rules group', () => {
+    const rule = { mode: 'text' as const, query: 'q', action: 'hide' as const, target: 'line' as const, enabled: true };
+
+    it('clear-one-scope asks first, then clears only that scope', async () => {
+      const store = createAppStore();
+      const clearLogsScopeRules = vi.fn();
+      const clearLogsRuleSets = vi.fn();
+      store.setState({
+        clearLogsScopeRules,
+        clearLogsRuleSets,
+        logsGlobalFilter: { level: null, rules: [rule] },
+        logsRuleSets: [{ name: 'n', rules: [rule] }],
+      });
+      const { press, stop, stdout, instance } = mount(
+        createElement(SettingsScreen, { useStore: store, initialTab: 'logs', initialLogsGroup: 'filter-rules' }),
+      );
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(KEYS.enter); // open the scope picker, cursor on Global
+        expect(stdout.output).toContain('Global filter (1 rule)');
+        await press(KEYS.enter);
+        expect(stdout.output).toContain('Clear the persisted rules of Global filter?');
+        expect(footerIdOf(store)).toBe('settings-rules-confirm');
+        await press(' ');
+        expect(clearLogsScopeRules).not.toHaveBeenCalled();
+        await press(KEYS.enter);
+        await press('y');
+        expect(clearLogsScopeRules).toHaveBeenCalledWith('global');
+        expect(clearLogsRuleSets).not.toHaveBeenCalled();
+      } finally {
+        await stop();
+      }
+    });
+
+    it('clearing a service row targets its path, and an orphan scope can be cleared too', async () => {
+      const store = createAppStore();
+      const clearLogsScopeRules = vi.fn();
+      store.setState({
+        clearLogsScopeRules,
+        edtsBranches: [{ service: 'api', path: '/repos/api' } as never],
+        logsPaneFilters: { '/repos/api': { level: null, rules: [rule] }, '/repos/gone': { level: null, rules: [rule] } },
+      });
+      const { press, stop, stdout, instance } = mount(
+        createElement(SettingsScreen, { useStore: store, initialTab: 'logs', initialLogsGroup: 'filter-rules' }),
+      );
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(KEYS.enter);
+        expect(stdout.output).toContain('/repos/gone (not listed) (1 rule)');
+        await press(KEYS.down); // api
+        await press(KEYS.enter);
+        await press('y');
+        expect(clearLogsScopeRules).toHaveBeenLastCalledWith('/repos/api');
+        await press(KEYS.enter); // the picker closed after the clear; reopen it
+        await press(KEYS.down);
+        await press(KEYS.down); // orphan
+        await press(KEYS.enter);
+        await press('y');
+        expect(clearLogsScopeRules).toHaveBeenLastCalledWith('/repos/gone');
+      } finally {
+        await stop();
+      }
+    });
+
+    it('does not ask to clear a scope that has no rules', async () => {
+      const store = createAppStore();
+      const clearLogsScopeRules = vi.fn();
+      store.setState({ clearLogsScopeRules });
+      const { press, stop, stdout, instance } = mount(
+        createElement(SettingsScreen, { useStore: store, initialTab: 'logs', initialLogsGroup: 'filter-rules' }),
+      );
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(KEYS.enter);
+        await press(KEYS.enter);
+        expect(stdout.output).not.toContain('Clear the persisted rules of');
+        expect(clearLogsScopeRules).not.toHaveBeenCalled();
+      } finally {
+        await stop();
+      }
+    });
+
+    it('delete-library asks first and clears only the library', async () => {
+      const store = createAppStore();
+      const clearLogsScopeRules = vi.fn();
+      const clearLogsRuleSets = vi.fn();
+      store.setState({ clearLogsScopeRules, clearLogsRuleSets, logsRuleSets: [{ name: 'n', rules: [rule] }] });
+      const { press, stop, stdout, instance } = mount(
+        createElement(SettingsScreen, { useStore: store, initialTab: 'logs', initialLogsGroup: 'filter-rules' }),
+      );
+      try {
+        await instance.waitUntilRenderFlush();
+        await press(KEYS.down);
+        await press(KEYS.enter);
+        expect(stdout.output).toContain('Delete all 1 saved rule sets?');
+        await press(KEYS.enter);
+        expect(clearLogsRuleSets).toHaveBeenCalledTimes(1);
+        expect(clearLogsScopeRules).not.toHaveBeenCalled();
+      } finally {
+        await stop();
+      }
+    });
+  });
 });

@@ -42,4 +42,40 @@ describe('MenuList', () => {
     expect(output).toContain('not yet');
     expect(output.split('\n').filter((line) => line.includes('›')).join('')).toContain('Third');
   });
+
+  it('renders a description as one dim line under its row, leaving rows without one on a single line', async () => {
+    const items: readonly MenuItem<Value>[] = [
+      { value: 'a', label: 'First', description: `Explains the first ${'x'.repeat(200)}` },
+      { value: 'c', label: 'Third' },
+    ];
+    const output = await renderToString(<MenuList items={items} cursor={0} />, { columns: 40, rows: 10 });
+    const lines = output.split('\n').filter((line) => line.trim() !== '');
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toContain('First');
+    expect(lines[1]).toContain('Explains the first');
+    expect(lines[2]).toContain('Third');
+    for (const line of lines) {
+      expect(Array.from(line).length).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it('treats an empty description like none (no blank caption row)', async () => {
+    const items: readonly MenuItem<Value>[] = [
+      { value: 'a', label: 'First', description: '' },
+      { value: 'c', label: 'Third' },
+    ];
+    const output = await renderToString(<MenuList items={items} cursor={0} />, { columns: 40, rows: 10 });
+    const lines = output.split('\n');
+    expect(lines.findIndex((line) => line.includes('Third'))).toBe(lines.findIndex((line) => line.includes('First')) + 1);
+  });
+
+  it('renders a row carrying both a note and a description', async () => {
+    const items: readonly MenuItem<Value>[] = [{ value: 'b', label: 'Second', note: 'not yet', disabled: true, description: 'Why it waits' }];
+    const output = await renderToString(<MenuList items={items} cursor={0} />, { columns: 40, rows: 10 });
+    const lines = output.split('\n').filter((line) => line.trim() !== '');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('Second');
+    expect(lines[0]).toContain('not yet');
+    expect(lines[1]).toContain('Why it waits');
+  });
 });

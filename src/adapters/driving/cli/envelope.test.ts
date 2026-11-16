@@ -69,3 +69,19 @@ describe('renderResult — TTY (human-readable text)', () => {
     expect(output).toBe('OK\n');
   });
 });
+
+describe('renderResult — humanText hook', () => {
+  const hook = (data: unknown): string => (data as { script: string }).script;
+
+  it('prints the hook text raw on a TTY', () => {
+    expect(renderResult(ok({ script: 'echo hi\n' }), true, hook).output).toBe('echo hi\n');
+  });
+
+  it('is ignored when piped', () => {
+    expect(renderResult(ok({ script: 'x' }), false, hook).output).toBe('{"ok":true,"data":{"script":"x"}}\n');
+  });
+
+  it('is ignored for errors', () => {
+    expect(renderResult(err('boom', 'bad'), true, hook).output).toBe('Error: bad (code: boom)\n');
+  });
+});

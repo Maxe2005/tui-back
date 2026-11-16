@@ -12,5 +12,9 @@ export const stateSchema = z
     splitterRatios: z.record(z.string(), z.array(z.number())).optional(),
     filterHistory: z.record(z.string(), z.array(z.string())).optional(),
     commandHistory: z.array(z.string()).optional(),
+    // Deliberately unvalidated here: core/logs/rule-sets sanitizes them per element, so one bad
+    // rule drops alone with a visible warning instead of failing the whole field (or file).
+    logRules: z.unknown().optional(),
+    logRuleSets: z.unknown().optional(),
   })
   .strict();

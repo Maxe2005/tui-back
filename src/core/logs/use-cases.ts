@@ -49,7 +49,7 @@ export function clearLogs(params: ClearLogsParams): Result<void> {
 }
 
 export interface GetServiceHealthParams {
-  docker: DockerPort;
+  docker: Pick<DockerPort, 'getContainerHealth'>;
   container: string;
 }
 

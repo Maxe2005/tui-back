@@ -178,3 +178,48 @@ export function ok<T>(data: T): Result<T> { return { ok: true, data }; }
     ]);
   });
 });
+
+describe('.dependency-cruiser.cjs no-child-process-outside-driven-adapters rule', () => {
+  const childProcessRule = depCruiserConfig.forbidden.find(
+    (candidate: { name: string }) => candidate.name === 'no-child-process-outside-driven-adapters',
+  );
+  let fixtureRoot: string;
+
+  afterEach(() => {
+    if (fixtureRoot) {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('flags child_process imported from core or a driving adapter, but not from a driven adapter', async () => {
+    fixtureRoot = makeFixture();
+    mkdirSync(join(fixtureRoot, 'src', 'adapters', 'driving'), { recursive: true });
+    mkdirSync(join(fixtureRoot, 'src', 'adapters', 'driven'), { recursive: true });
+    writeFileSync(
+      join(fixtureRoot, 'src', 'core', 'spawner.ts'),
+      "import { spawn } from 'node:child_process';\nexport const s = spawn;\n",
+    );
+    writeFileSync(
+      join(fixtureRoot, 'src', 'adapters', 'driving', 'spawner.ts'),
+      "import { spawn } from 'child_process';\nexport const s = spawn;\n",
+    );
+    writeFileSync(
+      join(fixtureRoot, 'src', 'adapters', 'driven', 'spawner.ts'),
+      "import { spawn } from 'node:child_process';\nexport const s = spawn;\n",
+    );
+
+    expect(childProcessRule).toBeDefined();
+    const result = await cruiseFixture(fixtureRoot, [childProcessRule]);
+
+    // The driven fixture must actually have been cruised for its absence below to mean anything.
+    const cruised = result.modules.map((module: { source: string }) => module.source);
+    expect(cruised).toContain('src/adapters/driven/spawner.ts');
+    const offenders = result.summary.violations.map((v: { from: string }) => v.from).sort();
+    expect(offenders).toEqual(['src/adapters/driving/spawner.ts', 'src/core/spawner.ts']);
+    expect(result.summary.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rule: expect.objectContaining({ name: 'no-child-process-outside-driven-adapters' }) }),
+      ]),
+    );
+  });
+});

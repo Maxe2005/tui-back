@@ -1,6 +1,7 @@
 // tui/store/slices: the Update zone's group-update run state. Calls the same
 // core/scripts/group-update.ts use-case the CLI's `tui-back update` wraps, in-process (AD-2,
 // never by shelling out to the CLI).
+import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
 import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
 import {
@@ -19,9 +20,9 @@ import {
 } from '../../../../../core/scripts/group-update.js';
 import { serviceRestart as serviceRestartUseCase } from '../../../../../core/scripts/service-restart.js';
 import { openInIde } from '../../../../../core/service-actions/index.js';
-import { getServiceHealth } from '../../../../../core/logs/use-cases.js';
+import { resolveServiceStatus, type ServiceStatusState } from '../../../../../core/service-status/index.js';
+import { createInFlightGuard } from '../../shared/poll/in-flight-guard.js';
 import { err, ok, type Result } from '../../../../../core/result.js';
-import type { HealthState } from '../../../../../core/ports/docker.js';
 import {
   advanceServiceSteps,
   finalizeServiceSteps,
@@ -240,12 +241,12 @@ export type UpdateSlice = {
   markUpdateInterrupted: () => Promise<void>;
   clearUpdate: () => void;
 
-  // Live per-service container health for the Update zone's always-visible service list —
-  // keyed by repoPath, independent of the Logs zone's `logsPanes[*].health`. A repoPath with
-  // no entry yet (poll in flight, or never started) reads as `down`, until the first poll
-  // resolves. `no-container` is the TUI-side state for a manifest without `container` —
-  // recorded without ever polling Docker for the service.
-  updateServiceHealth: Record<string, HealthState | 'no-container'>;
+  // Live per-service health-first status (AD-23, through core/service-status) for the Update
+  // zone's always-visible service list — keyed by repoPath, independent of the Logs zone's
+  // `logsPanes[*].health`. A repoPath with no entry yet (poll in flight, or never started) reads
+  // as `down`, until the first poll resolves. `no-container` is a manifest declaring neither a
+  // `container` nor a probed `healthUrl` — recorded without ever polling Docker for the service.
+  updateServiceHealth: Record<string, ServiceStatusState>;
   // The last completed run's per-service outcome, keyed by `service` (results
   // carry no repoPath) — merged, never wholesale-replaced, by runGroupUpdate's success
   // branch below, so a partial-scope run never drops another service's earlier outcome.
@@ -356,45 +357,53 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
   // service that appears/disappears from `edtsBranches` is picked up without leaking a
   // stale timer. Held in closure, mirrors logs-slice.ts's own healthPollTimers convention.
   let healthPollTimer: ReturnType<typeof setInterval> | null = null;
+  // Per-repo in-flight guard for the health poll: a slow health route never stacks probes, and a
+  // poll still settling after stop/retarget is dropped.
+  const healthInFlight = createInFlightGuard();
   let pollingRepoPaths: readonly string[] = [];
   // The service quick-pick's generation — bumped on every open and every
   // close so a slow enumeration from an earlier open can never pop the pick open after
   // the user already cancelled (or re-opened). Held in closure, never in Zustand state.
   let servicePickGeneration = 0;
   return (set, get) => {
-    // One poll cycle for a single service — resolves its manifest-declared container and
-    // inspects it, updating the badge only on success. Like logs-slice.ts's pollPaneHealth, any
-    // failure (manifest load fails, inspect errors, docker unreachable) keeps last-known health
-    // and never crashes the view. A manifest without `container` records the no-container
-    // state and never reaches Docker.
+    // One poll cycle for a single service — resolves its health-first status through
+    // core/service-status, updating the badge only on success. Like logs-slice.ts's
+    // pollPaneHealth, any failure (manifest load fails, Docker and the probe both fail) keeps
+    // last-known health and never crashes the view. A tick for a repo whose previous poll (probe
+    // included) is still awaiting is skipped.
     async function pollServiceHealth(repoPath: string): Promise<void> {
       if (!deps) {
         return;
       }
-      const manifestResult = await deps.manifest.load(repoPath);
-      if (!manifestResult.ok) {
+      const token = healthInFlight.begin(repoPath);
+      if (token === null) {
         return;
       }
-      if (manifestResult.data.container === undefined || manifestResult.data.container.trim() === '') {
+      try {
+        const status = await resolveServiceStatus(
+          {
+            manifest: deps.manifest,
+            docker: deps.docker,
+            ...(deps.healthProbe === undefined ? {} : { healthProbe: deps.healthProbe }),
+            // Read at every poll, so a :settings toggle applies at the next tick.
+            isHealthCheckEnabled: healthCheckEnabledFrom(() => get().settings),
+          },
+          repoPath,
+        );
+        // A repo no longer polled (stopped, or retargeted away) keeps no late write.
+        if (!status.ok || !pollingRepoPaths.includes(repoPath) || !healthInFlight.isCurrent(repoPath, token)) {
+          return;
+        }
+        const health = status.data.state;
         set((state) => {
-          if (state.updateServiceHealth[repoPath] === 'no-container') {
+          if (state.updateServiceHealth[repoPath] === health) {
             return {};
           }
-          return { updateServiceHealth: { ...state.updateServiceHealth, [repoPath]: 'no-container' as const } };
+          return { updateServiceHealth: { ...state.updateServiceHealth, [repoPath]: health } };
         });
-        return;
+      } finally {
+        healthInFlight.end(repoPath, token);
       }
-      const healthResult = await getServiceHealth({ docker: deps.docker, container: manifestResult.data.container });
-      if (!healthResult.ok) {
-        return;
-      }
-      const health = healthResult.data;
-      set((state) => {
-        if (state.updateServiceHealth[repoPath] === health) {
-          return {};
-        }
-        return { updateServiceHealth: { ...state.updateServiceHealth, [repoPath]: health } };
-      });
     }
 
     function pollAll(repoPaths: readonly string[]): void {
@@ -1506,6 +1515,11 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       updateServiceHealth: {},
       lastServiceOutcomes: {},
       startUpdateHealthPolling: (repoPaths) => {
+        for (const path of pollingRepoPaths) {
+          if (!repoPaths.includes(path)) {
+            healthInFlight.release(path);
+          }
+        }
         pollingRepoPaths = [...repoPaths];
         pollAll(pollingRepoPaths);
         if (healthPollTimer !== null) {
@@ -1527,6 +1541,7 @@ export function createUpdateSlice(deps?: AppStoreDeps): StateCreator<AppState, [
           healthPollTimer = null;
         }
         pollingRepoPaths = [];
+        healthInFlight.releaseAll();
       },
     };
   };

@@ -5,7 +5,7 @@ inputDocuments:
   - _bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md
   - _bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/DESIGN.md
   - _bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md
-  - _bmad-output/planning-artifacts/epics.md
+  - _bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md
 ---
 
 # Implementation Readiness Assessment Report

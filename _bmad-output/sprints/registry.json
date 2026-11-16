@@ -1,0 +1,23 @@
+{
+  "active": "sprint-2",
+  "sprints": [
+    {
+      "id": "sprint-1",
+      "name": "Delivery of tui-back (epics 1-11)",
+      "status": "open",
+      "epics_file": "_bmad-output/sprints/sprint-1-delivery-of-tui-back/epics.md",
+      "artifacts_dir": "_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back",
+      "status_file": "_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml",
+      "epics": "1-11"
+    },
+    {
+      "id": "sprint-2",
+      "name": "Refonte des fichiers volumineux",
+      "status": "active",
+      "epics_file": "_bmad-output/sprints/sprint-2-refonte-fichiers-volumineux/epics.md",
+      "artifacts_dir": "_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux",
+      "status_file": "_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/sprint-status.yaml",
+      "epics": "12-14"
+    }
+  ]
+}

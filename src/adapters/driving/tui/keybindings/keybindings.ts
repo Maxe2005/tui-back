@@ -13,13 +13,23 @@ export type Keybinding = {
   description: string;
   // Rows of the same section are listed under one heading in the `?` help.
   section?: string;
-  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' };
+  footer?: { key: string; verb: string; zones?: readonly ZoneId[]; when?: 'resizable' | 'service-focused' | 'active-edt' | 'drift' };
 };
 
 // The retry key StateLine advertises beside a load error; zones bind R to their reload.
 export const CONTEXT_SECTION = 'Keys per dialog, pane and screen';
 
 export const RETRY_HINT: Hint = ['R', 'retry'];
+
+// The Shared Types tab's commands, declared once: the zone's action bar reads key + label, the
+// `?` help reads the description (one row per action, appended below).
+export type SharedTypesActionId = 'publish' | 'propagate' | 'history' | 'reload';
+export const SHARED_TYPES_ACTIONS: readonly { id: SharedTypesActionId; key: string; label: string; description: string }[] = [
+  { id: 'publish', key: 'P', label: 'publish', description: 'Shared Types: publish a new version of the shared-types source repo' },
+  { id: 'propagate', key: 'Enter', label: 'propagate', description: 'Shared Types: on the version row, edit the version; from a consumer or option row, propagate it to the checked consuming services; on a choice screen, select the highlighted choice' },
+  { id: 'history', key: 'H', label: 'history', description: "Shared Types: browse the source repo's published versions and pick one" },
+  { id: 'reload', key: 'R', label: 'reload', description: 'Shared Types: reload the source repo and consuming services after a load error; relaunch a failed publish; retry the highlighted failed service in the results' },
+];
 
 export const KEYBINDINGS: readonly Keybinding[] = [
   {
@@ -167,6 +177,66 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'Esc (switch resolution)',
     description: 'Switch EDT, dirty services: close the open field/box first, otherwise cancel the switch (nothing touched)',
   },
+  {
+    keys: 'R (Dashboard)',
+    description: 'Dashboard: refresh every section (also retries a failed section)',
+    footer: { key: 'R', verb: 'refresh', zones: ['dashboard'] },
+  },
+  {
+    keys: '↑ / ↓ (Dashboard)',
+    description: 'Dashboard: move the cursor over the active EDT\'s services',
+    footer: { key: '↑/↓', verb: 'service', zones: ['dashboard'] },
+  },
+  {
+    keys: 'Enter (Dashboard)',
+    description: 'Dashboard: open the focused service in the Logs zone',
+    footer: { key: 'Enter', verb: 'open', zones: ['dashboard'] },
+  },
+  {
+    keys: 'a (Dashboard)',
+    description: 'Dashboard: step through the Attention lines, moving the cursor to the line\'s service',
+    footer: { key: 'a', verb: 'attention', zones: ['dashboard'] },
+  },
+  {
+    keys: 'A (Dashboard)',
+    description: 'Dashboard: open the realign dialog over the drifted services (also `:realign`)',
+    footer: { key: 'A', verb: 'realign', zones: ['dashboard'], when: 'drift' },
+  },
+  {
+    keys: 'H (Dashboard)',
+    description: 'Dashboard: heal — restart services that are not up, after confirmation',
+    footer: { key: 'H', verb: 'heal', zones: ['dashboard'], when: 'active-edt' },
+  },
+  {
+    keys: 'E (Dashboard)',
+    description: 'Dashboard: enter the active EDT in the EDTs zone (e opens the EDT quick-pick, or the create wizard when none exists)',
+    footer: { key: 'E', verb: 'enter EDT', zones: ['dashboard'], when: 'active-edt' },
+  },
+  {
+    keys: 'Ctrl+O (Dashboard)',
+    description: 'Dashboard: open the focused service repo in your editor',
+    footer: { key: 'Ctrl+O', verb: 'IDE', zones: ['dashboard'], when: 'service-focused' },
+  },
+  {
+    keys: 'Ctrl+R (Dashboard)',
+    description: 'Dashboard: restart the focused service (R stays refresh)',
+    footer: { key: 'Ctrl+R', verb: 'restart', zones: ['dashboard'], when: 'service-focused' },
+  },
+  {
+    keys: 'Ctrl+L (Dashboard)',
+    description: 'Dashboard: clean-restart the focused service through its recipe',
+    footer: { key: 'Ctrl+L', verb: 'clean restart', zones: ['dashboard'], when: 'service-focused' },
+  },
+  {
+    keys: 'Ctrl+T (Dashboard)',
+    description: 'Dashboard: open a terminal in the focused service repo',
+    footer: { key: 'Ctrl+T', verb: 'terminal', zones: ['dashboard'], when: 'service-focused' },
+  },
+  {
+    keys: 'Ctrl+X (Dashboard)',
+    description: "Dashboard: open a terminal inside the focused service's running container",
+    footer: { key: 'Ctrl+X', verb: 'container terminal', zones: ['dashboard'], when: 'service-focused' },
+  },
   // Scoped to the Logs zone's pane grid.
   {
     keys: 'W (Logs)',
@@ -179,11 +249,16 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'R (Logs)',
-    description: 'Logs: restart the focused pane\'s service',
+    description: "Logs: restart the focused pane's service (mode from settings: logs.restartMode)",
   },
   {
     keys: 'O (Logs)',
     description: 'Logs: open the focused pane\'s service repo in your editor (also for services without a container)',
+  },
+  {
+    keys: 'a (Logs)',
+    description: "Logs: open the focused pane's service actions menu (open in IDE, restart, clean restart, terminals), with each unavailable action's reason",
+    footer: { key: 'a', verb: 'pane actions', zones: ['logs'] },
   },
   {
     keys: 'm / a / p (Update)',
@@ -220,6 +295,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     keys: 'PgUp / PgDn',
     description: 'Scroll a dialog taller than the window; page the Update last-run recap and full report',
   },
+  ...SHARED_TYPES_ACTIONS.map((action) => ({ keys: `${action.key} (Shared Types)`, description: action.description })),
   ...Object.values(FOOTER_CONTEXTS).map((context) => ({
     keys: context.label,
     description: context.hints.length > 0 ? formatHints(context.hints) : 'No keys while it runs',

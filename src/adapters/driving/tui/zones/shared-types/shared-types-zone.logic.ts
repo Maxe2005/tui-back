@@ -3,7 +3,10 @@
 // `useInput` stays a thin dispatcher over these.
 import type { PropagateOptions, PropagateServiceResult, PropagateStep } from '../../../../../core/shared-types/propagate-version.js';
 import { isValidVersion } from '../../../../../core/shared-types/propagate-version.js';
+import type { ServiceAction } from '../../../../../core/service-actions/index.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/text-edit.js';
+import { resolveMenuKey, type MenuItem, type MenuKey, type MenuStep } from '../../shared/components/menu-list.js';
+import { SHARED_TYPES_ACTIONS, type SharedTypesActionId } from '../../keybindings/keybindings.js';
 
 export const VERSION_PREFIX = '0.1.';
 
@@ -127,24 +130,169 @@ export function shouldStartPublish(input: string, publishStatus: string, sourceC
   return (input === 'p' || input === 'P') && publishStatus === 'idle' && sourceCount === 1;
 }
 
-export function resolvePublishBlockedKey(input: string, key: { return?: boolean; escape?: boolean }): 'relaunch' | 'back' | null {
-  if (input === 'r' || input === 'R' || key.return === true) {
-    return 'relaunch';
+// Why the History view cannot open: it reads the one shared-types-source repo of the active EDT.
+export function historyDisabledReason(sourcesStatus: string, sourceError: string | undefined, sourceCount: number): string {
+  if (sourcesStatus === 'error' && sourceError !== undefined) {
+    return `History is unavailable: ${sourceError}`;
   }
-  if (key.escape === true) {
-    return 'back';
+  if (sourcesStatus === 'error') {
+    return 'History is unavailable: the source repo could not be read.';
+  }
+  if (sourceCount > 1) {
+    return 'History is unavailable: several source repos are in the active EDT.';
+  }
+  if (sourceCount === 0) {
+    return 'History is unavailable: the shared-types source repo is not part of the active EDT.';
+  }
+  return 'History is unavailable: the source repo is still loading.';
+}
+
+export type SharedTypesActionsInput = {
+  form: FormState;
+  repoPaths: readonly string[];
+  sourcesStatus: string;
+  sourceError: string | undefined;
+  sourceCount: number;
+  consumersStatus: string;
+  publishStatus: string;
+  runStatus: string;
+};
+
+function publishReason(input: SharedTypesActionsInput): string | null {
+  if (input.publishStatus !== 'idle' || input.runStatus !== 'idle') {
+    return 'a run is in progress';
+  }
+  if (input.sourcesStatus === 'error') {
+    return 'source repo unavailable';
+  }
+  if (input.sourcesStatus !== 'ready') {
+    return 'source repo loading';
+  }
+  if (input.sourceCount === 0) {
+    return 'no source repo in the EDT';
+  }
+  if (input.sourceCount > 1) {
+    return 'several source repos';
   }
   return null;
 }
 
-export function resolvePublishDoneKey(input: string, key: { return?: boolean; escape?: boolean }): 'chain' | 'stop' | null {
-  if (input === 'c' || input === 'C' || key.return === true) {
-    return 'chain';
+function propagateReason(input: SharedTypesActionsInput): string | null {
+  if (input.runStatus !== 'idle' || input.publishStatus !== 'idle') {
+    return 'a run is in progress';
   }
-  if (key.escape === true || input === 'n' || input === 'N') {
-    return 'stop';
+  if (input.consumersStatus === 'error') {
+    return 'consuming services unavailable';
+  }
+  if (input.consumersStatus !== 'ready') {
+    return 'consuming services loading';
+  }
+  if (input.repoPaths.length === 0) {
+    return 'no consuming service';
+  }
+  if (!isValidVersion(input.form.version.value)) {
+    return 'enter a valid version';
+  }
+  if (!canRun(input.form, input.repoPaths)) {
+    return 'select a consumer';
+  }
+  // Enter on the version row edits the field (or leaves it); only another row propagates.
+  if (input.form.editing) {
+    return 'finish editing the version';
+  }
+  if (input.form.row === 0) {
+    return 'move to a consumer row';
   }
   return null;
+}
+
+export const HISTORY_UNAVAILABLE_PREFIX = 'History is unavailable: ';
+
+// The bar shows the reason right after `[H] history`, so the sentence's own prefix (and its
+// closing period, like every other bar fragment) is dropped there; pressing H still shows the full
+// historyDisabledReason sentence.
+function historyReason(input: SharedTypesActionsInput): string | null {
+  if (input.sourcesStatus === 'ready' && input.sourceCount === 1) {
+    return null;
+  }
+  const reason = historyDisabledReason(input.sourcesStatus, input.sourceError, input.sourceCount);
+  const fragment = reason.startsWith(HISTORY_UNAVAILABLE_PREFIX) ? reason.slice(HISTORY_UNAVAILABLE_PREFIX.length) : reason;
+  return fragment.replace(/\.$/, '');
+}
+
+function reloadReason(input: SharedTypesActionsInput): string | null {
+  return input.sourcesStatus === 'error' || input.consumersStatus === 'error' ? null : 'nothing to reload';
+}
+
+const ACTION_REASONS: Record<SharedTypesActionId, (input: SharedTypesActionsInput) => string | null> = {
+  publish: publishReason,
+  propagate: propagateReason,
+  history: historyReason,
+  reload: reloadReason,
+};
+
+// The action bar of the form view: every Shared Types command with its availability — the same
+// conditions the key dispatcher applies (`shouldStartPublish`, `canRun` + the focused row, the
+// History gate, the load-error Reload). Available actions come first (declaration order kept
+// within each group) so a narrow, clipped bar still shows what can be pressed.
+export function sharedTypesActions(input: SharedTypesActionsInput): ServiceAction[] {
+  const actions: ServiceAction[] = SHARED_TYPES_ACTIONS.map((action) => {
+    const reason = ACTION_REASONS[action.id](input);
+    return {
+      id: action.id,
+      key: action.key,
+      label: action.label,
+      availability: reason === null ? { available: true } : { available: false, reason },
+    };
+  });
+  return [...actions.filter((action) => action.availability.available), ...actions.filter((action) => !action.availability.available)];
+}
+
+// The post-publish choice screens. Each row carries a one-line explanation; the screen's local
+// cursor starts on the first row.
+export type PublishDoneChoice = 'propagate' | 'back' | 'close';
+export type PublishFailedChoice = 'relaunch' | 'back';
+
+// The one builder of the done screen's rows: the zone renders and resolves keys on the same array.
+// A done publish without a version still offers the same three rows.
+export function publishDoneChoices(version: string | null): readonly MenuItem<PublishDoneChoice>[] {
+  return [
+    { value: 'propagate', label: `Propagate ${version ?? 'the published version'} to consumers`, description: 'Back to the form with this version pre-filled, ready to propagate.' },
+    { value: 'back', label: 'Back to the form', description: 'Dismiss this result and return to the form as you left it.' },
+    { value: 'close', label: 'Close', description: 'Dismiss this result and reset the form.' },
+  ];
+}
+
+export const PUBLISH_FAILED_CHOICES: readonly MenuItem<PublishFailedChoice>[] = [
+  { value: 'relaunch', label: 'Relaunch', description: 'Run the whole publish command again.' },
+  { value: 'back', label: 'Back', description: 'Dismiss the failure and return to the form.' },
+];
+
+// A cursor left over from a longer menu never points past the last row.
+export function clampChoiceCursor(cursor: number, length: number): number {
+  return Math.max(0, Math.min(cursor, length - 1));
+}
+
+// Up/Down/Home/End move, Enter chooses the highlighted row, Esc = Close; `C` stays a shortcut
+// for Propagate. `items` is the array the screen renders (`publishDoneChoices(version)`).
+export function resolvePublishDoneChoice(
+  input: string,
+  key: MenuKey,
+  cursor: number,
+  items: readonly MenuItem<PublishDoneChoice>[],
+): MenuStep<PublishDoneChoice> {
+  if (input === 'c' || input === 'C') {
+    return { type: 'choose', choice: 'propagate' };
+  }
+  return resolveMenuKey(key, clampChoiceCursor(cursor, items.length), items, 'close');
+}
+
+// Same keys, Esc = Back; `R` stays a shortcut for Relaunch.
+export function resolvePublishFailedChoice(input: string, key: MenuKey, cursor: number): MenuStep<PublishFailedChoice> {
+  if (input === 'r' || input === 'R') {
+    return { type: 'choose', choice: 'relaunch' };
+  }
+  return resolveMenuKey(key, clampChoiceCursor(cursor, PUBLISH_FAILED_CHOICES.length), PUBLISH_FAILED_CHOICES, 'back');
 }
 
 export function resolveQuitDecision(input: string, key: { return?: boolean; escape?: boolean }): 'confirm' | 'cancel' | null {

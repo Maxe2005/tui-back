@@ -136,6 +136,8 @@ Inside the content area, most zones use a resizable list/detail split — a narr
 
 **Launch banner.** A k9s-inspired ASCII-art banner appears permanently, on every Dashboard render (amended 2026-08-26, Sprint Change Proposal, Story 2.16 — originally once-per-launch), sitting above/within the Dashboard zone's content area (on `{colors.surface}`, same as any other content). Kept light-touch, not a new component system: render it monochrome in `{colors.text-dim}` or, if it should read as a brand mark rather than chrome, in `{colors.accent}` — either reads correctly against Atelier's flat-field register. No motion, no gradient, consistent with Elevation & Depth's "minimal motion" rule.
 
+**Dashboard composition (amended 2026-10-15, Epic 8).** The banner is fixed and never compacted; below it, top to bottom: EDT line, services table (one `list-row` per service, accent bar on the focused row, reason line and service-action row under it), Attention block, registry-health line, EDT actions. The remaining space is a bounded scroll region (UX-DR37); when the terminal cannot even fit the banner, the "terminal too small" screen applies instead of compacting it. Status colours (success/warning/error) are used only for status glyphs and anomaly markers. Reference: `mockups/key-dashboard.html`.
+
 ## Elevation & Depth
 
 A terminal has no shadows, blurs, or z-axis to speak of — Ink renders flat character cells. Depth is conveyed by exactly two devices instead:

@@ -54,6 +54,7 @@ import {
 } from './update-zone.js';
 import {
   deriveUpdateServiceStatus,
+  updateStatusText,
   formatLiveServiceDetail,
   formatServiceOutcomeDetail,
   isServiceTargetedByRun,
@@ -665,6 +666,16 @@ describe('UpdateZone rendering', () => {
 });
 
 describe('deriveUpdateServiceStatus', () => {
+  it('passes the health-first states through, with their own text', () => {
+    expect(deriveUpdateServiceStatus('unhealthy', undefined, false)).toBe('unhealthy');
+    expect(deriveUpdateServiceStatus('inconsistent', undefined, false)).toBe('inconsistent');
+    expect(deriveUpdateServiceStatus('unhealthy', undefined, true)).toBe('updating');
+    expect(updateStatusText('unhealthy')).toBe('unhealthy');
+    expect(updateStatusText('inconsistent')).toBe('inconsistent');
+    expect(updateStatusText('no-container')).toBe('no container');
+    expect(updateStatusText('up')).toBeNull();
+  });
+
   it('a service paused on an incident is awaiting, outranking updating', () => {
     expect(deriveUpdateServiceStatus('up', undefined, true, false, 'merging', true)).toBe('awaiting');
     expect(deriveUpdateServiceStatus('down', 'failed', false, false, undefined, true)).toBe('awaiting');
@@ -957,6 +968,27 @@ describe('UpdateZone service-list shell rendering', () => {
     expect(output).toContain('No update has run for this service yet.');
   });
 
+  it('unhealthy and inconsistent rows show their glyph and their name', async () => {
+    const store = createAppStore();
+    store.setState({
+      edtsBranches: [SERVICE_A, SERVICE_B],
+      edtsBranchesStatus: 'idle',
+      edts: [ACTIVE_EDT],
+      activeEdt: 'edt-1',
+      loadEdtsBranches: noopLoad,
+      loadEdts: noopLoad,
+      updateServiceHealth: { [SERVICE_A.path]: 'unhealthy', [SERVICE_B.path]: 'inconsistent' },
+    });
+
+    const output = await renderToString(createElement(UpdateZone, { useStore: store, initialRecap: false }));
+    const lines = output.split('\n');
+    const svcARow = lines.find((line) => line.includes('svc-a') && line.includes('+0/-0'));
+    const svcBRow = lines.find((line) => line.includes('svc-b') && line.includes('+0/-0'));
+
+    expect(svcARow).toMatch(/◐\s*unhealthy/);
+    expect(svcBRow).toMatch(/⚠\s*inconsistent/);
+  });
+
   it('updating: only the service targeted by the in-flight EDT-scoped run shows the updating glyph — the non-targeted service keeps its raw-health glyph', async () => {
     const store = createAppStore();
     store.setState({
@@ -1147,6 +1179,10 @@ function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps
     writeFilterHistory: vi.fn(async () => ok(undefined)),
     readCommandHistory: vi.fn(async () => ok(null)),
     writeCommandHistory: vi.fn(async () => ok(undefined)),
+    readLogRules: vi.fn(async () => ok(null)),
+    writeLogRules: vi.fn(async () => ok(undefined)),
+    readLogRuleSets: vi.fn(async () => ok(null)),
+    writeLogRuleSets: vi.fn(async () => ok(undefined)),
   };
   const lock: LockPort = {
     acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),

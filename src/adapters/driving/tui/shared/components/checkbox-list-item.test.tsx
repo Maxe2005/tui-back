@@ -33,7 +33,25 @@ describe('resolveCheckboxItemLayout', () => {
   });
 });
 
+describe('resolveCheckboxItemLayout — disabled', () => {
+  it('dims a disabled row and shows a [-] box whatever its state', () => {
+    expect(resolveCheckboxItemLayout({ label: 'api', state: 'checked', disabled: true })).toEqual({
+      boxGlyph: '[-]',
+      labelColor: colors['text-dim'],
+      metaColor: colors['text-dim'],
+      paddingLeft: 0,
+    });
+  });
+});
+
 describe('CheckboxListItem', () => {
+  it('renders a disabled row with its dim reason', async () => {
+    const output = await renderToString(<CheckboxListItem label="api" disabled disabledReason="no healthUrl" />);
+    expect(output).toContain('[-]');
+    expect(output).toContain('api');
+    expect(output).toContain('(no healthUrl)');
+  });
+
   it('renders the unchecked state', async () => {
     const output = await renderToString(<CheckboxListItem label="api-gateway" />);
     expect(output).toContain('[ ]');

@@ -134,6 +134,10 @@ function wiredDeps(): AppStoreDeps {
     writeFilterHistory: async () => ok(undefined),
     readCommandHistory: async () => ok(null),
     writeCommandHistory: async () => ok(undefined),
+    readLogRules: async () => ok(null),
+    writeLogRules: async () => ok(undefined),
+    readLogRuleSets: async () => ok(null),
+    writeLogRuleSets: async () => ok(undefined),
   };
   return {
     registry,

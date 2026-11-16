@@ -1,5 +1,5 @@
 // tui/zones/dashboard: render tests for the empty-registry prompt (checked before any other
-// Dashboard content) and the ZonePlaceholder fallback. checkRegistryEmpty is stubbed in tests
+// Dashboard content) and the snapshot sections. checkRegistryEmpty is stubbed in tests
 // that seed a registryEmpty/registryEmptyStatus combination: the mount effect always calls it,
 // and on an unwired store the real call sets registryEmptyStatus to 'error', clobbering the
 // seeded state (same reasoning as edts-zone.test.tsx's noopLoad).
@@ -9,6 +9,7 @@ import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
+import { BoundsProvider } from '../../shared/bounds/bounds-context.js';
 import { BANNER_LINES } from './launch-banner.js';
 import {
   DashboardZone,
@@ -51,12 +52,12 @@ describe('DashboardZone', () => {
     expect(output).toContain(EMPTY_REGISTRY_HINT);
   });
 
-  it('shows the existing (unchanged) placeholder content when the registry is non-empty — no registry prompt', async () => {
+  it('shows the snapshot sections when the registry is non-empty — no registry prompt', async () => {
     const store = createAppStore();
     store.setState({ registryEmpty: false, checkRegistryEmpty: noopCheck });
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
-    expect(output).toContain('DASHBOARD');
+    expect(output).toContain('services');
     // The banner is permanent — shows above the placeholder content too, not just the
     // empty-registry prompt.
     for (const line of BANNER_LINES) {
@@ -64,12 +65,12 @@ describe('DashboardZone', () => {
     }
   });
 
-  it('shows the existing placeholder content (never assumes empty) before the registry check resolves', async () => {
+  it('shows the snapshot sections (never assumes empty) before the registry check resolves', async () => {
     const store = createAppStore();
     store.setState({ registryEmpty: null, checkRegistryEmpty: noopCheck });
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
-    expect(output).toContain('DASHBOARD');
+    expect(output).toContain('services');
     // The banner is permanent — shows above the placeholder content too, even before the
     // registry check has resolved.
     for (const line of BANNER_LINES) {
@@ -88,7 +89,7 @@ describe('DashboardZone', () => {
     const output = await renderToString(<DashboardZone useStore={store} />);
     expect(output).toContain(REGISTRY_CHECK_ERROR_MESSAGE);
     expect(output).not.toContain(EMPTY_REGISTRY_MESSAGE);
-    expect(output).not.toContain('DASHBOARD');
+    expect(output).not.toContain('services');
     // The banner is permanent — shows above the error message too.
     for (const line of BANNER_LINES) {
       expect(output).toContain(line);
@@ -156,5 +157,305 @@ describe('DashboardZone', () => {
       instance.unmount();
       await instance.waitUntilExit();
     }
+  });
+});
+
+describe('DashboardZone snapshot sections', () => {
+  const load = async () => {};
+  const ACTIVE = {
+    status: 'active' as const,
+    edt: { ulid: 'e1', topic: 'topic-a', serviceCount: 2 },
+    services: [
+      {
+        service: 'svc-a',
+        path: '/r/a',
+        manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
+        status: { ok: true, value: { state: 'up', verified: false, container: 'up' } },
+        branch: 'feat/x',
+        divergence: { status: 'current', ahead: 0, behind: 0 },
+        workingTree: { ok: true, value: { uncommitted: true, mergeInProgress: false, rebaseInProgress: false } },
+        protectedBranch: false,
+        usedByEdts: [],
+        expectedBranch: 'feat/x',
+        drift: 'aligned',
+      },
+      {
+        service: 'svc-b',
+        path: '/r/b',
+        manifest: { ok: true, value: { sharedBranch: 'development', protectedBranches: [] } },
+        status: { ok: false, error: { code: 'docker-error', message: 'boom' } },
+        branch: 'feat/x',
+        divergence: { status: 'current', ahead: 0, behind: 0 },
+        workingTree: { ok: false, error: { code: 'git-error', message: 'boom' } },
+        protectedBranch: false,
+        usedByEdts: [],
+        expectedBranch: 'feat/x',
+        drift: 'aligned',
+      },
+    ],
+    others: [],
+  };
+  const REGISTRY = { repoCount: 3, invalidManifests: 1, unreachable: 0, listingIssues: 0 };
+
+  function seed(extra: Record<string, unknown>) {
+    const store = createAppStore();
+    store.setState({ registryEmpty: false, checkRegistryEmpty: noopCheck, loadDashboard: load, ...extra });
+    return store;
+  }
+
+  it('gives each section its own spinner while loading', async () => {
+    const store = seed({ dashboardServicesStatus: 'loading', dashboardRegistryStatus: 'loading' });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Loading services');
+    expect(output).toContain('Loading repo health');
+  });
+
+  it('fills one section while the other still loads', async () => {
+    const store = seed({ dashboardServicesStatus: 'loading', dashboardRegistryStatus: 'ready', dashboardRegistry: REGISTRY });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Loading services');
+    expect(output).toContain('3 repos');
+  });
+
+  it('shows the populated view with per-field error markers and the updated line', async () => {
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: ACTIVE,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+      dashboardUpdatedAt: Date.now(),
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('EDT topic-a · 2 services');
+    expect(output).toMatch(/SERVICE\s+STATUS\s+BRANCH\s+SYNC/);
+    expect(output).toMatch(/svc-a\s+up\s+feat\/x\s+↑0 ↓0/);
+    expect(output).toMatch(/svc-b\s+status error\s+feat\/x\s+↑0 ↓0/);
+    // The focused (first) row explains its anomaly and lists the actions' absence while unloaded.
+    expect(output).toContain('uncommitted changes');
+    expect(output).toContain('Actions unavailable.');
+    expect(output).toContain('1 invalid manifests');
+    expect(output).toContain('updated 0s ago · [R] refresh');
+    expect(output).toContain('[E] ▸ Enter');
+    expect(output).toContain('[e] ▸ Choose another EDT / create one');
+  });
+
+  it('lists an inconsistent service in Attention with its own glyph and text, and an unhealthy row with its reason', async () => {
+    const [first, second] = ACTIVE.services;
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: {
+        ...ACTIVE,
+        services: [
+          { ...first, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } }, status: { ok: true, value: { state: 'unhealthy', verified: true, container: 'up', probeReason: 'HTTP 503' } } },
+          { ...second, status: { ok: true, value: { state: 'inconsistent', verified: true, container: 'down' } } },
+        ],
+      },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toMatch(/◐\s*svc-a\s+unhealthy/);
+    expect(output).toMatch(/⚠\s*svc-b\s+inconsistent/);
+    // The focused (first) row's reason line carries the probe reason.
+    expect(output).toContain('health check: HTTP 503');
+    expect(output).toMatch(/⚠\s*svc-b · health route answers but container is down/);
+  });
+
+  it('shows a dim "health check off" instead of "No issue." for a disabled check, and after a real issue', async () => {
+    const [first, second] = ACTIVE.services;
+    const clean = { uncommitted: false, mergeInProgress: false, rebaseInProgress: false };
+    const off = { ok: true as const, value: { state: 'up' as const, verified: false, container: 'up' as const, healthCheck: 'disabled' as const } };
+    const quiet = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { ...ACTIVE, services: [{ ...first, workingTree: { ok: true, value: clean }, status: off }, second] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const quietOutput = await renderToString(<DashboardZone useStore={quiet} />);
+    expect(quietOutput).toContain('health check off');
+    expect(quietOutput).not.toContain('No issue.');
+    expect(quietOutput).not.toMatch(/!\s*svc-a/);
+
+    const dirty = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { ...ACTIVE, services: [{ ...first, workingTree: { ok: true, value: { ...clean, uncommitted: true } }, status: off }, second] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const dirtyOutput = await renderToString(<DashboardZone useStore={dirty} />);
+    expect(dirtyOutput).toContain('uncommitted changes');
+    expect(dirtyOutput).toContain('health check off');
+  });
+
+  it('shows the focused row actions with their unavailable reasons, and the running progress', async () => {
+    const actions = [
+      { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: { available: true as const } },
+      { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: { available: false as const, reason: 'no container' } },
+      { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: { available: false as const, reason: 'no clean recipe' } },
+    ];
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: ACTIVE,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+      dashboardServiceActions: { '/r/a': actions },
+    });
+    const idle = await renderToString(<DashboardZone useStore={store} />);
+    expect(idle).toContain('[Ctrl+O]');
+    expect(idle).toContain('(no container)');
+    expect(idle).toContain('Ctrl+L: no clean recipe');
+    store.setState({ dashboardActionState: { '/r/a': { running: { actionId: 'restart-clean', text: 'Clean restart — recipe step 2/3' }, result: null } } });
+    const running = await renderToString(<DashboardZone useStore={store} />);
+    expect(running).toContain('Clean restart — recipe step 2/3');
+    expect(running).toContain('Ctrl+R: operation in progress');
+  });
+
+  it('shows the registry terminals after the restarts on the one actions line, the container terminal greyed with its reason', async () => {
+    const actions = [
+      { id: 'open-in-ide', label: 'Open in IDE', key: 'Ctrl+O', availability: { available: true as const } },
+      { id: 'restart-simple', label: 'Restart', key: 'Ctrl+R', availability: { available: true as const } },
+      { id: 'restart-clean', label: 'Clean restart', key: 'Ctrl+L', availability: { available: true as const } },
+      { id: 'terminal-service', label: 'Terminal', key: 'Ctrl+T', availability: { available: true as const } },
+      { id: 'terminal-container', label: 'Container terminal', key: 'Ctrl+X', availability: { available: false as const, reason: 'container not running' } },
+    ];
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: ACTIVE,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+      dashboardServiceActions: { '/r/a': actions },
+    });
+    // Wide enough for the whole line: at 120 columns the row truncates (bounded rendering), as intended.
+    const output = await renderToString(<DashboardZone useStore={store} />, { columns: 240, rows: 40 });
+    const line = output.split('\n').find((row) => row.includes('[Ctrl+O] Open in IDE'));
+    expect(line).toBeDefined();
+    const order = ['[Ctrl+O] Open in IDE', '[Ctrl+R] Restart', '[Ctrl+L] Clean restart', '[Ctrl+T] Terminal', '[Ctrl+X] Container terminal (container not running)'].map(
+      (label) => line!.indexOf(label),
+    );
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('lists attention lines with a count, and the registry hint with its counts', async () => {
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: ACTIVE,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Attention (1)');
+    expect(output).toContain('svc-a · uncommitted changes');
+    expect(output).toContain('[:registry]');
+  });
+
+  it('lists drift lines after the protected-branch line and before the other items, counted in the header', async () => {
+    const [first, second] = ACTIVE.services;
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: {
+        ...ACTIVE,
+        services: [
+          { ...first!, branch: 'main', drift: 'drifted', workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } } },
+          { ...second!, branch: 'development', protectedBranch: true, drift: 'drifted' },
+        ],
+        others: [{ service: 'svc-o', path: '/r/o', branch: null, expectedBranch: 'develop', drift: 'drifted' }],
+      },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Attention (4)');
+    const order = [
+      'svc-b · on protected branch development',
+      'svc-a · on main, expected feat/x (EDT member)',
+      'svc-b · on development, expected feat/x (EDT member)',
+      'svc-o · on detached HEAD, expected develop (other service)',
+    ].map((line) => output.indexOf(line));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('shows single success lines when nothing needs attention and the registry is clear', async () => {
+    const clean = { ...ACTIVE, services: [{ ...ACTIVE.services[0]!, workingTree: { ok: true, value: { uncommitted: false, mergeInProgress: false, rebaseInProgress: false } } }] };
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: clean,
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: { repoCount: 3, invalidManifests: 0, unreachable: 0, listingIssues: 0 },
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Attention (0)');
+    expect(output).toContain('Nothing needs attention.');
+    expect(output).toContain('Registry healthy.');
+  });
+
+  it('prompts to create or choose an EDT when none is active, keeping the registry section', async () => {
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { status: 'no-active-edt', edt: null, services: [], others: [] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('No active EDT.');
+    expect(output).toContain('[e] ▸ Choose or create an EDT');
+    expect(output).toContain('3 repos');
+  });
+
+  it('shows [R] retry on a failed section without touching the other one', async () => {
+    const store = seed({ dashboardServicesStatus: 'error', dashboardRegistryStatus: 'ready', dashboardRegistry: REGISTRY });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('Failed to load services.');
+    expect(output).toContain('[R] retry');
+    expect(output).toContain('3 repos');
+  });
+
+  it('does not render the sections behind the empty-registry prompt', async () => {
+    const store = seed({ registryEmpty: true, dashboardServicesStatus: 'ready', dashboardServices: ACTIVE });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain(EMPTY_REGISTRY_MESSAGE);
+    expect(output).not.toContain('svc-a');
+  });
+
+  it('says so when the active EDT has no services', async () => {
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { status: 'active', edt: { ulid: 'e1', topic: 'topic-a', serviceCount: 0 }, services: [] },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+    });
+    const output = await renderToString(<DashboardZone useStore={store} />);
+    expect(output).toContain('This EDT has no services.');
+  });
+
+  it('keeps the banner and clips the service list at the minimum terminal height', async () => {
+    const many = Array.from({ length: 20 }, (_, index) => ({ ...ACTIVE.services[0], service: `svc-${index}`, path: `/r/${index}` }));
+    const store = seed({
+      dashboardServicesStatus: 'ready',
+      dashboardServices: { ...ACTIVE, edt: { ulid: 'e1', topic: 'topic-a', serviceCount: 20 }, services: many },
+      dashboardRegistryStatus: 'ready',
+      dashboardRegistry: REGISTRY,
+      dashboardUpdatedAt: Date.now(),
+    });
+    const output = await renderToString(
+      <BoundsProvider columns={80} rows={9}>
+        <DashboardZone useStore={store} />
+      </BoundsProvider>,
+    );
+    for (const line of BANNER_LINES) {
+      expect(output).toContain(line);
+    }
+    expect(output).toContain('svc-0');
+    expect(output).not.toContain('svc-19');
+    expect(output).toContain('more below');
+  });
+
+  it('probes nothing behind the empty-registry prompt', async () => {
+    const calls: string[] = [];
+    const store = createAppStore();
+    store.setState({ registryEmpty: true, checkRegistryEmpty: noopCheck, loadDashboard: async () => void calls.push('load') });
+    await renderToString(<DashboardZone useStore={store} />);
+    expect(calls).toEqual([]);
   });
 });

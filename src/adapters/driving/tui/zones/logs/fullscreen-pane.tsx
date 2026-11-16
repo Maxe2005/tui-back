@@ -4,22 +4,21 @@ import { Box, Text } from 'ink';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { formatHint } from '../../shared/components/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
-import { useElementSize } from '../../shared/hooks/use-element-size.js';
-import { colors, spacing } from '../../shared/theme/theme.js';
+import { FullscreenFrame } from '../../shared/components/fullscreen-frame.js';
+import { ScrollableOutput } from '../../shared/components/scrollable-output.js';
+import { colors } from '../../shared/theme/theme.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { LogsPaneData } from '../../store/app-store.js';
 import {
-  computeLineRowCount,
   formatHealthLabel,
-  formatLogFilterSpec,
+  formatLogFilterScope,
   formatLogLine,
   healthBadgeState,
-  isDefaultLogFilterSpec,
+  isDefaultLogFilterScope,
   isRestartingDisplay,
   resolveEffectiveLines,
   restartHintVerb,
-  sliceVisibleWindow,
-  type LogFilterSpec,
+  type LogFilterScope,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
@@ -48,27 +47,21 @@ export function FullscreenPane({
   wrapLines: boolean;
   visibleLines: number;
   contentWidth: number;
-  globalFilter: LogFilterSpec;
+  globalFilter: LogFilterScope;
   engaged: boolean;
-  ownFilter: LogFilterSpec | null;
+  ownFilter: LogFilterScope | null;
   restartMode?: RestartMode;
 }) {
-  const [contentRef, measuredSize] = useElementSize();
-  const rowBudget = measuredSize !== null ? measuredSize.height : visibleLines;
-  const resolvedContentWidth = measuredSize !== null ? Math.max(measuredSize.width, 1) : contentWidth;
   const lines = resolveEffectiveLines(pane, visibility, globalFilter, engaged, ownFilter);
-  const windowLines = sliceVisibleWindow(lines, pane?.scrollOffset ?? 0, rowBudget, (line) =>
-    computeLineRowCount(formatLogLine(line, visibility.showTimestamps), resolvedContentWidth, wrapLines),
-  );
   // A pane whose buffered lines the stdout/stderr toggles or filters hide entirely must read
   // differently from "no lines have arrived yet" — otherwise a user who toggled off both streams,
   // or set an aggressive filter, is misleadingly told the stream itself is empty.
   const allLinesHiddenByFilters = (pane?.lines.length ?? 0) > 0 && lines.length === 0;
   const paneHealth = pane?.health ?? 'down';
   const displayHealth = isRestartingDisplay(pane?.restarting ?? false, paneHealth) ? 'restarting' : paneHealth;
-  const noContainer = paneHealth === 'no-container';
+  const noContainer = paneHealth === 'no-container' || pane?.noContainer === true;
   return (
-    <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+    <FullscreenFrame>
       <Box flexDirection="row">
         <Box flexGrow={1} minWidth={0}>
           <Text color={colors.accent} bold wrap="truncate-end">
@@ -93,26 +86,28 @@ export function FullscreenPane({
       {pane?.noMoreHistory && (pane?.scrollOffset ?? 0) > 0 ? <DimAnnotation text="no more history" /> : null}
       {!engaged ? (
         <DimAnnotation text="global filter: off" />
-      ) : !isDefaultLogFilterSpec(globalFilter) ? (
-        <DimAnnotation text={`global filter: ${formatLogFilterSpec(globalFilter)}`} />
+      ) : !isDefaultLogFilterScope(globalFilter) ? (
+        <DimAnnotation text={`global filter: ${formatLogFilterScope(globalFilter)}`} />
       ) : null}
-      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterSpec(ownFilter)}`} /> : null}
-      <Box ref={contentRef} flexDirection="column" flexGrow={1} minHeight={0}>
-        {windowLines.length === 0 && !pane?.streamError ? (
-          noContainer ? (
+      {ownFilter !== null ? <DimAnnotation text={`pane filter: ${formatLogFilterScope(ownFilter)}`} /> : null}
+      <ScrollableOutput
+        lines={lines}
+        offset={pane?.scrollOffset ?? 0}
+        wrap={wrapLines}
+        fallbackRows={visibleLines}
+        fallbackWidth={contentWidth}
+        format={(line) => formatLogLine(line, visibility.showTimestamps)}
+        color={(line) => (line.stream === 'stderr' ? colors.error : colors.text)}
+        placeholder={
+          pane?.streamError ? null : noContainer ? (
             <StateLine kind="empty" subject="logs" text="No container — no logs" />
           ) : allLinesHiddenByFilters ? (
             <StateLine kind="empty" subject="lines" text="All lines hidden by filters" />
           ) : (
             <StateLine kind="loading" verb="Waiting for" subject="logs" />
           )
-        ) : null}
-        {windowLines.map((line, index) => (
-          <Text key={index} color={line.stream === 'stderr' ? colors.error : colors.text} wrap={wrapLines ? 'wrap' : 'truncate-end'}>
-            {formatLogLine(line, visibility.showTimestamps)}
-          </Text>
-        ))}
-      </Box>
-    </Box>
+        }
+      />
+    </FullscreenFrame>
   );
 }
