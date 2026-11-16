@@ -66,247 +66,35 @@ import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelecti
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { UpdateIncidentsDialog } from './update-incidents-dialog.js';
 import { formatQuitRunCounts, reduceIncidentListKey } from './update-incidents.logic.js';
+import {
+  UPDATE_ALL_REPOS_PROMPT,
+  UPDATE_ALL_RUNNING_LABEL,
+  UPDATE_IDLE_PROMPT,
+  UPDATE_INTERRUPTED_OFFER,
+  UPDATE_NO_RECAP,
+  UPDATE_QUIT_CONFIRM_BODY,
+  UPDATE_QUIT_CONFIRM_BODY_ALL,
+  UPDATE_QUIT_CONFIRM_TITLE,
+  UPDATE_RUNNING_LABEL,
+  UPDATE_SELECTION_RUNNING_LABEL,
+  formatUpdateSummary,
+  resolveQuitConfirm,
+  resolveUpdateTone,
+  resolveUpdateTrigger,
+  shouldConfirmQuit,
+  shouldOfferRerun,
+} from './update-zone.resolvers.logic.js';
+import { UPDATE_BLOCKER_MENU_ESCAPE, blockerMenuItems } from './update-zone.blockers.logic.js';
+
+// Public surface unchanged: everything the pure modules export is still importable from here.
+export * from './update-zone.resolvers.logic.js';
+export * from './update-zone.blockers.logic.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the "UPDATE" title row, the list
 // column's section header/loading/error lines) subtracted from the window size before the
 // service list's BoundedList sees it — an approximation, like edts-zone.tsx's
 // EDTS_SERVICE_LISTS_CHROME_ROWS.
 const UPDATE_SERVICE_LIST_CHROME_ROWS = 8;
-
-export const UPDATE_IDLE_PROMPT = formatHints([['M', 'EDT update'], ['P', 'this service'], ['Enter', 'service actions']]);
-export const UPDATE_ALL_REPOS_PROMPT = formatHint(['A', 'all-repos maintenance mode (every managed repo)']);
-export const UPDATE_INTERRUPTED_OFFER = `Last update was interrupted — ${formatHint(['Enter', 'service actions'])}`;
-export const UPDATE_NO_RECAP = 'No update has run yet in this session.';
-export const UPDATE_RUNNING_LABEL = 'Updating member services…';
-export const UPDATE_ALL_RUNNING_LABEL = 'Updating all managed repos…';
-export const UPDATE_SELECTION_RUNNING_LABEL = 'Updating selected services…';
-export const UPDATE_QUIT_CONFIRM_TITLE = 'QUIT MID-RUN';
-export const UPDATE_QUIT_CONFIRM_BODY = 'A group update is in progress. Quit and mark this EDT interrupted?';
-export const UPDATE_QUIT_CONFIRM_BODY_ALL = 'A group update is in progress. Quit without marking anything interrupted?';
-
-// Collapses a detail message to one line — git/runtime stderr is multi-line, and a row is
-// always exactly one rendered line.
-function oneLine(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
-}
-
-// A per-service outcome row — glyph always paired with the outcome word (never color
-// alone), followed by the kebab-case code and the human detail message.
-export function formatUpdateRow(row: GroupUpdateRepoResult): string {
-  switch (row.outcome) {
-    case 'updated':
-      return `✔ ${row.service} — updated`;
-    case 'skipped': {
-      const code = row.detail?.code ?? 'skipped';
-      const message = row.detail?.message !== undefined ? `: ${oneLine(row.detail.message)}` : '';
-      return `○ ${row.service} — skipped (${code})${message}`;
-    }
-    case 'failed': {
-      const code = row.detail?.code ?? 'failed';
-      const message = row.detail?.message !== undefined ? `: ${oneLine(row.detail.message)}` : '';
-      return `✖ ${row.service} — failed (${code})${message}`;
-    }
-  }
-}
-
-export function resolveUpdateTone(results: readonly GroupUpdateRepoResult[]): SummaryTone {
-  if (results.some((row) => row.outcome === 'failed')) {
-    return 'error';
-  }
-  if (results.some((row) => row.outcome === 'skipped')) {
-    return 'warning';
-  }
-  return 'success';
-}
-
-// The DetailPane summary line for a finished run: every targeted service is named by count
-// with an outcome from the closed set — none silently absent. The all-repos scope renders
-// its own title variant (no EDT topic to name).
-export function formatUpdateSummary(topic: string, results: readonly GroupUpdateRepoResult[]): string {
-  const updated = results.filter((row) => row.outcome === 'updated').length;
-  const skipped = results.filter((row) => row.outcome === 'skipped').length;
-  const failed = results.filter((row) => row.outcome === 'failed').length;
-  if (topic === 'all-repos') {
-    return `All repos: ${updated} updated, ${skipped} skipped, ${failed} failed.`;
-  }
-  return `EDT "${topic}": ${updated} updated, ${skipped} skipped, ${failed} failed.`;
-}
-
-// The next idle render offers a re-run when the active EDT entry carries `interrupted`
-// (an abandoned run) — a re-run is a true resume in effect because applied merges are
-// no-ops.
-export function shouldOfferRerun(
-  edts: readonly EdtRegistryEntry[] | null,
-  activeEdt: string | null,
-): boolean {
-  if (edts === null || activeEdt === null) {
-    return false;
-  }
-  return edts.some((entry) => entry.ulid === activeEdt && entry.status === 'interrupted');
-}
-
-export function shouldConfirmQuit(input: string, updateStatus: string): boolean {
-  return input === 'q' && updateStatus === 'running';
-}
-
-// The separate all-repos trigger: `a` while idle/done/error opens the confirm gate (never
-// while a run is in flight — a second trigger is rejected by the core lock instead).
-export function shouldOpenAllConfirm(input: string, updateStatus: string): boolean {
-  return (input === 'a' || input === 'A') && updateStatus !== 'running';
-}
-
-// The EDT-scoped main trigger — `m` while idle/done/error opens the config pre-scoped to every
-// EDT member (never while a run is in flight — a second trigger is rejected by the same guard as
-// every other scope).
-export function shouldOpenEdtConfig(input: string, updateStatus: string): boolean {
-  return (input === 'm' || input === 'M') && updateStatus !== 'running';
-}
-
-// The single-service trigger — `p` while idle/done/error opens the config pre-scoped to the
-// highlighted row (the dispatcher ignores it when no row is selected).
-export function shouldOpenSingleConfig(input: string, updateStatus: string): boolean {
-  return (input === 'p' || input === 'P') && updateStatus !== 'running';
-}
-
-// The trigger mapping — `a` opens the pre-run configuration screen pre-scoped to every managed
-// repo, `m` to the EDT members, `p` to the highlighted row; `Enter` opens the per-service action menu
-// for the selected row (Update this service / Clean restart / Cancel). No trigger ever starts
-// an unconfigured run. Pure because the zone's `useInput` is never driven in tests, so an inline
-// mapping would let a wiring regression back to a direct `runGroupUpdate` go undetected.
-export type UpdateTriggerAction = 'open-edt-config' | 'open-all-config' | 'open-service-menu' | 'open-single-config' | 'none';
-
-export function resolveUpdateTrigger(
-  input: string,
-  key: { return?: boolean },
-  updateStatus: string,
-): UpdateTriggerAction {
-  if (updateStatus === 'running') {
-    return 'none';
-  }
-  if (shouldOpenEdtConfig(input, updateStatus)) {
-    return 'open-edt-config';
-  }
-  if (shouldOpenAllConfirm(input, updateStatus)) {
-    return 'open-all-config';
-  }
-  if (shouldOpenSingleConfig(input, updateStatus)) {
-    return 'open-single-config';
-  }
-  if (key.return === true) {
-    return 'open-service-menu';
-  }
-  return 'none';
-}
-
-export type AllConfirmDecision = 'confirm' | 'cancel';
-
-// The all-repos modal gate: [Enter] confirms (the run starts), [Esc] cancels. Anything
-// else is ignored so a stray keystroke never launches the wider-blast-radius run.
-export function resolveAllConfirm(input: string, key: { return?: boolean; escape?: boolean }): AllConfirmDecision | null {
-  if (key.return === true) {
-    return 'confirm';
-  }
-  if (key.escape === true) {
-    return 'cancel';
-  }
-  return null;
-}
-
-export type QuitConfirmDecision = 'confirm' | 'cancel';
-
-export function resolveQuitConfirm(input: string, key: { return?: boolean; escape?: boolean }): QuitConfirmDecision | null {
-  if (key.return === true) {
-    return 'confirm';
-  }
-  if (key.escape === true) {
-    return 'cancel';
-  }
-  return null;
-}
-
-// The assisted-resolution menu — the seam's fixed choices rendered as `ListRow`s navigated like
-// the EDT zone's `SERVICE_ACTION_MENU_ITEMS` (arrows/Home/End + Enter). `Escape` answers
-// `cancel-repo`: the least-destructive unblock (the repo is skipped, the rest of the run
-// continues) so a stray keystroke never cancels the run.
-export const UPDATE_BLOCKER_TITLE = 'UPDATE BLOCKED';
-
-export type UpdateBlockerMenuValue = 'stash' | 'edited' | 'cancel-repo' | 'cancel-run' | 'fetch';
-
-export type UpdateBlockerMenuItem = MenuItem<UpdateBlockerMenuValue>;
-
-export const UPDATE_BLOCKER_MENU_ESCAPE: UpdateBlockerMenuValue = 'cancel-repo';
-
-export const UPDATE_BLOCKER_MENU_ITEMS: readonly UpdateBlockerMenuItem[] = Object.freeze([
-  { value: 'stash', label: 'Stash changes and continue' },
-  { value: 'edited', label: 'Open in editor, then retry' },
-  { value: 'cancel-repo', label: 'Cancel this repo (continue with the rest)' },
-  { value: 'cancel-run', label: 'Cancel the whole run' },
-]);
-
-// The `shared-types` phase failure reuses the same four seam values under phase-specific labels:
-// `edited` is retry, `cancel-repo` skips the phase (the remaining services update), `cancel-run`
-// aborts the run (the remaining services are cancelled). Escape stays the least destructive.
-export const SHARED_TYPES_PHASE_MENU_ITEMS: readonly UpdateBlockerMenuItem[] = Object.freeze([
-  { value: 'edited', label: 'Retry the shared-types phase' },
-  { value: 'cancel-repo', label: 'Skip shared-types handling (update the rest)' },
-  { value: 'cancel-run', label: 'Abort the run (cancel the remaining services)' },
-]);
-
-// The choices offered for a blocker kind. A merge conflict drops `stash`: git refuses to
-// stash unmerged paths, and once the conflict is resolved and staged a stash silently
-// shelves the resolution and clears the merge (the retry then re-conflicts) — the editor
-// retry and the two cancels are the only meaningful exits there.
-export function blockerMenuItems(kind: IncidentBlocker['kind'], branch?: string): readonly UpdateBlockerMenuItem[] {
-  if (kind === 'shared-types-phase-failed') {
-    return SHARED_TYPES_PHASE_MENU_ITEMS;
-  }
-  if (kind === 'unpushed-commits') {
-    // No stash (nothing is dirty); the plain fetch comes first as the proposed way out.
-    return [
-      { value: 'fetch', label: `Simple fetch (git fetch origin ${branch ?? '<branch>'}) and continue` },
-      { value: 'edited', label: 'Open in editor, then retry' },
-      { value: 'cancel-repo', label: 'Cancel this service (continue with the rest)' },
-      { value: 'cancel-run', label: 'Cancel the whole run' },
-    ];
-  }
-  return kind === 'merge-conflict' ? UPDATE_BLOCKER_MENU_ITEMS.filter((item) => item.value !== 'stash') : UPDATE_BLOCKER_MENU_ITEMS;
-}
-
-// The modal body names the blocked service, its repo path, and the blocker kind —
-// mid-merge/mid-rebase rows stress that the pre-existing state is reported, never
-// auto-touched.
-export function formatBlockerBody(blocker: IncidentBlocker): string {
-  switch (blocker.kind) {
-    case 'dirty-worktree':
-      return `"${blocker.service}" has uncommitted changes (${blocker.repoPath}).`;
-    case 'merge-conflict':
-      return `"${blocker.service}" hit a merge conflict (${blocker.repoPath}).${blocker.autoResolveNote !== undefined ? ` Issue: ${blocker.autoResolveNote}` : ''}`;
-    case 'mid-merge':
-      return `"${blocker.service}" is already mid-merge from an earlier run (${blocker.repoPath}) — left as-is.`;
-    case 'unpushed-commits': {
-      const commits = blocker.commits ?? [];
-      return `There are unpushed commits on branch ${blocker.branch ?? '?'} of service "${blocker.service}", which prevents a clean fetch. How to proceed? Unpushed: ${commits.join(' | ')}`;
-    }
-    case 'mid-rebase':
-      return `"${blocker.service}" is already mid-rebase from an earlier run (${blocker.repoPath}) — rebases are never touched.`;
-    case 'shared-types-phase-failed':
-      return `shared-types phase failed after "${blocker.service}": ${blocker.message} No other service starts until you choose.`;
-  }
-}
-
-// A re-presented merge conflict (a failed stash/edit attempt) carries core's retry counter
-// and the reason the last attempt did not settle it — rendered under the body so the
-// endless resolve-and-retry loop stays legible. Null on a first prompt.
-export function formatBlockerRetry(blocker: IncidentBlocker): string | null {
-  if (blocker.kind === 'shared-types-phase-failed') {
-    return null;
-  }
-  if (blocker.retry === undefined || blocker.retry <= 0) {
-    return null;
-  }
-  const reason = blocker.retryReason !== undefined && blocker.retryReason !== '' ? ` — ${blocker.retryReason}` : '';
-  return `↻ Retry #${String(blocker.retry)} still blocked${reason}`;
-}
 
 // The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
 // key focuses a service. Tests pass `initialRecap={false}` to start on a service.
