@@ -59,6 +59,7 @@ import { SharedTypesTab } from './settings/shared-types-tab.js';
 import { ServicesTab } from './settings/services-tab.js';
 import { GeneralTab } from './settings/general-tab.js';
 import { UpdateTab } from './settings/update-tab.js';
+import { PaletteTab } from './settings/palette-tab.js';
 export * from './settings/footer-context.logic.js';
 export * from './settings/edts.logic.js';
 export * from './settings/logs.logic.js';
@@ -692,53 +693,8 @@ export function SettingsScreen({
           <UpdateTab settings={settings} cursor={updateCursor} />
         ) : null}
 
-        {tab === 'command-palette' && paletteGroup === null ? (
-          <Box flexDirection="column">
-            {PALETTE_SETTINGS_GROUPS.map((group, index) => {
-              const highlighted = index === paletteGroupCursor;
-              return (
-                <Box key={group.id} flexDirection="row">
-                  <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                  <Text color={highlighted ? colors.accent : colors.text} wrap="truncate-end">{group.label}</Text>
-                </Box>
-              );
-            })}
-          </Box>
-        ) : null}
-
-        {tab === 'command-palette' && paletteGroup === 'grid-max-rows' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Command grid max rows: <Text color={colors.accent}>{settings.commandPalette.gridMaxRows}</Text>
-            </Text>
-            <DimAnnotation text="Rows of the command grid before it scrolls." />
-          </Box>
-        ) : null}
-
-        {tab === 'command-palette' && paletteGroup === 'history-size' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">
-              Command history size: <Text color={colors.accent}>{settings.commandPalette.historySize}</Text>
-            </Text>
-            <DimAnnotation text={`Steps of ${FILTER_HISTORY_SIZE_STEP} entries.`} />
-          </Box>
-        ) : null}
-
-        {tab === 'command-palette' && paletteGroup === 'history-dedup' ? (
-          <Box flexDirection="column">
-            <CheckboxListItem
-              label="Deduplicate command history"
-              state={settings.commandPalette.historyDedup ? 'checked' : 'unchecked'}
-            />
-            <DimAnnotation text="On: a repeated command moves to the front. Off: only a repeat of the latest is merged." />
-          </Box>
-        ) : null}
-
-        {tab === 'command-palette' && paletteGroup === 'clear-history' ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">Clear the command history</Text>
-            <DimAnnotation text="Empties the `:` bar's recall list; the filter histories are untouched." />
-          </Box>
+        {tab === 'command-palette' ? (
+          <PaletteTab settings={settings} paletteGroup={paletteGroup} paletteGroupCursor={paletteGroupCursor} />
         ) : null}
 
         {tab === 'logs' && logsGroup === null ? (
