@@ -99,7 +99,7 @@ export function emptyPane(repoPath: string, service: string): LogsPaneData {
 // resubscribes the log stream itself.
 export const LOGS_HEALTH_POLL_INTERVAL_MS = 5000;
 // Listed-row health poll cadence — one shared timer covering every listed row (mirroring
-// update-slice.ts), not one timer per pane. Same 5s by convention, not by coupling.
+// update-slice.health.ts), not one timer per pane. Same 5s by convention, not by coupling.
 export const LOGS_LISTED_HEALTH_POLL_INTERVAL_MS = 5000;
 
 export type LogsPaneShortcut = 'restart' | 'ide';

@@ -217,7 +217,7 @@ export type UpdateSlice = {
   // branch below, so a partial-scope run never drops another service's earlier outcome.
   lastServiceOutcomes: Record<string, GroupUpdateRepoResult>;
   // Starts (or restarts, on a changed service list) a one-shot-then-interval poll of every
-  // given repoPath's container health — like logs-slice.ts's pollPaneHealth/
+  // given repoPath's container health — like logs-slice.health.ts's pollPaneHealth/
   // startHealthPolling, but one poll cycle covers every service in `edtsBranches` at once
   // rather than one timer per pane.
   startUpdateHealthPolling: (repoPaths: readonly string[]) => void;

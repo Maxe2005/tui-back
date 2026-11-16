@@ -79,7 +79,7 @@ export function createUpdateHealthActions(
         pollAll(ctx.pollingRepoPaths);
       }, UPDATE_HEALTH_POLL_INTERVAL_MS);
       // Never keep the process alive for a poll timer alone (tests, abnormal exits) —
-      // mirrors logs-slice.ts's own startHealthPolling.
+      // mirrors logs-slice.health.ts's own startHealthPolling.
       const unrefable = ctx.healthPollTimer as unknown as { unref?: () => void };
       if (typeof unrefable.unref === 'function') {
         unrefable.unref();

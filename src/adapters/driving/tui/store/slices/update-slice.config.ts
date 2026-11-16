@@ -64,7 +64,7 @@ export function createUpdateConfigActions(
     const loaded = deps ? await deps.manifest.load(repoPath) : null;
     if (loaded === null || !loaded.ok) {
       // Unreadable manifest: claim nothing (the run reports the load failure on its own row).
-    return { sourceBranch: 'development', migrationDeclared: false, recipeDeclared: false };
+      return { sourceBranch: 'development', migrationDeclared: false, recipeDeclared: false };
     }
     return {
       sourceBranch: loaded.data.sharedBranch,

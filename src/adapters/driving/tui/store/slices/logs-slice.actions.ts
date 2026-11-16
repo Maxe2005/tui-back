@@ -217,11 +217,11 @@ export function createLogsServiceActions(
           return current ? { logsPanes: { ...state.logsPanes, [repoPath]: { ...current, notice } } } : {};
         });
       patchNotice(null);
-      const ctx = { editorCommand: get().settings.general.editorCommand };
+      const ideOptions = { editorCommand: get().settings.general.editorCommand };
       const opened: Result<void> = serviceActions
-        ? serviceActions.openInIde(repoPath, ctx)
+        ? serviceActions.openInIde(repoPath, ideOptions)
         : deps?.editor
-          ? openInIde(deps.editor, repoPath, ctx)
+          ? openInIde(deps.editor, repoPath, ideOptions)
           : err('editor-unavailable', 'No editor port is wired — cannot open the repo in an editor.');
       if (!opened.ok) {
         patchNotice(opened.error.message.split('\n')[0] ?? opened.error.message);
