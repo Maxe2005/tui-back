@@ -987,3 +987,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-3-split-the-settings-screen-by-tab.md`
   summary: settings-screen.tsx still holds all state and the single useInput (~726 lines); per-tab key resolvers/state hooks and a shared CursorRow component would shrink it and the ~15 duplicated cursor-glyph rows.
   evidence: wc -l settings-screen.tsx = 726 after the split; spec marks extracting key handlers as Ask First.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-8-split-the-update-and-logs-slices.md`
+  summary: `update-slice.config.ts` (~537 lines) and `update-slice.run.ts` (~615 lines) still exceed the ~400-line target.
+  evidence: Review of story 12.8; the spec's file list put run/shared-types hook/auto-resolve and the config flow in single modules, so they were left whole and justified in their headers.
