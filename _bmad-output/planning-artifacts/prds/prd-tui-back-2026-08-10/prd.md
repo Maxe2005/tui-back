@@ -198,6 +198,7 @@ Assigning a protected branch as an EDT's "own" branch for a service is rejected.
 - Attempting to register a protected branch to an EDT fails with a clear explanation, before any git write happens.
 - Renaming a protected branch, in either direction, is refused.
 - A branch registered as another EDT's own branch for that service can be neither attached nor renamed. Every branch chooser shows which EDT uses it before the developer picks it.
+- The only exception is the preconfigured shared-branches EDT (FR-53), which sits on shared branches by definition and cannot be created by hand (added 2026-11-16).
 
 > Amended 2026-09-28 (Sprint Change Proposal, Stories 2.42–2.43): the fixed `development`/preprod/prod set is replaced by the per-service manifest list, and the cross-EDT consequence is added.
 
@@ -232,6 +233,7 @@ its git branch alone or delete it too — informed by that branch's merge status
 configured shared branch) and whether it carries uncommitted work.
 
 **Consequences (testable):**
+- The shared-branches EDT (FR-53) can never be deleted (`edt-system-readonly`).
 - Deleting an EDT while it is the active one is rejected with a clear message to switch away
   first — the tool never auto-switches on the developer's behalf to make room for a deletion.
 - The per-service branch-disposition choice ("leave as-is" / "delete, including any uncommitted
@@ -482,6 +484,15 @@ When a consumer's update merge conflicts and the only conflicting hunk in `packa
 #### FR-52: Manifest-declared generated files regenerated on update conflict (added 2026-11-16, Sprint Change Proposal 2)
 
 A service's manifest may declare generated files (a glob) and the command that rebuilds them (`generatedFiles`, e.g. barrel `index.ts` files rebuilt by `npm run barrels`). When an update's merge conflicts, and once every other conflict is settled, the tool re-runs the command in place of hand-resolution, verifies no conflict marker remains, stages the regenerated files and completes the merge; otherwise the conflict is left to the developer with the command's error. Applies to the TUI, the CLI and MCP updates; FR-31's `shared-types` auto-resolution applies there too (Story 4.9). Files the command touches outside the declared globs are never staged.
+
+#### FR-53: Shared-branches EDT (added 2026-11-16, Sprint Change Proposal 3)
+
+A preconfigured "shared branches" EDT gathers every managed service on its `sharedBranch`. It cannot be created, modified, renamed or deleted by hand; it is shown among the EDTs, and can be activated, only while a setting enables it (off by default). Activating it is an ordinary switch (FR-6): uncommitted work is preserved, every repo goes to its shared branch, and the post-switch restart (FR-37) applies. Its update brings every shared branch up to date in one go (fast-forward, then the usual migrations and restarts); an optional quick action fast-forwards the local shared branches without switching, leaving the active EDT and every worktree untouched. The setting cannot be turned off while the EDT is active.
+
+**Consequences (testable):**
+- With the setting off, no listing (TUI, CLI, MCP) shows the EDT and nothing else changes.
+- Every mutation of it fails `edt-system-readonly` before any write; uncommitted work cannot be adopted into it.
+- The only git writes it permits on a shared branch are the checkout and the fast-forward; commit, merge, rename, delete and push stay rejected.
 
 ---
 

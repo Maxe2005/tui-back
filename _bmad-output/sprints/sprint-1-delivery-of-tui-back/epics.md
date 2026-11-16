@@ -61,6 +61,7 @@ FR-49 (added 2026-11-05): The log filter is an ordered list of rules (text/regex
 FR-50 (added 2026-11-16): Each EDT keeps its own favorite routes (repo, method, path), shown in a pane above the routes list; one key adds or removes the selected or open route; the last fired routes of the session are listed with their status and the last request can be re-fired in one keypress.
 FR-51 (added 2026-11-16): The favorite routes of an EDT can be fired together (smoke run) and reported as a status table; mutating requests are never sent unless explicitly included.
 FR-52 (added 2026-11-16, Sprint Change Proposal 2): A service's manifest may declare generated files and the command that rebuilds them (`generatedFiles`); an update merge conflict that touches only such files is settled by re-running the command, in the TUI, the CLI and MCP.
+FR-53 (added 2026-11-16, Sprint Change Proposal 3): A preconfigured, non-creatable "shared branches" EDT, enabled from the settings, gathers every managed service on its shared branch; activating it switches every repo to its shared branch and its update refreshes them all (a quick fast-forward without switching is also available).
 
 ### NonFunctional Requirements
 
@@ -190,6 +191,7 @@ FR-49: Epic 5 - Log filter action (show/hide) and target (line/match), stored in
 FR-50: Epic 6 - Favorite routes per EDT, recents, quick re-fire (added 2026-11-16 — Stories 6.11, 6.12, 6.13; UX of Stories 6.10, 6.16, 6.17)
 FR-51: Epic 6 - Smoke run of the EDT's favorite routes (added 2026-11-16 — Stories 6.14, 6.15)
 FR-52: Epic 4 - Manifest-declared generated files regenerated on update conflict (added 2026-11-16 — Stories 4.8, 4.9)
+FR-53: Epic 2 - Shared-branches EDT: preconfigured, settings-enabled, switch + update on every shared branch (added 2026-11-16 — Stories 2.46, 2.47, 2.48)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
@@ -232,7 +234,7 @@ A developer can launch the tool, see the full navigation shell (top bar, six zon
 
 ### Epic 2: EDT Workspace Management
 A developer can create, modify, and safely switch between EDTs (no uncommitted work ever lost), with branch/divergence visibility across every managed repo, and the guarantee that non-member repos stay on `development`.
-**FRs covered:** FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-37 (Story 2.44, added 2026-10-14)
+**FRs covered:** FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-37 (Story 2.44, added 2026-10-14; clarified by Story 2.45), FR-53 (Stories 2.46–2.48, added 2026-11-16)
 **Implementation notes:** Per-EDT SQLite storage (AD-7), centralized git branch-scope safety gate (AD-8), EDTs zone (UX-DR20), blast-radius isolation (NFR-2).
 
 ### Epic 3: Group Update & Migrations
@@ -2348,6 +2350,57 @@ As a developer, I want a switch to restart only the services that really changed
 - **Given** the switch sequence **Then** FR-37's consequence text is satisfied literally: only services whose branch changed in the switch and that declare a container are restarted.
 
 Implementation notes: in `switchMemberRepo` / `switchNonMemberRepo`, compare `git.currentBranch` (already read during classification, `switch.ts:480`) with the resolved target; if equal and the dirty plan is `none` and no target stash exists (`hasStash` is already a non-destructive existence check, `GitPort`), return `unchanged` before `checkoutExpectedBranch`. Verify `restoreStash` reports whether it actually restored (today `Result<void>`); extend the result if not. `CHANGED_OUTCOMES` stays `switched|adopted|discarded`. Tests: same-branch repo not restarted; same-branch with stash restore restarted; mixed switch (3 repos: 1 moved, 1 already there, 1 no container); CLI and MCP envelope.
+
+### Story 2.46: Shared-Branches EDT: Model, Guards, Setting, Switch & Update
+
+> Added 2026-11-16 (Sprint Change Proposal 3). Adds FR-53; adds AD-27; amends AD-8 and FR-7. Builds on Stories 2.39–2.41 (switch core), 2.44/2.45 (restart) and Epic 3 (update).
+
+As a developer, I want a preconfigured EDT that puts every service on its shared branch and updates them together, so that I can refresh all my shared branches in one move without creating or maintaining an EDT for it.
+
+**Acceptance Criteria:**
+
+- **Given** `settings.yaml` **When** it has no `edts.sharedBranchesEdtEnabled` **Then** the default is `false`, nothing changes anywhere, and an invalid value falls back to the default with the usual warning.
+- **Given** the setting is `true` **When** the EDT list is read (TUI, `tui-back edt list`, MCP) **Then** it contains one extra entry, topic `Shared branches`, `kind: "system-shared"`, whose members are every registered managed repo on its manifest `sharedBranch`; with the setting `false` the entry is absent from every listing and `edt switch shared-branches` fails `edt-not-found`.
+- **Given** a repo is registered or removed, or a manifest's `sharedBranch` changes **When** the EDT is listed again **Then** it reflects it at once; `edts.yaml` is never written by any of this.
+- **Given** any mutation of the system EDT (modify topic, rename, add / remove a member, delete, or creating an EDT named like it) **When** attempted from the TUI, the CLI or MCP **Then** it fails `edt-system-readonly` with an explanation, before any write.
+- **Given** the system EDT **When** switching to it **Then** the normal switch runs: each repo's dirty work is handled per the resolution dialog / flags, then each repo is checked out to its `sharedBranch` (fetched first if absent locally); the AD-8 gate accepts those checkouts (and only those) through the carve-out; per-repo outcomes and the optional post-switch restart (FR-37, only services whose checkout moved — Story 2.45) work unchanged.
+- **Given** the system EDT is the outgoing EDT **When** a switch finds a dirty repo **Then** "adopt into the outgoing EDT" is unavailable (stash or discard only), the dialog says why, and the CLI rejects `--adopt-branch` for it before touching anything.
+- **Given** the system EDT is active **When** a group update runs with the EDT scope **Then** every service pulls its shared branch (fast-forward semantics of today's `pull`), with the usual migrate / restart toggles, concurrency, live tracking and assisted resolution; a service not on its shared branch (checked out elsewhere since the switch) is reported as such and skipped, never switched silently.
+- **Given** the setting is turned off **When** the system EDT is the active EDT **Then** the change is refused with a message naming the switch to make first; when it is not active, it disappears immediately.
+- **Given** the active-EDT pointer names the system EDT while the setting is off **When** the app starts **Then** it falls back to no active EDT with a warning, nothing is written to any repo.
+- **Given** the AD-8 carve-out **When** tested **Then** commit, merge, rename, delete and push on a shared branch are still rejected for the system EDT, and the same checkout is still rejected for an ordinary EDT.
+
+**Implementation notes:** build order, one commit each: setting + schema → `shared-edt.ts` pure builder → registry adapter synthesis + readonly guards → AD-8 carve-out + tests → switch dirty-resolution rule (no adopt) → update on the system EDT (skip-if-not-on-shared) → CLI `edt list` field and rejections → MCP schema (additive). Reuse `branch-owners` (it must not list the system EDT as "using" a shared branch in branch choosers, Story 2.43).
+
+### Story 2.47: Shared-Branches EDT in the EDTs Zone and the Settings Screen
+
+> Added 2026-11-16 (Sprint Change Proposal 3). Depends on Story 2.46.
+
+As a developer, I want to switch the feature on in the settings and then see and activate the EDT like any other, so that using it needs no new concept in the interface.
+
+**Acceptance Criteria:**
+
+- **Given** the `:settings` EDTs tab **When** rendered **Then** a toggle "Show the shared-branches EDT" (off by default, `Space` toggles, persisted and applied live, UX-DR7 hints) is shown with a one-line description; turning it off while the EDT is active shows the refusal message inline.
+- **Given** the setting is on **When** the EDTs zone renders **Then** the system EDT appears in the list with a distinct marker (`shared` badge, text, not colour alone) and sorts first or last (decided in the spec), a detail pane showing its members and each service's shared branch, and its recent actions like any EDT.
+- **Given** the system EDT is selected **When** the zone's actions are offered **Then** `switch` (the existing dialog, with the adopt choice hidden per Story 2.46) and `update` are available; modify, rename, member editing and delete are not offered, and their keys show the `edt-system-readonly` explanation instead of acting.
+- **Given** the EDT-creation wizard and the quick-pick switch **When** opened **Then** the wizard never offers the system EDT as a template or a name, and the quick-pick lists it only while enabled.
+- **Given** the system EDT is active **When** the footer and the Update zone render **Then** they show the active EDT as `Shared branches` and the update scope label "all shared branches"; the Dashboard and branch-owners views treat it as any EDT without flagging its branches as "used by another EDT".
+- **Given** the keybinding help (`?`) **When** the zone is focused **Then** every key shown for the system EDT row is declared in `footer-contexts.ts`.
+
+### Story 2.48: Fast-Forward the Shared Branches Without Switching (optional, backlog)
+
+> Added 2026-11-16 (Sprint Change Proposal 3), at Max's follow-up: the update on the shared-branches EDT runs fast-forward **and** migrations; when only speed matters, a quick fast-forward without switching is useful. Depends on Story 2.46; ship it after 2.47 if the daily use confirms the need.
+
+As a developer, I want to bring every local shared branch up to date without leaving my current EDT, so that I can start a new EDT or compare against fresh shared branches in seconds.
+
+**Acceptance Criteria:**
+
+- **Given** the shared-branches EDT is enabled **When** the quick fast-forward is triggered (a key on its row in the EDTs zone, keys declared in `footer-contexts.ts`; `tui-back edt fast-forward-shared`; the matching MCP tool, class `write`) **Then** each managed service's **local shared branch** is fast-forwarded from `origin` (`GitPort.fetch(repoPath, sharedBranch)`), with the active EDT, every working tree and every checked-out branch left untouched.
+- **Given** a service whose shared branch is the one checked out **When** its worktree is clean **Then** it is fast-forwarded in place (`pull`, fast-forward only); **When** it is dirty, or the branch has diverged (local commits not on origin) **Then** it is reported `skipped` with its reason (`dirty` / `diverged`), never forced, never stashed.
+- **Given** a service whose shared branch is absent locally **Then** it is fetched into a new local branch; a missing or unreachable `origin` is reported `failed` for that service only.
+- **Given** the run **When** it ends **Then** per-service rows (`fast-forwarded` / `already up to date` / `skipped (reason)` / `failed`) are shown in a bounded list (AD-19) and emitted in the AD-3 envelope; no migration and no restart is run (that is what the full update on the active EDT is for); the exit code is non-zero if any row `failed`.
+- **Given** the AD-8 gate **When** the fast-forward runs **Then** it passes through a second narrow carve-out for the system EDT's quick action: fast-forward of a local shared branch from its own `origin` counterpart only; no other write on a protected branch is allowed.
+- **Given** the setting is off **Then** the action is unavailable in the TUI and refused by the CLI and MCP with `edt-not-found`.
 
 ## Epic 3: Group Update & Migrations
 

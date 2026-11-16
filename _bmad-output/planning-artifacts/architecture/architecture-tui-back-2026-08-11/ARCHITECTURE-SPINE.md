@@ -125,6 +125,8 @@ graph LR
 
 > Amended 2026-09-28 (Sprint Change Proposal, Stories 2.42–2.43): protected set is manifest-defined per service; renames are gated against other EDTs' ownership.
 
+> Amended 2026-11-16 (Sprint Change Proposal 3, Stories 2.46/2.48): for an EDT with `kind = 'system-shared'` (AD-27) the gate accepts a service's `sharedBranch` as that EDT's own branch for checkout and for the fast-forward pull only, and the quick action may fast-forward a local shared branch from its own `origin` counterpart; commit, merge, rename, delete, push and every other write on a protected branch stay rejected. The carve-out keys on the entry's kind read from the registry at write time, never on a caller-supplied value.
+
 > Amended 2026-09-24 (Sprint Change Proposal, Story 2.39): `GitPort.discardAll` is the single destructive, non-branch-scoped write; it is guarded structurally (explicit per-repo `discard` resolution, still-dirty re-check, sole caller `switch.ts`) rather than by the branch-scope gate.
 
 ### AD-9 — Single-TUI enforcement plus a per-EDT/repo action lock
@@ -287,4 +289,10 @@ graph LR
 - **Binds:** FR-52, FR-31
 - **Prevents:** stack- or service-specific merge rules entering `core/` or a compiled-in module when a manifest line can carry them.
 - **Rule:** a repo declares `generatedFiles: [{glob, command}]` in its manifest (AD-4). On an update merge conflict, core runs the declared command (once per distinct command, in the repo directory, through a command-runner port shaped like `RestartPort`) only when every other conflicted path is settled, verifies no conflict marker remains in the matched files, and stages only files matching a declared glob (`GitPort.stagePaths`, AD-8). Resolvers compose behind the single `AutoResolveConflict` seam: each settles only its own files, the row is `auto-resolved` only if together they settled every conflicted path. Core never names a language, a tool or `shared-types`; a stack-specific understanding of a file (a lockfile, a dependency line) stays in a compiled-in module (AD-5, AD-18) behind the same seam. The CLI, MCP and TUI share one builder of the composed resolver. The command is manifest text run in its own repo, the same trust model as `migrationCommand` / `restartCommands`.
+
+### AD-27 — System EDTs are synthesized, never persisted (added 2026-11-16, SCP 3)
+
+- **Binds:** FR-53, FR-6, FR-7, FR-24
+- **Prevents:** a hand-made or stale copy of the "shared branches" EDT drifting from the registry of managed repos, and a second EDT claiming shared branches.
+- **Rule:** the shared-branches EDT is built in memory from `RegistryPort` + each repo's manifest (`members = {service, repoPath, branch: sharedBranch}`), appended by the EDT registry adapter's `list()` only while `edts.sharedBranchesEdtEnabled` is on, and never written to `edts.yaml`. `EdtRegistryEntry.kind = 'system-shared'` marks it (fixed ulid `shared-branches`); every mutation (create under its name, modify, rename, add/remove member, delete) fails `edt-system-readonly` before any write. Core switch and update treat it as any EDT, except that uncommitted work cannot be adopted into it. Turning the setting off while it is the active EDT is refused; an active-EDT pointer naming it while the setting is off falls back to no active EDT with a warning.
 
