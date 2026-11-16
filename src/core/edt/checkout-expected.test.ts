@@ -87,4 +87,24 @@ describe('checkoutExpectedBranch', () => {
     expect(onCheckoutFailed).toHaveBeenCalledWith('prepared', { code: 'git-checkout-error', message: 'refused' });
     expect(events).toEqual(['gate', 'exists', 'prepare', 'checkout', 'undo']);
   });
+
+  it('skips the checkout, after preparing, when skipCheckout resolves true', async () => {
+    const { git, events, prepare, onCheckoutFailed } = setup();
+    const skipCheckout = vi.fn(async () => true);
+
+    const result = await checkoutExpectedBranch({
+      git,
+      repoPath: '/r/a',
+      spec: { kind: 'shared', branch: 'develop' },
+      prepare,
+      skipCheckout,
+      onResolveFailed: () => 'x',
+      onCheckoutFailed,
+    });
+
+    expect(result).toEqual({ ok: true, value: 'prepared' });
+    expect(skipCheckout).toHaveBeenCalledWith('prepared');
+    expect(events).toEqual(['exists', 'prepare']);
+    expect(git.checkout).not.toHaveBeenCalled();
+  });
 });

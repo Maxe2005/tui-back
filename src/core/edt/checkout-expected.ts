@@ -42,6 +42,9 @@ export interface CheckoutExpectedInput<P, R> {
   spec: TargetBranchSpec;
   // Runs after the destination resolved, before the checkout (switch: its dirty plan).
   prepare: () => Promise<CheckoutStep<P, R>>;
+  // Optional: when it resolves true after `prepare`, the repo already sits where it should and
+  // no checkout is run (switch: the `unchanged` outcome).
+  skipCheckout?: (prepared: P) => Promise<boolean>;
   onResolveFailed: (error: ResultError) => R;
   // Undoes what `prepare` did, when it can, and builds the caller's row.
   onCheckoutFailed: (prepared: P, error: ResultError) => Promise<R>;
@@ -57,6 +60,9 @@ export async function checkoutExpectedBranch<P, R>(input: CheckoutExpectedInput<
   }
   const prepared = await input.prepare();
   if (!prepared.ok) {
+    return prepared;
+  }
+  if (input.skipCheckout !== undefined && (await input.skipCheckout(prepared.value))) {
     return prepared;
   }
   const checkedOut = await git.checkout(repoPath, spec.branch);
