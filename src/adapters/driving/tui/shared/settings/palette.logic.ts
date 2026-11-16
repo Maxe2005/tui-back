@@ -33,8 +33,8 @@ export function parseGridMaxRowsDigit(input: string): number | null {
 }
 
 // Logs tab: settings.logs.filterHistorySize/filterHistoryGridMaxRows, same clamp/adjust idiom
-// as bufferSize/gridMaxRows above. filterHistorySize has no digit preset — Left/Right (see the
-// group model below) is its only adjustment.
+// as bufferSize (logs.logic.ts) and gridMaxRows (above). filterHistorySize has no digit preset —
+// Left/Right is its only adjustment.
 export const FILTER_HISTORY_SIZE_STEP = 5;
 export { MIN_INPUT_HISTORY_SIZE as MIN_FILTER_HISTORY_SIZE, MAX_INPUT_HISTORY_SIZE as MAX_FILTER_HISTORY_SIZE };
 

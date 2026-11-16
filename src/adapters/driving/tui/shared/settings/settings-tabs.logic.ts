@@ -17,8 +17,8 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   services: 'Services',
 };
 
-// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> Logs -> Update -> st -> General order
-// (SETTINGS_TABS' declared order) — Left and Tab both step forward, simpler than zones.ts's
+// Left/Right/Tab all cycle in SETTINGS_TABS' declared order (General -> ... -> Services -> General);
+// `direction` is 1 forward (Right/Tab), -1 back (Left/Shift+Tab). Simpler than zones.ts's
 // nextZoneId since every settings tab is always reachable.
 export function nextSettingsTab(current: SettingsTab, direction: 1 | -1): SettingsTab {
   const index = SETTINGS_TABS.indexOf(current);
