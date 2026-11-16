@@ -23,7 +23,7 @@ import { isProtectedBranch } from './shared-branches.js';
 
 export interface SwitchEdtRepoResult {
   service: string;
-  outcome: 'switched' | 'adopted' | 'discarded' | 'failed';
+  outcome: 'switched' | 'adopted' | 'discarded' | 'unchanged' | 'failed';
   // `discardedPaths`: on a `discarded` row, exactly the paths the discard removed (captured
   // before `discardAll`, untracked directories expanded to files).
   // `adoptedBranch`: on an `adopted` row, the branch the work was adopted onto in the
@@ -536,6 +536,8 @@ type DirtyPlan =
 // The executed plan's effect, carried to the checkout step.
 interface Prepared {
   outcome: 'switched' | 'adopted' | 'discarded';
+  // True when the dirty plan was `none` (the working tree was left untouched).
+  untouched: boolean;
   // The outgoing-tagged stash this repo's work sits in, when one was created by this switch.
   stashTag?: string;
   adoptedInto?: EdtRegistryEntry;
@@ -608,14 +610,14 @@ async function executeDirtyPlan(
   const { git } = context;
   switch (plan.kind) {
     case 'none':
-      return { ok: true, value: { outcome: 'switched' } };
+      return { ok: true, value: { outcome: 'switched', untouched: true } };
     case 'stash': {
       const tag = stashMessage(plan.outgoingUlid);
       const stashed = await git.stashSave(repoPath, tag);
       if (!stashed.ok) {
         return { ok: false, row: failed(service, stashed.error) };
       }
-      return { ok: true, value: { outcome: 'switched', stashTag: tag } };
+      return { ok: true, value: { outcome: 'switched', stashTag: tag, untouched: false } };
     }
     case 'discard': {
       const captured = await git.listDirtyPaths(repoPath, { expandUntracked: true });
@@ -623,7 +625,7 @@ async function executeDirtyPlan(
         return { ok: false, row: failed(service, captured.error) };
       }
       if (captured.data.length === 0) {
-        return { ok: true, value: { outcome: 'switched' } };
+        return { ok: true, value: { outcome: 'switched', untouched: false } };
       }
       if (plan.confirmedPaths !== undefined) {
         const confirmed = new Set(plan.confirmedPaths);
@@ -656,7 +658,7 @@ async function executeDirtyPlan(
           },
         };
       }
-      return { ok: true, value: { outcome: 'discarded', discardedPaths: captured.data } };
+      return { ok: true, value: { outcome: 'discarded', discardedPaths: captured.data, untouched: false } };
     }
     case 'adopt':
       return adoptDirtyWork(context, service, repoPath, plan.outgoing, plan.branch);
@@ -714,7 +716,7 @@ async function adoptDirtyWork(
     return { ok: false, row: await restoreAndFail(git, service, repoPath, tag, registered.error, note) };
   }
 
-  return { ok: true, value: { outcome: 'adopted', stashTag: tag, adoptedInto: outgoing, adoptedBranch: branch } };
+  return { ok: true, value: { outcome: 'adopted', untouched: false, stashTag: tag, adoptedInto: outgoing, adoptedBranch: branch } };
 }
 
 // Restores the stash this switch just created (onto the branch the repo still sits on) and
@@ -733,6 +735,17 @@ async function restoreAndFail(
     ? ' Uncommitted work restored in place.'
     : ` Restoring the stash also failed (${restored.error.message}) — the work is still stashed under "${tag}".`;
   return failed(service, { code: error.code, message: `${error.message}.${where}${note}` });
+}
+
+// True when the repo already sits on `target` (a failed or detached read counts as "no": the
+// caller then keeps today's checkout path).
+async function isAlreadyOn(git: GitPort, repoPath: string, target: string): Promise<boolean> {
+  const current = await git.currentBranch(repoPath);
+  return current.ok && current.data !== '' && current.data !== 'HEAD' && current.data === target;
+}
+
+function unchangedRow(service: string, branch: string): SwitchEdtRepoResult {
+  return { service, outcome: 'unchanged', detail: { code: 'unchanged', message: `already on \`${branch}\`` } };
 }
 
 // Checkout failed after the dirty plan ran: undo what can be undone and say what was kept.
@@ -826,6 +839,8 @@ async function switchMemberRepo(
 ): Promise<SwitchEdtRepoResult> {
   const { git, target } = context;
   const { service, repoPath, branch } = member;
+  let alreadyThere = false;
+  let skipped = false;
 
   // Resolve (and gate) the destination before touching the working tree, so a missing member
   // branch never follows an irreversible discard (or a needless stash).
@@ -834,14 +849,28 @@ async function switchMemberRepo(
     repoPath,
     spec: { kind: 'member', branch, edtUlid: target.ulid },
     prepare: async () => {
+      // Read before the dirty plan (which never changes the branch).
+      alreadyThere = await isAlreadyOn(git, repoPath, branch);
       const plan = await planDirtyWork(context, service, repo, resolution);
       return plan.ok ? executeDirtyPlan(context, service, repoPath, plan.value) : plan;
+    },
+    skipCheckout: async (prepared) => {
+      if (!alreadyThere || !prepared.untouched) {
+        return false;
+      }
+      // A target-tagged stash would be popped: the working tree changes, so not `unchanged`.
+      const stashed = await git.hasStash(repoPath, stashMessage(target.ulid));
+      skipped = stashed.ok && !stashed.data;
+      return skipped;
     },
     onResolveFailed: (error) => failed(service, error),
     onCheckoutFailed: (prepared, error) => failAfterPrepare(git, service, repoPath, prepared, error),
   });
   if (!checkedOut.ok) {
     return checkedOut.row;
+  }
+  if (skipped) {
+    return unchangedRow(service, branch);
   }
 
   const popped = await git.restoreStash(repoPath, stashMessage(target.ulid));
@@ -875,6 +904,8 @@ async function switchNonMemberRepo(
     return plan.row;
   }
 
+  let skipped = false;
+
   // Resolve the destination before touching the working tree, so a failed fetch never
   // follows an irreversible discard.
   const checkedOut = await checkoutExpectedBranch({
@@ -882,11 +913,19 @@ async function switchNonMemberRepo(
     repoPath,
     spec: { kind: 'shared', branch: sharedBranch },
     prepare: () => executeDirtyPlan(context, service, repoPath, plan.value),
+    // Non-members never pop a stash: only the (untouched) plan matters.
+    skipCheckout: async (prepared) => {
+      skipped = prepared.untouched && (await isAlreadyOn(git, repoPath, sharedBranch));
+      return skipped;
+    },
     onResolveFailed: (error) => failed(service, error),
     onCheckoutFailed: (prepared, error) => failAfterPrepare(git, service, repoPath, prepared, error),
   });
   if (!checkedOut.ok) {
     return checkedOut.row;
+  }
+  if (skipped) {
+    return unchangedRow(service, sharedBranch);
   }
 
   return succeeded(service, checkedOut.value);
