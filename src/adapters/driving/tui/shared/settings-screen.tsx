@@ -46,21 +46,8 @@ import { StateLine } from './components/state-line.js';
 import { GLOBAL_RULES_KEY } from '../../../../core/logs/rule-sets.js';
 import { BoundedList } from './components/bounded-list.js';
 import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../core/edt/list.js';
-
-export type SettingsTab = 'general' | 'edts' | 'command-palette' | 'logs' | 'update' | 'shared-types' | 'services';
-
-// Services stays last: a new tab is appended, never inserted, so muscle memory for the others holds.
-export const SETTINGS_TABS: readonly SettingsTab[] = ['general', 'edts', 'command-palette', 'logs', 'update', 'shared-types', 'services'];
-
-export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
-  general: 'General',
-  edts: 'EDTs',
-  'command-palette': 'Command Palette',
-  logs: 'Logs',
-  update: 'Update',
-  'shared-types': 'st',
-  services: 'Services',
-};
+import { SETTINGS_LIST_CHROME_ROWS, SETTINGS_TABS, SETTINGS_TAB_LABELS, nextSettingsTab, resolveSettingsTabState, type SettingsTab } from './settings/settings-tabs.logic.js';
+export * from './settings/settings-tabs.logic.js';
 
 // Services tab: one "health check" checkbox per registered service (checked = enabled), listed
 // from the already-loaded EDT branch rows plus the manifests that failed to load. A service with
@@ -163,33 +150,6 @@ export function resolveSharedTypesSettingsKey(
     return { type: 'set-number', id: row.id, value: clampSharedTypesNumber(row.id, value - row.step) };
   }
   return { type: 'ignore' };
-}
-
-// Left/Right/Tab all cycle in the same General -> EDTs -> Command Palette -> Logs -> Update -> st -> General order
-// (SETTINGS_TABS' declared order) — Left and Tab both step forward, simpler than zones.ts's
-// nextZoneId since every settings tab is always reachable.
-export function nextSettingsTab(current: SettingsTab, direction: 1 | -1): SettingsTab {
-  const index = SETTINGS_TABS.indexOf(current);
-  return stepFocus(SETTINGS_TABS, SETTINGS_TABS[index] ?? SETTINGS_TABS[0]!, direction === 1 ? 'next' : 'back');
-}
-
-export type SettingsTabState = {
-  active: boolean;
-  labelColor: string;
-  backgroundColor: string;
-  bold: boolean;
-};
-
-// Mirrors zone-tab-bar.tsx's active/inactive treatment at a smaller scale — no
-// strikethrough/badge, since settings tabs are never manifest-gated or event-badged.
-export function resolveSettingsTabState(tab: SettingsTab, activeTab: SettingsTab): SettingsTabState {
-  const active = tab === activeTab;
-  return {
-    active,
-    labelColor: active ? colors.background : colors['text-dim'],
-    backgroundColor: active ? colors.accent : colors.background,
-    bold: active ? typography['active-tab'].bold : typography.label.bold,
-  };
 }
 
 // Command Palette tab: the grid rows per column. Clamped to a sane, always-positive range —
@@ -619,9 +579,6 @@ export type SettingsScreenProps = {
   // Production always starts browsing the row list (false).
   initialGeneralEditing?: boolean;
 };
-
-// Rows the settings frame, tab strip, heading and hint keep around a drill-down list.
-const SETTINGS_LIST_CHROME_ROWS = 14;
 
 export function SettingsScreen({
   useStore = useAppStore,
