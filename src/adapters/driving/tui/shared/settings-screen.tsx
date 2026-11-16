@@ -47,54 +47,9 @@ import { GLOBAL_RULES_KEY } from '../../../../core/logs/rule-sets.js';
 import { BoundedList } from './components/bounded-list.js';
 import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../core/edt/list.js';
 import { SETTINGS_LIST_CHROME_ROWS, SETTINGS_TABS, SETTINGS_TAB_LABELS, nextSettingsTab, resolveSettingsTabState, type SettingsTab } from './settings/settings-tabs.logic.js';
+import { buildServicesSettingsRows, resolveServicesSettingsKey } from './settings/services.logic.js';
+export * from './settings/services.logic.js';
 export * from './settings/settings-tabs.logic.js';
-
-// Services tab: one "health check" checkbox per registered service (checked = enabled), listed
-// from the already-loaded EDT branch rows plus the manifests that failed to load. A service with
-// no `healthUrl`, or whose manifest is unreadable, is listed but cannot be toggled.
-export type ServicesSettingsRow = {
-  key: string;
-  service: string;
-  // null = toggleable; otherwise the dim reason shown next to the disabled row.
-  disabledReason: string | null;
-};
-
-export const SERVICES_NO_HEALTH_URL_REASON = 'no healthUrl';
-export const SERVICES_MANIFEST_UNAVAILABLE_REASON = 'manifest unavailable';
-
-export function buildServicesSettingsRows(
-  branches: readonly Pick<ServiceBranchDivergence, 'service' | 'path' | 'healthUrl'>[] | null,
-  errors: readonly BranchDivergenceEntryError[],
-): ServicesSettingsRow[] {
-  const listed: ServicesSettingsRow[] = (branches ?? []).map((row) => ({
-    key: row.path,
-    service: row.service,
-    disabledReason: row.healthUrl !== undefined && row.healthUrl.trim() !== '' ? null : SERVICES_NO_HEALTH_URL_REASON,
-  }));
-  const unreadable: ServicesSettingsRow[] = errors.map((entry) => ({
-    key: entry.path,
-    // No manifest means no service name: the repo directory stands in for it.
-    service: entry.path.split('/').filter((part) => part !== '').pop() ?? entry.path,
-    disabledReason: SERVICES_MANIFEST_UNAVAILABLE_REASON,
-  }));
-  return [...listed, ...unreadable];
-}
-
-export type ServicesSettingsStep = { type: 'move'; cursor: number } | { type: 'toggle'; service: string } | { type: 'ignore' };
-
-// Up/Down move over every row (disabled ones included, so their reason can be read); Space
-// toggles only a toggleable row.
-export function resolveServicesSettingsKey(input: string, key: TextEditKey, cursor: number, rows: readonly ServicesSettingsRow[]): ServicesSettingsStep {
-  const moved = nextCursorForKey(key, cursor, rows.length);
-  if (moved !== null) {
-    return { type: 'move', cursor: moved };
-  }
-  const row = rows[cursor];
-  if (input === ' ' && row !== undefined && row.disabledReason === null) {
-    return { type: 'toggle', service: row.service };
-  }
-  return { type: 'ignore' };
-}
 
 // st tab: a flat Up/Down list of the shared-types zone's option defaults (Space toggles the
 // checkboxes) followed by the History view's two numeric bounds (+/- step them, always clamped to
