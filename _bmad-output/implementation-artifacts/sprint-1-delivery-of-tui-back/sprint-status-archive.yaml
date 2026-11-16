@@ -1,4 +1,4 @@
-# Archive of completed stories removed from sprint-status.yaml on 2026-10-14 and 2026-11-04.
+# Archive of completed stories removed from sprint-status.yaml on 2026-10-14, 2026-11-04, 2026-11-09 and 2026-11-16.
 # Historical record only — not read by any BMAD workflow. Live tracking stays in sprint-status.yaml.
 
 development_status:
@@ -159,3 +159,14 @@ development_status:
   9-9-dashboard-heal-action: done
   9-10-text-filter-in-the-keybinding-help: done
   9-11-per-service-health-check-toggle: done
+
+  # Archived 2026-11-16 (fourth trim; epics 10 and 11 stories).
+
+  10-1-repair-the-bin-one-binary-tui-routing: done
+  10-2-completion-bash-subcommand: done
+  10-3-install-subcommand: done
+  10-4-publication-install-sh-and-docs: done
+  11-1-mcp-skeleton-and-read-only-tools: done
+  11-2-authorization-gate-and-write-tools: done
+  11-3-destructive-tools-and-long-operations: done
+  11-4-install-registration-and-docs: done
