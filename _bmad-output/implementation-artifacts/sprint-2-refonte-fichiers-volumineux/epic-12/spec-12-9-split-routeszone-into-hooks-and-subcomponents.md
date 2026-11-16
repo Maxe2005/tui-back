@@ -2,7 +2,7 @@
 title: 'Split RoutesZone into Hooks and Subcomponents'
 type: 'refactor'
 created: '2026-11-16'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'c5c52fbacd45442cb735717ae3477431468ad2a6'
 review_loop_iteration: 0
 context:
@@ -67,3 +67,18 @@ Hooks share state through one context object built each render (`{ useStore, ...
 
 **Commands:**
 - `npx vitest run --configLoader runner && npm run typecheck && npm run depcheck` -- expected: green (modulo the known `:reset` failure)
+
+## Suggested Review Order
+
+- Composer: hook layering, early returns, footer context, subcomponent wiring.
+  [`routes-zone.tsx`](../../../../../src/adapters/driving/tui/zones/routes/routes-zone.tsx)
+- Hook layers (state, derived, tree, editor, pane actions, effects).
+  [`use-routes-state.ts`](../../../../../src/adapters/driving/tui/zones/routes/use-routes-state.ts)
+- Input dispatcher keeping the original priority order, and the per-mode key handlers.
+  [`use-routes-input.ts`](../../../../../src/adapters/driving/tui/zones/routes/use-routes-input.ts)
+- Guard path repoints (paths only, no assertion changed).
+  [`focus-navigation.guard.test.ts`](../../../../../src/adapters/driving/tui/shared/keys/focus-navigation.guard.test.ts)
+
+## Review Notes
+
+Three review layers ran. Applied: restored the key-handler rationale comments. Rejected/out of scope (verbatim-move refactor): shared-ctx design, duplicated tree/editor logic, async error handling, per-render cost, lint/formatting. Name uniqueness across layers verified: no collisions.

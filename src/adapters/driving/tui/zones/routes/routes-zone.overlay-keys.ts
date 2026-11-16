@@ -11,6 +11,8 @@ import { nextTextInputValue } from '../../shared/components/text-edit.js';
 import { resolveRouteIndex } from './routes-request.logic.js';
 import { routeKeyFor } from '../../shared/components/json-tree/model.js';
 
+// The destructive overwrite confirm owns every key: Enter overwrites, Esc backs out to the name
+// prompt, nothing else acts.
 export function handleOverwriteConfirmKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const { setOverwriteConfirm, attemptSave } = c;
   if (key.escape === true) {
@@ -86,7 +88,9 @@ export function handleSavedTabDeleteConfirmKey(c: RoutesZoneCtx, savedTabDeleteC
   return;
 }
 
-// The inline name prompt owns every key (see seg comment in the zone).
+// The inline name prompt owns every key: Enter saves (a colliding name stays put with an inline
+// error until Ctrl+O), Esc closes, arrows/tab never leave the field. Ctrl+O is offered only for a
+// confirmed duplicate — any other error re-saves with Enter.
 export function handleSavePromptKey(c: RoutesZoneCtx, savePrompt: NonNullable<RoutesZoneCtx['savePrompt']>, input: string, key: Key): void {
   const { setSavePrompt, setOverwriteConfirm, attemptSave } = c;
   if (key.escape === true) {
@@ -118,7 +122,12 @@ export function handleSavePromptKey(c: RoutesZoneCtx, savePrompt: NonNullable<Ro
   return;
 }
 
-// The saved picker owns every key while open.
+// The saved picker owns every key while open: Esc closes, `d` on a stale row (with an empty filter —
+// while filtering, the input owns every key) asks to delete it, Enter loads a fresh row (a stale row
+// is blocked with an error line), and everything else filters. Loading first moves the list cursor
+// onto the saved request's route — the pane always reflects the cursor — clearing the list filter
+// when it hides that route; a route from another repo cannot load here and stays in the picker
+// with an error line.
 export function handlePickerKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const {
     routes, setPaneFocus, setPaneTab, loadSavedRequest, setSelected, setFilter, setSection, setRowCursor,
