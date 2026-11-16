@@ -25,7 +25,7 @@ const REALIGN_USAGE =
   ' --service adds a service to the scope; --restart defaults to the realign.restartMode setting, none out of the box;' +
   ' exit 1 when a service fails or a restarted service ends failed, down or unhealthy)';
 
-// Hand-rolled flag parsing for `realign` (same style as runEdtSwitch): every flag, scope and
+// Hand-rolled flag parsing for `realign` (same style as runEdtSwitch in edt-switch.ts): every flag, scope and
 // restart value is validated here, service names by the use-case — both before any lock is
 // taken or any repo touched.
 async function runRealign(

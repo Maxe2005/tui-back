@@ -52,7 +52,7 @@ export function updateSubcommand(deps: SubcommandDeps): Subcommand {
       // explicit flags win.
       const loaded = await deps.settings.load();
       if (!loaded.ok) {
-        // stderr is separate from the stdout JSON envelope (same idiom as dispatch.ts).
+        // stderr is separate from the stdout JSON envelope (same idiom as dispatch.ts in the parent folder).
         console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
       } else if (loaded.data.warning !== null) {
         console.error(`tui-back: ${loaded.data.warning}`);
@@ -96,7 +96,7 @@ export function updateSubcommand(deps: SubcommandDeps): Subcommand {
           lock: deps.lock,
           registry: deps.registry,
           scope: 'all',
-          // Same toggles as the bare invocation above.
+          // Same toggles as the bare invocation (first groupUpdate call).
           runMigrations,
           cleanRestart,
           onUpdateBlocker: undefined,

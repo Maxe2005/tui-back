@@ -171,7 +171,7 @@ export function registrySubcommand(deps: SubcommandDeps): Subcommand {
   return {
     name: 'registry',
     usage: REGISTRY_USAGE,
-    // Verb-dispatch subcommand, same shape as `edt` above — `clean` is the only action, but
+    // Verb-dispatch subcommand, same shape as `edt` in edt.ts — `clean` and `validate` are the actions, but
     // the dispatch shape leaves room for another registry verb without renaming.
     run: async (args) => {
       if (args[0] === 'clean') {

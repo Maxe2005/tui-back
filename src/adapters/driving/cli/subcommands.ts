@@ -1,7 +1,7 @@
-// adapters/driving/cli/subcommands: the production subcommand registry (AD-2). Each entry is a
-// thin wrapper around one core use-case that also validates argument cardinality, so a typo'd
-// or excess argument is an explicit invalid-argument instead of being ignored.
-// assertUniqueSubcommandNames keeps a later entry from silently shadowing an earlier one.
+// adapters/driving/cli/subcommands: the production subcommand registry (AD-2). It assembles the
+// per-family factories of ./commands in a fixed order, then appends `install` and `completion`
+// (which close over the final list). assertUniqueSubcommandNames keeps a later entry from
+// silently shadowing an earlier one.
 import { err, ok } from '../../../core/result.js';
 import type { Subcommand } from './dispatch.js';
 import { generateBashCompletion } from './completion-spec.js';

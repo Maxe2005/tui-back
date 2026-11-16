@@ -14,7 +14,7 @@ const REQUEST_FIRE_USAGE =
   "tui-back request-fire <name> [--body <json>] [--query name=value]... [--header 'Name: value']... [--overwrite | --save-as <new>]";
 const REQUEST_DELETE_USAGE = 'tui-back request-delete <name>';
 
-// Hand-rolled `fire-request` flags (same dependency-free walk as `edt create` below).
+// Hand-rolled `fire-request` flags (same dependency-free walk as `edt create` in edt-create.ts).
 // `--body` takes JSON (unparsable → invalid-argument, at most once); `--query name=value` and
 // `--header 'Name: value'` repeat with distinct names (a repeated query name, or a header name
 // repeated in any case, is invalid-argument rather than silently overwritten or comma-merged);
