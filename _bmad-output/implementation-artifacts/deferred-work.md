@@ -987,3 +987,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-3-split-the-settings-screen-by-tab.md`
   summary: settings-screen.tsx still holds all state and the single useInput (~726 lines); per-tab key resolvers/state hooks and a shared CursorRow component would shrink it and the ~15 duplicated cursor-glyph rows.
   evidence: wc -l settings-screen.tsx = 726 after the split; spec marks extracting key handlers as Ask First.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-45-edt-switch-restart-only-services-whose-checkout-moved.md`
+  summary: Re-running an EDT switch after an interrupted or failed restart reports every repo `unchanged`, so containers still on the old checkout are never restarted.
+  evidence: `unchanged` rows are not restart targets by design (FR-37, story 2.45); a retry therefore cannot recover a restart that did not complete — needs a product decision (e.g. a standalone restart command or retry flag).
