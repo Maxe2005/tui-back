@@ -54,6 +54,8 @@ import { UPDATE_SETTINGS_ROWS, UPDATE_SETTINGS_ROW_HINTS, resolveUpdateSettingsK
 import { FILTER_HISTORY_SIZE_STEP, PALETTE_SETTINGS_GROUPS, type PaletteSettingsGroupId, adjustFilterHistoryGridMaxRows, adjustFilterHistorySize, adjustGridMaxRows, parseFilterHistoryGridMaxRowsDigit, parseGridMaxRowsDigit } from './settings/palette.logic.js';
 import { LOGS_CLEAR_ROWS, LOGS_CLEAR_ROW_LABELS, LOGS_RULES_ROWS, LOGS_RULES_ROW_LABELS, LOGS_SETTINGS_GROUPS, LOG_BUFFER_SIZE_STEP, type LogsRulesConfirm, type LogsSettingsGroupId, adjustLogBufferSize, parseLogBufferSizeDigit } from './settings/logs.logic.js';
 import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
+import { settingsFooterContext } from './settings/footer-context.logic.js';
+export * from './settings/footer-context.logic.js';
 export * from './settings/edts.logic.js';
 export * from './settings/logs.logic.js';
 export * from './settings/palette.logic.js';
@@ -62,61 +64,6 @@ export * from './settings/general.logic.js';
 export * from './settings/shared-types.logic.js';
 export * from './settings/services.logic.js';
 export * from './settings/settings-tabs.logic.js';
-
-const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | PaletteSettingsGroupId, FooterContextId> = {
-  'grid-max-rows': 'settings-adjust',
-  'history-size': 'settings-adjust',
-  'history-dedup': 'settings-toggle',
-  'hint-visibility': 'settings-toggle',
-  'action-types': 'settings-toggle',
-  'branch-dropdown-rows': 'settings-adjust',
-  'switch-restart': 'settings-toggle',
-  'realign-scope': 'settings-toggle',
-  'realign-restart': 'settings-toggle',
-  'heal-restart': 'settings-toggle',
-  'buffer-size': 'settings-adjust',
-  'start-with-history': 'settings-toggle',
-  'filter-history-size': 'settings-adjust',
-  'filter-history-grid': 'settings-adjust',
-  'filter-history-dedup': 'settings-toggle',
-  'restart-mode': 'settings-toggle',
-  'clear-history': 'settings-run',
-  'filter-rules': 'settings-rules',
-};
-
-// The footer context of the current tab and drill-down level: a text edit is a plain
-// confirm/cancel, a group list opens groups, and each group advertises its own control.
-export function settingsFooterContext(
-  tab: SettingsTab,
-  state: {
-    generalEditing: boolean;
-    edtsGroup: SettingsGroupId | null;
-    logsGroup: LogsSettingsGroupId | null;
-    paletteGroup?: PaletteSettingsGroupId | null;
-    // True while a Logs "persisted filter rules" action waits for its confirmation.
-    logsRulesConfirming?: boolean;
-  },
-): FooterContextId {
-  switch (tab) {
-    case 'general':
-      return state.generalEditing ? 'confirm' : 'settings-general';
-    case 'update':
-      return 'settings-update';
-    case 'command-palette':
-      return state.paletteGroup == null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.paletteGroup];
-    case 'edts':
-      return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
-    case 'shared-types':
-      return 'settings-shared-types';
-    case 'services':
-      return 'settings-services';
-    case 'logs':
-      if (state.logsGroup === 'filter-rules' && state.logsRulesConfirming === true) {
-        return 'settings-rules-confirm';
-      }
-      return state.logsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.logsGroup];
-  }
-}
 
 // Self-contained Esc handling (like command-bar.tsx's `onClose`): the drill-down state is local
 // to this component, so only it can decide whether Esc steps back a level or closes the whole
