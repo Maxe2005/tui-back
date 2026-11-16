@@ -627,6 +627,9 @@ export function summarizeActivationResults(results: readonly SwitchEdtRepoResult
       const paths = row.detail?.discardedPaths ?? [];
       return { service: row.service, message: `files overwritten (${paths.length}): ${paths.join(', ')} — then switched to its target branch` };
     }
+    if (row.outcome === 'unchanged') {
+      return { service: row.service, message: 'already on its target branch' };
+    }
     return { service: row.service, message: 'switched to its target branch' };
   });
 }
