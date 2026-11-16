@@ -2,7 +2,7 @@
 title: 'Split LogsZone into Hooks and Subcomponents'
 type: 'refactor'
 created: '2026-11-16'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'ad94fa62'
 review_loop_iteration: 0
 context:
@@ -39,3 +39,7 @@ All in `src/adapters/driving/tui/zones/logs/`.
 ## Verification
 
 - `npx vitest run --configLoader runner && npm run typecheck && npm run depcheck` -- logs zone 298/298 passing; full suite only the known `:reset` failure.
+
+## Review Notes
+
+Four layers ran. Applied: reindented `handlePaneKey`, removed dead trailing returns, restored handler comments and the `panes` marker, fixed JSX indentation. Rejected/out of scope (verbatim-move refactor): ctx key-collision assertions (names verified unique), `Pick`-narrowed handler contexts, list-handler dedup, extra unit tests, hypothetical future-enum guards. Noted: `useWindowSize` (Ink's resize listener effect) now registers before the zone's own effects; harmless. Single refactor commit kept because intermediate states do not typecheck.

@@ -45,7 +45,7 @@ development_status:
   12-7-split-the-zone-logic-modules: done
   12-8-split-the-update-and-logs-slices: done
   12-9-split-routeszone-into-hooks-and-subcomponents: done
-  12-10-split-logszone-into-hooks-and-subcomponents: review
+  12-10-split-logszone-into-hooks-and-subcomponents: done
   12-11-split-edtszone-into-hooks-and-subcomponents: backlog
   12-12-split-updatezone-into-hooks-and-subcomponents: backlog
   epic-12-retrospective: optional
