@@ -56,6 +56,7 @@ import { LOGS_CLEAR_ROWS, LOGS_CLEAR_ROW_LABELS, LOGS_RULES_ROWS, LOGS_RULES_ROW
 import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
 import { settingsFooterContext } from './settings/footer-context.logic.js';
 import { SharedTypesTab } from './settings/shared-types-tab.js';
+import { ServicesTab } from './settings/services-tab.js';
 export * from './settings/footer-context.logic.js';
 export * from './settings/edts.logic.js';
 export * from './settings/logs.logic.js';
@@ -678,30 +679,7 @@ export function SettingsScreen({
         ) : null}
 
         {tab === 'services' ? (
-          <Box flexDirection="column">
-            {servicesRows.length === 0 ? <StateLine kind="empty" subject="manifest services loaded" /> : null}
-            <BoundedList
-              items={servicesRows}
-              chromeRows={SETTINGS_LIST_CHROME_ROWS}
-              cursorIndex={servicesCursor}
-              renderItem={(row, index) => {
-                const highlighted = index === servicesCursor;
-                return (
-                  <Box key={row.key} flexDirection="row">
-                    <Text color={colors.accent} wrap="truncate-end">{highlighted ? '›' : ' '}</Text>
-                    <CheckboxListItem
-                      label={`${row.service} — health check`}
-                      selected={highlighted}
-                      state={settings.services.healthCheckDisabled.includes(row.service) ? 'unchecked' : 'checked'}
-                      disabled={row.disabledReason !== null}
-                      {...(row.disabledReason === null ? {} : { disabledReason: row.disabledReason })}
-                    />
-                  </Box>
-                );
-              }}
-            />
-            <DimAnnotation text="Unchecked: the service's healthUrl is never probed on this machine; its state comes from the container alone." />
-          </Box>
+          <ServicesTab settings={settings} rows={servicesRows} cursor={servicesCursor} />
         ) : null}
 
         {tab === 'general' ? (
