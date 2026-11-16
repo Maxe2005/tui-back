@@ -55,6 +55,7 @@ import { FILTER_HISTORY_SIZE_STEP, PALETTE_SETTINGS_GROUPS, type PaletteSettings
 import { LOGS_CLEAR_ROWS, LOGS_CLEAR_ROW_LABELS, LOGS_RULES_ROWS, LOGS_RULES_ROW_LABELS, LOGS_SETTINGS_GROUPS, LOG_BUFFER_SIZE_STEP, type LogsRulesConfirm, type LogsSettingsGroupId, adjustLogBufferSize, parseLogBufferSizeDigit } from './settings/logs.logic.js';
 import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
 import { settingsFooterContext } from './settings/footer-context.logic.js';
+import { SharedTypesTab } from './settings/shared-types-tab.js';
 export * from './settings/footer-context.logic.js';
 export * from './settings/edts.logic.js';
 export * from './settings/logs.logic.js';
@@ -673,24 +674,7 @@ export function SettingsScreen({
         {settingsWarning ? <DimAnnotation text={settingsWarning} /> : null}
 
         {tab === 'shared-types' ? (
-          <Box flexDirection="column">
-            {SHARED_TYPES_SETTINGS_ROWS.map((row, index) => (
-              <Box key={row.id} flexDirection="row">
-                <Text color={colors.accent} wrap="truncate-end">{index === sharedTypesCursor ? '›' : ' '}</Text>
-                {row.kind === 'checkbox' ? (
-                  <CheckboxListItem label={row.label} selected={index === sharedTypesCursor} state={settings.sharedTypes[row.id] ? 'checked' : 'unchecked'} />
-                ) : (
-                  <Text color={index === sharedTypesCursor ? colors.accent : colors.text} wrap="truncate-end">
-                    {row.label}: <Text color={colors.accent}>{settings.sharedTypes[row.id]}</Text>
-                  </Text>
-                )}
-              </Box>
-            ))}
-            {(() => {
-              const focused = SHARED_TYPES_SETTINGS_ROWS[sharedTypesCursor];
-              return focused?.kind === 'number' ? <DimAnnotation text={focused.hint} /> : null;
-            })()}
-          </Box>
+          <SharedTypesTab settings={settings} cursor={sharedTypesCursor} />
         ) : null}
 
         {tab === 'services' ? (
