@@ -2,7 +2,7 @@
 title: 'Split the Zone Logic Modules'
 type: 'refactor'
 created: '2026-11-16'
-status: 'in-review'
+status: 'done'
 baseline_commit: '2104932c11e0323be1a5d030b2caadb1f8da130d'
 review_loop_iteration: 0
 context:
@@ -71,3 +71,36 @@ Update (`zones/update/`): `update-zone.logic.ts` keeps status/rows/outcome forma
 - `initialCreateDialog` and `createPickerSession` stayed in `edts-zone.dialogs.logic.ts` (next to the other initialisers); `edts-zone.wizard.logic.ts` holds the wizard step state and `CreateDialogState`.
 - Cross-module helpers were exported so siblings can import them; the barrels therefore also expose them (harmless).
 - `npx vitest run --configLoader runner` was needed locally (default config bundling fails in this environment); full suite green except the known `app-shell` `:reset` test.
+
+## Suggested Review Order
+
+**Logs zone**
+
+- Barrel keeping the original import path; start here.
+  [`logs-zone.logic.ts:1`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.logic.ts#L1)
+
+- Largest module: filter model, ANSI-safe compile/apply (400 lines).
+  [`logs-zone.filter.logic.ts:1`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.filter.logic.ts#L1)
+
+- Filter history and editor dialog state.
+  [`logs-zone.filter-editor.logic.ts:1`](../../../../src/adapters/driving/tui/zones/logs/logs-zone.filter-editor.logic.ts#L1)
+
+**Edts zone**
+
+- Barrel over format, focus, modify, wizard and dialogs modules.
+  [`edts-zone.logic.ts:1`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.logic.ts#L1)
+
+- Dialog states and initialisers (412 lines, cohesive).
+  [`edts-zone.dialogs.logic.ts:1`](../../../../src/adapters/driving/tui/zones/edts/edts-zone.dialogs.logic.ts#L1)
+
+**Update zone**
+
+- Barrel plus status/recap/steps/report modules.
+  [`update-zone.logic.ts:1`](../../../../src/adapters/driving/tui/zones/update/update-zone.logic.ts#L1)
+
+- Pure code lifted out of the component; the tsx re-exports it.
+  [`update-zone.tsx:50`](../../../../src/adapters/driving/tui/zones/update/update-zone.tsx#L50)
+
+- Trigger/confirm resolvers and blocker menus.
+  [`update-zone.resolvers.logic.ts:1`](../../../../src/adapters/driving/tui/zones/update/update-zone.resolvers.logic.ts#L1)
+  [`update-zone.blockers.logic.ts:1`](../../../../src/adapters/driving/tui/zones/update/update-zone.blockers.logic.ts#L1)
