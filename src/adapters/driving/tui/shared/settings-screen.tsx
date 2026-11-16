@@ -53,6 +53,8 @@ import { EDITOR_COMMAND_PLACEHOLDER_TEXT, GENERAL_SETTINGS_ROWS, resolveGeneralS
 import { UPDATE_SETTINGS_ROWS, UPDATE_SETTINGS_ROW_HINTS, resolveUpdateSettingsKey } from './settings/update.logic.js';
 import { FILTER_HISTORY_SIZE_STEP, PALETTE_SETTINGS_GROUPS, type PaletteSettingsGroupId, adjustFilterHistoryGridMaxRows, adjustFilterHistorySize, adjustGridMaxRows, parseFilterHistoryGridMaxRowsDigit, parseGridMaxRowsDigit } from './settings/palette.logic.js';
 import { LOGS_CLEAR_ROWS, LOGS_CLEAR_ROW_LABELS, LOGS_RULES_ROWS, LOGS_RULES_ROW_LABELS, LOGS_SETTINGS_GROUPS, LOG_BUFFER_SIZE_STEP, type LogsRulesConfirm, type LogsSettingsGroupId, adjustLogBufferSize, parseLogBufferSizeDigit } from './settings/logs.logic.js';
+import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
+export * from './settings/edts.logic.js';
 export * from './settings/logs.logic.js';
 export * from './settings/palette.logic.js';
 export * from './settings/update.logic.js';
@@ -60,87 +62,6 @@ export * from './settings/general.logic.js';
 export * from './settings/shared-types.logic.js';
 export * from './settings/services.logic.js';
 export * from './settings/settings-tabs.logic.js';
-
-// EDTs tab: the hideable per-context action hints (formatAvailableActionsHint's contexts).
-export type HideableActionHint = { id: string; label: string };
-
-export const HIDEABLE_ACTION_HINTS: readonly HideableActionHint[] = [
-  { id: 'edts', label: `EDT selector — "${formatHint(['Enter', 'Switch'])}" / "${formatHint(['Enter', 'Modify'])}"` },
-  { id: 'edt-services', label: `EDT services — "${formatHint(['Enter', 'Remove / Change branch'])}"` },
-  { id: 'other-services', label: `Other services — "${formatHint(['Enter', 'Add to EDT'])}"` },
-];
-
-// Toggles `id` in `hidden`, never mutating the input array (Settings.edts.hiddenActionHints and
-// hiddenActionTypes are each a string[], not a Set). Shared by both EDTs checkbox groups.
-export function toggleHiddenHint(hidden: readonly string[], id: string): string[] {
-  return hidden.includes(id) ? hidden.filter((existing) => existing !== id) : [...hidden, id];
-}
-
-// The "Recent action types" group's rows — the literal `EdtActionLogEntry['actionType']`
-// domain, closed and hardcoded, never derived from `edtActionLog` at runtime (an EDT with no
-// `modify` entries yet must still offer to hide `modify`).
-export type HideableActionType = { id: string; label: string };
-
-export const HIDEABLE_ACTION_TYPES: readonly HideableActionType[] = [
-  { id: 'create', label: 'Create' },
-  { id: 'switch', label: 'Switch' },
-  { id: 'modify', label: 'Modify' },
-];
-
-// The EDTs tab's group-list level, ahead of its two checkbox lists (one flat list would
-// conflate two unrelated toggles).
-//
-// Branch autocomplete dropdown rows (shared BranchAutocompleteInput): the visible row count
-// before the `… N more` overflow line, with the gridMaxRows clamp/adjust/parse-digit idiom
-// (bounds from core's MIN/MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS, shared with the schema).
-export { MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS, MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS };
-
-export function clampBranchDropdownMaxRows(value: number): number {
-  return Math.min(Math.max(value, MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS), MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
-}
-
-export function adjustBranchDropdownMaxRows(current: number, direction: 'up' | 'down'): number {
-  return clampBranchDropdownMaxRows(current + (direction === 'up' ? 1 : -1));
-}
-
-// A typed digit sets the value directly (same value-set convention as parseGridMaxRowsDigit:
-// single digit 1-9 only; '0' is never valid and non-digits are ignored rather than appended).
-export function parseBranchDropdownMaxRowsDigit(input: string): number | null {
-  if (!/^[1-9]$/.test(input)) {
-    return null;
-  }
-  return clampBranchDropdownMaxRows(Number(input));
-}
-
-export type SettingsGroupId =
-  | 'hint-visibility'
-  | 'action-types'
-  | 'branch-dropdown-rows'
-  | 'switch-restart'
-  | 'realign-scope'
-  | 'realign-restart'
-  | 'heal-restart';
-
-export type SettingsGroup = { id: SettingsGroupId; label: string };
-
-export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
-  { id: 'hint-visibility', label: 'Hint visibility' },
-  { id: 'action-types', label: 'Recent action types' },
-  { id: 'branch-dropdown-rows', label: 'Branch dropdown rows' },
-  { id: 'switch-restart', label: 'Post-switch restart' },
-  { id: 'realign-scope', label: 'Realign default scope' },
-  { id: 'realign-restart', label: 'Post-realign restart' },
-  { id: 'heal-restart', label: 'Heal restart mode' },
-];
-
-const SWITCH_RESTART_LABELS: Record<SwitchRestartMode, string> = { none: 'None', simple: 'Simple restart', clean: 'Clean restart' };
-
-// Left/Right/Space cycle none → simple → clean (Left goes back).
-export { cycleSwitchRestartMode };
-
-const REALIGN_SCOPE_LABELS: Record<RealignScope, string> = { none: 'None', edt: 'EDT services', all: 'All' };
-
-export { cycleRealignScope };
 
 const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | PaletteSettingsGroupId, FooterContextId> = {
   'grid-max-rows': 'settings-adjust',
