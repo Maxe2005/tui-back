@@ -57,6 +57,7 @@ import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SET
 import { settingsFooterContext } from './settings/footer-context.logic.js';
 import { SharedTypesTab } from './settings/shared-types-tab.js';
 import { ServicesTab } from './settings/services-tab.js';
+import { GeneralTab } from './settings/general-tab.js';
 export * from './settings/footer-context.logic.js';
 export * from './settings/edts.logic.js';
 export * from './settings/logs.logic.js';
@@ -683,38 +684,7 @@ export function SettingsScreen({
         ) : null}
 
         {tab === 'general' ? (
-          <Box flexDirection="column">
-            <Box flexDirection="row">
-              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? '›' : ' '}</Text>
-              <CheckboxListItem
-                label="Enable 'q' to quit"
-                selected={GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut'}
-                state={settings.general.quitShortcutEnabled ? 'checked' : 'unchecked'}
-              />
-            </Box>
-            <Box flexDirection="row">
-              <Text color={colors.accent} wrap="truncate-end">{GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? '›' : ' '}</Text>
-              {generalEditing !== null ? (
-                <TextInputLine label="Editor command" value={generalEditing.value} cursor={generalEditing.cursor} focused />
-              ) : (
-                <Text color={GENERAL_SETTINGS_ROWS[generalCursor] === 'editor-command' ? colors.accent : colors.text} wrap="truncate-end">
-                  Editor command:{' '}
-                  {settings.general.editorCommand !== '' ? (
-                    <Text color={colors.accent}>{settings.general.editorCommand}</Text>
-                  ) : (
-                    <Text color={colors['text-dim']} wrap="truncate-end">{EDITOR_COMMAND_PLACEHOLDER_TEXT}</Text>
-                  )}
-                </Text>
-              )}
-            </Box>
-            {GENERAL_SETTINGS_ROWS[generalCursor] === 'quit-shortcut' ? (
-              <DimAnnotation text="Unchecked: 'q' types as a normal character; quit is still reachable via the :quit command." />
-            ) : generalEditing !== null ? (
-              <DimAnnotation text="<repo> is replaced by the repo path (appended when absent), e.g. code <repo>. Empty: $EDITOR, else vi." />
-            ) : (
-              <DimAnnotation text="Run by the Update zone's “Open in editor” choice on a blocked repo, e.g. code <repo>." />
-            )}
-          </Box>
+          <GeneralTab settings={settings} cursor={generalCursor} editing={generalEditing} />
         ) : null}
 
         {tab === 'update' ? (
