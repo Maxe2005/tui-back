@@ -37,9 +37,7 @@ import {
   listActiveRules,
   moveTreeSelection,
   parseRawJsonBuffer,
-  remapErrorsForDelete,
   removeActiveRule,
-  removeEntryAtPath,
   resolveAddParentPath,
   resolveTreeKeyAction,
   resolveTreeListBudget,
@@ -91,7 +89,6 @@ import {
   buildFireRequest,
   defaultRequestSection,
   nextRequestSection,
-  removeRequestRow,
   resolveFireBlock,
   resolveRouteIndex,
   seedRequestDraft,
@@ -790,22 +787,6 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setAddPrompt({ parentPath, input: { value: '', cursor: 0 }, error: null });
         return;
       }
-      case 'delete-entry': {
-        const frame = frameEditorTreeState(editorTreeState, draft);
-        const row = frame.rows[frame.selected];
-        if (row === undefined || row.path === '') {
-          return;
-        }
-        const result = removeEntryAtPath(draft, row.path);
-        if (!result.ok) {
-          return;
-        }
-        updateBodyDraft(routeKey, () => result.value);
-        // The removed subtree's errors drop; later array siblings remap down by one.
-        setBodyEditErrors(routeKey, remapErrorsForDelete(readEditorErrors(), row.path));
-        amendEditorTreeState((live) => ({ ...live, selected: editorWithClampedSelection(live, result.value) }));
-        return;
-      }
       case 'change-type': {
         const frame = frameEditorTreeState(editorTreeState, draft);
         const row = frame.rows[frame.selected];
@@ -1363,9 +1344,10 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         if (key.ctrl === true || key.meta === true) {
           return;
         }
-        // `s` saves the draft under a name (prefilled with the origin name when the draft
+        // `w` saves the draft under a name (prefilled with the origin name when the draft
         // came from a saved request); every inline sub-editor above already owns its keys.
-        if ((input === 's' || input === 'S') && paneTab === 'request') {
+        // Not `s`: that is the shared-types zone mnemonic.
+        if ((input === 'w' || input === 'W') && paneTab === 'request') {
           openSavePrompt();
           return;
         }
@@ -1544,11 +1526,6 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             setRowAddPrompt({ section: rowSection, input: { value: '', cursor: 0 }, error: null });
             return;
           }
-          if (rowSection !== 'params' && (input === 'd' || input === 'D') && rows[at] !== undefined && paneRouteKey !== null) {
-            updateRequestDraft(paneRouteKey, (previous) => ({ ...previous, [rowSection]: removeRequestRow(previous[rowSection], at) }));
-            setRowCursor(Math.max(0, Math.min(at, rows.length - 2)));
-            return;
-          }
           return;
         }
         // Response tab: Esc closes the rules panel first, then returns to Request (the draft is
@@ -1651,9 +1628,10 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
         setFilterEditing(true);
         return;
       }
-      // `s` opens the saved-request picker: Enter reloads a fresh row into the Request tab
-      // (stale rows render flagged and never load), `d` on a stale row deletes it.
-      if (input === 's' || input === 'S') {
+      // `p` opens the saved-request picker: Enter reloads a fresh row into the Request tab
+      // (stale rows render flagged and never load), `d` on a stale row deletes it. Not `s`:
+      // that is the shared-types zone mnemonic and switches zone.
+      if ((input === 'p' || input === 'P') && key.ctrl !== true && key.meta !== true) {
         openPicker();
         return;
       }

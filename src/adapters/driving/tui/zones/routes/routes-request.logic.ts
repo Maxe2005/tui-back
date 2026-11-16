@@ -162,10 +162,6 @@ export function addRequestRow(
   return { ok: true, rows: [...rows, { name: trimmed, value: '', required: false }] };
 }
 
-export function removeRequestRow(rows: readonly RequestRow[], index: number): RequestRow[] {
-  return rows.filter((_, candidate) => candidate !== index);
-}
-
 export function setRequestRowValue(rows: readonly RequestRow[], index: number, value: string): RequestRow[] {
   return rows.map((row, candidate) => (candidate === index ? { ...row, value } : row));
 }

@@ -241,11 +241,11 @@ export const FOOTER_CONTEXTS = {
   'routes-filter': { label: 'Routes filter', hints: [['Enter', 'apply'], ['Esc', 'clear']] },
   'routes-list': {
     label: 'Routes list',
-    hints: [['Enter', 'request'], ['/ f', 'filter'], ['s', 'saved'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['/ f', 'filter'], ['p', 'picker'], ['Home/End', 'jump']],
   },
   'routes-list-editable': {
     label: 'Routes list (body editable)',
-    hints: [['Enter', 'request'], ['/ f', 'filter'], ['s', 'saved'], ['e', 'edit body'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['/ f', 'filter'], ['p', 'picker'], ['e', 'edit body'], ['Home/End', 'jump']],
   },
   'routes-response-raw': {
     label: 'Routes response (raw)',
@@ -282,7 +282,6 @@ export const FOOTER_CONTEXTS = {
     label: 'Routes body editor',
     hints: [
       ...ROUTES_BODY_TREE,
-      ['d', 'delete'],
       ['t', 'type'],
       ['r', 'raw'],
       ['←/→', 'fold'],
@@ -295,7 +294,6 @@ export const FOOTER_CONTEXTS = {
     hints: [
       ...ROUTES_BODY_TREE,
       ['a', 'add'],
-      ['d', 'delete'],
       ['t', 'type'],
       ['r', 'raw'],
       ['←/→', 'fold'],
@@ -305,11 +303,11 @@ export const FOOTER_CONTEXTS = {
   },
   'routes-section': {
     label: 'Routes request section',
-    hints: [['Esc', 'list'], ['Tab', 'section'], ['s', 'save'], ...ROUTES_PANE_KEYS],
+    hints: [['Esc', 'list'], ['Tab', 'section'], ['w', 'save'], ...ROUTES_PANE_KEYS],
   },
   'routes-rows-readonly': {
     label: 'Routes request rows',
-    hints: [['Esc', 'list'], ['Tab', 'section'], [KEY_UP_DOWN, 'move'], ['Enter', 'edit'], ['s', 'save'], ...ROUTES_PANE_KEYS],
+    hints: [['Esc', 'list'], ['Tab', 'section'], [KEY_UP_DOWN, 'move'], ['Enter', 'edit'], ['w', 'save'], ...ROUTES_PANE_KEYS],
   },
   'routes-rows': {
     label: 'Routes request rows (editable)',
@@ -319,14 +317,13 @@ export const FOOTER_CONTEXTS = {
       [KEY_UP_DOWN, 'move'],
       ['Enter', 'edit'],
       ['a', 'add'],
-      ['d', 'delete'],
-      ['s', 'save'],
+      ['w', 'save'],
       ...ROUTES_PANE_KEYS,
     ],
   },
   'routes-rows-empty': {
     label: 'Routes request rows (empty)',
-    hints: [['Esc', 'list'], ['Tab', 'section'], ['a', 'add'], ['s', 'save'], ...ROUTES_PANE_KEYS],
+    hints: [['Esc', 'list'], ['Tab', 'section'], ['a', 'add'], ['w', 'save'], ...ROUTES_PANE_KEYS],
   },
   'registry-path': {
     label: 'Repo registry path',

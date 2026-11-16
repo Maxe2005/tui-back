@@ -21,7 +21,6 @@ import {
   formatBodyEditStatus,
   formatTreeStatusLine,
   getValueAtPath,
-  isPathUnderPrefix,
   listActiveRules,
   listTreeContainers,
   moveTreeSelection,
@@ -31,9 +30,7 @@ import {
   parseRawJsonBuffer,
   pruneBodyDrafts,
   pruneJsonTreeStates,
-  remapErrorsForDelete,
   removeActiveRule,
-  removeEntryAtPath,
   resolveAddParentPath,
   resolveTreeKeyAction,
   resolveTreeListBudget,
@@ -345,8 +342,8 @@ describe('resolveTreeKeyAction', () => {
     expect(resolveTreeKeyAction('\r', {})).toBe('edit-value');
     expect(resolveTreeKeyAction('a', {})).toBe('add-entry');
     expect(resolveTreeKeyAction('A', {})).toBe('add-entry');
-    expect(resolveTreeKeyAction('d', {})).toBe('delete-entry');
-    expect(resolveTreeKeyAction('D', {})).toBe('delete-entry');
+    expect(resolveTreeKeyAction('d', {})).toBeNull();
+    expect(resolveTreeKeyAction('D', {})).toBeNull();
     expect(resolveTreeKeyAction('t', {})).toBe('change-type');
     expect(resolveTreeKeyAction('T', {})).toBe('change-type');
     expect(resolveTreeKeyAction('r', {})).toBe('open-raw');
@@ -572,22 +569,6 @@ describe('addEntryAtPath (structural add)', () => {
   });
 });
 
-describe('removeEntryAtPath (delete)', () => {
-  it('removes object keys and clamps callers re-derive selection afterwards', () => {
-    expect(removeEntryAtPath({ a: 1, b: 2 }, 'a')).toEqual({ ok: true, value: { b: 2 } });
-  });
-
-  it('splices array items', () => {
-    expect(removeEntryAtPath({ tags: ['a', 'b'] }, 'tags[0]')).toEqual({ ok: true, value: { tags: ['b'] } });
-  });
-
-  it('refuses the root and missing paths', () => {
-    const original = { a: 1 };
-    expect(removeEntryAtPath(original, '')).toMatchObject({ ok: false });
-    expect(removeEntryAtPath(original, 'missing').ok).toBe(false);
-  });
-});
-
 describe('changeTypeAtPath (t cycle)', () => {
   it('re-parses string "3" to number 3', () => {
     expect(changeTypeAtPath({ v: '3' }, 'v')).toEqual({ ok: true, value: { v: 3 } });
@@ -702,9 +683,6 @@ describe('draft gating, seeding, and prune (bodyDrafts)', () => {
     expect(formatBodyEditStatus(null, 3)).toBe('3 lines hidden — still sent');
     expect(formatBodyEditStatus('expected a number, got "x"', 0)).toContain('expected a number');
     expect(formatBodyEditStatus('expected a number, got "x"', 3)).toContain('3 lines hidden — still sent');
-    expect(isPathUnderPrefix('a.b', 'a')).toBe(true);
-    expect(isPathUnderPrefix('a[0]', 'a')).toBe(true);
-    expect(isPathUnderPrefix('ab', 'a')).toBe(false);
   });
 
   it('seeds an explicit null example as null (editable null row, not the empty state)', () => {
@@ -713,45 +691,3 @@ describe('draft gating, seeding, and prune (bodyDrafts)', () => {
   });
 });
 
-describe('remapErrorsForDelete (array-shift remap)', () => {
-  const numberError = (reason: string) => ({ reason, kind: 'number' as const });
-
-  it('drops the removed subtree on object deletes', () => {
-    expect(remapErrorsForDelete({ a: numberError('x'), 'a.b': numberError('y'), c: numberError('z') }, 'a')).toEqual({
-      c: numberError('z'),
-    });
-  });
-
-  it('shifts later array siblings down by one and drops the removed item', () => {
-    expect(
-      remapErrorsForDelete(
-        { 'scores[0]': numberError('e0'), 'scores[1]': numberError('e1'), 'scores[2]': numberError('e2'), other: numberError('e3') },
-        'scores[0]',
-      ),
-    ).toEqual({
-      'scores[0]': numberError('e1'),
-      'scores[1]': numberError('e2'),
-      other: numberError('e3'),
-    });
-  });
-
-  it('leaves earlier siblings and unrelated branches untouched', () => {
-    expect(
-      remapErrorsForDelete({ 'scores[0]': numberError('e0'), 'scores[2].v': numberError('e2'), 'tags[5]': numberError('t') }, 'scores[1]'),
-    ).toEqual({
-      'scores[0]': numberError('e0'),
-      'scores[1].v': numberError('e2'),
-      'tags[5]': numberError('t'),
-    });
-  });
-
-  it('handles nested array parents and the root array', () => {
-    expect(remapErrorsForDelete({ 'a[1].v': numberError('x'), 'a[0].v': numberError('y') }, 'a[0]')).toEqual({
-      'a[0].v': numberError('x'),
-    });
-    expect(remapErrorsForDelete({ '[2]': numberError('x'), '[0]': numberError('y') }, '[1]')).toEqual({
-      '[1]': numberError('x'),
-      '[0]': numberError('y'),
-    });
-  });
-});
