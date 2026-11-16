@@ -6,6 +6,7 @@ import { cycleFilterLevel, openRuleEditorState, openRuleSetNameState, backToRule
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import type { LogsKey, LogsZoneCtx } from './logs-zone.ctx.js';
 
+// Keys of the rule list view: the scope's changes apply to the store immediately.
 export function handleRuleListKey(c: LogsZoneCtx, editor: FilterEditorState, input: string, key: LogsKey): void {
   const { currentScopeOf, ruleSets, setFilterEditor, setHistoryGridCursor, updateScopeOf } = c;
   const scope = currentScopeOf(editor);
@@ -90,6 +91,8 @@ export function handleRuleListKey(c: LogsZoneCtx, editor: FilterEditorState, inp
   }
 }
 
+// Keys of the named-set library: Enter applies (asking first when the active list is not
+// empty), r renames, d deletes (asking first), Esc returns to the rule list.
 export function handleLibraryKey(c: LogsZoneCtx, editor: FilterEditorState, input: string, key: LogsKey): void {
   const { applySetToScope, currentScopeOf, deleteRuleSetAction, ruleSets, setFilterEditor } = c;
   const count = ruleSets.length;
@@ -148,6 +151,7 @@ export function handleLibraryKey(c: LogsZoneCtx, editor: FilterEditorState, inpu
   }
 }
 
+// Keys of the set-name input (save or rename): Enter confirms, Esc goes back.
 export function handleSetNameKey(c: LogsZoneCtx, editor: FilterEditorState, input: string, key: LogsKey): void {
   const { renameRuleSetAction, saveActiveRulesAs, setFilterEditor } = c;
   if (editor.setConfirm !== null) {

@@ -38,7 +38,6 @@ export function handleEdtListKey(c: LogsZoneCtx, input: string, key: LogsKey): v
       openLogsFullscreen(service.path, service.service);
     }
   }
-  return;
 }
 
 export function handleOtherListKey(c: LogsZoneCtx, input: string, key: LogsKey): void {
@@ -77,5 +76,4 @@ export function handleOtherListKey(c: LogsZoneCtx, input: string, key: LogsKey):
       openLogsFullscreen(service.path, service.service);
     }
   }
-  return;
 }

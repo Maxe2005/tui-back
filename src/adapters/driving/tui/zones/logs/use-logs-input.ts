@@ -158,6 +158,7 @@ export function useLogsInput(c: LogsZoneCtx): void {
         return;
       }
 
+      // paneFocus === 'panes'
       handlePaneKey(c, input, key);
     },
     { isActive: zoneInputActive },

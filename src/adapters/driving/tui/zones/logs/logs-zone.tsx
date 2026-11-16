@@ -98,27 +98,27 @@ export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
             useStore={useStore}
             first={<LogsServiceLists c={c} />}
             second={
-            <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
-              {activePanes.length === 0 ? (
-                <DimAnnotation text="No service selected — select one or more services on the left to stream their logs." />
-              ) : (
-                <LogsGrid
-                  panes={activePanes.slice(0, visiblePaneCount)}
-                  hiddenPaneCount={activePanes.length - visiblePaneCount}
-                  logsPanes={logsPanes}
-                  layout={layout}
-                  visibleLines={paneVisibleLines}
-                  contentWidth={paneContentWidth}
-                  visibility={visibility}
-                  paneWrap={paneWrap}
-                  subFocused={paneFocus === 'panes' ? subFocus : -1}
-                  globalFilter={globalFilter}
-                  paneFilterEngaged={paneFilterEngaged}
-                  paneFilters={paneFilters}
-                  restartMode={restartMode}
-                />
-              )}
-            </Box>
+              <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
+                {activePanes.length === 0 ? (
+                  <DimAnnotation text="No service selected — select one or more services on the left to stream their logs." />
+                ) : (
+                  <LogsGrid
+                    panes={activePanes.slice(0, visiblePaneCount)}
+                    hiddenPaneCount={activePanes.length - visiblePaneCount}
+                    logsPanes={logsPanes}
+                    layout={layout}
+                    visibleLines={paneVisibleLines}
+                    contentWidth={paneContentWidth}
+                    visibility={visibility}
+                    paneWrap={paneWrap}
+                    subFocused={paneFocus === 'panes' ? subFocus : -1}
+                    globalFilter={globalFilter}
+                    paneFilterEngaged={paneFilterEngaged}
+                    paneFilters={paneFilters}
+                    restartMode={restartMode}
+                  />
+                )}
+              </Box>
             }
           />
         </Box>
