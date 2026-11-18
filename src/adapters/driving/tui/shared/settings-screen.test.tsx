@@ -474,7 +474,7 @@ describe('SettingsScreen', () => {
   it('reflects hidden hints from the store for the EDTs tab data path', () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false } },
     });
     expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edt-services']);
   });
@@ -482,7 +482,7 @@ describe('SettingsScreen', () => {
   it('reflects hidden action types from the store for the EDTs tab data path', () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false } },
     });
     expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['modify']);
   });
@@ -594,7 +594,7 @@ describe('SettingsScreen', () => {
   it('drilled into "Hint visibility", renders every hideable hint as a checkbox row, checked where hidden', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false } },
     });
     const output = await renderToString(
       <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="hint-visibility" />,
@@ -612,7 +612,7 @@ describe('SettingsScreen', () => {
   it('drilled into "Recent action types", renders create/switch/modify as a checkbox row, checked where hidden', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false } },
     });
     const output = await renderToString(
       <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="action-types" />,
