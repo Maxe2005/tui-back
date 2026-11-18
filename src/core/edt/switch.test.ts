@@ -24,45 +24,19 @@ import {
   manifestFor as coreManifestFor,
   member,
 } from '../shared/core-ports.test-support.js';
-
-function manifestFor(repoPath: string): Manifest {
-  const name = repoPath.split('/').pop() ?? repoPath;
-  return coreManifestFor(`svc-${name}`, `ctr-${name}`);
-}
-
-function fakeManifest(overrides: Partial<ManifestPort> = {}): ManifestPort {
-  return fakeCoreManifest(overrides, manifestFor);
-}
-
-function fakeManifestCarry(overrides: Partial<ManifestCarryPort> = {}): ManifestCarryPort {
-  return {
-    capture: vi.fn(async () => ok({ kind: 'absent' } as const)),
-    restore: vi.fn(async () => ok(undefined)),
-    ...overrides,
-  };
-}
-
-const TARGET = edtEntry('target-ulid', 'target-topic', [member('svc-a', '/repo/a', 'feat/a')]);
-const OUTGOING = edtEntry('outgoing-ulid', 'outgoing-topic', [member('svc-c', '/repo/c', 'feat/c')]);
-const REPOS = ['/repo/a', '/repo/b', '/repo/c'];
-
-function makeParams(overrides: Partial<SwitchActiveEdtParams> = {}): SwitchActiveEdtParams {
-  return {
-    edtRegistry: overrides.edtRegistry ?? fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING])) }),
-    registry: overrides.registry ?? fakeRegistry(REPOS),
-    manifest: overrides.manifest ?? fakeManifest(),
-    manifestCarry: overrides.manifestCarry ?? fakeManifestCarry(),
-    git: overrides.git ?? fakeGit(),
-    lock: overrides.lock ?? fakeLock(),
-    state: overrides.state ?? fakeState({ readActiveEdt: vi.fn(async () => ok('outgoing-ulid')) }),
-    edtRegistryResourceKey: overrides.edtRegistryResourceKey ?? '/cfg/edts.yaml',
-    topic: overrides.topic ?? 'target-topic',
-    force: overrides.force,
-    dirtyResolutions: overrides.dirtyResolutions,
-    dirtyPolicy: overrides.dirtyPolicy,
-    onDirtyReposBeforeSwitch: overrides.onDirtyReposBeforeSwitch,
-  };
-}
+import {
+  OTHER,
+  OUTGOING,
+  REPOS,
+  TARGET,
+  WRITE_METHODS,
+  callOrder,
+  expectZeroWrites,
+  fakeManifest,
+  fakeManifestCarry,
+  makeParams,
+  manifestFor,
+} from './switch.test-support.js';
 
 describe('switchActiveEdt — validation before any write', () => {
   it('rejects a missing/blank topic with missing-argument before consulting the registry', async () => {
@@ -620,24 +594,6 @@ describe('switchActiveEdt — target member deregistered from RegistryPort', () 
   });
 });
 
-
-// ---- Dirty-repo classification and resolutions --------------------------------------------
-
-const WRITE_METHODS = ['stashSave', 'restoreStash', 'checkout', 'createBranch', 'deleteBranch', 'discardAll', 'discardPaths', 'fetch', 'renameBranch'] as const;
-
-function expectZeroWrites(git: GitPort): void {
-  for (const method of WRITE_METHODS) {
-    expect(calls(git[method]), `git.${method}`).toHaveLength(0);
-  }
-}
-
-function callOrder(fn: unknown, predicate: (args: unknown[]) => boolean = () => true): number {
-  const mock = fn as Mock;
-  const index = mock.mock.calls.findIndex((args) => predicate(args));
-  return mock.mock.invocationCallOrder[index] as number;
-}
-
-const OTHER = edtEntry('other-ulid', 'other-topic', [member('svc-b', '/repo/b', 'feat/b-other')], 'inactive');
 
 describe('classifySwitchRepos', () => {
   it('classifies against the OUTGOING EDT, destination still target-driven', () => {
