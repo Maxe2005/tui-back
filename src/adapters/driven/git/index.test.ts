@@ -12,6 +12,8 @@ import { ok } from '../../../core/result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import type { ManifestPort } from '../../../core/ports/manifest.js';
 import { loadManifest } from '../manifest/index.js';
+import { fastForwardShared } from '../../../core/edt/fast-forward-shared.js';
+import { buildSharedBranchesEdt } from '../../../core/edt/shared-edt.js';
 import {
   aheadBehind,
   abortMerge,
@@ -1364,6 +1366,86 @@ describe('pullBranch', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
     // Neither side moved: no merge commit was created to paper over the divergence.
     expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 1, behind: 1 } });
+  });
+});
+
+// fastForwardShared against real origin+clone repos through createGitPort: pins the argument
+// order of isBranchMerged / listUnpushedCommits and that a checked-out branch only ever moves
+// through `pull --ff-only`.
+describe('fastForwardShared against real repositories', () => {
+  async function setup() {
+    const { origin, clone } = await makeGitRepoOriginAndClone();
+    const edtRegistry = fakeEdtRegistry([
+      buildSharedBranchesEdt([{ repoPath: clone, manifest: { service: 'svc', sharedBranch: 'development' } }]),
+    ]);
+    const git = createGitPort(manifest);
+    const run = async () => {
+      const result = await fastForwardShared({ edtRegistry, git });
+      if (!result.ok) throw new Error(result.error.message);
+      return result.data.rows[0];
+    };
+    const rev = (dir: string, ref: string) => runGit(dir, ['rev-parse', ref]).stdout.trim();
+    return { origin, clone, run, rev };
+  }
+
+  it('behind origin and not checked out: fast-forwarded and the ref moved', async () => {
+    const { origin, clone, run, rev } = await setup();
+    commit(origin, 'upstream commit');
+    expect(runGit(clone, ['checkout', 'feat/remote-only']).status).toBe(0);
+
+    expect(await run()).toMatchObject({ outcome: 'fast-forwarded' });
+    expect(rev(clone, 'development')).toBe(rev(origin, 'development'));
+    expect(runGit(clone, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/remote-only');
+  });
+
+  it('behind origin, checked out and clean: fast-forwarded', async () => {
+    const { origin, clone, run, rev } = await setup();
+    commit(origin, 'upstream commit');
+
+    expect(await run()).toMatchObject({ outcome: 'fast-forwarded' });
+    expect(rev(clone, 'HEAD')).toBe(rev(origin, 'development'));
+  });
+
+  it('equal to origin: up-to-date, nothing moves', async () => {
+    const { clone, run, rev } = await setup();
+    const before = rev(clone, 'development');
+
+    expect(await run()).toMatchObject({ outcome: 'up-to-date' });
+    expect(rev(clone, 'development')).toBe(before);
+  });
+
+  it('local-only commit: skipped (diverged) and the commit is kept', async () => {
+    const { clone, run, rev } = await setup();
+    commit(clone, 'local only');
+    const before = rev(clone, 'development');
+
+    expect(await run()).toMatchObject({ outcome: 'skipped', reason: 'diverged' });
+    expect(rev(clone, 'development')).toBe(before);
+  });
+
+  it('dirty checked-out branch behind origin: skipped (dirty), worktree untouched', async () => {
+    const { origin, clone, run, rev } = await setup();
+    commit(origin, 'upstream commit');
+    const before = rev(clone, 'development');
+    await writeFile(join(clone, 'wip.txt'), 'work in progress');
+
+    expect(await run()).toMatchObject({ outcome: 'skipped', reason: 'dirty' });
+    expect(rev(clone, 'development')).toBe(before);
+    expect(existsSync(join(clone, 'wip.txt'))).toBe(true);
+  });
+
+  it('diverged but clean checked-out branch is never merged (pull is --ff-only)', async () => {
+    const { origin, clone, run, rev } = await setup();
+    commit(origin, 'upstream commit');
+    commit(clone, 'local only');
+    const before = rev(clone, 'development');
+
+    expect(await run()).toMatchObject({ outcome: 'skipped', reason: 'diverged' });
+    expect(rev(clone, 'development')).toBe(before);
+    expect(runGit(clone, ['rev-list', '--merges', 'development']).stdout.trim()).toBe('');
+    // The adapter's own pull refuses the same state instead of merging.
+    expect(await createGitPort(manifest).pull(clone)).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
+    expect(rev(clone, 'development')).toBe(before);
   });
 });
 
