@@ -1,70 +1,15 @@
 // tui/zones/routes: bounded list + route filter (real keypresses via the fake-tty technique
 // shared with logs-zone.interaction.test.tsx).
-import { createElement } from 'react';
-import { Box, Text, render } from 'ink';
+import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
 import type { AppStoreDeps } from '../../store/app-store.js';
 import { err, ok } from '../../../../../core/result.js';
 import type { SavedRequest, SavedRequestPort } from '../../../../../core/ports/saved-request.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
+import { KEYS } from '../../shared/test-support/fake-tty.js';
 import { RoutesZone } from './routes-zone.js';
 import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
-
-const ROWS = 14;
-
-function seed() {
-  const store = createAppStore();
-  store.setState({
-    routesStatus: 'ready',
-    routesRepoPath: '/repos/gateway',
-    routes: Array.from({ length: 40 }, (_, i) => ({
-      method: i % 2 === 0 ? 'GET' : 'POST',
-      path: `/resource-${i}/{id}`,
-      summary: `SUMMARY-${i} a rather long description that must only show in the detail pane`,
-    })),
-    routesError: null,
-    loadRoutes: async () => {},
-    fireRoute: async () => {},
-  });
-  return store;
-}
-
-function mount(store: ReturnType<typeof createAppStore>, rows = ROWS) {
-  const stdout = new FakeTtyStdout();
-  Object.assign(stdout, { columns: 100, rows });
-  const stdin = fakeInteractiveTtyStdin();
-  // Mirrors AppShell: a fixed-height column with fixed sibling rows above and below the zone.
-  const instance = render(
-    createElement(
-      Box,
-      { flexDirection: 'column', height: rows, overflow: 'hidden' },
-      createElement(Text, {}, 'TABS-ROW'),
-      createElement(RoutesZone, { useStore: store }),
-      createElement(Text, {}, 'FOOTER-ROW'),
-    ),
-    {
-      stdout: stdout as unknown as NodeJS.WriteStream,
-      stdin,
-      interactive: true,
-      exitOnCtrlC: false,
-      patchConsole: false,
-    },
-  );
-  return { instance, stdout, stdin };
-}
-
-async function press(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, sequence: string): Promise<void> {
-  (stdin as unknown as { write: (chunk: string) => void }).write(sequence);
-  await instance.waitUntilRenderFlush();
-}
-
-function lastFrame(stdout: FakeTtyStdout): string {
-  // Every Ink render writes the whole frame in one chunk; the newest chunk carrying the
-  // sibling row is the current screen.
-  const chunks = (stdout as unknown as { chunks: string[] }).chunks;
-  return [...chunks].reverse().find((chunk) => chunk.includes('TABS-ROW')) ?? '';
-}
+import { ROWS, seed, mount, press, lastFrame } from './routes-zone.test-support.js';
 
 describe('RoutesZone bounded list', () => {
   it('keeps the list inside its area: sibling rows stay visible, indicators never overlap rows, no summary in the list', async () => {
