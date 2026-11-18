@@ -1,4 +1,4 @@
-// core/scripts/group-update: unit tests against fake ports (remaining topics).
+// core/scripts/group-update: unit tests against fake ports — the conflict auto-resolution seam.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../result.js';
 import type { GitPort } from '../ports/git.js';
