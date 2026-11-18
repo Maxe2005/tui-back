@@ -4,110 +4,21 @@
 // never invoked here — the shared harness's fake stdin never emits data (the edts-zone
 // convention) — so keystroke behavior is verified through the pure functions directly.
 import { UPDATE_INCIDENTS_TITLE } from './update-incidents.logic.js';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { ok } from '../../../../../core/result.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { DockerPort } from '../../../../../core/ports/docker.js';
-import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../core/ports/registry.js';
-import type { SettingsPort } from '../../../../../core/ports/settings.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
 import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { resolveMenuKey } from '../../shared/components/menu-list.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { fakeTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
-import { createAppStore, type AppStoreDeps } from '../../store/app-store.js';
-import {
-  UPDATE_ALL_REPOS_PROMPT,
-  UPDATE_ALL_RUNNING_LABEL,
-  UPDATE_BLOCKER_MENU_ITEMS,
-  UPDATE_BLOCKER_TITLE,
-  UPDATE_IDLE_PROMPT,
-  UPDATE_INTERRUPTED_OFFER,
-
-  UPDATE_QUIT_CONFIRM_BODY,
-  UPDATE_QUIT_CONFIRM_BODY_ALL,
-  UPDATE_RUNNING_LABEL,
-  UPDATE_SELECTION_RUNNING_LABEL,
-  formatBlockerBody,
-  formatBlockerRetry,
-  formatUpdateRow,
-  formatUpdateSummary,
-  resolveAllConfirm,
-  UPDATE_BLOCKER_MENU_ESCAPE,
-  blockerMenuItems,
-  resolveQuitConfirm,
-  resolveUpdateTrigger,
-  resolveUpdateTone,
-  shouldConfirmQuit,
-  shouldOfferRerun,
-  shouldOpenAllConfirm,
-  shouldOpenEdtConfig,
-  shouldOpenSingleConfig,
-  UpdateZone,
-} from './update-zone.js';
-import {
-  deriveUpdateServiceStatus,
-  updateStatusText,
-  formatLiveServiceDetail,
-  formatServiceOutcomeDetail,
-  isServiceTargetedByRun,
-  mergeLastServiceOutcomes,
-  partitionUpdateServiceRows,
-} from './update-zone.logic.js';
+import { createAppStore } from '../../store/app-store.js';
+import { UPDATE_ALL_REPOS_PROMPT, UPDATE_ALL_RUNNING_LABEL, UPDATE_BLOCKER_MENU_ITEMS, UPDATE_IDLE_PROMPT, UPDATE_INTERRUPTED_OFFER, UPDATE_QUIT_CONFIRM_BODY, UPDATE_QUIT_CONFIRM_BODY_ALL, UPDATE_RUNNING_LABEL, UPDATE_SELECTION_RUNNING_LABEL, formatBlockerBody, formatBlockerRetry, formatUpdateRow, formatUpdateSummary, resolveAllConfirm, UPDATE_BLOCKER_MENU_ESCAPE, blockerMenuItems, resolveQuitConfirm, resolveUpdateTrigger, resolveUpdateTone, shouldConfirmQuit, shouldOfferRerun, shouldOpenAllConfirm, shouldOpenEdtConfig, shouldOpenSingleConfig, UpdateZone } from './update-zone.js';
+import { deriveUpdateServiceStatus, updateStatusText, formatLiveServiceDetail, formatServiceOutcomeDetail, isServiceTargetedByRun, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
 import { toServicePickItems } from './update-service-pick-dialog.js';
 import { matchPickItemsBySubstring } from '../../shared/components/filterable-pick-list.js';
-
-const INTERRUPTED_EDTS = [
-  {
-    ulid: 'edt-1',
-    topic: 'demo',
-    createdAt: '2026-09-17T00:00:00.000Z',
-    status: 'interrupted' as const,
-    members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
-  },
-];
-
-// The Update zone's always-visible service-list fixtures.
-const ACTIVE_EDT = {
-  ulid: 'edt-1',
-  topic: 'demo',
-  createdAt: '2026-09-17T00:00:00.000Z',
-  status: 'active' as const,
-  members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
-};
-
-const SERVICE_A: ServiceBranchDivergence = {
-  service: 'svc-a',
-  path: '/repo/a',
-  isMember: true,
-  sharedBranch: 'development',
-  protectedBranches: [],
-  branch: 'feat/a',
-  ahead: 0,
-  behind: 0,
-  status: 'current',
-};
-
-const SERVICE_B: ServiceBranchDivergence = {
-  service: 'svc-b',
-  path: '/repo/b',
-  isMember: false,
-  sharedBranch: 'development',
-  protectedBranches: [],
-  branch: 'development',
-  ahead: 0,
-  behind: 0,
-  status: 'current',
-};
-
-const LOADING_MEMBERS = 'Loading member services…';
+import { INTERRUPTED_EDTS, ACTIVE_EDT, SERVICE_A, SERVICE_B, LOADING_MEMBERS, noopLoad, fakeUpdateZoneDeps } from './update-zone.test-support.js';
 
 describe('formatUpdateRow', () => {
   it('renders each outcome with a glyph paired to the outcome word, code, and message', () => {
@@ -938,13 +849,6 @@ describe('isServiceTargetedByRun', () => {
   });
 });
 
-// A no-op stub for every render test below: `createAppStore()` (no deps, the same default
-// every other zone test uses) still owns *real* loadEdtsBranches/loadEdts actions that
-// early-return an 'error'/no-op status when unwired — and UpdateZone calls both on mount.
-// Left un-stubbed, those real calls would race the state each test deliberately seeds and
-// clobber it out from under it (mirrors edts-zone.test.tsx's own noopLoad precedent).
-const noopLoad = async () => {};
-
 describe('UpdateZone service-list shell rendering', () => {
   it('idle: every service carries a glyph (health fallback down until the first poll resolves), selected detail shows idle', async () => {
     const store = createAppStore();
@@ -1094,126 +998,6 @@ describe('UpdateZone service-list shell rendering', () => {
     expect(output).toContain('failed (merge-conflict): Automatic merge failed');
   });
 });
-
-// Every render test above uses a deps-less `createAppStore()`, under which `pollServiceHealth`
-// early-returns whatever path it is given — so a poll keyed by `row.service` instead of
-// `row.path` (`updateServiceHealth[row.path]` reads by path) would leave every row on the `down`
-// fallback with zero failures. This block wires real (fake-port) deps, like update-slice.test.ts's
-// health-polling fakeDeps, and mounts UpdateZone with a real Ink render loop.
-function fakeUpdateZoneDeps(overrides: Partial<AppStoreDeps> = {}): AppStoreDeps {
-  const registry: RegistryPort = {
-    list: vi.fn(async () => ok([])),
-    add: vi.fn(async () => ok(undefined)),
-    exists: vi.fn(async () => ok(true)),
-    scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
-    reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
-    remove: vi.fn(async () => ok(undefined)),
-  };
-  const manifest: ManifestPort = {
-    load: vi.fn(async (repoPath: string) =>
-      ok({
-        service: `svc-${repoPath.split('/').pop()}`,
-        container: `ctr-${repoPath.split('/').pop()}`,
-        migrationCommand: 'npm run migration:run',
-        sharedBranch: 'development',
-        modules: {},
-      }),
-    ),
-  };
-  const git: GitPort = {
-    assertAllowedBranch: vi.fn(async () => ok(undefined)),
-    createBranch: vi.fn(async () => ok(undefined)),
-    deleteBranch: vi.fn(async () => ok(undefined)),
-    currentBranch: vi.fn(async () => ok('feat/a')),
-    aheadBehind: vi.fn(async () => ok({ ahead: 0, behind: 0 })),
-    checkout: vi.fn(async () => ok(undefined)),
-    hasUncommittedChanges: vi.fn(async () => ok(false)),
-    stashSave: vi.fn(async () => ok(undefined)),
-    restoreStash: vi.fn(async () => ok(undefined)),
-    branchExistsLocally: vi.fn(async () => ok(true)),
-    fetch: vi.fn(async () => ok(undefined)),
-    pull: vi.fn(async () => ok(undefined)),
-    mergeBranch: vi.fn(async () => ok(undefined)),
-    abortMerge: vi.fn(async () => ok(undefined)),
-    isMergeInProgress: vi.fn(async () => ok(false)),
-    listDirtyPaths: vi.fn(async () => ok([])),
-    discardPaths: vi.fn(async () => ok(undefined)),
-    discardAll: vi.fn(async () => ok(undefined)),
-    diffNameOnly: vi.fn(async () => ok([])),
-    headRevision: vi.fn(async () => ok('head-a')),
-    diffStat: vi.fn(async () => ok({ files: 0, insertions: 0, deletions: 0 })),
-    discardPathsToHead: vi.fn(async () => ok(undefined)),
-    isRebaseInProgress: vi.fn(async () => ok(false)),
-    hasUnmergedPaths: vi.fn(async () => ok(false)),
-    listUnmergedPaths: vi.fn(async () => ok([] as string[])),
-    readWorktreeFile: vi.fn(async () => ok("")),
-    writeResolvedFile: vi.fn(async () => ok(undefined)),
-    checkoutSide: vi.fn(async () => ok(undefined)),
-    finalizeMerge: vi.fn(async () => ok(undefined)),
-    listBranches: vi.fn(async () => ok([])),
-    renameBranch: vi.fn(async () => ok(undefined)),
-    isBranchMerged: vi.fn(async () => ok(true)),
-    hasStash: vi.fn(async () => ok(false)),
-    fetchRemote: vi.fn(async () => ok(undefined)),
-    listUnpushedCommits: vi.fn(async () => ok([] as string[])),
-    listVersionBumpCommits: vi.fn(async () => ok({ endedBy: "exhausted" as const, scanned: 0 })),
-    listBranchesContaining: vi.fn(async () => ok([] as string[])),
-    listRemoteBranches: vi.fn(async () => ok([])),
-    createTrackingBranch: vi.fn(async () => ok(undefined)),
-    stagePaths: vi.fn(async () => ok(undefined)),
-    commit: vi.fn(async () => ok(undefined)),
-  };
-  const edtRegistry: EdtRegistryPort = {
-    add: vi.fn(async () => ok(undefined)),
-    list: vi.fn(async () => ok([])),
-    setStatus: vi.fn(async () => ok(undefined)),
-    update: vi.fn(async () => ok(undefined)),
-    remove: vi.fn(async () => ok(undefined)),
-  };
-  const state: StatePort = {
-    readActiveEdt: vi.fn(async () => ok(null)),
-    writeActiveEdt: vi.fn(async () => ok(undefined)),
-    readSplitterRatios: vi.fn(async () => ok(null)),
-    writeSplitterRatios: vi.fn(async () => ok(undefined)),
-    readFilterHistory: vi.fn(async () => ok(null)),
-    writeFilterHistory: vi.fn(async () => ok(undefined)),
-    readCommandHistory: vi.fn(async () => ok(null)),
-    writeCommandHistory: vi.fn(async () => ok(undefined)),
-    readLogRules: vi.fn(async () => ok(null)),
-    writeLogRules: vi.fn(async () => ok(undefined)),
-    readLogRuleSets: vi.fn(async () => ok(null)),
-    writeLogRuleSets: vi.fn(async () => ok(undefined)),
-  };
-  const lock: LockPort = {
-    acquire: vi.fn(async () => ok({ release: vi.fn(async () => ok(undefined)) })),
-    peek: vi.fn(async () => ok({ locked: false })),
-  };
-  const settings: SettingsPort = {
-    load: vi.fn(async () => ok({ settings: DEFAULT_SETTINGS, warning: null })),
-    save: vi.fn(async () => ok(undefined)),
-  };
-  const docker: DockerPort = {
-    streamLogs: vi.fn(() => () => {}),
-    fetchLogsBefore: vi.fn(async () => ok([])),
-    getContainerHealth: vi.fn(async () => ok('up' as const)),
-    restartContainer: vi.fn(async () => ok(undefined)),
-  };
-  return {
-    registry,
-    manifest,
-    manifestCarry: { capture: async () => ({ ok: true, data: { kind: 'absent' } }), restore: async () => ({ ok: true, data: undefined }) },
-    git,
-    edtRegistry,
-    state,
-    lock,
-    edtRegistryResourceKey: '/tmp/edts.yaml',
-    edtsBaseDir: '/tmp/edts',
-    registryResourceKey: '/config/registry.yaml',
-    settings,
-    docker,
-    ...overrides,
-  };
-}
 
 describe('UpdateZone health-poll wiring against real (fake-port) deps', () => {
   it('polls each row by its own repoPath (never by service name) and the rendered row reflects the resolved health glyph', async () => {
