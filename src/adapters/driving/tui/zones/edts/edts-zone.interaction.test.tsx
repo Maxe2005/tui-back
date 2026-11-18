@@ -298,6 +298,36 @@ describe('EdtsZone real-keypress interactions', () => {
     }
   });
 
+  it('`f` turns a rejected fast-forward into an error dialog instead of staying stuck running', async () => {
+    const store = createAppStore();
+    const system = edt({ ulid: SHARED_EDT_ULID, topic: SHARED_EDT_TOPIC, kind: 'system-shared' });
+    store.setState({
+      edts: [system, edt({ ulid: 'user-ulid', topic: 'mine' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      fastForwardShared: async () => {
+        throw new Error('boom');
+      },
+    } as never);
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'f');
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('fast-forward-failed: boom');
+      expect(footerIdOf(store)).toBe('close');
+      await pressEscape(instance, stdin);
+      expect(footerIdOf(store)).not.toBe('close');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('`f` does nothing on a user EDT row (the action is unavailable there)', async () => {
     const store = createAppStore();
     const fastForwardShared = vi.fn();

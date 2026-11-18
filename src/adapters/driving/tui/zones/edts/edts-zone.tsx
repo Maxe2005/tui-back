@@ -315,6 +315,13 @@ export function EdtsZone({
   // re-anchor the selection on the same EDT by ulid (the clamp covers a vanished one).
   const prevEdtsRef = useRef<readonly EdtRegistryEntry[] | null>(null);
   const edtsSelectedRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   useEffect(() => {
     const previous = prevEdtsRef.current;
     if (previous !== null && edts !== null && previous !== edts && previous.length > 0) {
@@ -725,7 +732,16 @@ export function EdtsZone({
   // dialog opens at once ("running") and swaps to the per-service rows when the run lands.
   async function runFastForwardShared(): Promise<void> {
     setDialog(initialFastForwardDialog());
-    const result = await fastForwardSharedAction();
+    let result: Awaited<ReturnType<typeof fastForwardSharedAction>>;
+    try {
+      result = await fastForwardSharedAction();
+    } catch (error) {
+      result = { ok: false, error: { code: 'fast-forward-failed', message: error instanceof Error ? error.message : String(error) } };
+    }
+    // The zone may have unmounted while the run was in flight.
+    if (!mountedRef.current) {
+      return;
+    }
     setDialog(
       result.ok
         ? { kind: 'fast-forward-shared', status: 'done', rows: result.data.rows, error: null }
