@@ -1,8 +1,4 @@
-// tui/zones/update: tests for the Update zone's pure keystroke/render helpers plus
-// renderToString smoke coverage of each visual state (idle prompt, interrupted re-run
-// offer, running spinner, done summary, top-level error). The useInput callback itself is
-// never invoked here — the shared harness's fake stdin never emits data (the edts-zone
-// convention) — so keystroke behavior is verified through the pure functions directly.
+// tui/zones/update: UpdateZone health-poll wiring and live per-service detail against fake-port deps.
 import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { render } from 'ink';
