@@ -3,7 +3,7 @@
  // registry.yaml), and the optional action log to each EDT's SQLite database
  // (edtsBaseDir/<ulid>.db), whose action_log table is created on demand.
  import { readFile, writeFile } from 'node:fs/promises';
- import { dirname, join } from 'node:path';
+ import { dirname, join, resolve } from 'node:path';
  import { parse, stringify } from 'yaml';
  import Database from 'better-sqlite3';
  import { err, ok, type Result } from '../../../core/result.js';
@@ -45,7 +45,7 @@
      },
      // The system EDT has no persisted status: activation lives in the active-EDT pointer.
      setStatus: async (ulid, status) => (isSystemEdt(ulid) ? ok(undefined) : setEdtStatus(edtRegistryFile, ulid, status)),
-     update: async (ulid, patch) => (isSystemEdt(ulid) ? systemReadonly() : updateEdtEntry(edtRegistryFile, ulid, patch)),
+     update: async (ulid, patch) => (isSystemEdt(ulid) || (patch.topic !== undefined && isSharedEdtTopic(patch.topic)) ? systemReadonly() : updateEdtEntry(edtRegistryFile, ulid, patch)),
      remove: async (ulid) => (isSystemEdt(ulid) ? systemReadonly() : removeEdtRegistryEntry(edtRegistryFile, ulid)),
      logAction: (ulid, actionType, outcome, detail) => logEdtAction(edtsBaseDir, ulid, actionType, outcome, detail),
      getActionLog: (ulid, limit) => getEdtActionLog(edtsBaseDir, ulid, limit),
@@ -65,9 +65,16 @@
      return null;
    }
    const repos: SharedEdtRepo[] = [];
+   const seen = new Set<string>();
    for (const repoPath of paths.data) {
+     const resolved = resolve(repoPath);
+     if (seen.has(resolved)) {
+       continue;
+     }
+     seen.add(resolved);
      const manifest = await source.manifest.load(repoPath);
-     if (manifest.ok) {
+     // A manifest without a usable sharedBranch cannot place the repo anywhere: left out.
+     if (manifest.ok && typeof manifest.data.sharedBranch === 'string' && manifest.data.sharedBranch.trim() !== '') {
        repos.push({ repoPath, manifest: manifest.data });
      }
    }

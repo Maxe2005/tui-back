@@ -667,4 +667,25 @@ describe('edt-registry shared-branches system EDT', () => {
     expect(listed.ok && listed.data.map((e) => e.topic)).toEqual(['mine', 'Shared branches']);
     expect(await readFile(file, 'utf8')).not.toContain('Shared branches');
   });
+
+  it('refuses an update whose patch renames a user EDT to the reserved topic, without writing', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const { source } = sharedSource(false, {});
+    const port = createEdtRegistryPort(file, edtsBaseDir, source);
+    await port.add({ ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA', topic: 'mine', createdAt: 'x', status: 'inactive', members: [] });
+    const before = await readFile(file, 'utf8');
+
+    expect(await port.update('01JXXXXX1AAAAAAAAAAAAAAAAA', { topic: ' Shared Branches ' })).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+    expect(await readFile(file, 'utf8')).toBe(before);
+  });
+
+  it('skips repos with an empty sharedBranch and de-duplicates repos by resolved path', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const { source } = sharedSource(true, { '/r/a': 'development', '/r/a/': 'development', '/r/x/../a': 'development', '/r/blank': '  ' });
+    const port = createEdtRegistryPort(file, edtsBaseDir, source);
+
+    const listed = await port.list();
+
+    expect(listed.ok && listed.data[0].members.map((m) => m.repoPath)).toEqual(['/r/a']);
+  });
 });
