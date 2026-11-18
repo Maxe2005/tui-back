@@ -991,3 +991,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-8-split-the-update-and-logs-slices.md`
   summary: `update-slice.config.ts` (~537 lines) and `update-slice.run.ts` (~615 lines) still exceed the ~400-line target.
   evidence: Review of story 12.8; the spec's file list put run/shared-types hook/auto-resolve and the config flow in single modules, so they were left whole and justified in their headers.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-13/spec-13-4-split-app-shell-and-store-tests.md`
+  summary: Fake timers are never restored (`vi.useRealTimers`) in `update-slice.health.test.ts` and `logs-slice.health.test.ts`.
+  evidence: Review found `vi.useFakeTimers()` calls without an `afterEach` restore; the monolithic originals had the same weakness, moved verbatim.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-13/spec-13-4-split-app-shell-and-store-tests.md`
+  summary: Three near-identical `fakeDeps` (app shell, store, update slice) could share a base with per-suite overrides, and `app-store.*` files repeat the `describe("app store")` wrapper.
+  evidence: Defaults differ (repo lists, ahead/behind, extra ports), so unifying would alter test bodies; deferred per the spec's Ask First rule.
