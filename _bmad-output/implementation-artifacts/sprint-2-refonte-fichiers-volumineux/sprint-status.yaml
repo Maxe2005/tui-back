@@ -35,7 +35,7 @@ project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux
 development_status:
-  epic-12: in-progress
+  epic-12: done
   12-1-split-the-git-adapter-by-operation-family: done
   12-2-extract-pure-logic-from-json-tree-and-the-command-bar: done
   12-3-split-the-settings-screen-by-tab: done
@@ -47,7 +47,7 @@ development_status:
   12-9-split-routeszone-into-hooks-and-subcomponents: done
   12-10-split-logszone-into-hooks-and-subcomponents: done
   12-11-split-edtszone-into-hooks-and-subcomponents: done
-  12-12-split-updatezone-into-hooks-and-subcomponents: review
+  12-12-split-updatezone-into-hooks-and-subcomponents: done
   epic-12-retrospective: optional
 
   epic-13: backlog
