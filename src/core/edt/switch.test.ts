@@ -1877,6 +1877,24 @@ describe('switchActiveEdt — shared-branches system EDT', () => {
     expect(seen.every((row) => row.adoptUnavailable === true)).toBe(true);
   });
 
+  it('rejects an adopt resolution returned by the dialog callback with switch-adopt-unavailable, before any git write', async () => {
+    const partial = buildSharedBranchesEdt([{ repoPath: '/repo/a', manifest: manifestFor('/repo/a') }]);
+    const params = outgoingSystem({
+      edtRegistry: fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, partial])) }),
+      onDirtyReposBeforeSwitch: async () => ({
+        kind: 'proceed',
+        resolutions: { '/repo/b': { kind: 'adopt', branch: 'feat/x' }, '/repo/c': { kind: 'discard' } },
+      }),
+    });
+
+    const result = await switchActiveEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'switch-adopt-unavailable' } });
+    for (const write of [params.git.stashSave, params.git.discardAll, params.git.checkout, params.git.createBranch]) {
+      expect(calls(write)).toHaveLength(0);
+    }
+  });
+
   it('allows discard when the system EDT is outgoing and a repo is a non-member', async () => {
     const partial = buildSharedBranchesEdt([{ repoPath: '/repo/a', manifest: manifestFor('/repo/a') }]);
     const params = outgoingSystem({
