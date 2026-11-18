@@ -1799,6 +1799,13 @@ describe('switchActiveEdt — unchanged outcome', () => {
 describe('switchActiveEdt — shared-branches system EDT (story 2.46)', () => {
   const SYSTEM = buildSharedBranchesEdt(REPOS.map((repoPath) => ({ repoPath, manifest: manifestFor(repoPath) })));
 
+  it('the system EDT only counts as an owner of a repo when it is the switch target', () => {
+    const asOwner = classifySwitchRepos(['/repo/b'], OUTGOING, TARGET, [TARGET, OUTGOING, SYSTEM]);
+    expect(asOwner[0]).toMatchObject({ state: 3, owningTopics: [] });
+    const asTarget = classifySwitchRepos(['/repo/b'], OUTGOING, SYSTEM, [TARGET, OUTGOING, SYSTEM]);
+    expect(asTarget[0]).toMatchObject({ state: 2, owningTopics: ['Shared branches'] });
+  });
+
   it('switching INTO the system EDT checks every repo out to its shared branch, ungated, fetching an absent one', async () => {
     const assertAllowedBranch = vi.fn(async () => err('shared-branch-rejected', 'protected'));
     const branchExistsLocally = vi.fn(async (_repo: string) => ok(_repo !== '/repo/b'));

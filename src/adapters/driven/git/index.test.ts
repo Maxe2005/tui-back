@@ -255,6 +255,20 @@ describe('assertAllowedBranch — system shared-branches EDT carve-out (story 2.
   });
 });
 
+describe('assertAllowedBranch — cross-EDT gate ignores the system EDT (story 2.46)', () => {
+  it('does not report the system shared-branches EDT as another EDT owning a branch', async () => {
+    const repo = await makeGitRepo();
+    const edtRegistry = {
+      list: async () => ({
+        ok: true as const,
+        data: [{ ulid: '01SHAREDBRANCHES0000000000', topic: 'Shared branches', kind: 'system-shared' as const, createdAt: 'x', status: 'inactive' as const, members: [{ service: 's', repoPath: repo, branch: 'feat/x' }] }],
+      }),
+    } as unknown as EdtRegistryPort;
+
+    expect(await assertAllowedBranch(manifest, repo, 'feat/x', '01MINE', edtRegistry)).toEqual({ ok: true, data: undefined });
+  });
+});
+
 describe('assertAllowedBranch — cross-EDT gate (AD-8)', () => {
   it('rejects a branch already registered as a different EDT\'s own branch for this repo', async () => {
     const repo = await makeGitRepo();

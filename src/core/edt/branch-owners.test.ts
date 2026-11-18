@@ -28,6 +28,19 @@ describe('branchOwnersMap', () => {
   });
 });
 
+describe('system shared-branches EDT (story 2.46)', () => {
+  const system = { ulid: '01SHAREDBRANCHES0000000000', topic: 'Shared branches', kind: 'system-shared' as const, members: [{ service: 'a', repoPath: '/r/a', branch: 'development' }] };
+
+  it('is never listed as owner of a shared branch', () => {
+    expect(branchOwners([system], '/r/a', 'development')).toEqual([]);
+    expect(branchOwnersMap([system], '/r/a', ['development'])).toEqual({});
+  });
+
+  it('is recognized by its constant ulid even without the kind field', () => {
+    expect(branchOwners([{ ...system, kind: undefined }], '/r/a', 'development')).toEqual([]);
+  });
+});
+
 describe('prototype-key safety', () => {
   it('a branch named constructor/__proto__ is a normal key', () => {
     const map = branchOwnersMap(edts, '/repos/a', ['constructor', '__proto__', 'feat/x']);

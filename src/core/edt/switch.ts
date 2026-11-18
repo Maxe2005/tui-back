@@ -149,7 +149,9 @@ export function classifySwitchRepos(
     const repoPath = resolve(rawPath);
     const inOutgoing = outgoing !== undefined && hasMember(outgoing, repoPath);
     const owningTopics = edts
-      .filter((entry) => entry.ulid !== outgoing?.ulid && hasMember(entry, repoPath))
+      // The system EDT lists every repo, so it only counts as an owner when it IS the target
+      // (otherwise a non-member would read as "member of another EDT" because of it).
+      .filter((entry) => entry.ulid !== outgoing?.ulid && (!isSystemEdt(entry) || entry.ulid === target.ulid) && hasMember(entry, repoPath))
       .map((entry) => entry.topic);
     const state: SwitchRepoState = inOutgoing ? 1 : owningTopics.length > 0 ? 2 : 3;
     const found = target.members.find((candidate) => resolve(candidate.repoPath) === repoPath);
