@@ -956,6 +956,16 @@ describe('subcommand registry guards', () => {
       });
     });
 
+    it('reports status active for the entry the active-EDT pointer names, even the system one', async () => {
+      const state = { ...fakeState(), readActiveEdt: async () => ok(system.ulid as string | null) };
+      const edt = buildTestSubcommands({ edtRegistry: registryOf([user, system]), state }).find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+
+      const result = await edt.run(['list']);
+
+      expect(result).toMatchObject({ ok: true, data: { edts: [{ topic: 'demo', status: 'inactive' }, { topic: 'Shared branches', status: 'active' }] } });
+    });
+
     it('has no system entry when the registry does not synthesize it (setting off)', async () => {
       const result = await edtOf([user]).run(['list']);
       expect(result).toMatchObject({ ok: true, data: { edts: [{ kind: 'user' }] } });
