@@ -861,6 +861,26 @@ describe('tui-back edts (black-box)', () => {
     ]);
   });
 
+  it('edt list shows a system-shared row only while edts.sharedBranchesEdtEnabled is on', async () => {
+    const xdg = await makeTempDir();
+    const env = { XDG_CONFIG_HOME: xdg, XDG_STATE_HOME: xdg };
+    const repo = await makeGitRepo();
+    expect(runCli(['register', repo], env).status).toBe(0);
+    const kinds = () => {
+      const { status, stdout } = runCli(['edt', 'list'], env);
+      expect(status).toBe(0);
+      return JSON.parse(stdout.trim()).data.edts.map((edt: { kind: string; topic: string }) => [edt.topic, edt.kind]);
+    };
+
+    expect(kinds()).toEqual([]);
+
+    await writeFile(join(xdg, 'tui-back', 'settings.yaml'), 'edts:\n  sharedBranchesEdtEnabled: true\n');
+    expect(kinds()).toEqual([['Shared branches', 'system-shared']]);
+
+    await writeFile(join(xdg, 'tui-back', 'settings.yaml'), 'edts:\n  sharedBranchesEdtEnabled: false\n');
+    expect(kinds()).toEqual([]);
+  });
+
   it('with no registry.yaml returns an empty listing and exits 0', async () => {
     const xdg = await makeTempDir();
 
