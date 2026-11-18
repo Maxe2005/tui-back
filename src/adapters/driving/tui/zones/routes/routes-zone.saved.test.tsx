@@ -1,5 +1,4 @@
-// tui/zones/routes: bounded list + route filter (real keypresses via the fake-tty technique
-// shared with logs-zone.interaction.test.tsx).
+// tui/zones/routes: saved requests and saved-prompt guards (real keypresses).
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import { createAppStore } from '../../store/app-store.js';
