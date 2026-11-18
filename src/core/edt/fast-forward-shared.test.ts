@@ -51,6 +51,23 @@ describe('fastForwardShared', () => {
     expect(git.pull).toHaveBeenCalledWith('/r/a');
   });
 
+  it('uses pull as the only update path of a checked-out branch (never fetch b:b, merge or checkout)', async () => {
+    const git = fakeGit({ currentBranch: vi.fn(async () => ok('development')) });
+    const only = buildSharedBranchesEdt([{ repoPath: '/r/a', manifest: { service: 'a', sharedBranch: 'development' } }]);
+    await run(git, [only]);
+    expect(git.pull).toHaveBeenCalledTimes(1);
+    expect(git.fetch).not.toHaveBeenCalled();
+    expect(git.mergeBranch).not.toHaveBeenCalled();
+    expect(git.checkout).not.toHaveBeenCalled();
+  });
+
+  it('a failing pull is a failed row, never retried through another path', async () => {
+    const git = fakeGit({ currentBranch: vi.fn(async () => ok('development')), pull: vi.fn(async () => err('git-pull-error', 'not ff')) });
+    const only = buildSharedBranchesEdt([{ repoPath: '/r/a', manifest: { service: 'a', sharedBranch: 'development' } }]);
+    expect(await run(git, [only])).toMatchObject({ ok: true, data: { rows: [{ outcome: 'failed', detail: 'not ff' }] } });
+    expect(git.fetch).not.toHaveBeenCalled();
+  });
+
   it('skips a dirty checked-out branch (never stashed)', async () => {
     const git = fakeGit({ currentBranch: vi.fn(async () => ok('development')), hasUncommittedChanges: vi.fn(async () => ok(true)) });
     const result = await run(git, [buildSharedBranchesEdt([{ repoPath: '/r/a', manifest: { service: 'a', sharedBranch: 'development' } }])]);
