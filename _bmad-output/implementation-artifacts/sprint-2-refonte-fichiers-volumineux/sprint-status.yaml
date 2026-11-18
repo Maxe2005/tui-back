@@ -50,8 +50,8 @@ development_status:
   12-12-split-updatezone-into-hooks-and-subcomponents: done
   epic-12-retrospective: optional
 
-  epic-13: backlog
-  13-1-test-split-conventions-and-shared-fixtures: backlog
+  epic-13: in-progress
+  13-1-test-split-conventions-and-shared-fixtures: done
   13-2-split-the-edts-zone-interaction-tests: backlog
   13-3-split-group-update-and-switch-tests: backlog
   13-4-split-app-shell-and-store-tests: backlog
