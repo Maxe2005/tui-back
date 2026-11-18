@@ -177,6 +177,25 @@ describe('realignServices', () => {
     expect(git.checkout).toHaveBeenCalledTimes(1);
   });
 
+  it('with the system shared-branches EDT active, a drifted member checks out its shared branch ungated', async () => {
+    const SYSTEM: EdtRegistryEntry = {
+      ulid: '01SHAREDBRANCHES0000000000',
+      topic: 'Shared branches',
+      kind: 'system-shared',
+      createdAt: '1970-01-01T00:00:00.000Z',
+      status: 'inactive',
+      members: [{ service: 'svc-a', repoPath: '/r/a', branch: 'develop' }],
+    };
+    const { params, git } = build({ active: SYSTEM.ulid });
+    const edtRegistry = { list: vi.fn(async () => ok([SYSTEM])) } as unknown as EdtRegistryPort;
+
+    const result = await realignServices(params({ edtRegistry }));
+
+    expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-a', outcome: 'realigned' }] } });
+    expect(git.assertAllowedBranch).not.toHaveBeenCalled();
+    expect(git.checkout).toHaveBeenCalledWith('/r/a', 'develop');
+  });
+
   it('fails a member when the gate or the checkout fails, the others still proceed', async () => {
     const { params } = build({
       branches: { '/r/b': ok('main') },
