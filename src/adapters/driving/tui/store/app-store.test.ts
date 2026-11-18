@@ -1282,6 +1282,46 @@ describe("app store", () => {
         expect(save).not.toHaveBeenCalled();
       });
 
+      it("reads the pointer from disk: in-memory activeEdt null but the persisted pointer is the system EDT => refused", async () => {
+        const { store, save } = withActive(SHARED_ULID);
+        await store.getState().loadSettings();
+        store.getState().setActiveEdt(null);
+
+        await store.getState().updateSettings({ edts: { sharedBranchesEdtEnabled: false } });
+
+        expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(true);
+        expect(store.getState().settingsWarning).toContain("switch to another EDT first");
+        expect(save).not.toHaveBeenCalled();
+      });
+
+      it("a later successful update clears the stale refusal warning", async () => {
+        const { store } = withActive(SHARED_ULID);
+        await store.getState().loadSettings();
+        await store.getState().updateSettings({ edts: { sharedBranchesEdtEnabled: false } });
+        expect(store.getState().settingsWarning).not.toBeNull();
+
+        await store.getState().updateSettings({ commandPalette: { gridMaxRows: 9 } });
+
+        expect(store.getState().settingsWarning).toBeNull();
+      });
+
+      it("setActiveEdt and a reload with a live pointer reset the activeEdtWarning", async () => {
+        const deps = fakeDeps();
+        const state = { ...deps.state, readActiveEdt: vi.fn(async () => ok(SHARED_ULID as string | null)) };
+        const store = createAppStore({ ...deps, state });
+        await store.getState().loadEdts();
+        expect(store.getState().activeEdtWarning).not.toBeNull();
+
+        store.getState().setActiveEdt("01OTHER");
+        expect(store.getState().activeEdtWarning).toBeNull();
+
+        await store.getState().loadEdts();
+        expect(store.getState().activeEdtWarning).not.toBeNull();
+        state.readActiveEdt.mockResolvedValue(ok(null));
+        await store.getState().loadEdts();
+        expect(store.getState().activeEdtWarning).toBeNull();
+      });
+
       it("turns the setting off immediately when the system EDT is not active", async () => {
         const { store, save } = withActive("01OTHER");
         await store.getState().loadSettings();

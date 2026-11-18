@@ -249,7 +249,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
   const createState: StateCreator<AppState, [], [], EdtSlice> = (set, get) => ({
     activeEdt: null,
     activeEdtWarning: null,
-    setActiveEdt: (edt) => set({ activeEdt: edt }),
+    setActiveEdt: (edt) => set({ activeEdt: edt, activeEdtWarning: null }),
     edtsBranches: null,
     edtsBranchesStatus: 'idle',
     edtsBranchesError: null,
@@ -364,7 +364,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         overwrite: params.overwrite,
       });
       if (result.ok && result.data.status === 'activated') {
-        set({ activeEdt: result.data.ulid });
+        set({ activeEdt: result.data.ulid, activeEdtWarning: null });
         void get().loadTabVisibility();
       }
       return result;
@@ -481,7 +481,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         if (result.ok) {
           // Success updates store's cached active-EDT pointer immediately — direct consequence
           // of this switch, not continuous fs.watch/poll re-sync.
-          set({ activeEdt: result.data.ulid });
+          set({ activeEdt: result.data.ulid, activeEdtWarning: null });
           // Switching active EDT swaps whole member set — reload gated-tab visibility so
           // newly (in)active member's tab flips immediately.
           void get().loadTabVisibility();
