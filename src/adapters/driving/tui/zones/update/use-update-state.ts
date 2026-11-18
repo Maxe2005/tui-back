@@ -1,5 +1,5 @@
 // tui/zones/update: use-update-state — the Update zone's store selectors and local `useState`s /
-// refs. No derivation, no effects: those live in the layers built on top.
+// refs. No derivation of its own (it also hosts the bounds/window-size/config-panel hooks); effects live in the layers built on top.
 import { useRef, useState } from 'react';
 import { useWindowSize } from 'ink';
 import type { AppStore } from '../../store/app-store.js';

@@ -145,7 +145,7 @@ export function useUpdateEffects(c: UpdateZoneCtx): void {
     } else {
       void openUpdateServicePick();
     }
-    // Keyed on primitives — selectedServiceRow is re-derived every render, so depend on
+    // Keyed on primitives — focusedServiceRow is re-derived every render, so depend on
     // its identity fields rather than the object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [updateServiceSelectRequest]);

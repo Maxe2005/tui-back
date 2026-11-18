@@ -176,8 +176,7 @@ export function useUpdateInput(c: UpdateZoneCtx): void {
         }
         return;
       }
-      // `Esc` drops service focus onto the last-update recap; an arrow key restores it (the
-      // remembered service, unmoved).
+      // PgUp/PgDn scroll the recap's result list while the recap view is active.
       if (recapActive && (key.pageDown || key.pageUp)) {
         const page = Math.max(1, windowSize.rows - RECAP_CHROME_ROWS - 1);
         const last = Math.max(0, updateResults.length - 1);

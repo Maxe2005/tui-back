@@ -103,58 +103,58 @@ export function UpdateDetailColumn({ c }: { c: UpdateZoneCtx }) {
                   )}
                 />
               )}
-        </Box>
-      ) : null}
-      {updateStatus === 'done' && updateTopic !== null ? (
-        // The zero-member no-op carries its note as the primary outcome line — rendering
-        // the success-toned `0 updated, 0 skipped, 0 failed` counts DetailPane for it
-        // would overstate a no-op as a result.
-        updateNote !== null && updateResults.length === 0 ? (
-          <Box flexDirection="column">
-            <Text color={colors.text} wrap="truncate-end">{updateNote}</Text>
-            <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_IDLE_PROMPT}</Text>
-          </Box>
-        ) : (
-          <Box flexDirection="column">
-            {recap !== null ? (
+            </Box>
+          ) : null}
+          {updateStatus === 'done' && updateTopic !== null ? (
+            // The zero-member no-op carries its note as the primary outcome line — rendering
+            // the success-toned `0 updated, 0 skipped, 0 failed` counts DetailPane would
+            // overstate a no-op as a result.
+            updateNote !== null && updateResults.length === 0 ? (
               <Box flexDirection="column">
-                <Text bold color={colors.text} wrap="truncate-end">
-                  {recap.title}
-                </Text>
-                {recap.contextLines.slice(0, RECAP_CONTEXT_MAX_LINES).map((line) => (
-                  <Text key={line} color={colors['text-dim']} wrap="truncate-end">
-                    {line}
-                  </Text>
-                ))}
-                <BoundedList
-                  items={recap.resultLines}
-                  chromeRows={RECAP_CHROME_ROWS}
-                  cursorIndex={Math.min(recapCursor, Math.max(0, recap.resultLines.length - 1))}
-                  renderItem={(line, index) => (
-                    // Duplicate service names occur within one EDT — key by line + index.
-                    <Text key={`${line}-${index}`} color={colors.text} wrap="truncate-end">
-                      {line}
-                    </Text>
-                  )}
-                />
+                <Text color={colors.text} wrap="truncate-end">{updateNote}</Text>
+                <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_IDLE_PROMPT}</Text>
               </Box>
-            ) : null}
-            <DetailPane
-              title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
-              summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
-            >
-              {updateNote ?? UPDATE_IDLE_PROMPT}
-            </DetailPane>
-          </Box>
-        )
-      ) : null}
-      {updateStatus === 'idle' ? (
-        <Box flexDirection="column">
-          <Text color={colors.text} wrap="truncate-end">{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
-          <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_ALL_REPOS_PROMPT}</Text>
-          <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_NO_RECAP}</Text>
-        </Box>
-      ) : null}
+            ) : (
+              <Box flexDirection="column">
+                {recap !== null ? (
+                  <Box flexDirection="column">
+                    <Text bold color={colors.text} wrap="truncate-end">
+                      {recap.title}
+                    </Text>
+                    {recap.contextLines.slice(0, RECAP_CONTEXT_MAX_LINES).map((line) => (
+                      <Text key={line} color={colors['text-dim']} wrap="truncate-end">
+                        {line}
+                      </Text>
+                    ))}
+                    <BoundedList
+                      items={recap.resultLines}
+                      chromeRows={RECAP_CHROME_ROWS}
+                      cursorIndex={Math.min(recapCursor, Math.max(0, recap.resultLines.length - 1))}
+                      renderItem={(line, index) => (
+                        // Duplicate service names occur within one EDT — key by line + index.
+                        <Text key={`${line}-${index}`} color={colors.text} wrap="truncate-end">
+                          {line}
+                        </Text>
+                      )}
+                    />
+                  </Box>
+                ) : null}
+                <DetailPane
+                  title={updateTopic === 'all-repos' ? 'All-repos update' : 'Group update'}
+                  summary={{ tone: resolveUpdateTone(updateResults), text: formatUpdateSummary(updateTopic, updateResults) }}
+                >
+                  {updateNote ?? UPDATE_IDLE_PROMPT}
+                </DetailPane>
+              </Box>
+            )
+          ) : null}
+          {updateStatus === 'idle' ? (
+            <Box flexDirection="column">
+              <Text color={colors.text} wrap="truncate-end">{offerRerun ? UPDATE_INTERRUPTED_OFFER : UPDATE_IDLE_PROMPT}</Text>
+              <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_ALL_REPOS_PROMPT}</Text>
+              <Text color={colors['text-dim']} wrap="truncate-end">{UPDATE_NO_RECAP}</Text>
+            </Box>
+          ) : null}
         </Box>
       ) : null}
     </Box>
