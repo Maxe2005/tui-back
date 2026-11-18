@@ -389,7 +389,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'shared/terminal-fullscreen', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
   { id: 'shared/terminal-confirm-close', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, confirming: true }), initial: { confirming: true } }) },
   { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
-  { id: 'update/zone', file: 'zones/update/update-zone.tsx', embedded: 'update' },
+  { id: 'update/zone', file: 'zones/update/update-zone-dialogs.tsx', embedded: 'update' },
   { id: 'routes/zone', file: 'zones/routes/routes-modals.tsx', embedded: 'routes' },
   { id: 'shared-types/zone', file: 'zones/shared-types/shared-types-zone.tsx', embedded: 'shared-types' },
 ];
