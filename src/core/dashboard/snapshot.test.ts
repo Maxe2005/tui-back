@@ -252,6 +252,15 @@ describe('buildDashboardSnapshot', () => {
     expect(snapshot.services[1]).toMatchObject({ protectedBranch: false, usedByEdts: ['topic-b'] });
   });
 
+  it('never lists the system shared-branches EDT as a user of a branch', async () => {
+    const system: EdtRegistryEntry = { ...edt('01SHAREDBRANCHES0000000000', 'Shared branches', [['/r/a', 'development']]), kind: 'system-shared' };
+    const snapshot = await data({
+      edts: [edt('e1', 'topic-a', [['/r/a', 'other']]), system],
+      git: { currentBranch: async () => ok('development') },
+    });
+    expect(snapshot.services[0]?.usedByEdts).toEqual([]);
+  });
+
   it('summarizes the registry per path', async () => {
     const snapshot = await data({
       paths: ['/r/a', '/r/b', '/r/gone', '/r/bad', '/r/err', '/r/unmanaged'],
