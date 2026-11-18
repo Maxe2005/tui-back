@@ -15,7 +15,9 @@
     "tsconfig.json",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
-    "!src/**/test-support"
+    "!src/**/test-support",
+    "!src/**/*.test-support.ts",
+    "!src/**/*.test-support.tsx"
   ],
   "bin": {
     "tui-back": "./src/bin/tui-back.mjs"
