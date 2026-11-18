@@ -918,7 +918,7 @@ describe('subcommand registry guards', () => {
     });
   });
 
-  describe('edt list and the system shared-branches EDT (story 2.46)', () => {
+  describe('edt list and the system shared-branches EDT', () => {
     const system = {
       ulid: '01SHAREDBRANCHES0000000000',
       topic: 'Shared branches',

@@ -16,8 +16,8 @@ export function branchOwners(
   return edts
     .filter(
       (edt) =>
-        // The system "Shared branches" EDT never "uses" a shared branch for ownership purposes
-        // (Story 2.43 invariant): it must not annotate choosers nor block renames.
+        // The system "Shared branches" EDT never "uses" a shared branch for ownership purposes:
+        // it must not annotate choosers nor block renames.
         !isSystemEdt(edt) &&
         edt.ulid !== excludeUlid &&
         edt.members.some((member) => member.branch === branch && resolve(member.repoPath) === target),

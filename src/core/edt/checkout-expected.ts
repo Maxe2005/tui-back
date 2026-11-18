@@ -9,7 +9,7 @@ import { isSystemEdt } from './shared-edt.js';
 // registered branch, any other repo to its manifest `sharedBranch`.
 export type TargetBranchSpec = { kind: 'member'; branch: string; edtUlid: string } | { kind: 'shared'; branch: string };
 
-// The AD-8 carve-out for the system "Shared branches" EDT (Story 2.46): its members' own branch
+// The AD-8 carve-out for the system "Shared branches" EDT: its members' own branch
 // IS the service's shared branch, which the member gate would always reject as protected, so its
 // members take the ungated `shared` spec (fetch if absent locally). Every ordinary EDT keeps the
 // gated `member` spec — it still cannot check out a shared branch — and the git adapter's gate

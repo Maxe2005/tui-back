@@ -109,7 +109,7 @@ describe('checkoutExpectedBranch', () => {
   });
 });
 
-describe('memberTargetSpec (AD-8 carve-out, story 2.46)', () => {
+describe('memberTargetSpec (AD-8 carve-out)', () => {
   it('gives the system shared-branches EDT the ungated shared spec', () => {
     expect(memberTargetSpec('01SHAREDBRANCHES0000000000', 'development')).toEqual({ kind: 'shared', branch: 'development' });
   });

@@ -28,7 +28,7 @@ describe('branchOwnersMap', () => {
   });
 });
 
-describe('system shared-branches EDT (story 2.46)', () => {
+describe('system shared-branches EDT', () => {
   const system = { ulid: '01SHAREDBRANCHES0000000000', topic: 'Shared branches', kind: 'system-shared' as const, members: [{ service: 'a', repoPath: '/r/a', branch: 'development' }] };
 
   it('is never listed as owner of a shared branch', () => {

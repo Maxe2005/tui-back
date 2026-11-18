@@ -593,7 +593,7 @@ describe('modifyEdt persistence (real update())', () => {
   });
 });
 
-describe('edt-registry shared-branches system EDT (story 2.46)', () => {
+describe('edt-registry shared-branches system EDT', () => {
   function sharedSource(enabled: boolean, repos: Record<string, string | null>) {
     const state = { enabled, repos: { ...repos } };
     const settings = {

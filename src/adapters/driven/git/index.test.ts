@@ -230,7 +230,7 @@ function edtEntry(ulid: string, repoPath: string, branch: string): EdtRegistryEn
   };
 }
 
-describe('assertAllowedBranch — system shared-branches EDT carve-out (story 2.46)', () => {
+describe('assertAllowedBranch — system shared-branches EDT carve-out', () => {
   // The carve-out lives in core (the system EDT's members take the ungated `shared` target
   // spec); the gate itself must keep rejecting every protected branch, whoever asks.
   it('still rejects a shared branch for the system EDT id and for an ordinary EDT id', async () => {
@@ -255,7 +255,7 @@ describe('assertAllowedBranch — system shared-branches EDT carve-out (story 2.
   });
 });
 
-describe('assertAllowedBranch — cross-EDT gate ignores the system EDT (story 2.46)', () => {
+describe('assertAllowedBranch — cross-EDT gate ignores the system EDT', () => {
   it('does not report the system shared-branches EDT as another EDT owning a branch', async () => {
     const repo = await makeGitRepo();
     const edtRegistry = {

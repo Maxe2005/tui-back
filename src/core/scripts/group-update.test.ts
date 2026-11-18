@@ -860,7 +860,7 @@ describe('groupUpdate — migrate phase', () => {
     expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
   });
 
-  describe('active EDT is the system shared-branches EDT (story 2.46)', () => {
+  describe('active EDT is the system shared-branches EDT', () => {
     const SYSTEM = {
       ...edtEntry('01SHAREDBRANCHES0000000000', 'Shared branches', [
         member('svc-a', '/repo/a', 'development'),

@@ -1256,7 +1256,7 @@ describe("app store", () => {
       });
     });
 
-    describe("shared-branches EDT (story 2.46)", () => {
+    describe("shared-branches EDT", () => {
       const SHARED_ULID = "01SHAREDBRANCHES0000000000";
       const enabledSettings = { ...DEFAULT_SETTINGS, edts: { ...DEFAULT_SETTINGS.edts, sharedBranchesEdtEnabled: true } };
       const withActive = (active: string | null) => {

@@ -41,7 +41,7 @@ export async function assertAllowedBranch(
     const target = resolve(repoPath);
     const ownedByOther = listed.data.some(
       (candidate) =>
-        // The system shared-branches EDT is not a "user" of any branch (Story 2.43 invariant).
+        // The system shared-branches EDT is not a "user" of any branch.
         !isSystemEdt(candidate) &&
         candidate.ulid !== edtId &&
         candidate.members.some((member) => resolve(member.repoPath) === target && member.branch === branchName),

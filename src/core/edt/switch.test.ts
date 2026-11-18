@@ -1796,7 +1796,7 @@ describe('switchActiveEdt — unchanged outcome', () => {
   });
 });
 
-describe('switchActiveEdt — shared-branches system EDT (story 2.46)', () => {
+describe('switchActiveEdt — shared-branches system EDT', () => {
   const SYSTEM = buildSharedBranchesEdt(REPOS.map((repoPath) => ({ repoPath, manifest: manifestFor(repoPath) })));
 
   it('the system EDT only counts as an owner of a repo when it is the switch target', () => {
