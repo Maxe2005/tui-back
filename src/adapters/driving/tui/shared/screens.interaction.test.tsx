@@ -3,6 +3,7 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
+import { SHARED_EDT_ULID } from '../../../../core/edt/shared-edt.js';
 import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
 import { createAppStore } from '../store/app-store.js';
 import { RepoRegistryScreen } from './repo-registry-screen.js';
@@ -62,6 +63,44 @@ describe('SettingsScreen (real keypress)', () => {
       await press(KEYS.end);
       await press(KEYS.enter);
       expect(footerIdOf(store)).toBe('confirm');
+    } finally {
+      await stop();
+    }
+  });
+
+  it('on the EDTs tab the shared-branches switch toggles live with Space, and a refusal shows inline', async () => {
+    const store = createAppStore();
+    const { press, stop, stdout, instance } = mount(createElement(SettingsScreen, { useStore: store, initialTab: 'edts' }));
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(false);
+      await press(KEYS.end);
+      expect(footerIdOf(store)).toBe('settings-groups-toggle');
+      await press(' ');
+      expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(true);
+      // Active system EDT (cached pointer, no deps wired): turning it off is refused, inline.
+      store.setState({ activeEdt: SHARED_EDT_ULID });
+      await press(' ');
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(true);
+      expect(stdout.output).toContain('switch to another EDT first');
+      store.setState({ activeEdt: null });
+      await press(' ');
+      expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(false);
+    } finally {
+      await stop();
+    }
+  });
+
+  it('Enter on the shared-branches switch row is a no-op (no drill-in, no toggle)', async () => {
+    const store = createAppStore();
+    const { press, stop, instance } = mount(createElement(SettingsScreen, { useStore: store, initialTab: 'edts' }));
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(KEYS.end);
+      await press(KEYS.enter);
+      expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(false);
+      expect(footerIdOf(store)).toBe('settings-groups-toggle');
     } finally {
       await stop();
     }

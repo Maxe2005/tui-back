@@ -89,17 +89,20 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
       // A later accepted update supersedes a stale refusal message.
       set({ settingsWarning: null });
       settingsVersion += 1;
+      // Re-read after the awaits above: the live value, not the snapshot taken at call time.
+      const latest = get().settings;
+      const toggledShared = partial.edts?.sharedBranchesEdtEnabled !== undefined && partial.edts.sharedBranchesEdtEnabled !== latest.edts.sharedBranchesEdtEnabled;
       const next: Settings = {
-        general: { ...current.general, ...partial.general },
-        commandPalette: { ...current.commandPalette, ...partial.commandPalette },
-        edts: { ...current.edts, ...partial.edts },
-        logs: { ...current.logs, ...partial.logs },
-        update: { ...current.update, ...partial.update },
-        sharedTypes: { ...current.sharedTypes, ...partial.sharedTypes },
-        switch: { ...current.switch, ...partial.switch },
-        realign: { ...current.realign, ...partial.realign },
-        services: { ...current.services, ...partial.services },
-        dashboard: { ...current.dashboard, ...partial.dashboard },
+        general: { ...latest.general, ...partial.general },
+        commandPalette: { ...latest.commandPalette, ...partial.commandPalette },
+        edts: { ...latest.edts, ...partial.edts },
+        logs: { ...latest.logs, ...partial.logs },
+        update: { ...latest.update, ...partial.update },
+        sharedTypes: { ...latest.sharedTypes, ...partial.sharedTypes },
+        switch: { ...latest.switch, ...partial.switch },
+        realign: { ...latest.realign, ...partial.realign },
+        services: { ...latest.services, ...partial.services },
+        dashboard: { ...latest.dashboard, ...partial.dashboard },
       };
       // Optimistic: applies to the live store immediately, before persistence even starts —
       // no separate save step.
@@ -116,6 +119,11 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
           set({ settingsWarning: result.error.message });
         } else {
           set({ settingsWarning: null });
+          // The registry adapter synthesizes (or omits) the system EDT from the persisted
+          // setting: reload the EDT list so the zone reflects the toggle live.
+          if (toggledShared) {
+            await get().loadEdts();
+          }
         }
       };
       const chained = settingsSaveChain.then(run, run);

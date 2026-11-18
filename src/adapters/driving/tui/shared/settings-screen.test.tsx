@@ -309,6 +309,16 @@ describe('SettingsScreen branch-dropdown-rows group (branch autocomplete shared 
     expect(output).toContain('Branch dropdown rows');
   });
 
+  it('renders the shared-branches switch row, unchecked by default and checked when enabled', async () => {
+    const store = createAppStore();
+    const off = await renderToString(<SettingsScreen useStore={store} initialTab="edts" />);
+    expect(off).toContain('Show the shared-branches EDT');
+    expect(off).toContain('Adds the system "Shared branches" EDT');
+    store.setState({ settings: { ...DEFAULT_SETTINGS, edts: { ...DEFAULT_SETTINGS.edts, sharedBranchesEdtEnabled: true } } });
+    const on = await renderToString(<SettingsScreen useStore={store} initialTab="edts" />);
+    expect(on).not.toBe(off);
+  });
+
   it('drilled into "Branch dropdown rows", renders the live value with its adjust hint', async () => {
     const store = createAppStore();
     store.setState({
@@ -765,6 +775,7 @@ describe('settingsFooterContext', () => {
     expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'grid-max-rows' })).toBe('settings-adjust');
     expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'history-dedup' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', closed)).toBe('settings-groups');
+    expect(settingsFooterContext('edts', { ...closed, edtsToggleRow: true })).toBe('settings-groups-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'hint-visibility' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'branch-dropdown-rows' })).toBe('settings-adjust');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'switch-restart' })).toBe('settings-toggle');

@@ -35,7 +35,7 @@ import {
   type ModifyEdtData,
 } from '../../../../../core/edt/modify.js';
 import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import { resolveActiveEdtPointer } from '../../../../../core/edt/shared-edt.js';
+import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../core/edt/shared-edt.js';
 import {
   deleteEdt as deleteEdtUseCase,
   resolveMemberDeleteStatuses as resolveMemberDeleteStatusesUseCase,
@@ -310,8 +310,10 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       // A pointer naming the system "Shared branches" EDT while the setting is off (it is then
       // absent from the list) falls back to no active EDT, with a warning; nothing is written.
       const pointer = resolveActiveEdtPointer(activeUlid.ok ? activeUlid.data : null, listed.data);
+      // The system EDT sorts first (the registry appends it last); user EDTs keep their order.
+      const sorted = [...listed.data.filter((edt) => isSystemEdt(edt)), ...listed.data.filter((edt) => !isSystemEdt(edt))];
       set({
-        edts: listed.data,
+        edts: sorted,
         edtsStatus: 'idle',
         edtsError: null,
         activeEdt: pointer.active,
