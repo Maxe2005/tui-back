@@ -147,6 +147,14 @@ describe('formatUpdateRow', () => {
   });
 });
 
+describe('formatUpdateSummary: shared-branches EDT', () => {
+  it('says "all shared branches"', () => {
+    expect(formatUpdateSummary('Shared branches', [{ service: 'a', outcome: 'updated' }])).toBe(
+      'Shared branches (all shared branches): 1 updated, 0 skipped, 0 failed.',
+    );
+  });
+});
+
 describe('resolveUpdateTone / formatUpdateSummary', () => {
   it('is error when any service failed, warning on skips, success otherwise', () => {
     expect(resolveUpdateTone([{ service: 'a', outcome: 'updated' }])).toBe('success');
