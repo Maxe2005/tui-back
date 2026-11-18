@@ -1,7 +1,3 @@
-// tui/store/slices/update-slice: unit tests for the Update zone's run state — the slice
-// calls the real core/scripts/group-update.ts use-case against fake ports (AD-2
-// in-process), so these verify the wiring (status transitions, runInProgress guard,
-// interrupted marking + edts refresh) rather than re-testing the use-case matrix.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../../../core/result.js';
 import type { GitPort } from '../../../../../core/ports/git.js';
