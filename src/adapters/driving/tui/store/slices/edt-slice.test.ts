@@ -290,6 +290,51 @@ describe('edt slice — update-in-progress lock', () => {
   });
 });
 
+describe('edt slice — fast-forward the shared branches (story 2.48)', () => {
+  const system = {
+    ulid: '01SHAREDBRANCHES0000000000',
+    topic: 'Shared branches',
+    kind: 'system-shared' as const,
+    createdAt: '1970-01-01T00:00:00.000Z',
+    status: 'inactive' as const,
+    members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'development' }],
+  };
+  const withSystem = () => {
+    const base = fakeDeps();
+    return fakeDeps({ edtRegistry: { ...base.edtRegistry, list: vi.fn(async () => ok([system])) } });
+  };
+
+  it('runs the use case, returns the rows and never touches the active pointer or checks out', async () => {
+    const deps = withSystem();
+    vi.mocked(deps.git.isBranchMerged).mockResolvedValue(ok(false));
+    vi.mocked(deps.git.currentBranch).mockResolvedValue(ok('feat/x'));
+    const store = createAppStore(deps);
+
+    const result = await store.getState().fastForwardShared();
+
+    expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-a', outcome: 'fast-forwarded' }] } });
+    expect(deps.git.fetch).toHaveBeenCalledWith('/repo/a', 'development');
+    expect(deps.git.checkout).not.toHaveBeenCalled();
+    expect(deps.state.writeActiveEdt).not.toHaveBeenCalled();
+    expect(store.getState().fastForwardSharedRunning).toBe(false);
+  });
+
+  it('is refused while an update or a restart runs, and while another fast-forward is in flight', async () => {
+    const deps = withSystem();
+    const store = createAppStore(deps);
+    store.setState({ updateStatus: 'running' });
+    expect(await store.getState().fastForwardShared()).toMatchObject({ ok: false, error: { code: 'fast-forward-in-progress' } });
+    store.setState({ updateStatus: 'done', fastForwardSharedRunning: true });
+    expect(await store.getState().fastForwardShared()).toMatchObject({ ok: false, error: { code: 'fast-forward-in-progress' } });
+    expect(deps.git.fetch).not.toHaveBeenCalled();
+  });
+
+  it('is edt-not-found when the setting is off (no system EDT)', async () => {
+    const store = createAppStore(fakeDeps());
+    expect(await store.getState().fastForwardShared()).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+  });
+});
+
 function calls(fn: unknown): Array<unknown[]> {
   return (fn as unknown as { mock: { calls: unknown[][] } }).mock.calls;
 }

@@ -44,6 +44,7 @@ import {
   type MemberDisposition,
 } from '../../../../../core/edt/delete.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
+import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../core/edt/fast-forward-shared.js';
 import type { Result } from '../../../../../core/result.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
@@ -62,6 +63,12 @@ export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DE
 export const UPDATE_IN_PROGRESS_CODE = 'update-in-progress';
 export const UPDATE_IN_PROGRESS_MESSAGE =
   'A group update is in progress — wait for it to finish before activating or switching an EDT.';
+
+// The "fast-forward the shared branches" quick action (story 2.48) moves local branches, so it
+// never overlaps a group update, a restart run or another fast-forward.
+export const FAST_FORWARD_IN_PROGRESS_CODE = 'fast-forward-in-progress';
+export const FAST_FORWARD_IN_PROGRESS_MESSAGE =
+  'An update, a restart or another fast-forward is in progress — wait for it to finish before fast-forwarding the shared branches.';
 
 // A restart run (post-switch, standalone, or a group update) is in flight — see the exclusion
 // notes on `runSwitchRestart`.
@@ -173,6 +180,12 @@ export type EdtSlice = {
   // `activated` updates cached active pointer like switchEdt.
   activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
+  // Quick action on the system "Shared branches" EDT: fast-forwards each service's local shared
+  // branch from origin with no switch, migration or restart (core/edt/fast-forward-shared.ts).
+  // Rejected while an update, a restart run or another fast-forward is in flight; `edt-not-found`
+  // when the setting is off. Never touches the active-EDT pointer.
+  fastForwardSharedRunning: boolean;
+  fastForwardShared: () => Promise<Result<{ rows: FastForwardSharedRow[] }>>;
   // The optional post-switch restart phase (FR-37): a second call after a successful switchEdt,
   // never part of it. `null` until a run starts; kept after it ends so the report survives
   // leaving the zone, until clearSwitchRestart. Starting one while an update, another restart
@@ -447,6 +460,21 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       pendingSwitchDirtyResolve = null;
       set({ switchDirtyRepos: null });
       resolve?.(choice);
+    },
+    fastForwardSharedRunning: false,
+    fastForwardShared: async () => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      if (get().fastForwardSharedRunning || get().updateStatus === 'running' || get().switchRestart?.status === 'running') {
+        return { ok: false, error: { code: FAST_FORWARD_IN_PROGRESS_CODE, message: FAST_FORWARD_IN_PROGRESS_MESSAGE } };
+      }
+      set({ fastForwardSharedRunning: true });
+      try {
+        return await fastForwardSharedUseCase({ edtRegistry: deps.edtRegistry, git: deps.git });
+      } finally {
+        set({ fastForwardSharedRunning: false });
+      }
     },
     switchEdt: async (params) => {
       if (!deps) {
