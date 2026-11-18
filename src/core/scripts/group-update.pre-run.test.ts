@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../result.js';
 import { groupUpdate, type GroupUpdateParams } from './group-update.js';
-import { calls, fakeContainer, fakeLock, fakeMigration, fakeRegistry, fakeRestart, member } from '../shared/core-ports.test-support.js';
+import { calls, fakeContainer, fakeLock, fakeMigration, fakeRegistry, fakeRestart } from '../shared/core-ports.test-support.js';
 import { fakeGit, makeParams } from './group-update.test-support.js';
 
 describe('groupUpdate — pre-run configuration', () => {

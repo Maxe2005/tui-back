@@ -5,7 +5,7 @@ import type { GitPort } from '../ports/git.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { MigrationPort } from '../ports/migration.js';
 import { groupUpdate, type OnUpdateBlocker, type UpdateBlockerChoice, type UpdatePhase } from './group-update.js';
-import { calls, fakeLock, fakeManifest, fakeMigration, fakeRestart, manifestFor, member } from '../shared/core-ports.test-support.js';
+import { calls, fakeLock, fakeManifest, fakeMigration, fakeRestart, manifestFor } from '../shared/core-ports.test-support.js';
 import { fakeGit, makeParams } from './group-update.test-support.js';
 
 describe('groupUpdate — per-service result observer', () => {

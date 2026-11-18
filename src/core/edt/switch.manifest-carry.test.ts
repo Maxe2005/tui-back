@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../result.js';
 import type { GitPort } from '../ports/git.js';
 import { switchActiveEdt } from './switch.js';
-import { calls, fakeEdtRegistry, fakeGit, member } from '../shared/core-ports.test-support.js';
+import { calls, fakeEdtRegistry, fakeGit } from '../shared/core-ports.test-support.js';
 import { callOrder, fakeManifestCarry, makeParams, OUTGOING, TARGET } from './switch.test-support.js';
 
 describe('switchActiveEdt — dirty .tui-back.yaml is carried over', () => {
