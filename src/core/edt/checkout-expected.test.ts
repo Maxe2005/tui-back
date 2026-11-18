@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, type ResultError } from '../result.js';
 import type { GitPort } from '../ports/git.js';
-import { checkoutExpectedBranch, type CheckoutStep } from './checkout-expected.js';
+import { checkoutExpectedBranch, memberTargetSpec, type CheckoutStep } from './checkout-expected.js';
 
 function setup(overrides: { branchExists?: boolean; fetch?: unknown; gate?: unknown; checkout?: unknown; prepare?: CheckoutStep<string, string> } = {}) {
   const events: string[] = [];
@@ -106,5 +106,35 @@ describe('checkoutExpectedBranch', () => {
     expect(skipCheckout).toHaveBeenCalledWith('prepared');
     expect(events).toEqual(['exists', 'prepare']);
     expect(git.checkout).not.toHaveBeenCalled();
+  });
+});
+
+describe('memberTargetSpec (AD-8 carve-out)', () => {
+  it('gives the system shared-branches EDT the ungated shared spec', () => {
+    expect(memberTargetSpec('01SHAREDBRANCHES0000000000', 'development')).toEqual({ kind: 'shared', branch: 'development' });
+  });
+
+  it('keeps the gated member spec for an ordinary EDT', () => {
+    expect(memberTargetSpec('01ORDINARY', 'development')).toEqual({ kind: 'member', branch: 'development', edtUlid: '01ORDINARY' });
+  });
+
+  it('system members check out a shared branch without the gate, fetching it when absent; an ordinary EDT is rejected', async () => {
+    const gate = err('shared-branch-rejected', 'protected');
+    const system = setup({ branchExists: false, gate });
+    const systemResult = await checkoutExpectedBranch({
+      git: system.git, repoPath: '/r/a', spec: memberTargetSpec('01SHAREDBRANCHES0000000000', 'development'),
+      prepare: system.prepare, onResolveFailed: system.onResolveFailed, onCheckoutFailed: system.onCheckoutFailed,
+    });
+    expect(systemResult.ok).toBe(true);
+    expect(system.git.assertAllowedBranch).not.toHaveBeenCalled();
+    expect(system.events).toEqual(['exists', 'fetch', 'prepare', 'checkout']);
+
+    const ordinary = setup({ gate });
+    const ordinaryResult = await checkoutExpectedBranch({
+      git: ordinary.git, repoPath: '/r/a', spec: memberTargetSpec('01ORDINARY', 'development'),
+      prepare: ordinary.prepare, onResolveFailed: ordinary.onResolveFailed, onCheckoutFailed: ordinary.onCheckoutFailed,
+    });
+    expect(ordinaryResult).toEqual({ ok: false, row: 'resolve:shared-branch-rejected' });
+    expect(ordinary.git.checkout).not.toHaveBeenCalled();
   });
 });

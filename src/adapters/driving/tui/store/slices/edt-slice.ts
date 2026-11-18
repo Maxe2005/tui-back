@@ -35,6 +35,7 @@ import {
   type ModifyEdtData,
 } from '../../../../../core/edt/modify.js';
 import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import { resolveActiveEdtPointer } from '../../../../../core/edt/shared-edt.js';
 import {
   deleteEdt as deleteEdtUseCase,
   resolveMemberDeleteStatuses as resolveMemberDeleteStatusesUseCase,
@@ -141,6 +142,9 @@ export type EdtActionLogEntry = {
 
 export type EdtSlice = {
   activeEdt: string | null;
+  // Set at load when the persisted pointer named the system EDT while it is disabled (fell back
+  // to no active EDT); null otherwise.
+  activeEdtWarning: string | null;
   setActiveEdt: (edt: string | null) => void;
   // The EDTs zone's branch/divergence listing (FR-9). `edtsBranches` is null before first load;
   // successful load replaces it with array (never leaves stale mid-refresh).
@@ -244,7 +248,8 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
   let getState: (() => AppState) | null = null;
   const createState: StateCreator<AppState, [], [], EdtSlice> = (set, get) => ({
     activeEdt: null,
-    setActiveEdt: (edt) => set({ activeEdt: edt }),
+    activeEdtWarning: null,
+    setActiveEdt: (edt) => set({ activeEdt: edt, activeEdtWarning: null }),
     edtsBranches: null,
     edtsBranchesStatus: 'idle',
     edtsBranchesError: null,
@@ -302,11 +307,15 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       // (including genuinely-empty, which auto-opens create prompt) just because active-EDT
       // pointer read failed alongside it. Degrade only pointer to "no active EDT known".
       const activeUlid = await deps.state.readActiveEdt();
+      // A pointer naming the system "Shared branches" EDT while the setting is off (it is then
+      // absent from the list) falls back to no active EDT, with a warning; nothing is written.
+      const pointer = resolveActiveEdtPointer(activeUlid.ok ? activeUlid.data : null, listed.data);
       set({
         edts: listed.data,
         edtsStatus: 'idle',
         edtsError: null,
-        activeEdt: activeUlid.ok ? activeUlid.data : null,
+        activeEdt: pointer.active,
+        activeEdtWarning: pointer.warning,
       });
     },
     createEdt: async (params) => {
@@ -355,7 +364,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         overwrite: params.overwrite,
       });
       if (result.ok && result.data.status === 'activated') {
-        set({ activeEdt: result.data.ulid });
+        set({ activeEdt: result.data.ulid, activeEdtWarning: null });
         void get().loadTabVisibility();
       }
       return result;
@@ -472,7 +481,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         if (result.ok) {
           // Success updates store's cached active-EDT pointer immediately — direct consequence
           // of this switch, not continuous fs.watch/poll re-sync.
-          set({ activeEdt: result.data.ulid });
+          set({ activeEdt: result.data.ulid, activeEdtWarning: null });
           // Switching active EDT swaps whole member set — reload gated-tab visibility so
           // newly (in)active member's tab flips immediately.
           void get().loadTabVisibility();

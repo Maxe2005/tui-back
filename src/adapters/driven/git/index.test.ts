@@ -230,6 +230,45 @@ function edtEntry(ulid: string, repoPath: string, branch: string): EdtRegistryEn
   };
 }
 
+describe('assertAllowedBranch — system shared-branches EDT carve-out', () => {
+  // The carve-out lives in core (the system EDT's members take the ungated `shared` target
+  // spec); the gate itself must keep rejecting every protected branch, whoever asks.
+  it('still rejects a shared branch for the system EDT id and for an ordinary EDT id', async () => {
+    const repo = await makeGitRepo();
+    for (const edtId of ['01SHAREDBRANCHES0000000000', '01ORDINARYEDT0000000000000']) {
+      expect(await assertAllowedBranch(manifest, repo, 'development', edtId)).toMatchObject({
+        ok: false,
+        error: { code: 'shared-branch-rejected' },
+      });
+    }
+  });
+
+  it('keeps commit-adjacent writes (create/delete/rename) on a shared branch rejected', async () => {
+    const repo = await makeCleanGitRepo();
+    const git = createGitPort(manifest);
+    const created = await git.createBranch(repo, 'development', 'main');
+    const deleted = await git.deleteBranch(repo, 'development', true);
+    const renamed = await git.renameBranch(repo, 'development', 'dev2', '01SHAREDBRANCHES0000000000');
+    for (const result of [created, deleted, renamed]) {
+      expect(result).toMatchObject({ ok: false, error: { code: 'shared-branch-rejected' } });
+    }
+  });
+});
+
+describe('assertAllowedBranch — cross-EDT gate ignores the system EDT', () => {
+  it('does not report the system shared-branches EDT as another EDT owning a branch', async () => {
+    const repo = await makeGitRepo();
+    const edtRegistry = {
+      list: async () => ({
+        ok: true as const,
+        data: [{ ulid: '01SHAREDBRANCHES0000000000', topic: 'Shared branches', kind: 'system-shared' as const, createdAt: 'x', status: 'inactive' as const, members: [{ service: 's', repoPath: repo, branch: 'feat/x' }] }],
+      }),
+    } as unknown as EdtRegistryPort;
+
+    expect(await assertAllowedBranch(manifest, repo, 'feat/x', '01MINE', edtRegistry)).toEqual({ ok: true, data: undefined });
+  });
+});
+
 describe('assertAllowedBranch — cross-EDT gate (AD-8)', () => {
   it('rejects a branch already registered as a different EDT\'s own branch for this repo', async () => {
     const repo = await makeGitRepo();

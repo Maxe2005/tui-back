@@ -1186,7 +1186,7 @@ describe("app store", () => {
             settings: {
               general: { quitShortcutEnabled: true, editorCommand: '' },
               commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
-              edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+              edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
               update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
             },
             warning: "Invalid settings file /x/settings.yaml: (root) — bad shape — using defaults.",
@@ -1201,7 +1201,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
       expect(store.getState().settingsWarning).toContain("using defaults");
@@ -1251,8 +1251,98 @@ describe("app store", () => {
       expect(save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
+      });
+    });
+
+    describe("shared-branches EDT", () => {
+      const SHARED_ULID = "01SHAREDBRANCHES0000000000";
+      const enabledSettings = { ...DEFAULT_SETTINGS, edts: { ...DEFAULT_SETTINGS.edts, sharedBranchesEdtEnabled: true } };
+      const withActive = (active: string | null) => {
+        const save = vi.fn(async () => ok(undefined));
+        const settings: SettingsPort = { load: vi.fn(async () => ok({ settings: enabledSettings, warning: null })), save };
+        const base = fakeDeps({ settings });
+        const state = { ...base.state, readActiveEdt: vi.fn(async () => ok(active)) };
+        const store = createAppStore({ ...base, state });
+        return { store, save };
+      };
+
+      it("refuses turning the setting off while the system EDT is active, naming the switch to make first", async () => {
+        const { store, save } = withActive(SHARED_ULID);
+        await store.getState().loadSettings();
+        await store.getState().loadEdts();
+        // Pointer names the system EDT but the fake registry does not list it: pin it active.
+        store.getState().setActiveEdt(SHARED_ULID);
+
+        await store.getState().updateSettings({ edts: { sharedBranchesEdtEnabled: false } });
+
+        expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(true);
+        expect(store.getState().settingsWarning).toContain("switch to another EDT first");
+        expect(save).not.toHaveBeenCalled();
+      });
+
+      it("reads the pointer from disk: in-memory activeEdt null but the persisted pointer is the system EDT => refused", async () => {
+        const { store, save } = withActive(SHARED_ULID);
+        await store.getState().loadSettings();
+        store.getState().setActiveEdt(null);
+
+        await store.getState().updateSettings({ edts: { sharedBranchesEdtEnabled: false } });
+
+        expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(true);
+        expect(store.getState().settingsWarning).toContain("switch to another EDT first");
+        expect(save).not.toHaveBeenCalled();
+      });
+
+      it("a later successful update clears the stale refusal warning", async () => {
+        const { store } = withActive(SHARED_ULID);
+        await store.getState().loadSettings();
+        await store.getState().updateSettings({ edts: { sharedBranchesEdtEnabled: false } });
+        expect(store.getState().settingsWarning).not.toBeNull();
+
+        await store.getState().updateSettings({ commandPalette: { gridMaxRows: 9 } });
+
+        expect(store.getState().settingsWarning).toBeNull();
+      });
+
+      it("setActiveEdt and a reload with a live pointer reset the activeEdtWarning", async () => {
+        const deps = fakeDeps();
+        const state = { ...deps.state, readActiveEdt: vi.fn(async () => ok(SHARED_ULID as string | null)) };
+        const store = createAppStore({ ...deps, state });
+        await store.getState().loadEdts();
+        expect(store.getState().activeEdtWarning).not.toBeNull();
+
+        store.getState().setActiveEdt("01OTHER");
+        expect(store.getState().activeEdtWarning).toBeNull();
+
+        await store.getState().loadEdts();
+        expect(store.getState().activeEdtWarning).not.toBeNull();
+        state.readActiveEdt.mockResolvedValue(ok(null));
+        await store.getState().loadEdts();
+        expect(store.getState().activeEdtWarning).toBeNull();
+      });
+
+      it("turns the setting off immediately when the system EDT is not active", async () => {
+        const { store, save } = withActive("01OTHER");
+        await store.getState().loadSettings();
+        store.getState().setActiveEdt("01OTHER");
+
+        await store.getState().updateSettings({ edts: { sharedBranchesEdtEnabled: false } });
+
+        expect(store.getState().settings.edts.sharedBranchesEdtEnabled).toBe(false);
+        expect(save).toHaveBeenCalledTimes(1);
+      });
+
+      it("startup: a pointer naming the (now absent) system EDT falls back to no active EDT with a warning, writing nothing", async () => {
+        const deps = fakeDeps();
+        const state = { ...deps.state, readActiveEdt: vi.fn(async () => ok(SHARED_ULID)) };
+        const fallbackStore = createAppStore({ ...deps, state });
+
+        await fallbackStore.getState().loadEdts();
+
+        expect(fallbackStore.getState().activeEdt).toBeNull();
+        expect(fallbackStore.getState().activeEdtWarning).toContain("Shared branches");
+        expect(state.writeActiveEdt).not.toHaveBeenCalled();
       });
     });
 
@@ -1275,7 +1365,7 @@ describe("app store", () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
       });
@@ -1285,7 +1375,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: ["other-services"], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     });
@@ -1296,7 +1386,7 @@ describe("app store", () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["modify"], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
       });
@@ -1306,7 +1396,7 @@ describe("app store", () => {
       expect(store.getState().settings).toEqual({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: ["edts"], hiddenActionTypes: ["create", "modify"], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     });
@@ -1412,7 +1502,7 @@ describe("app store", () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
         warning: null,

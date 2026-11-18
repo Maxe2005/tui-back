@@ -3,10 +3,20 @@
 // the working tree, check out, and let the caller undo its preparation when the checkout fails.
 import type { GitPort } from '../ports/git.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
+import { isSystemEdt } from './shared-edt.js';
 
 // Where a repo goes when an EDT becomes active (FR-8): a member of that EDT goes to its own
 // registered branch, any other repo to its manifest `sharedBranch`.
 export type TargetBranchSpec = { kind: 'member'; branch: string; edtUlid: string } | { kind: 'shared'; branch: string };
+
+// The AD-8 carve-out for the system "Shared branches" EDT: a member's own branch IS the
+// service's shared branch, which the member gate would always reject as protected, so system
+// members take the ungated `shared` spec (fetched if absent locally). Every ordinary EDT keeps
+// the gated `member` spec and still cannot check out a shared branch; the git adapter's gate
+// is untouched (commit, merge, rename, delete and push on a shared branch stay rejected).
+export function memberTargetSpec(edtUlid: string, branch: string): TargetBranchSpec {
+  return isSystemEdt(edtUlid) ? { kind: 'shared', branch } : { kind: 'member', branch, edtUlid };
+}
 
 // Makes the destination checkout-ready, from reads only — except the FR-8 fetch of a missing
 // shared branch. A member branch is re-verified by the branch-scope gate

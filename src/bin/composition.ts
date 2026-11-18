@@ -38,7 +38,10 @@ export function composeSubcommands({ interactive }: ComposeOptions): Subcommand[
   const manifestCarry = createManifestCarryPort();
   const edtsBaseDir = join(xdg.dataDir, 'edts');
   const edtRegistryFile = resolveEdtRegistryFile(xdg);
-  const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
+  const settings = createSettingsPort(resolveSettingsFile(xdg));
+  // The settings/registry/manifest triple lets the EDT registry synthesize the read-only
+  // "Shared branches" system EDT while edts.sharedBranchesEdtEnabled is on (never persisted).
+  const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir, { settings, registry, manifest });
   // The git adapter is wired with the EdtRegistryPort so assertAllowedBranch can apply AD-8's
   // cross-EDT half (a branch already registered as a *different* EDT's own branch for a repo)
   // when a call site passes an edtId.
@@ -88,7 +91,7 @@ export function composeSubcommands({ interactive }: ComposeOptions): Subcommand[
     migration,
     restart,
     state,
-    settings: createSettingsPort(resolveSettingsFile(xdg)),
+    settings,
     editor: createEditorPort(),
     healthProbe: createHttpHealthProbe(),
     // `registry clean`'s prompt gate: only true when a y/N answer can be read back (see main.ts).
