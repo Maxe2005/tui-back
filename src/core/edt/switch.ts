@@ -16,10 +16,11 @@ import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result, type ResultError } from '../result.js';
-import { checkoutExpectedBranch, type CheckoutStep } from './checkout-expected.js';
+import { checkoutExpectedBranch, memberTargetSpec, type CheckoutStep } from './checkout-expected.js';
 import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import { addMemberUnderLock } from './modify.js';
 import { isProtectedBranch } from './shared-branches.js';
+import { isSystemEdt } from './shared-edt.js';
 
 export interface SwitchEdtRepoResult {
   service: string;
@@ -69,6 +70,9 @@ export interface SwitchDirtyRepo {
   // True when the repo also has a dirty `.tui-back.yaml`: it is carried over untouched, outside
   // any resolution, and never listed in `dirtyPaths`.
   manifestCarried?: boolean;
+  // True when the outgoing EDT is the system "Shared branches" EDT: "adopt into the outgoing
+  // EDT" is unavailable (stash or discard only) — the dialog hides the choice and says why.
+  adoptUnavailable?: boolean;
 }
 
 export type SwitchDirtyReposChoice =
@@ -402,6 +406,23 @@ async function resolveDirtyRepos(input: {
   }
 
   const policy = params.dirtyPolicy;
+
+  // The system EDT cannot receive adopted work (it is read-only and has no branch of its own to
+  // adopt onto): rejected before anything is touched. With it outgoing, every managed repo is a
+  // state-1 member, so dirty work is auto-stashed — "stash or discard only" holds.
+  if (outgoing !== undefined && isSystemEdt(outgoing)) {
+    const dirtyPaths = new Set(dirtyRows.map((row) => row.repoPath));
+    const adoptRequested =
+      (policy?.kind === 'adopt' && dirtyRows.length > 0) ||
+      [...resolutions].some(([repoPath, resolution]) => resolution.kind === 'adopt' && dirtyPaths.has(repoPath));
+    if (adoptRequested) {
+      return err(
+        'switch-adopt-unavailable',
+        `Cannot adopt uncommitted changes into "${outgoing.topic}": it is a system EDT. Stash (the default) or discard them (--discard-dirty) instead. Nothing was touched.`,
+      );
+    }
+  }
+
   if (policy !== undefined) {
     if (policy.kind === 'adopt' && outgoing === undefined && needingResolution.length > 0) {
       return err(
@@ -494,6 +515,9 @@ async function describeDirtyRepo(
     protectedBranches: loaded.ok ? (loaded.data.protectedBranches ?? []) : [],
     owningEdtTopics: repo.owningTopics,
   };
+  if (outgoing !== undefined && isSystemEdt(outgoing)) {
+    row.adoptUnavailable = true;
+  }
   const everyDirtyPath = await git.listDirtyPaths(repo.repoPath);
   if (everyDirtyPath.ok && everyDirtyPath.data.includes(MANIFEST_FILE)) {
     row.manifestCarried = true;
@@ -847,7 +871,7 @@ async function switchMemberRepo(
   const checkedOut = await checkoutExpectedBranch({
     git,
     repoPath,
-    spec: { kind: 'member', branch, edtUlid: target.ulid },
+    spec: memberTargetSpec(target.ulid, branch),
     prepare: async () => {
       // Read before the dirty plan (which never changes the branch).
       alreadyThere = await isAlreadyOn(git, repoPath, branch);

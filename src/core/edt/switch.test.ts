@@ -11,6 +11,7 @@ import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { ManifestCarryPort } from '../ports/manifest-carry.js';
 import type { RegistryPort } from '../ports/registry.js';
 import type { StatePort } from '../ports/state.js';
+import { buildSharedBranchesEdt, SHARED_EDT_ULID } from './shared-edt.js';
 import { classifySwitchRepos, switchActiveEdt, type SwitchActiveEdtParams } from './switch.js';
 
 function calls(fn: unknown): Array<unknown[]> {
@@ -1792,5 +1793,93 @@ describe('switchActiveEdt — unchanged outcome', () => {
     expect(result.ok && result.data.results.find((r) => r.service === 'svc-b')?.outcome).toBe('switched');
     expect(calls(git.stashSave)).toContainEqual(['/repo/b', 'tui-back:outgoing-ulid']);
     expect(calls(git.checkout)).toContainEqual(['/repo/b', 'development']);
+  });
+});
+
+describe('switchActiveEdt — shared-branches system EDT (story 2.46)', () => {
+  const SYSTEM = buildSharedBranchesEdt(REPOS.map((repoPath) => ({ repoPath, manifest: manifestFor(repoPath) })));
+
+  it('switching INTO the system EDT checks every repo out to its shared branch, ungated, fetching an absent one', async () => {
+    const assertAllowedBranch = vi.fn(async () => err('shared-branch-rejected', 'protected'));
+    const branchExistsLocally = vi.fn(async (_repo: string) => ok(_repo !== '/repo/b'));
+    const git = fakeGit({ assertAllowedBranch, branchExistsLocally });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, OUTGOING, SYSTEM])) });
+
+    const result = await switchActiveEdt(makeParams({ git, edtRegistry, topic: 'Shared branches' }));
+
+    expect(result.ok && result.data.results.map((row) => row.outcome)).toEqual(['switched', 'switched', 'switched']);
+    expect(calls(assertAllowedBranch)).toHaveLength(0);
+    expect(calls(git.checkout).map(([repo, branch]) => [repo, branch])).toEqual([
+      ['/repo/a', 'development'], ['/repo/b', 'development'], ['/repo/c', 'development'],
+    ]);
+    expect(calls(git.fetch)).toEqual([['/repo/b', 'development']]);
+  });
+
+  it('an ordinary EDT member on a shared branch is still gated and rejected', async () => {
+    const ordinary = edtEntry('ord-ulid', 'ord', [member('svc-a', '/repo/a', 'development')]);
+    const git = fakeGit({ assertAllowedBranch: vi.fn(async () => err('shared-branch-rejected', 'protected')) });
+    const edtRegistry = fakeEdtRegistry({ list: vi.fn(async () => ok([ordinary])) });
+
+    const result = await switchActiveEdt(makeParams({ git, edtRegistry, topic: 'ord', state: fakeState() }));
+
+    expect(result.ok && result.data.results[0]).toMatchObject({ service: 'svc-a', outcome: 'failed', detail: { code: 'shared-branch-rejected' } });
+    expect(calls(git.checkout).some(([repo]) => repo === '/repo/a')).toBe(false);
+  });
+
+  function outgoingSystem(overrides: Partial<SwitchActiveEdtParams> = {}): SwitchActiveEdtParams {
+    return makeParams({
+      edtRegistry: fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, SYSTEM])) }),
+      state: fakeState({ readActiveEdt: vi.fn(async () => ok(SHARED_EDT_ULID)) }),
+      git: fakeGit({ hasUncommittedChanges: vi.fn(async () => ok(true)), listDirtyPaths: vi.fn(async () => ok(['f.ts'])) }),
+      ...overrides,
+    });
+  }
+
+  it.each([
+    ['--adopt-dirty', { dirtyPolicy: { kind: 'adopt' as const } }],
+    ['--adopt-branch', { dirtyPolicy: { kind: 'adopt' as const, branch: 'feat/x' } }],
+    ['an explicit adopt resolution', { dirtyResolutions: { '/repo/a': { kind: 'adopt' as const, branch: 'feat/x' } } }],
+  ])('rejects %s with switch-adopt-unavailable before touching anything', async (_label, extra) => {
+    const params = outgoingSystem(extra);
+
+    const result = await switchActiveEdt(params);
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'switch-adopt-unavailable' } });
+    expect(calls(params.git.stashSave)).toHaveLength(0);
+    expect(calls(params.git.checkout)).toHaveLength(0);
+    expect(calls(params.state.writeActiveEdt)).toHaveLength(0);
+  });
+
+  it('stashes dirty repos (state 1) and marks the dialog rows adoptUnavailable', async () => {
+    let seen: Array<{ adoptUnavailable?: boolean }> = [];
+    // /repo/b and /repo/c are non-members here, so the dialog seam is reached with all three rows.
+    const partial = buildSharedBranchesEdt([{ repoPath: '/repo/a', manifest: manifestFor('/repo/a') }]);
+    const params = outgoingSystem({
+      edtRegistry: fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, partial])) }),
+      onDirtyReposBeforeSwitch: async (rows) => {
+        seen = rows;
+        return { kind: 'proceed', resolutions: { '/repo/b': { kind: 'discard' }, '/repo/c': { kind: 'discard' } } };
+      },
+    });
+
+    const result = await switchActiveEdt(params);
+
+    expect(result.ok).toBe(true);
+    expect(calls(params.git.stashSave).map(([, tag]) => tag)).toEqual([`tui-back:${SHARED_EDT_ULID}`]);
+    expect(seen.length).toBe(3);
+    expect(seen.every((row) => row.adoptUnavailable === true)).toBe(true);
+  });
+
+  it('allows discard when the system EDT is outgoing and a repo is a non-member', async () => {
+    const partial = buildSharedBranchesEdt([{ repoPath: '/repo/a', manifest: manifestFor('/repo/a') }]);
+    const params = outgoingSystem({
+      edtRegistry: fakeEdtRegistry({ list: vi.fn(async () => ok([TARGET, partial])) }),
+      dirtyPolicy: { kind: 'discard' },
+    });
+
+    const result = await switchActiveEdt(params);
+
+    expect(result.ok).toBe(true);
+    expect(calls(params.git.discardAll).map(([repo]) => repo)).toEqual(['/repo/b', '/repo/c']);
   });
 });
