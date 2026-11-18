@@ -47,7 +47,7 @@ development_status:
   12-9-split-routeszone-into-hooks-and-subcomponents: done
   12-10-split-logszone-into-hooks-and-subcomponents: done
   12-11-split-edtszone-into-hooks-and-subcomponents: done
-  12-12-split-updatezone-into-hooks-and-subcomponents: backlog
+  12-12-split-updatezone-into-hooks-and-subcomponents: review
   epic-12-retrospective: optional
 
   epic-13: backlog
