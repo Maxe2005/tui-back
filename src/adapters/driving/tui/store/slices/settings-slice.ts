@@ -76,12 +76,18 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
       // update is refused (nothing applied or persisted) with a message naming the switch to
       // make first, surfaced through `settingsWarning` (the settings screen shows it inline).
       if (partial.edts?.sharedBranchesEdtEnabled === false && current.edts.sharedBranchesEdtEnabled) {
-        const allowed = assertSharedEdtCanBeDisabled(get().activeEdt);
+        // The pointer on disk is the truth; the in-memory cache is only the fallback when the
+        // read fails.
+        const onDisk = deps ? await deps.state.readActiveEdt() : undefined;
+        const active = onDisk?.ok ? onDisk.data : get().activeEdt;
+        const allowed = assertSharedEdtCanBeDisabled(active);
         if (!allowed.ok) {
           set({ settingsWarning: allowed.error.message });
           return;
         }
       }
+      // A later accepted update supersedes a stale refusal message.
+      set({ settingsWarning: null });
       settingsVersion += 1;
       const next: Settings = {
         general: { ...current.general, ...partial.general },
