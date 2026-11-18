@@ -75,7 +75,7 @@ export function useEdtsEffects(c: EdtsZoneCtx): void {
   // (via createPickerSession's branchesStatus: 'loading' seed) — never re-fetched on every
   // render. A stale response (the picker closed, or another repoPath's session opened, before
   // this resolved) is dropped rather than applied. The create wizard's Step 3 lists load through
-  // its own loadPendingBranchLists (effect below).
+  // its own loadPendingBranchLists (use-edts-dialog-effects.ts).
   const activeBranchPicker =
     dialog.kind === 'modify' || dialog.kind === 'service-actions' || dialog.kind === 'add-to-edt' ? dialog.branchPicker : null;
   // Keyed on repoPath/branchesStatus (primitives) rather than the activeBranchPicker object

@@ -39,7 +39,7 @@ export function seedDialog(initialDialogKind: InitialDialogKind | undefined, use
   if (initialDialogKind === 'quick-pick') {
     // Test-only seed (like 'create'/'issues' above): defaults to switch mode — a smoke test only
     // needs one representative mode's chrome; real per-mode coverage goes through the
-    // interaction tests, driving the actual currentEdtAction -> quick-pick effect below.
+    // interaction tests, driving the actual currentEdtAction -> quick-pick effect (use-edts-effects.ts).
     return initialQuickPickDialog('switch');
   }
   const target = useStore.getState().edts?.[0];

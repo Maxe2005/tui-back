@@ -33,40 +33,40 @@ export function EdtsDetailColumn({ c }: { c: EdtsZoneCtx }) {
     error,
   } = c;
   return (
-          <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
-            {paneFocus === 'edts' ? (
-              <>
-                <DetailPane title={focusedEdt ? focusedEdt.topic : 'EDT'}>
-                  {focusedEdt
-                    ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) +
-                      '\n\n' +
-                      formatEdtActionHistory(edtActionLog, currentEdtAction, hiddenActionTypes) +
-                      appendHint(resolveActionHint('edts', focusedEdt.ulid === activeEdtUlid, hiddenActionHints))
-                    : 'No EDT selected.'}
-                </DetailPane>
-                {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
-                {edtActionLogStatus === 'loading' && <StateLine kind="loading" subject="action history" />}
-                {edtActionLogStatus === 'error' && <StateLine kind="error" subject="action history" />}
-              </>
-            ) : paneFocus === 'edt-services' ? (
-              <>
-                <DetailPane title={focusedEdtService ? focusedEdtService.service : 'Service'}>
-                  {(focusedEdtService ? formatServiceDetail(focusedEdtService) : 'No service selected.') +
-                    appendHint(resolveActionHint('edt-services', false, hiddenActionHints))}
-                </DetailPane>
-                {focusedEdtService?.detail ? <DimAnnotation text={focusedEdtService.detail.message} /> : null}
-                {status === 'error' && error ? <DimAnnotation text={error} /> : null}
-              </>
-            ) : (
-              <>
-                <DetailPane title={focusedOtherService ? focusedOtherService.service : 'Service'}>
-                  {(focusedOtherService ? formatServiceDetail(focusedOtherService) : 'No service selected.') +
-                    appendHint(resolveActionHint('other-services', false, hiddenActionHints))}
-                </DetailPane>
-                {focusedOtherService?.detail ? <DimAnnotation text={focusedOtherService.detail.message} /> : null}
-                {status === 'error' && error ? <DimAnnotation text={error} /> : null}
-              </>
-            )}
-          </Box>
+    <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+      {paneFocus === 'edts' ? (
+        <>
+          <DetailPane title={focusedEdt ? focusedEdt.topic : 'EDT'}>
+            {focusedEdt
+              ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) +
+                '\n\n' +
+                formatEdtActionHistory(edtActionLog, currentEdtAction, hiddenActionTypes) +
+                appendHint(resolveActionHint('edts', focusedEdt.ulid === activeEdtUlid, hiddenActionHints))
+              : 'No EDT selected.'}
+          </DetailPane>
+          {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
+          {edtActionLogStatus === 'loading' && <StateLine kind="loading" subject="action history" />}
+          {edtActionLogStatus === 'error' && <StateLine kind="error" subject="action history" />}
+        </>
+      ) : paneFocus === 'edt-services' ? (
+        <>
+          <DetailPane title={focusedEdtService ? focusedEdtService.service : 'Service'}>
+            {(focusedEdtService ? formatServiceDetail(focusedEdtService) : 'No service selected.') +
+              appendHint(resolveActionHint('edt-services', false, hiddenActionHints))}
+          </DetailPane>
+          {focusedEdtService?.detail ? <DimAnnotation text={focusedEdtService.detail.message} /> : null}
+          {status === 'error' && error ? <DimAnnotation text={error} /> : null}
+        </>
+      ) : (
+        <>
+          <DetailPane title={focusedOtherService ? focusedOtherService.service : 'Service'}>
+            {(focusedOtherService ? formatServiceDetail(focusedOtherService) : 'No service selected.') +
+              appendHint(resolveActionHint('other-services', false, hiddenActionHints))}
+          </DetailPane>
+          {focusedOtherService?.detail ? <DimAnnotation text={focusedOtherService.detail.message} /> : null}
+          {status === 'error' && error ? <DimAnnotation text={error} /> : null}
+        </>
+      )}
+    </Box>
   );
 }

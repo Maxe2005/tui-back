@@ -28,8 +28,7 @@ export function useEdtsDialogEffects(c: EdtsZoneCtx): void {
     loadMemberStatuses,
   } = c;
 
-  // Each dialog's submit/input-handling logic lives in its own file under dialogs/ — these
-  // factories close over this render's values (the deps object is recreated every render).
+  // The handlers these effects call come from use-edts-handlers.ts (rebuilt every render).
   // A post-switch restart report kept in the store (the run outlives this zone's dialogs): coming
   // back to the zone reopens it on that report once, so the run state is intact on return.
   // Only a report already in the store at mount is reopened — never one this mount started and

@@ -2,7 +2,7 @@
 title: 'Split EdtsZone into Hooks and Subcomponents'
 type: 'refactor'
 created: '2026-11-18'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'f97cf59f66775ba26e3ab25b699f3e752732c0f9'
 review_loop_iteration: 0
 context:
@@ -57,3 +57,7 @@ All in `src/adapters/driving/tui/zones/edts/`.
 
 **Commands:**
 - `npx vitest run --configLoader runner && npm run typecheck && npm run depcheck` -- expected: only the known `:reset` failure.
+
+## Review Notes
+
+Three layers ran (blind, edge-case, verification-gap). Applied: dedented the JSX of the two column components, fixed three comments made stale by the move. Rejected/out of scope (verbatim-move refactor): ctx collision guards, memoization, effect-dep cleanups, seed/if-chain dedup, extra unit tests, command-action cascade extraction. Handlers are rebuilt in the same render the effects run, so closure semantics are unchanged. Gates: edts tests 447/447; full suite only the known `:reset` failure; typecheck and depcheck green.
