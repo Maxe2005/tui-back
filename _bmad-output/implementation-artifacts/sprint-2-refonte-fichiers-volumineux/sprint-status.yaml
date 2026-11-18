@@ -53,7 +53,7 @@ development_status:
   epic-13: in-progress
   13-1-test-split-conventions-and-shared-fixtures: done
   13-2-split-the-edts-zone-interaction-tests: done
-  13-3-split-group-update-and-switch-tests: backlog
+  13-3-split-group-update-and-switch-tests: done
   13-4-split-app-shell-and-store-tests: backlog
   13-5-split-logs-zone-and-update-zone-tests: backlog
   13-6-split-cli-e2e-and-git-tests: backlog
