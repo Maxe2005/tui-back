@@ -42,6 +42,16 @@ describe('buildToolRegistry', () => {
     }
   });
 
+  it('edt-list is a read tool that calls the edt subcommand with [list]', async () => {
+    const seen: string[][] = [];
+    const tools = buildToolRegistry(TOOL_DEFINITIONS.map((d) => fake(d.subcommand, seen)));
+    const tool = tools.find((t) => t.name === 'edt-list')!;
+
+    expect(tool.safety).toBe('read');
+    await tool.run({});
+    expect(seen).toEqual([['list']]);
+  });
+
   it('throws on an unknown wrapped subcommand', () => {
     const def: ToolDefinition = { name: 'x', description: 'x', inputSchema: {}, subcommand: 'nope', safety: 'read' };
     expect(() => buildToolRegistry([], [def])).toThrow(/unknown subcommand/);
