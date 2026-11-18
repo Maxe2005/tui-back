@@ -361,7 +361,7 @@ describe('subcommand registry guards', () => {
   it('completion script derives the real edt/registry verbs and flags from the live registry', async () => {
     const piped = await runCli(['completion', 'bash'], buildTestSubcommands(), false);
     const script: string = JSON.parse(piped.output).data.script;
-    expect(script).toContain('edt) words="create switch modify delete list" ;;');
+    expect(script).toContain('edt) words="create switch modify delete list fast-forward-shared" ;;');
     expect(script).toContain('registry) words="clean validate" ;;');
     expect(script).toContain('completion) words="bash" ;;');
     expect(script).toMatch(/"edt switch"\) words="[^"]*--to[^"]*--force/);
@@ -984,6 +984,49 @@ describe('subcommand registry guards', () => {
 
     it('switching to the system topic fails edt-not-found when it is not listed', async () => {
       expect(await edtOf([user]).run(['switch', '--to', 'Shared branches'])).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+    });
+  });
+
+  describe('edt fast-forward-shared (story 2.48)', () => {
+    const system = {
+      ulid: '01SHAREDBRANCHES0000000000',
+      topic: 'Shared branches',
+      kind: 'system-shared' as const,
+      createdAt: '1970-01-01T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [
+        { service: 'svc-a', repoPath: '/repo/a', branch: 'development' },
+        { service: 'svc-b', repoPath: '/repo/b', branch: 'development' },
+      ],
+    };
+    const edtWith = (entries: Array<typeof system>, git: Partial<GitPort>) => {
+      const edt = buildTestSubcommands({
+        edtRegistry: { ...fakeEdtRegistry(), list: async () => ok(entries) },
+        git: fakeGitPort({ branchExistsLocally: async () => ok(true), fetchRemote: async () => ok(undefined), listUnpushedCommits: async () => ok([]), isBranchMerged: async () => ok(false), currentBranch: async () => ok('feat/x'), fetch: async () => ok(undefined), ...git }),
+      }).find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+      return edt;
+    };
+
+    it('returns the per-service rows', async () => {
+      const result = await edtWith([system], {}).run(['fast-forward-shared']);
+      expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-a', outcome: 'fast-forwarded' }, { service: 'svc-b', outcome: 'fast-forwarded' }] } });
+    });
+
+    it('fails fast-forward-failed, carrying every row, when a service failed', async () => {
+      const result = await edtWith([system], { fetchRemote: async (p: string) => (p === '/repo/a' ? err('git-fetch-error', 'offline') : ok(undefined)) }).run(['fast-forward-shared']);
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'fast-forward-failed', details: { rows: [{ outcome: 'failed' }, { outcome: 'fast-forwarded' }] } },
+      });
+    });
+
+    it('is edt-not-found when the system EDT is not listed (setting off)', async () => {
+      expect(await edtWith([], {}).run(['fast-forward-shared'])).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+    });
+
+    it('rejects extra arguments', async () => {
+      expect(await edtWith([system], {}).run(['fast-forward-shared', '--x'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     });
   });
 

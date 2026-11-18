@@ -59,7 +59,7 @@ export const EXCLUDED_SUBCOMMANDS: Record<string, string> = {
   mcp: 'the MCP server itself',
   completion: 'shell completion script, meaningless to an agent',
   install: 'installer; handled outside MCP (registration commands are printed, not served)',
-  // `edt` is wrapped by edt-create / edt-modify / edt-switch / edt-switch-discard / edt-delete.
+  // `edt` is wrapped by edt-create / edt-modify / edt-switch / edt-switch-discard / edt-delete / edt-fast-forward-shared.
 };
 
 // A leading '-' would be parsed as a flag by the wrapped CLI (argument injection).
@@ -181,6 +181,17 @@ const WRITE_DEFINITIONS: ToolDefinition[] = [
       ...(typeof i.restart === 'string' ? ['--restart', i.restart] : []),
     ],
     describeTargets: (i) => [`EDT ${String(i.to)}`],
+    safety: 'write',
+  },
+  {
+    name: 'edt-fast-forward-shared',
+    description:
+      'Fast-forward each managed service\'s local shared branch from origin without switching EDT (no checkout, stash, migration or restart). Requires the "Shared branches" EDT setting (edt-not-found otherwise). Per-service rows: fast-forwarded, up-to-date, skipped (dirty | diverged) or failed; fails fast-forward-failed, rows attached, when any service failed.',
+    inputSchema: {},
+    subcommand: 'edt',
+    baseArgs: ['fast-forward-shared'],
+    toArgs: () => [],
+    describeTargets: () => ['every shared branch of the managed services'],
     safety: 'write',
   },
   {
