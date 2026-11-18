@@ -423,6 +423,18 @@ export const FOOTER_CONTEXTS = {
     label: 'Settings group list',
     hints: [MOVE, ['Enter', 'open'], TAB_SWITCH, CLOSE],
   },
+  'edts-system-switch': {
+    label: 'EDTs zone, shared-branches EDT (switchable)',
+    hints: [MOVE, ['Enter', 'switch'], ['Tab', 'focus'], [':', 'cmd'], ['?', 'help']],
+  },
+  'edts-system-readonly': {
+    label: 'EDTs zone, shared-branches EDT (read-only)',
+    hints: [MOVE, ['Enter', 'explain read-only'], ['Tab', 'focus'], [':', 'cmd'], ['?', 'help']],
+  },
+  'settings-groups-toggle': {
+    label: 'Settings group list, shared-branches switch',
+    hints: [MOVE, ['Space', 'toggle'], TAB_SWITCH, CLOSE],
+  },
   'settings-toggle': {
     label: 'Settings toggle group',
     hints: [MOVE, ['Space', 'toggle'], BACK],

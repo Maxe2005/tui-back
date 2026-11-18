@@ -66,6 +66,13 @@ function validThroughStep3(overrides: Partial<CreateDialogState> = {}, branchOve
   });
 }
 
+describe('checkNameAvailability: reserved system topic', () => {
+  it('rejects "Shared branches" in any case as taken, even when no EDT lists it', () => {
+    expect(checkNameAvailability('Shared branches', [])).toBe('taken');
+    expect(checkNameAvailability('  SHARED BRANCHES ', [])).toBe('taken');
+  });
+});
+
 describe('checkNameAvailability', () => {
   it('a free name is available', () => {
     expect(checkNameAvailability('auth-flow', EDTS)).toBe('available');

@@ -1,3 +1,4 @@
+import { SHARED_EDT_ULID } from '../../../../../../../core/edt/shared-edt.js';
 import { describe, expect, it } from 'vitest';
 import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { TextEditKey } from '../../../../shared/components/text-edit.js';
@@ -122,6 +123,13 @@ describe('switch-resolution rows', () => {
     const noManifest = repo({ service: 'svc-m', repoPath: '/repo/m', sharedBranch: null });
     expect(validateRow(row('fresh', noManifest), {})).toBe('unreadable manifest — cannot validate the branch; choose Discard or cancel');
     expect(validateRow({ repo: detached, hasOutgoing: true, claims: [], plan: { kind: 'discard', source: 'perso' } }, {})).toBeNull();
+  });
+
+  it('the system EDT never claims a branch', () => {
+    const edts = [
+      { ulid: SHARED_EDT_ULID, topic: 'Shared branches', kind: 'system-shared' as const, createdAt: '', status: 'inactive' as const, members: [{ service: 'svc-b', repoPath: '/repo/b', branch: 'development' }] },
+    ];
+    expect(otherEdtBranches(edts, null)).toEqual({});
   });
 
   it('a row on a branch another EDT registers for that repo targets the global name; that branch is rejected inline', () => {

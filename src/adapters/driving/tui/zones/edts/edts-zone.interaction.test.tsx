@@ -10,6 +10,7 @@ import type { ActivateEdtData } from '../../../../../core/edt/activate.js';
 import type { CreateCandidateBranches, CreateEdtData } from '../../../../../core/edt/create.js';
 import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../core/edt/switch.js';
 import type { ModifyEdtData } from '../../../../../core/edt/modify.js';
+import { SHARED_EDT_ULID, SHARED_EDT_TOPIC } from '../../../../../core/edt/shared-edt.js';
 import { createAppStore, type CreateEdtParams, type ModifyEdtParams } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { EdtsZone } from './edts-zone.js';
@@ -145,6 +146,113 @@ function mount(
 }
 
 describe('EdtsZone real-keypress interactions', () => {
+  function systemStore(withUser: boolean) {
+    const store = createAppStore();
+    const system = edt({ ulid: SHARED_EDT_ULID, topic: SHARED_EDT_TOPIC, kind: 'system-shared', members: [{ service: 'svc-a', repoPath: '/repos/a', branch: 'main' }] });
+    store.setState({
+      edts: withUser ? [system, edt({ ulid: 'user-ulid', topic: 'mine' })] : [system],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [
+        { service: 'svc-a', path: '/repos/a', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'main', protectedBranches: [] },
+        { service: 'svc-b', path: '/repos/b', isMember: false, branch: 'main', ahead: 0, behind: 0, status: 'current', sharedBranch: 'main', protectedBranches: [] },
+      ],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+    return store;
+  }
+
+  it.each(['modify', 'delete'] as const)('the %s command on the system EDT shows the readonly notice and opens no dialog', async (type) => {
+    const store = systemStore(true);
+    store.setState({ currentEdtAction: { type, target: SHARED_EDT_TOPIC, startedAt: new Date().toISOString() } });
+    const { instance, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).not.toContain('DELETE EDT');
+      expect(stdout.output).not.toContain('MODIFY EDT');
+      expect(footerIdOf(store)).not.toBe('menu');
+      expect(stdout.output).toContain('edt-system-readonly');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('create-from on the system EDT opens the quick-pick with the notice, never a seeded wizard', async () => {
+    const store = systemStore(true);
+    store.setState({ currentEdtAction: { type: 'create-from', target: SHARED_EDT_TOPIC, startedAt: new Date().toISOString() } });
+    const { instance, stdout } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('SELECT EDT TO COPY');
+      expect(stdout.output).toContain('edt-system-readonly');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('Enter on the EDT SERVICES and OTHER SERVICES panes of the system EDT shows the notice, no dialog', async () => {
+    const store = systemStore(false);
+    // Only the system EDT: the wizard auto-opens (no user EDT); Esc closes it.
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain(WIZARD_TITLE);
+      await pressEscape(instance, stdin);
+      for (const _pane of ['edt-services', 'other-services']) {
+        await press(instance, stdin, KEYS.tab);
+        const before = stdout.output.length;
+        await press(instance, stdin, KEYS.enter);
+        const added = stdout.output.slice(before);
+        expect(added).toContain('edt-system-readonly');
+        expect(added).not.toContain('SERVICE ACTIONS');
+        await press(instance, stdin, KEYS.down);
+      }
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('system "Shared branches" EDT: Enter switches when inactive; when active it explains the read-only rule and opens no dialog', async () => {
+    const store = createAppStore();
+    const system = edt({ ulid: SHARED_EDT_ULID, topic: SHARED_EDT_TOPIC, kind: 'system-shared' });
+    store.setState({
+      edts: [system, edt({ ulid: 'user-ulid', topic: 'mine' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+    });
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('[shared]');
+      expect(footerIdOf(store)).toBe('edts-system-switch');
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output).toContain('SWITCH EDT');
+      await pressEscape(instance, stdin);
+
+      store.setState({ activeEdt: SHARED_EDT_ULID });
+      await instance.waitUntilRenderFlush();
+      expect(footerIdOf(store)).toBe('edts-system-readonly');
+      await press(instance, stdin, KEYS.enter);
+      expect(stdout.output).toContain('edt-system-readonly');
+      expect(footerIdOf(store)).toBe('edts-system-readonly');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('a switch failure that is not the lock-block code stays in switch-confirm — never a silent return to the list', async () => {
     const store = createAppStore();
     const target = edt({ ulid: 'target-ulid', topic: 'other' });

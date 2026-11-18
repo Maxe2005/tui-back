@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize, type Key } from 'ink';
 import { useInput } from '../../shared/hooks/use-input.js';
+import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { branchOwnersMap } from '../../../../../core/edt/branch-owners.js';
@@ -28,6 +29,8 @@ import {
   formatEdtActionHistory,
   formatEdtDetail,
   formatEdtRowMeta,
+  SYSTEM_EDT_NOTICE,
+  resolveOutgoingTopic,
   formatIssuesSummary,
   formatServiceDetail,
   formatServiceMeta,
@@ -63,6 +66,7 @@ import {
   type LocalBranchList,
 } from './dialogs/switch-resolution/switch-resolution.logic.js';
 import { StateLine } from '../../shared/components/state-line.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above the splitter,
@@ -304,6 +308,25 @@ export function EdtsZone({
   const edtServicesConsumedRows = edtServices.length === 0 ? 1 : Math.min(edtServices.length, edtServicesMaxVisibleRows);
   const otherServicesMaxVisibleRows = Math.max(1, servicesListsAvailableHeight - edtServicesConsumedRows);
 
+  // A reload can insert or drop the system EDT (the setting toggled), shifting every index:
+  // re-anchor the selection on the same EDT by ulid (the clamp covers a vanished one).
+  const prevEdtsRef = useRef<readonly EdtRegistryEntry[] | null>(null);
+  const edtsSelectedRef = useRef(0);
+  useEffect(() => {
+    const previous = prevEdtsRef.current;
+    if (previous !== null && edts !== null && previous !== edts && previous.length > 0) {
+      const anchored = previous[Math.min(edtsSelectedRef.current, previous.length - 1)]?.ulid;
+      const index = edts.findIndex((entry) => entry.ulid === anchored);
+      if (index >= 0) {
+        setEdtsSelected(index);
+      }
+    }
+  }, [edts]);
+  useEffect(() => {
+    prevEdtsRef.current = edts;
+    edtsSelectedRef.current = edtsSelected;
+  });
+
   // Arrowing within the `edts` pane changes `focusedEdt` — and therefore the contents of both
   // partitioned service panes — without touching their cursors, which could then land on a row
   // unrelated to the newly selected EDT. Reset both to the top whenever the selected EDT changes.
@@ -313,12 +336,26 @@ export function EdtsZone({
   }, [focusedEdt?.ulid]);
 
   const dialogOpen = dialog.kind !== 'none';
-  useFooterContext('edts', edtsFooterContext(dialog, { registryEmpty: edtsRows.length === 0, resolutionPending: switchDirtyRepos !== null }), useStore);
+  // "Empty" means no user EDT: the system EDT alone must still auto-open the create wizard.
+  const userEdtCount = edtsRows.filter((entry) => !isSystemEdt(entry)).length;
+  // The focused EDT is the read-only system "Shared branches" one: Enter switches to it (unless it
+  // is already active); every other action key explains the read-only rule instead.
+  const focusedIsSystem = isSystemEdt(focusedEdt);
+  const focusedIsActive = focusedEdt !== undefined && focusedEdt.ulid === activeEdtUlid;
+  const systemEdtFooter: 'switch' | 'readonly' | null = !focusedIsSystem ? null : paneFocus === 'edts' && !focusedIsActive ? 'switch' : 'readonly';
+  useFooterContext(
+    'edts',
+    edtsFooterContext(dialog, { registryEmpty: userEdtCount === 0, resolutionPending: switchDirtyRepos !== null, systemEdt: systemEdtFooter }),
+    useStore,
+  );
+  // Inline refusal shown when a blocked key (modify, rename, member edit, delete, create-from) is
+  // used on the system EDT; cleared by the next keypress.
+  const [readonlyNotice, setReadonlyNotice] = useState<string | null>(null);
 
   // No EDT exists -> the create wizard, never a bare/empty list. Auto-opens once the list has
   // genuinely resolved to empty (never while still loading, never on a load error).
   useEffect(() => {
-    if (edtsStatus === 'idle' && edts !== null && edts.length === 0 && dialog.kind === 'none') {
+    if (edtsStatus === 'idle' && edts !== null && edts.filter((entry) => !isSystemEdt(entry)).length === 0 && dialog.kind === 'none') {
       setDialog(initialCreateDialog());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -411,7 +448,10 @@ export function EdtsZone({
         // If a topic was specified, find the EDT and open modify dialog pre-targeted
         if (currentEdtAction.target !== 'select EDT') {
           const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
-          if (targetEdt) {
+          if (targetEdt && isSystemEdt(targetEdt)) {
+            setReadonlyNotice(SYSTEM_EDT_NOTICE);
+            setCurrentEdtAction(null);
+          } else if (targetEdt) {
             setDialog(initialModifyDialog(targetEdt));
             setCurrentEdtAction(null);
           } else {
@@ -431,7 +471,9 @@ export function EdtsZone({
         if (currentEdtAction.target !== 'select EDT') {
           const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
           setDialog(
-            targetEdt
+            targetEdt && isSystemEdt(targetEdt)
+              ? initialQuickPickDialog('create-from', SYSTEM_EDT_NOTICE)
+              : targetEdt
               ? initialCreateDialog(targetEdt)
               : initialQuickPickDialog('create-from', `EDT not found: "${currentEdtAction.target}"`),
           );
@@ -445,7 +487,10 @@ export function EdtsZone({
         // rejection message (never auto-switched).
         if (currentEdtAction.target !== 'select EDT') {
           const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
-          if (targetEdt) {
+          if (targetEdt && isSystemEdt(targetEdt)) {
+            setReadonlyNotice(SYSTEM_EDT_NOTICE);
+            setCurrentEdtAction(null);
+          } else if (targetEdt) {
             setDialog(initialDeleteDialog(targetEdt, targetEdt.ulid === activeEdtUlid));
             setCurrentEdtAction(null);
           } else {
@@ -519,7 +564,8 @@ export function EdtsZone({
       return;
     }
     const dirty = switchDirtyRepos;
-    const outgoingTopic = activeEdtUlid !== null ? (edtsRows.find((entry) => entry.ulid === activeEdtUlid)?.topic ?? null) : null;
+    // Leaving the system EDT: nothing to adopt dirty work into (no outgoing topic -> discard/stash only).
+    const outgoingTopic = resolveOutgoingTopic(edtsRows, activeEdtUlid);
     // Branches other EDTs register per repo, so a row sitting on one is retargeted to the global
     // name and such a name is rejected inline.
     const claims = otherEdtBranches(edtsRows, activeEdtUlid);
@@ -650,6 +696,15 @@ export function EdtsZone({
     if (target === undefined) {
       return;
     }
+    if (isSystemEdt(target)) {
+      // Switch only: the active system EDT has nothing left to do from Enter (no modify).
+      if (activeEdtUlid !== null && target.ulid === activeEdtUlid) {
+        setReadonlyNotice(SYSTEM_EDT_NOTICE);
+      } else {
+        setDialog(initialSwitchDialog(target));
+      }
+      return;
+    }
     if (activeEdtUlid !== null && target.ulid === activeEdtUlid) {
       setDialog(initialModifyDialog(target));
     } else {
@@ -719,6 +774,9 @@ export function EdtsZone({
 
   const zoneInputActive = useZoneInputActive(useStore);
   useInput((input, key) => {
+    if (readonlyNotice !== null) {
+      setReadonlyNotice(null);
+    }
     if (dialog.kind === 'create') {
       handleCreateInput(dialog, input, key);
       return;
@@ -814,7 +872,9 @@ export function EdtsZone({
       }
       if (key.return) {
         const service = edtServices[clampedEdtServicesSelected];
-        if (service !== undefined && focusedEdt !== undefined) {
+        if (service !== undefined && focusedEdt !== undefined && isSystemEdt(focusedEdt)) {
+          setReadonlyNotice(SYSTEM_EDT_NOTICE);
+        } else if (service !== undefined && focusedEdt !== undefined) {
           setDialog(initialServiceActionsDialog(focusedEdt, service.path, service.service));
         }
       }
@@ -834,7 +894,9 @@ export function EdtsZone({
     }
     if (key.return) {
       const service = otherServices[clampedOtherServicesSelected];
-      if (service !== undefined && focusedEdt !== undefined) {
+      if (service !== undefined && focusedEdt !== undefined && isSystemEdt(focusedEdt)) {
+        setReadonlyNotice(SYSTEM_EDT_NOTICE);
+      } else if (service !== undefined && focusedEdt !== undefined) {
         setDialog(initialAddToEdtDialog(focusedEdt, service.path, service.service, service.branch, service.sharedBranch));
       }
     }
@@ -863,7 +925,7 @@ export function EdtsZone({
               <Text color={paneFocus === 'edts' ? colors.accent : colors['text-dim']}>EDTS</Text>
               {edtsLoading ? <StateLine kind="loading" subject="EDTs" /> : null}
               {edtsStatus === 'error' ? <StateLine kind="error" subject="EDTs" retry /> : null}
-              {!edtsLoading && edtsStatus !== 'error' && edtsRows.length === 0 ? (
+              {!edtsLoading && edtsStatus !== 'error' && userEdtCount === 0 ? (
                 <StateLine kind="empty" subject="EDTs" />
               ) : null}
               <BoundedList
@@ -887,7 +949,11 @@ export function EdtsZone({
                 />
                 )}
               />
-              {!dialogOpen ? <DimAnnotation text={formatHints([['Enter', 'switch/modify'], ['Tab', 'focus']])} /> : null}
+              {!dialogOpen ? (
+                <DimAnnotation
+                  text={formatHints([['Enter', focusedIsSystem ? (focusedIsActive ? 'read-only' : 'switch') : 'switch/modify'], ['Tab', 'focus']])}
+                />
+              ) : null}
               </>
               }
               second={
@@ -982,7 +1048,7 @@ export function EdtsZone({
                     ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) +
                       '\n\n' +
                       formatEdtActionHistory(edtActionLog, currentEdtAction, hiddenActionTypes) +
-                      appendHint(resolveActionHint('edts', focusedEdt.ulid === activeEdtUlid, hiddenActionHints))
+                      appendHint(resolveActionHint('edts', focusedEdt.ulid === activeEdtUlid, hiddenActionHints, focusedIsSystem))
                     : 'No EDT selected.'}
                 </DetailPane>
                 {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
@@ -993,7 +1059,7 @@ export function EdtsZone({
               <>
                 <DetailPane title={focusedEdtService ? focusedEdtService.service : 'Service'}>
                   {(focusedEdtService ? formatServiceDetail(focusedEdtService) : 'No service selected.') +
-                    appendHint(resolveActionHint('edt-services', false, hiddenActionHints))}
+                    appendHint(resolveActionHint('edt-services', false, hiddenActionHints, focusedIsSystem))}
                 </DetailPane>
                 {focusedEdtService?.detail ? <DimAnnotation text={focusedEdtService.detail.message} /> : null}
                 {status === 'error' && error ? <DimAnnotation text={error} /> : null}
@@ -1002,12 +1068,13 @@ export function EdtsZone({
               <>
                 <DetailPane title={focusedOtherService ? focusedOtherService.service : 'Service'}>
                   {(focusedOtherService ? formatServiceDetail(focusedOtherService) : 'No service selected.') +
-                    appendHint(resolveActionHint('other-services', false, hiddenActionHints))}
+                    appendHint(resolveActionHint('other-services', false, hiddenActionHints, focusedIsSystem))}
                 </DetailPane>
                 {focusedOtherService?.detail ? <DimAnnotation text={focusedOtherService.detail.message} /> : null}
                 {status === 'error' && error ? <DimAnnotation text={error} /> : null}
               </>
             )}
+            {readonlyNotice !== null ? <ClampedParagraph color={colors.warning} maxLines={4}>{`▲ ${readonlyNotice}`}</ClampedParagraph> : null}
           </Box>
         }
       />
@@ -1034,7 +1101,11 @@ export function EdtsZone({
       {dialog.kind === 'delete-confirm' ? <DeleteDialogView dialog={dialog} /> : null}
 
       {dialog.kind === 'quick-pick' ? (
-        <QuickPickDialogView dialog={dialog} pool={resolveQuickPickCandidates(dialog.mode, edtsRows, activeEdtUlid)} />
+        <QuickPickDialogView
+          dialog={dialog}
+          pool={resolveQuickPickCandidates(dialog.mode, edtsRows, activeEdtUlid)}
+          systemOnly={dialog.mode !== 'switch' && edtsRows.length > 0 && edtsRows.every((entry) => isSystemEdt(entry))}
+        />
       ) : null}
 
       {dialog.kind === 'issues' ? <IssuesDialogView unreachable={unreachable} errors={errors} /> : null}

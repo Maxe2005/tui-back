@@ -72,11 +72,20 @@ function switchFooterContext(dialog: SwitchDialogState, resolutionPending: boole
 // `switchDirtyRepos` is set), so the resolution view owns the keyboard.
 export function edtsFooterContext(
   dialog: EdtDialogState,
-  state: { registryEmpty: boolean; resolutionPending: boolean },
+  state: {
+    registryEmpty: boolean;
+    resolutionPending: boolean;
+    // The focused EDT is the system "Shared branches" one: 'switch' when Enter can switch to it,
+    // 'readonly' when every key but navigation explains the read-only rule. Only read with no dialog open.
+    systemEdt?: 'switch' | 'readonly' | null;
+  },
 ): FooterContextId | null {
   switch (dialog.kind) {
     case 'none':
-      return null;
+      if (state.systemEdt === 'switch') {
+        return 'edts-system-switch';
+      }
+      return state.systemEdt === 'readonly' ? 'edts-system-readonly' : null;
     case 'create':
       return wizardFooterContext(dialog, state.registryEmpty);
     case 'switch-confirm':
