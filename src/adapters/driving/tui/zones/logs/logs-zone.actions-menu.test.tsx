@@ -1,6 +1,4 @@
-// tui/zones/logs: real-keypress interactions — renderToString's fake stdin never emits data, so
-// Tab/Space/Enter/Escape/Ctrl+A's dispatch through a real `useInput` round-trip is only
-// observable here (shared/test-support/fake-tty.ts).
+// tui/zones/logs: real-keypress actions menu (a).
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import type { ServiceAction } from '../../../../../core/service-actions/index.js';
