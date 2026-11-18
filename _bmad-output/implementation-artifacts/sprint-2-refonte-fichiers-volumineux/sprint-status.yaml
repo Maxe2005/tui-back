@@ -55,7 +55,7 @@ development_status:
   13-2-split-the-edts-zone-interaction-tests: done
   13-3-split-group-update-and-switch-tests: done
   13-4-split-app-shell-and-store-tests: done
-  13-5-split-logs-zone-and-update-zone-tests: backlog
+  13-5-split-logs-zone-and-update-zone-tests: done
   13-6-split-cli-e2e-and-git-tests: backlog
   epic-13-retrospective: optional
 
