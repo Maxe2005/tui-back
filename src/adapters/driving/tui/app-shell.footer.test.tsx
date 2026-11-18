@@ -1,7 +1,3 @@
-// AppShell real-keypress tests: renderToString's fake stdin never emits a real keypress and
-// the zone interaction tests never mount AppShell, so only these tests (real Ink input via
-// shared/test-support/fake-tty.ts) observe whether a keystroke reaches, or is blocked from,
-// AppShell's global dispatch — e.g. the zoneInputCaptured gate.
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
