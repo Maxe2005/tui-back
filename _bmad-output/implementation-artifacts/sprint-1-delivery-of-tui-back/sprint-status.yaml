@@ -46,7 +46,7 @@ development_status:
 
   epic-2: in-progress
   2-45-edt-switch-restart-only-services-whose-checkout-moved: done
-  2-46-shared-branches-edt-model-guards-setting-switch-and-update: in-progress
+  2-46-shared-branches-edt-model-guards-setting-switch-and-update: review
   2-47-shared-branches-edt-in-the-edts-zone-and-the-settings-screen: backlog
   2-48-fast-forward-the-shared-branches-without-switching: backlog
   epic-2-retrospective: optional

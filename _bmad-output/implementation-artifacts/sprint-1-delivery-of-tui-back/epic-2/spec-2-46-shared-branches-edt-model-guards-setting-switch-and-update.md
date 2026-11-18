@@ -2,7 +2,7 @@
 title: 'Story 2.46: Shared-Branches EDT — Model, Guards, Setting, Switch & Update'
 type: 'feature'
 created: '2026-11-18'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'efc3491a9d0b8819ca688cf95f59683dbb12ff73'
 review_loop_iteration: 0
 context:
@@ -79,3 +79,48 @@ Paths under `src/`.
 **Commands:**
 - `npm test` -- expected: all green
 - `npx tsc --noEmit` and `npm run lint` -- expected: no errors
+
+## Suggested Review Order
+
+**Model and synthesis**
+
+- Pure identity helpers and builder: the one place that defines the system EDT.
+  [`shared-edt.ts:11`](../../../../../src/core/edt/shared-edt.ts#L11)
+
+- Registry synthesizes the entry on read, never writing `edts.yaml`.
+  [`index.ts:58`](../../../../../src/adapters/driven/edt-registry/index.ts#L58)
+
+- Setting wiring into the real CLI/MCP process.
+  [`composition.ts:43`](../../../../../src/bin/composition.ts#L43)
+
+**AD-8 carve-out and switch rules**
+
+- Narrow carve-out: system EDT members use the ungated shared spec.
+  [`checkout-expected.ts:17`](../../../../../src/core/edt/checkout-expected.ts#L17)
+
+- Adopt refused before any write when the outgoing EDT is the system one.
+  [`switch.ts:422`](../../../../../src/core/edt/switch.ts#L422)
+
+- System EDT never counts as a branch owner.
+  [`branch-owners.ts:9`](../../../../../src/core/edt/branch-owners.ts#L9)
+
+**Update**
+
+- Off-shared-branch services are skipped, never switched silently.
+  [`group-update.ts:939`](../../../../../src/core/scripts/group-update.ts#L939)
+
+**Setting-off refusal and stale pointer**
+
+- Disabling the setting is refused while the system EDT is active.
+  [`settings-slice.ts:78`](../../../../../src/adapters/driving/tui/store/slices/settings-slice.ts#L78)
+
+- Startup falls back to no active EDT, writing nothing.
+  [`edt-slice.ts:312`](../../../../../src/adapters/driving/tui/store/slices/edt-slice.ts#L312)
+
+**CLI and MCP**
+
+- `edt list` exposes `kind` and the real active status.
+  [`edt-list.ts:19`](../../../../../src/adapters/driving/cli/commands/edt-list.ts#L19)
+
+- Additive read-only MCP tool `edt-list`.
+  [`tool-registry.ts:420`](../../../../../src/adapters/driving/mcp/tool-registry.ts#L420)

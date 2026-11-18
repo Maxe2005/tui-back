@@ -991,3 +991,16 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-45-edt-switch-restart-only-services-whose-checkout-moved.md`
   summary: Re-running an EDT switch after an interrupted or failed restart reports every repo `unchanged`, so containers still on the old checkout are never restarted.
   evidence: `unchanged` rows are not restart targets by design (FR-37, story 2.45); a retry therefore cannot recover a restart that did not complete — needs a product decision (e.g. a standalone restart command or retry flag).
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
+  summary: Surface synthesis failures of the shared-branches EDT (settings/registry/manifest load errors) instead of silently dropping the entry or a member.
+  evidence: `list()` in the edt-registry adapter swallows every failure, so an enabled EDT can vanish or lose a repo with no explanation, and the stale-pointer fallback then misreports it as disabled.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
+  summary: Normalize a stale system-EDT active pointer in core so CLI/MCP flows (switch, group-update, realign, dashboard) handle it like the TUI startup fallback does.
+  evidence: `resolveActiveEdtPointer` is applied only in the TUI edt slice; other paths read `state.readActiveEdt()` directly and can hold a ulid absent from the registry when the setting is edited off outside the TUI.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
+  summary: Handle a legacy user EDT already named "Shared branches" in edts.yaml (topic collision with the system entry) and repos with unloadable manifests being silently omitted from a switch to the system EDT.
+  evidence: Topic-based lookups in switch/modify/delete become ambiguous with two same-topic entries; no migration or collision test exists.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
+  summary: `edtRegistry.list()` re-reads settings.yaml and every manifest on each call from hot paths (gate, branchOwners, dashboard); consider caching.
+  evidence: The synthesis runs per call with no cache and no performance test for a large repo list.
