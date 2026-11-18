@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-12-2026 15:07
-last_updated: 16-11-2026 14:40
+last_updated: 2026-11-18
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -40,14 +40,14 @@ development_status:
   12-2-extract-pure-logic-from-json-tree-and-the-command-bar: done
   12-3-split-the-settings-screen-by-tab: done
   12-4-split-the-cli-subcommands-by-family: done
-  12-5-split-the-group-update-core: backlog
-  12-6-split-edt-switch: backlog
-  12-7-split-the-zone-logic-modules: backlog
-  12-8-split-the-update-and-logs-slices: backlog
-  12-9-split-routeszone-into-hooks-and-subcomponents: backlog
-  12-10-split-logszone-into-hooks-and-subcomponents: backlog
-  12-11-split-edtszone-into-hooks-and-subcomponents: backlog
-  12-12-split-updatezone-into-hooks-and-subcomponents: backlog
+  12-5-split-the-group-update-core: done
+  12-6-split-edt-switch: done
+  12-7-split-the-zone-logic-modules: done
+  12-8-split-the-update-and-logs-slices: done
+  12-9-split-routeszone-into-hooks-and-subcomponents: done
+  12-10-split-logszone-into-hooks-and-subcomponents: done
+  12-11-split-edtszone-into-hooks-and-subcomponents: done
+  12-12-split-updatezone-into-hooks-and-subcomponents: review
   epic-12-retrospective: optional
 
   epic-13: backlog
