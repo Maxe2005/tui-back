@@ -37,6 +37,7 @@ import {
   initialAddToEdtDialog,
   initialCreateDialog,
   initialDeleteDialog,
+  initialFastForwardDialog,
   initialIssuesDialog,
   initialModifyDialog,
   initialQuickPickDialog,
@@ -53,6 +54,7 @@ import {
 import { createAddToEdtDialogHandlers, AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
 import { createCreateWizardHandlers, CreateWizardView } from './dialogs/create-wizard/create-wizard.js';
 import { createDeleteDialogHandlers, DeleteDialogView } from './dialogs/delete-dialog.js';
+import { FastForwardDialogView } from './dialogs/fast-forward-dialog.js';
 import { IssuesDialogView } from './dialogs/issues-dialog.js';
 import { createModifyDialogHandlers, ModifyDialogView } from './dialogs/modify-dialog.js';
 import { createQuickPickDialogHandlers, resolveQuickPickCandidates, QuickPickDialogView } from './dialogs/quick-pick-dialog.js';
@@ -128,6 +130,7 @@ export function EdtsZone({
   // The create wizard's Step 4 first-EDT activation.
   const activateEdtAction = useStore((state) => state.activateEdt);
   const switchEdtAction = useStore((state) => state.switchEdt);
+  const fastForwardSharedAction = useStore((state) => state.fastForwardShared);
   // The switch dirty-repo confirm seam (edt-slice.ts).
   const switchDirtyRepos = useStore((state) => state.switchDirtyRepos);
   const resolveSwitchDirtyRepos = useStore((state) => state.resolveSwitchDirtyRepos);
@@ -312,6 +315,13 @@ export function EdtsZone({
   // re-anchor the selection on the same EDT by ulid (the clamp covers a vanished one).
   const prevEdtsRef = useRef<readonly EdtRegistryEntry[] | null>(null);
   const edtsSelectedRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   useEffect(() => {
     const previous = prevEdtsRef.current;
     if (previous !== null && edts !== null && previous !== edts && previous.length > 0) {
@@ -342,7 +352,13 @@ export function EdtsZone({
   // is already active); every other action key explains the read-only rule instead.
   const focusedIsSystem = isSystemEdt(focusedEdt);
   const focusedIsActive = focusedEdt !== undefined && focusedEdt.ulid === activeEdtUlid;
-  const systemEdtFooter: 'switch' | 'readonly' | null = !focusedIsSystem ? null : paneFocus === 'edts' && !focusedIsActive ? 'switch' : 'readonly';
+  const systemEdtFooter: 'switch' | 'readonly' | 'fast-forward' | null = !focusedIsSystem
+    ? null
+    : paneFocus === 'edts'
+      ? focusedIsActive
+        ? 'fast-forward'
+        : 'switch'
+      : 'readonly';
   useFooterContext(
     'edts',
     edtsFooterContext(dialog, { registryEmpty: userEdtCount === 0, resolutionPending: switchDirtyRepos !== null, systemEdt: systemEdtFooter }),
@@ -712,6 +728,31 @@ export function EdtsZone({
     }
   }
 
+  // Fast-forwards every local shared branch from origin — no switch, migration or restart. The
+  // dialog opens at once ("running") and swaps to the per-service rows when the run lands.
+  async function runFastForwardShared(): Promise<void> {
+    setDialog(initialFastForwardDialog());
+    let result: Awaited<ReturnType<typeof fastForwardSharedAction>>;
+    try {
+      result = await fastForwardSharedAction();
+    } catch (error) {
+      result = { ok: false, error: { code: 'fast-forward-failed', message: error instanceof Error ? error.message : String(error) } };
+    }
+    // The zone may have unmounted while the run was in flight.
+    if (!mountedRef.current) {
+      return;
+    }
+    setDialog(
+      result.ok
+        ? { kind: 'fast-forward-shared', status: 'done', rows: result.data.rows, error: null }
+        : { kind: 'fast-forward-shared', status: 'done', rows: [], error: `${result.error.code}: ${result.error.message}` },
+    );
+    if (result.ok) {
+      // Branch positions may have moved: refresh the divergence badges.
+      void loadEdtsBranches();
+    }
+  }
+
   const { handleModifyDialogInput } = createModifyDialogHandlers({
     setDialog,
     modifyEdtAction,
@@ -805,6 +846,13 @@ export function EdtsZone({
       handleQuickPickDialogInput(dialog, input, key);
       return;
     }
+    if (dialog.kind === 'fast-forward-shared') {
+      // Inert while running; the results close with Esc or Enter.
+      if (dialog.status === 'done' && (key.escape || key.return)) {
+        setDialog({ kind: 'none' });
+      }
+      return;
+    }
     if (dialog.kind === 'issues') {
       // Read-only dialog, no submit path — Esc or Enter both just close it.
       if (key.escape || key.return) {
@@ -843,6 +891,11 @@ export function EdtsZone({
     }
 
     if (paneFocus === 'edts') {
+      // Quick action on the system "Shared branches" row only (it exists only while the setting is on).
+      if (input === 'f' && focusedIsSystem) {
+        void runFastForwardShared();
+        return;
+      }
       const jump = resolveSelectionJump(key);
       if (jump !== null) {
         setEdtsSelected(jumpSelection(jump, edtsRows.length));
@@ -951,7 +1004,11 @@ export function EdtsZone({
               />
               {!dialogOpen ? (
                 <DimAnnotation
-                  text={formatHints([['Enter', focusedIsSystem ? (focusedIsActive ? 'read-only' : 'switch') : 'switch/modify'], ['Tab', 'focus']])}
+                  text={formatHints([
+                    ['Enter', focusedIsSystem ? (focusedIsActive ? 'read-only' : 'switch') : 'switch/modify'],
+                    ...(focusedIsSystem ? ([['f', 'fast-forward']] as const) : []),
+                    ['Tab', 'focus'],
+                  ])}
                 />
               ) : null}
               </>
@@ -1108,6 +1165,7 @@ export function EdtsZone({
         />
       ) : null}
 
+      {dialog.kind === 'fast-forward-shared' ? <FastForwardDialogView dialog={dialog} /> : null}
       {dialog.kind === 'issues' ? <IssuesDialogView unreachable={unreachable} errors={errors} /> : null}
     </Box>
   );

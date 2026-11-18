@@ -75,7 +75,7 @@ Run freely, no approval.
 
 Change workspace state; each call needs your approval.
 
-`register`, `scan`, `edt-create`, `edt-modify`, `edt-switch`, `realign`, `heal`, `fire-request`, `request-fire`
+`register`, `scan`, `edt-create`, `edt-modify`, `edt-switch`, `edt-fast-forward-shared`, `realign`, `heal`, `fire-request`, `request-fire`
 
 #### destructive
 

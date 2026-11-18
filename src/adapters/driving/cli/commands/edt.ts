@@ -1,4 +1,4 @@
-// cli/commands/edt: the `edt` verb-dispatch subcommand (create / switch / modify / delete / list).
+// cli/commands/edt: the `edt` verb-dispatch subcommand (create / switch / modify / delete / list / fast-forward-shared).
 import { err } from '../../../../core/result.js';
 import { Subcommand } from '../dispatch.js';
 import { SubcommandDeps } from './deps.js';
@@ -7,8 +7,9 @@ import { EDT_SWITCH_USAGE, runEdtSwitch } from './edt-switch.js';
 import { EDT_MODIFY_USAGE, runEdtModify } from './edt-modify.js';
 import { EDT_DELETE_USAGE, runEdtDelete } from './edt-delete.js';
 import { EDT_LIST_USAGE, runEdtList } from './edt-list.js';
+import { EDT_FAST_FORWARD_SHARED_USAGE, runEdtFastForwardShared } from './edt-fast-forward-shared.js';
 
-const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}\n${EDT_LIST_USAGE}`;
+const EDT_USAGE = `${EDT_CREATE_USAGE}\n${EDT_SWITCH_USAGE}\n${EDT_MODIFY_USAGE}\n${EDT_DELETE_USAGE}\n${EDT_LIST_USAGE}\n${EDT_FAST_FORWARD_SHARED_USAGE}`;
 
 export function edtSubcommand(deps: SubcommandDeps): Subcommand {
   return {
@@ -29,6 +30,9 @@ export function edtSubcommand(deps: SubcommandDeps): Subcommand {
       }
       if (args[0] === 'list') {
         return runEdtList(deps, args.slice(1));
+      }
+      if (args[0] === 'fast-forward-shared') {
+        return runEdtFastForwardShared(deps, args.slice(1));
       }
       const label = args[0] === undefined ? '(none)' : `"${args[0]}"`;
       return err('invalid-argument', `Unknown edt action: ${label}. Usage:\n${EDT_USAGE}`);

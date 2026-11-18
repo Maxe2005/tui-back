@@ -10,6 +10,7 @@ import { adversarialEdt, adversarialServices, failedRows, MULTILINE_ERROR } from
 import { EdtsZone } from './edts-zone.js';
 import { IssuesDialogView } from './dialogs/issues-dialog.js';
 import { DeleteDialogView } from './dialogs/delete-dialog.js';
+import { FastForwardDialogView } from './dialogs/fast-forward-dialog.js';
 import { initialDeleteDialog } from './edts-zone.logic.js';
 import { frameLines } from '../../shared/test-support/matrix.js';
 
@@ -31,6 +32,34 @@ describe('EDTs zone bounded rendering', () => {
     const lines = frameLines(output);
     expect(lines.length).toBeLessThanOrEqual(15);
     expect(output).toContain('▼ more issues');
+    expect(output).not.toContain('third line');
+  });
+
+  it('fast-forward dialog windows 300 service rows, one line each, inside the frame', async () => {
+    const output = await renderToString(
+      createElement(
+        BoundsProvider,
+        region,
+        createElement(FastForwardDialogView, {
+          dialog: {
+            kind: 'fast-forward-shared',
+            status: 'done',
+            error: null,
+            rows: Array.from({ length: 300 }, (_, i) => ({
+              service: `svc-${i}`,
+              repoPath: `/repos/${i}`,
+              branch: 'development',
+              outcome: 'failed' as const,
+              detail: MULTILINE_ERROR,
+            })),
+          },
+        }),
+      ),
+      { columns: 60, rows: 15 },
+    );
+    expect(frameLines(output).length).toBeLessThanOrEqual(15);
+    expect(output).toContain('svc-0');
+    expect(output).toContain('▼ more');
     expect(output).not.toContain('third line');
   });
 

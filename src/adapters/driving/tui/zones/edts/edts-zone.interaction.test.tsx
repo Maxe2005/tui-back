@@ -243,10 +243,109 @@ describe('EdtsZone real-keypress interactions', () => {
 
       store.setState({ activeEdt: SHARED_EDT_ULID });
       await instance.waitUntilRenderFlush();
-      expect(footerIdOf(store)).toBe('edts-system-readonly');
+      expect(footerIdOf(store)).toBe('edts-system-fast-forward');
       await press(instance, stdin, KEYS.enter);
       expect(stdout.output).toContain('edt-system-readonly');
-      expect(footerIdOf(store)).toBe('edts-system-readonly');
+      expect(footerIdOf(store)).toBe('edts-system-fast-forward');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('system "Shared branches" EDT: `f` runs the fast-forward quick action and lists a row per service in a closable dialog', async () => {
+    const store = createAppStore();
+    const system = edt({ ulid: SHARED_EDT_ULID, topic: SHARED_EDT_TOPIC, kind: 'system-shared' });
+    const fastForwardShared = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        rows: [
+          { service: 'svc-ok', repoPath: '/r/a', branch: 'development', outcome: 'fast-forwarded' as const },
+          { service: 'svc-dirty', repoPath: '/r/b', branch: 'development', outcome: 'skipped' as const, reason: 'dirty' as const },
+          { service: 'svc-down', repoPath: '/r/c', branch: 'development', outcome: 'failed' as const, detail: 'origin unreachable' },
+        ],
+      },
+    }));
+    const switchEdt = vi.fn();
+    store.setState({
+      edts: [system, edt({ ulid: 'user-ulid', topic: 'mine' })],
+      edtsStatus: 'idle',
+      activeEdt: 'user-ulid',
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      fastForwardShared,
+      switchEdt,
+    } as never);
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'f');
+      await instance.waitUntilRenderFlush();
+      expect(fastForwardShared).toHaveBeenCalledTimes(1);
+      expect(switchEdt).not.toHaveBeenCalled();
+      expect(stdout.output).toContain('FAST-FORWARD SHARED BRANCHES');
+      expect(stdout.output).toContain('✔ svc-ok — fast-forwarded');
+      expect(stdout.output).toContain('– svc-dirty — skipped (dirty)');
+      expect(stdout.output).toContain('✖ svc-down — failed: origin unreachable');
+      expect(footerIdOf(store)).toBe('close');
+      await pressEscape(instance, stdin);
+      expect(footerIdOf(store)).toBe('edts-system-switch');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('`f` turns a rejected fast-forward into an error dialog instead of staying stuck running', async () => {
+    const store = createAppStore();
+    const system = edt({ ulid: SHARED_EDT_ULID, topic: SHARED_EDT_TOPIC, kind: 'system-shared' });
+    store.setState({
+      edts: [system, edt({ ulid: 'user-ulid', topic: 'mine' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      fastForwardShared: async () => {
+        throw new Error('boom');
+      },
+    } as never);
+    const { instance, stdout, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'f');
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output).toContain('fast-forward-failed: boom');
+      expect(footerIdOf(store)).toBe('close');
+      await pressEscape(instance, stdin);
+      expect(footerIdOf(store)).not.toBe('close');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
+  it('`f` does nothing on a user EDT row (the action is unavailable there)', async () => {
+    const store = createAppStore();
+    const fastForwardShared = vi.fn();
+    store.setState({
+      edts: [edt({ ulid: 'user-ulid', topic: 'mine' })],
+      edtsStatus: 'idle',
+      activeEdt: null,
+      edtsBranches: [],
+      edtsBranchesStatus: 'idle',
+      loadEdts: async () => {},
+      loadEdtsBranches: async () => {},
+      fastForwardShared,
+    } as never);
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'f');
+      expect(fastForwardShared).not.toHaveBeenCalled();
     } finally {
       instance.unmount();
       await instance.waitUntilExit();

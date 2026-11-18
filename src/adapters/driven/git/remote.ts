@@ -7,6 +7,12 @@ import { spawnFailureDetail } from './refs.js';
 // it out. Only ever called for a non-member repo's manifest sharedBranch after
 // branchExistsLocally reports false (a member's own branch is never auto-fetched — the
 // switch fails for that repo instead).
+//
+// AD-8 carve-out #2 ("fast-forward the shared branches"): this call, like
+// `pullBranch` below, is also how `fastForwardShared` moves a *shared* branch. It carries no
+// gate call on purpose: `git fetch origin b:b` only ever fast-forwards (a diverged local branch
+// is refused by git), and the sole ref it writes is the branch's own `origin` counterpart. Every
+// other write on a shared branch (commit, delete, rename, create, stage) stays gated.
 export async function fetchBranch(repoPath: string, branchName: string): Promise<Result<void>> {
   const result = await runProcess('git', ['fetch', 'origin', `${branchName}:${branchName}`], {
     cwd: repoPath,

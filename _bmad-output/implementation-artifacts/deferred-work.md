@@ -1004,3 +1004,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
   summary: `edtRegistry.list()` re-reads settings.yaml and every manifest on each call from hot paths (gate, branchOwners, dashboard); consider caching.
   evidence: The synthesis runs per call with no cache and no performance test for a large repo list.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-48-fast-forward-the-shared-branches-without-switching.md`
+  summary: Make the TUI in-progress guard bidirectional so switch/activate/update also refuse while a shared-branches fast-forward runs, and vice versa for switch/activate.
+  evidence: `fastForwardShared` in `edt-slice.ts` only checks update/restart/fast-forward flags; a switch or activate in flight is not checked, and the other actions do not check `fastForwardSharedRunning`.
