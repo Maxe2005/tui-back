@@ -8,7 +8,7 @@ import { spawnFailureDetail } from './refs.js';
 // branchExistsLocally reports false (a member's own branch is never auto-fetched — the
 // switch fails for that repo instead).
 //
-// AD-8 carve-out #2 (story 2.48, "fast-forward the shared branches"): this call, like
+// AD-8 carve-out #2 ("fast-forward the shared branches"): this call, like
 // `pullBranch` below, is also how `fastForwardShared` moves a *shared* branch. It carries no
 // gate call on purpose: `git fetch origin b:b` only ever fast-forwards (a diverged local branch
 // is refused by git), and the sole ref it writes is the branch's own `origin` counterpart. Every

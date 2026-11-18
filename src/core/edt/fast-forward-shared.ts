@@ -1,4 +1,4 @@
-// core/edt/fast-forward-shared: the "fast-forward the shared branches" quick action (story 2.48).
+// core/edt/fast-forward-shared: the "fast-forward the shared branches" quick action.
 // For each member of the system "Shared branches" EDT it brings the local shared branch up to
 // date with its `origin` counterpart — and nothing else: no checkout, stash, force, migration or
 // restart, and the active EDT, other branches and worktrees are never touched. Only a

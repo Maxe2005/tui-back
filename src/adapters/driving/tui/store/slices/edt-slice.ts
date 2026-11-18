@@ -64,7 +64,7 @@ export const UPDATE_IN_PROGRESS_CODE = 'update-in-progress';
 export const UPDATE_IN_PROGRESS_MESSAGE =
   'A group update is in progress — wait for it to finish before activating or switching an EDT.';
 
-// The "fast-forward the shared branches" quick action (story 2.48) moves local branches, so it
+// The "fast-forward the shared branches" quick action moves local branches, so it
 // never overlaps a group update, a restart run or another fast-forward.
 export const FAST_FORWARD_IN_PROGRESS_CODE = 'fast-forward-in-progress';
 export const FAST_FORWARD_IN_PROGRESS_MESSAGE =

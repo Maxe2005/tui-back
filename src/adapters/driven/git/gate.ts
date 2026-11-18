@@ -9,7 +9,7 @@ import { currentBranch } from './refs.js';
 
 // Carve-outs: `fetch` / `pull --ff-only` of a shared branch (remote.ts) are deliberately
 // ungated — they can only fast-forward it from its own origin counterpart (switch, update and the
-// story 2.48 `fastForwardShared` quick action).
+// `fastForwardShared` quick action).
 //
 // The reusable branch-scope safety gate (AD-8): resolves the protected set from the
 // repo's own manifest at check time — never trusted from the caller — and rejects

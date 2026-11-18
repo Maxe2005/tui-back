@@ -987,7 +987,7 @@ describe('subcommand registry guards', () => {
     });
   });
 
-  describe('edt fast-forward-shared (story 2.48)', () => {
+  describe('edt fast-forward-shared', () => {
     const system = {
       ulid: '01SHAREDBRANCHES0000000000',
       topic: 'Shared branches',

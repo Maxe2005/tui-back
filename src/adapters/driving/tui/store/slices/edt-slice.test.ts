@@ -290,7 +290,7 @@ describe('edt slice — update-in-progress lock', () => {
   });
 });
 
-describe('edt slice — fast-forward the shared branches (story 2.48)', () => {
+describe('edt slice — fast-forward the shared branches', () => {
   const system = {
     ulid: '01SHAREDBRANCHES0000000000',
     topic: 'Shared branches',

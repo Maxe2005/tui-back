@@ -1,5 +1,5 @@
 // cli/commands/edt-fast-forward-shared: `edt fast-forward-shared` — fast-forwards each managed
-// service's local shared branch from origin without switching EDT (story 2.48). Needs the
+// service's local shared branch from origin without switching EDT. Needs the
 // "Shared branches" EDT setting on (`edt-not-found` otherwise); exits non-zero when any row failed.
 import { err, ok, type Result } from '../../../../core/result.js';
 import { anyFastForwardFailed, fastForwardShared, FAST_FORWARD_FAILED_CODE } from '../../../../core/edt/fast-forward-shared.js';

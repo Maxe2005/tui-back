@@ -837,7 +837,7 @@ export type QuickPickDialogState = {
   notFound: string | null;
 } & FilterablePickListState;
 
-// The "fast-forward the shared branches" quick action (story 2.48): running while the core call
+// The "fast-forward the shared branches" quick action: running while the core call
 // is in flight, then the per-service rows (or a refusal) until Enter/Esc.
 export type FastForwardDialogState = {
   kind: 'fast-forward-shared';

@@ -1,4 +1,4 @@
-// tui/zones/edts/dialogs: the "fast-forward the shared branches" results dialog (story 2.48) —
+// tui/zones/edts/dialogs: the "fast-forward the shared branches" results dialog —
 // one row per managed service, glyph AND colour per outcome (never colour alone), through a
 // BoundedList so any number of services stays inside the terminal. Running: nothing to press.
 // Done: Enter/Esc close it (the zone's useInput handles keys, like the issues dialog).

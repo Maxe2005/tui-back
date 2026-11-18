@@ -1367,10 +1367,10 @@ describe('pullBranch', () => {
   });
 });
 
-// Story 2.48 carve-out: `fetch` (branch:branch) and `pull --ff-only` of a shared branch carry
+// `fetch` (branch:branch) and `pull --ff-only` of a shared branch carry
 // no write-gate — the only way the shared branch moves is a fast-forward from its own origin
 // counterpart. Every other write on it stays rejected by the AD-8 gate.
-describe('shared-branch fast-forward carve-out (story 2.48)', () => {
+describe('shared-branch fast-forward carve-out', () => {
   it('fast-forwards a non-checked-out shared branch while commit, delete, rename and create stay rejected', async () => {
     const { origin, clone } = await makeGitRepoOriginAndClone();
     const port = createGitPort(manifest);
