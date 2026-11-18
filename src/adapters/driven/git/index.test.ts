@@ -4,7 +4,7 @@
 // gets the gate error rather than a "not a git repository" failure.
 import { describe, expect, it, afterEach } from 'vitest';
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -1364,6 +1364,47 @@ describe('pullBranch', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'git-pull-error' } });
     // Neither side moved: no merge commit was created to paper over the divergence.
     expect(await aheadBehind(clone)).toEqual({ ok: true, data: { ahead: 1, behind: 1 } });
+  });
+});
+
+// Story 2.48 carve-out: `fetch` (branch:branch) and `pull --ff-only` of a shared branch carry
+// no write-gate — the only way the shared branch moves is a fast-forward from its own origin
+// counterpart. Every other write on it stays rejected by the AD-8 gate.
+describe('shared-branch fast-forward carve-out (story 2.48)', () => {
+  it('fast-forwards a non-checked-out shared branch while commit, delete, rename and create stay rejected', async () => {
+    const { origin, clone } = await makeGitRepoOriginAndClone();
+    const port = createGitPort(manifest);
+    await copyFile(join(origin, '.tui-back.yaml'), join(clone, '.tui-back.yaml'));
+    commit(origin, 'upstream-only commit');
+    expect(runGit(clone, ['checkout', 'feat/remote-only']).status).toBe(0);
+    const before = runGit(clone, ['rev-parse', 'development']).stdout.trim();
+
+    expect(await port.fetch(clone, 'development')).toEqual({ ok: true, data: undefined });
+
+    const after = runGit(clone, ['rev-parse', 'development']).stdout.trim();
+    expect(after).not.toBe(before);
+    expect(after).toBe(runGit(origin, ['rev-parse', 'development']).stdout.trim());
+    expect(runGit(clone, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('feat/remote-only');
+
+    const rejected = { ok: false, error: { code: 'shared-branch-rejected' } };
+    expect(await port.deleteBranch(clone, 'development', true)).toMatchObject(rejected);
+    expect(await port.renameBranch(clone, 'development', 'dev-renamed')).toMatchObject(rejected);
+    expect(await port.createBranch(clone, 'development', 'feat/remote-only')).toMatchObject(rejected);
+    expect(branchExists(clone, 'development')).toBe(true);
+  });
+
+  it('fast-forwards a checked-out shared branch via pull while commit and stagePaths stay rejected', async () => {
+    const { origin, clone } = await makeGitRepoOriginAndClone();
+    const port = createGitPort(manifest);
+    await copyFile(join(origin, '.tui-back.yaml'), join(clone, '.tui-back.yaml'));
+    commit(origin, 'upstream-only commit');
+
+    expect(await port.pull(clone)).toEqual({ ok: true, data: undefined });
+    expect(runGit(clone, ['rev-parse', 'HEAD']).stdout.trim()).toBe(runGit(origin, ['rev-parse', 'HEAD']).stdout.trim());
+
+    const rejected = { ok: false, error: { code: 'shared-branch-rejected' } };
+    expect(await port.commit(clone, 'nope', ['x.txt'])).toMatchObject(rejected);
+    expect(await port.stagePaths(clone, ['x.txt'])).toMatchObject(rejected);
   });
 });
 
