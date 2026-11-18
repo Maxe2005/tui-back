@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { ok, err } from "../../../../core/result.js";
-import type { StatePort } from "../../../../core/ports/state.js";
-import { createAppStore } from "./app-store.js";
-import { fakeDeps } from "./store.test-support.js";
+import { ok, err } from "../../../../../core/result.js";
+import type { StatePort } from "../../../../../core/ports/state.js";
+import { createAppStore } from "../app-store.js";
+import { fakeDeps } from "../store.test-support.js";
 
 // Filter-history persistence — mirrors "splitterRatios persistence"'s coverage shape.
 describe("logs slice: filter history", () => {
