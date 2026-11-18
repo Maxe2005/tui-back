@@ -860,6 +860,55 @@ describe('groupUpdate — migrate phase', () => {
     expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
   });
 
+  describe('active EDT is the system shared-branches EDT (story 2.46)', () => {
+    const SYSTEM = {
+      ...edtEntry('01SHAREDBRANCHES0000000000', 'Shared branches', [
+        member('svc-a', '/repo/a', 'development'),
+        member('svc-b', '/repo/b', 'development'),
+      ]),
+      kind: 'system-shared' as const,
+    };
+    const systemParams = (git: GitPort, migration = fakeMigration()) =>
+      makeParams({
+        git,
+        migration,
+        edtRegistry: fakeEdtRegistry({ list: vi.fn(async () => ok([SYSTEM])) }),
+        state: fakeState({ readActiveEdt: vi.fn(async () => ok(SYSTEM.ulid)) }),
+      });
+
+    it('pulls every service on its shared branch (fast-forward pull, no merge, no gate call)', async () => {
+      const git = fakeGit({ currentBranch: vi.fn(async () => ok('development')) });
+
+      const result = await groupUpdate(systemParams(git));
+
+      expect(result).toMatchObject({ ok: true, data: { results: [{ outcome: 'updated' }, { outcome: 'updated' }] } });
+      expect(calls(git.pull).map(([path]) => path)).toEqual(['/repo/a', '/repo/b']);
+      expect(calls(git.mergeBranch)).toHaveLength(0);
+    });
+
+    it('reports a service checked out elsewhere as skipped (not-on-shared-branch), never switched, no migration', async () => {
+      const git = fakeGit({
+        currentBranch: vi.fn(async (repoPath: string) => ok(repoPath === '/repo/a' ? 'feat/wip' : 'development')),
+      });
+      const migration = fakeMigration();
+
+      const result = await groupUpdate(systemParams(git, migration));
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: {
+          results: [
+            { service: 'svc-a', outcome: 'skipped', detail: { code: 'not-on-shared-branch' } },
+            { service: 'svc-b', outcome: 'updated' },
+          ],
+        },
+      });
+      expect(calls(git.checkout)).toHaveLength(0);
+      expect(calls(git.pull).map(([path]) => path)).toEqual(['/repo/b']);
+      expect(calls(migration.run).filter(([path]) => path === '/repo/a')).toHaveLength(0);
+    });
+  });
+
   it('never runs the migration when the pull/merge itself failed', async () => {
     const git = fakeGit({
       fetch: vi.fn(async (repoPath: string) =>
