@@ -442,6 +442,7 @@ it('shouldQuit returns true for q', () => {
         exitResizeMode: () => {},
         cycleResizeTargetBoundary: () => {},
         activeEdt: null,
+        activeEdtWarning: null,
         setActiveEdt: () => {},
         helpOpen: false,
         openHelp: () => {},

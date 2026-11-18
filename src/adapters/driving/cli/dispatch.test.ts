@@ -361,7 +361,7 @@ describe('subcommand registry guards', () => {
   it('completion script derives the real edt/registry verbs and flags from the live registry', async () => {
     const piped = await runCli(['completion', 'bash'], buildTestSubcommands(), false);
     const script: string = JSON.parse(piped.output).data.script;
-    expect(script).toContain('edt) words="create switch modify delete" ;;');
+    expect(script).toContain('edt) words="create switch modify delete list" ;;');
     expect(script).toContain('registry) words="clean validate" ;;');
     expect(script).toContain('completion) words="bash" ;;');
     expect(script).toMatch(/"edt switch"\) words="[^"]*--to[^"]*--force/);
@@ -915,6 +915,65 @@ describe('subcommand registry guards', () => {
       const result = await edt.run(['delete', 'demo', '--branches', '/repo/a=leave', '--branches', '/repo/a/=delete']);
 
       expect(result).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+  });
+
+  describe('edt list and the system shared-branches EDT (story 2.46)', () => {
+    const system = {
+      ulid: '01SHAREDBRANCHES0000000000',
+      topic: 'Shared branches',
+      kind: 'system-shared' as const,
+      createdAt: '1970-01-01T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'development' }],
+    };
+    const user = {
+      ulid: '01USER',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+    };
+    const registryOf = (entries: Array<typeof system | typeof user>): EdtRegistryPort => ({
+      add: async () => ok(undefined),
+      list: async () => ok(entries),
+      setStatus: async () => ok(undefined),
+      update: async () => ok(undefined),
+      remove: async () => ok(undefined),
+    });
+    const edtOf = (entries: Array<typeof system | typeof user>) => {
+      const edt = buildTestSubcommands({ edtRegistry: registryOf(entries) }).find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+      return edt;
+    };
+
+    it('lists every EDT with kind "user" or "system-shared"', async () => {
+      const result = await edtOf([user, system]).run(['list']);
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: { edts: [{ topic: 'demo', kind: 'user' }, { topic: 'Shared branches', kind: 'system-shared' }] },
+      });
+    });
+
+    it('has no system entry when the registry does not synthesize it (setting off)', async () => {
+      const result = await edtOf([user]).run(['list']);
+      expect(result).toMatchObject({ ok: true, data: { edts: [{ kind: 'user' }] } });
+    });
+
+    it('rejects extra arguments', async () => {
+      expect(await edtOf([user]).run(['list', 'x'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('delete, modify and create refuse the system EDT with edt-system-readonly', async () => {
+      const edt = edtOf([system]);
+      expect(await edt.run(['delete', 'Shared branches'])).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+      expect(await edt.run(['modify', '--topic', 'Shared branches', '--rename-to', 'x'])).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+      expect(await edt.run(['create', '--topic', 'shared branches', '--member', '/repo/a'])).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+    });
+
+    it('switching to the system topic fails edt-not-found when it is not listed', async () => {
+      expect(await edtOf([user]).run(['switch', '--to', 'Shared branches'])).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
     });
   });
 

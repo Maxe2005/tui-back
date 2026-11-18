@@ -2,6 +2,7 @@
 // settings.yaml and applied to the live store immediately, with no separate save step.
 import type { StateCreator } from 'zustand';
 import { DEFAULT_SETTINGS, type Settings } from '../../../../../core/ports/settings.js';
+import { assertSharedEdtCanBeDisabled } from '../../../../../core/edt/shared-edt.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 // A partial update accepted by updateSettings — each present top-level key shallow-merges
@@ -70,8 +71,18 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
       }
     },
     updateSettings: async (partial) => {
-      settingsVersion += 1;
       const current = get().settings;
+      // The "Shared branches" EDT cannot be switched off while it is the active EDT: the whole
+      // update is refused (nothing applied or persisted) with a message naming the switch to
+      // make first, surfaced through `settingsWarning` (the settings screen shows it inline).
+      if (partial.edts?.sharedBranchesEdtEnabled === false && current.edts.sharedBranchesEdtEnabled) {
+        const allowed = assertSharedEdtCanBeDisabled(get().activeEdt);
+        if (!allowed.ok) {
+          set({ settingsWarning: allowed.error.message });
+          return;
+        }
+      }
+      settingsVersion += 1;
       const next: Settings = {
         general: { ...current.general, ...partial.general },
         commandPalette: { ...current.commandPalette, ...partial.commandPalette },

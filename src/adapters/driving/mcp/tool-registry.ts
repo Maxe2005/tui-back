@@ -163,7 +163,7 @@ const WRITE_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'edt-switch',
-    description: 'Switch the active EDT (checks out its branches). Discarding dirty changes is not available through MCP.',
+    description: 'Switch the active EDT (checks out its branches). Discarding dirty changes is not available through MCP. Adopting dirty changes is refused (switch-adopt-unavailable) when the outgoing EDT is the system "Shared branches" EDT.',
     inputSchema: {
       to: safeString('Target EDT topic.'),
       force: z.boolean().optional(),
@@ -412,6 +412,15 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: "Every managed service's current branch and ahead/behind divergence from its upstream.",
     inputSchema: {},
     subcommand: 'edts',
+    safety: 'read',
+  },
+  {
+    name: 'edt-list',
+    description:
+      'List the registered EDTs. Each entry has a `kind`: "user" for an ordinary EDT, "system-shared" for the read-only "Shared branches" EDT (present only while the edts.sharedBranchesEdtEnabled setting is on; it cannot be created, modified or deleted — edt-system-readonly).',
+    inputSchema: {},
+    subcommand: 'edt',
+    baseArgs: ['list'],
     safety: 'read',
   },
   {

@@ -2,7 +2,7 @@
 // It is a system entry synthesized in memory from the managed repos and their manifests — never
 // persisted to edts.yaml — whose members are every managed repo on its manifest `sharedBranch`.
 // It is recognized by `kind` (and, defensively, its constant ulid), never by topic alone.
-import { err, type Result } from '../result.js';
+import { err, ok, type Result } from '../result.js';
 import type { EdtMember, EdtRegistryEntry } from '../ports/edt-registry.js';
 import type { Manifest } from '../ports/manifest.js';
 
@@ -61,4 +61,34 @@ export const EDT_SYSTEM_READONLY_MESSAGE =
 // The one refusal every mutation path returns, before any write.
 export function systemEdtReadonly(): Result<never> {
   return err(EDT_SYSTEM_READONLY_CODE, EDT_SYSTEM_READONLY_MESSAGE);
+}
+
+export const SHARED_EDT_DISABLE_REFUSED_CODE = 'shared-edt-active';
+
+// The settings guard: the "Shared branches" EDT cannot be switched off while it is the active
+// EDT. The message names the switch to make first; when it is not active, disabling is free.
+export function assertSharedEdtCanBeDisabled(activeUlid: string | null): Result<void> {
+  if (isSystemEdt(activeUlid)) {
+    return err(
+      SHARED_EDT_DISABLE_REFUSED_CODE,
+      `The "${SHARED_EDT_TOPIC}" EDT is the active EDT: switch to another EDT first, then turn this setting off.`,
+    );
+  }
+  return ok(undefined);
+}
+
+// Startup fallback: an active-EDT pointer naming the system EDT while it no longer exists (the
+// setting is off) resolves to no active EDT, with a warning. Pure — nothing is written anywhere;
+// the stale pointer stays in state.json until the next switch overwrites it.
+export function resolveActiveEdtPointer(
+  pointer: string | null,
+  edts: readonly { ulid: string }[],
+): { active: string | null; warning: string | null } {
+  if (isSystemEdt(pointer) && !edts.some((edt) => edt.ulid === pointer)) {
+    return {
+      active: null,
+      warning: `The active EDT was "${SHARED_EDT_TOPIC}", which is disabled in the settings: no EDT is active. Switch to an EDT, or re-enable it in :settings.`,
+    };
+  }
+  return { active: pointer, warning: null };
 }

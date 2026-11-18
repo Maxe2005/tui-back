@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   SHARED_EDT_ULID,
   SHARED_EDT_TOPIC,
+  assertSharedEdtCanBeDisabled,
   buildSharedBranchesEdt,
+  resolveActiveEdtPointer,
   isSharedEdtTopic,
   isSystemEdt,
 } from './shared-edt.js';
@@ -41,5 +43,30 @@ describe('shared-edt', () => {
   it('matches the reserved topic trimmed and case-insensitively', () => {
     expect(isSharedEdtTopic('  shared BRANCHES ')).toBe(true);
     expect(isSharedEdtTopic('Shared branch')).toBe(false);
+  });
+});
+
+describe('settings guard and startup fallback', () => {
+  it('refuses disabling while the system EDT is active, naming the switch to make first', () => {
+    const refused = assertSharedEdtCanBeDisabled(SHARED_EDT_ULID);
+    expect(refused).toMatchObject({ ok: false, error: { code: 'shared-edt-active' } });
+    expect(!refused.ok && refused.error.message).toContain('switch to another EDT first');
+  });
+
+  it('allows disabling when another EDT, or none, is active', () => {
+    expect(assertSharedEdtCanBeDisabled('01USER').ok).toBe(true);
+    expect(assertSharedEdtCanBeDisabled(null).ok).toBe(true);
+  });
+
+  it('falls back to no active EDT with a warning when the pointer names the missing system EDT', () => {
+    const resolved = resolveActiveEdtPointer(SHARED_EDT_ULID, [{ ulid: '01USER' }]);
+    expect(resolved.active).toBeNull();
+    expect(resolved.warning).toContain('Shared branches');
+  });
+
+  it('keeps the pointer when the system EDT exists, when it is another EDT, or when it is null', () => {
+    expect(resolveActiveEdtPointer(SHARED_EDT_ULID, [{ ulid: SHARED_EDT_ULID }])).toEqual({ active: SHARED_EDT_ULID, warning: null });
+    expect(resolveActiveEdtPointer('01GONE', [])).toEqual({ active: '01GONE', warning: null });
+    expect(resolveActiveEdtPointer(null, [])).toEqual({ active: null, warning: null });
   });
 });
