@@ -6,6 +6,7 @@ import type { ActivationBlockedRepo } from '../../../../../core/edt/activate.js'
 import type { MemberBranchPlan } from '../../../../../core/edt/create.js';
 import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../core/edt/delete.js';
 import { EDT_SYSTEM_READONLY_CODE, EDT_SYSTEM_READONLY_MESSAGE, isSystemEdt } from '../../../../../core/edt/shared-edt.js';
+import type { FastForwardSharedRow } from '../../../../../core/edt/fast-forward-shared.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { SwitchEdtRepoResult } from '../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
@@ -13,7 +14,7 @@ import type { NavigationKey } from '../../shared/keys/navigation-key.js';
 import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../shared/components/failed-result-list.js';
-import { formatHint } from '../../shared/components/hints.js';
+import { formatHint, formatHints } from '../../shared/components/hints.js';
 import type { MenuItem } from '../../shared/components/menu-list.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
 import type { TextInputState } from '../../shared/components/text-edit.js';
@@ -394,8 +395,11 @@ export function formatEdtActionHistory(
 // formatEdtDetail/formatEdtActionHistory using the same '\n\n' separator.
 export function formatAvailableActionsHint(paneFocus: PaneFocus, focusedIsActiveEdt: boolean, focusedIsSystemEdt = false): string {
   if (focusedIsSystemEdt) {
-    // Read-only: only a switch is offered (and not to itself when already active).
-    return paneFocus === 'edts' && !focusedIsActiveEdt ? formatHint(['Enter', 'Switch']) : '';
+    // Read-only: a switch (not to itself when already active) and the fast-forward quick action.
+    if (paneFocus !== 'edts') {
+      return '';
+    }
+    return focusedIsActiveEdt ? formatHint(['f', 'Fast-forward']) : formatHints([['Enter', 'Switch'], ['f', 'Fast-forward']]);
   }
   switch (paneFocus) {
     case 'edts':
@@ -833,6 +837,19 @@ export type QuickPickDialogState = {
   notFound: string | null;
 } & FilterablePickListState;
 
+// The "fast-forward the shared branches" quick action (story 2.48): running while the core call
+// is in flight, then the per-service rows (or a refusal) until Enter/Esc.
+export type FastForwardDialogState = {
+  kind: 'fast-forward-shared';
+  status: 'running' | 'done';
+  rows: FastForwardSharedRow[];
+  error: string | null;
+};
+
+export function initialFastForwardDialog(): FastForwardDialogState {
+  return { kind: 'fast-forward-shared', status: 'running', rows: [], error: null };
+}
+
 export type EdtDialogState =
   | { kind: 'none' }
   | CreateDialogState
@@ -842,7 +859,8 @@ export type EdtDialogState =
   | AddToEdtDialogState
   | DeleteDialogState
   | IssuesDialogState
-  | QuickPickDialogState;
+  | QuickPickDialogState
+  | FastForwardDialogState;
 
 export function initialIssuesDialog(): IssuesDialogState {
   return { kind: 'issues' };

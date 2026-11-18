@@ -11,6 +11,7 @@ import {
   initialCreateDialog,
   initialDeleteDialog,
   initialModifyDialog,
+  initialFastForwardDialog,
   initialIssuesDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
@@ -70,6 +71,8 @@ describe('edtsFooterContext', () => {
     expect(edtsFooterContext(initialIssuesDialog(), CLOSED)).toBe('issues-list');
     const quickPick = { kind: 'quick-pick', mode: 'switch', notFound: null, query: '', queryCursor: 0, cursor: 0 } as unknown as EdtDialogState;
     expect(edtsFooterContext(quickPick, CLOSED)).toBe('menu');
+    expect(edtsFooterContext({ ...initialFastForwardDialog() }, CLOSED)).toBe('busy');
+    expect(edtsFooterContext({ ...initialFastForwardDialog(), status: 'done' }, CLOSED)).toBe('close');
   });
 
   it('switch: confirm, forced confirm, resolution view, then the result summary', () => {

@@ -666,9 +666,9 @@ describe('system "Shared branches" EDT', () => {
     expect(detail).toContain('- web (main)');
   });
 
-  it('offers switch only (nothing when active, nothing on the service panes)', () => {
-    expect(formatAvailableActionsHint('edts', false, true)).toContain('Switch');
-    expect(formatAvailableActionsHint('edts', true, true)).toBe('');
+  it('offers switch and fast-forward (fast-forward only when active, nothing on the service panes)', () => {
+    expect(formatAvailableActionsHint('edts', false, true)).toBe('[Enter] Switch  [f] Fast-forward');
+    expect(formatAvailableActionsHint('edts', true, true)).toBe('[f] Fast-forward');
     expect(formatAvailableActionsHint('edt-services', false, true)).toBe('');
     expect(formatAvailableActionsHint('other-services', false, true)).toBe('');
   });
@@ -704,6 +704,9 @@ describe('system "Shared branches" EDT', () => {
   it('every new footer context is declared', () => {
     expect(FOOTER_CONTEXTS['edts-system-switch'].hints.length).toBeGreaterThan(0);
     expect(FOOTER_CONTEXTS['edts-system-readonly'].hints.length).toBeGreaterThan(0);
+    expect(FOOTER_CONTEXTS['edts-system-fast-forward'].hints.length).toBeGreaterThan(0);
+    expect(FOOTER_CONTEXTS['edts-system-switch'].hints).toContainEqual(['f', 'fast-forward']);
+    expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false, systemEdt: 'fast-forward' })).toBe('edts-system-fast-forward');
     expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false, systemEdt: 'switch' })).toBe('edts-system-switch');
     expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false, systemEdt: 'readonly' })).toBe('edts-system-readonly');
     expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false })).toBeNull();

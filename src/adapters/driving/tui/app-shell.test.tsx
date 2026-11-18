@@ -511,6 +511,8 @@ it('shouldQuit returns true for q', () => {
         createEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         activateEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         switchEdt: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
+        fastForwardSharedRunning: false,
+        fastForwardShared: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         switchRestart: null,
         runSwitchRestart: async () => ({ ok: false, error: { code: 'unwired', message: 'unwired' } }),
         clearSwitchRestart: () => {},

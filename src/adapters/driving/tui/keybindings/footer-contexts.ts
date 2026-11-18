@@ -425,7 +425,11 @@ export const FOOTER_CONTEXTS = {
   },
   'edts-system-switch': {
     label: 'EDTs zone, shared-branches EDT (switchable)',
-    hints: [MOVE, ['Enter', 'switch'], ['Tab', 'focus'], [':', 'cmd'], ['?', 'help']],
+    hints: [MOVE, ['Enter', 'switch'], ['f', 'fast-forward'], ['Tab', 'focus'], [':', 'cmd'], ['?', 'help']],
+  },
+  'edts-system-fast-forward': {
+    label: 'EDTs zone, shared-branches EDT (active)',
+    hints: [MOVE, ['f', 'fast-forward'], ['Tab', 'focus'], [':', 'cmd'], ['?', 'help']],
   },
   'edts-system-readonly': {
     label: 'EDTs zone, shared-branches EDT (read-only)',

@@ -10,6 +10,7 @@ import { createAppStore } from '../../store/app-store.js';
 import { createFilterablePickListState } from '../components/filterable-pick-list.js';
 import { KeybindingHelp } from '../components/keybinding-help.js';
 import { IssuesDialogView } from '../../zones/edts/dialogs/issues-dialog.js';
+import { FastForwardDialogView } from '../../zones/edts/dialogs/fast-forward-dialog.js';
 import { DeleteDialogView } from '../../zones/edts/dialogs/delete-dialog.js';
 import { ServiceActionsDialogView } from '../../zones/edts/dialogs/service-actions-dialog.js';
 import { AddToEdtDialogView } from '../../zones/edts/dialogs/add-to-edt-dialog.js';
@@ -87,6 +88,26 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
       createElement(IssuesDialogView, {
         unreachable: Array.from({ length: 80 }, (_, i) => `/repos/unreachable-${i}-${'u'.repeat(200)}`),
         errors: Array.from({ length: 80 }, (_, i) => ({ path: `/repos/broken-${i}`, code: 'git-error', message: MULTILINE_ERROR })) as never,
+      }),
+  },
+  {
+    id: 'edts/fast-forward-shared',
+    file: 'zones/edts/dialogs/fast-forward-dialog.tsx',
+    render: () =>
+      createElement(FastForwardDialogView, {
+        dialog: {
+          kind: 'fast-forward-shared',
+          status: 'done',
+          error: MULTILINE_ERROR,
+          rows: services.map((s, i) => ({
+            service: s.service,
+            repoPath: s.path,
+            branch: 'development',
+            outcome: (['fast-forwarded', 'up-to-date', 'skipped', 'failed'] as const)[i % 4],
+            ...(i % 4 === 2 ? { reason: 'dirty' as const } : {}),
+            ...(i % 4 === 3 ? { detail: MULTILINE_ERROR } : {}),
+          })),
+        },
       }),
   },
   {
