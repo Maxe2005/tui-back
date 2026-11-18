@@ -2,6 +2,7 @@
 // It is a system entry synthesized in memory from the managed repos and their manifests — never
 // persisted to edts.yaml — whose members are every managed repo on its manifest `sharedBranch`.
 // It is recognized by `kind` (and, defensively, its constant ulid), never by topic alone.
+import { err, type Result } from '../result.js';
 import type { EdtMember, EdtRegistryEntry } from '../ports/edt-registry.js';
 import type { Manifest } from '../ports/manifest.js';
 
@@ -51,4 +52,13 @@ export function isSystemEdt(edt: { kind?: string; ulid?: string } | string | nul
 // True when `topic` names the system EDT (trimmed, case-insensitive) — the creation guard.
 export function isSharedEdtTopic(topic: string): boolean {
   return topic.trim().toLowerCase() === SHARED_EDT_TOPIC.toLowerCase();
+}
+
+export const EDT_SYSTEM_READONLY_CODE = 'edt-system-readonly';
+export const EDT_SYSTEM_READONLY_MESSAGE =
+  'The "Shared branches" EDT is a system EDT: it cannot be created, modified, renamed or deleted.';
+
+// The one refusal every mutation path returns, before any write.
+export function systemEdtReadonly(): Result<never> {
+  return err(EDT_SYSTEM_READONLY_CODE, EDT_SYSTEM_READONLY_MESSAGE);
 }

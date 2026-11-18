@@ -8,6 +8,10 @@
  import Database from 'better-sqlite3';
  import { err, ok, type Result } from '../../../core/result.js';
  import type { EdtRegistryEntry, EdtRegistryPort, EdtMember, EdtStatus, EdtActionLogEntry } from '../../../core/ports/edt-registry.js';
+ import type { RegistryPort } from '../../../core/ports/registry.js';
+ import type { ManifestPort } from '../../../core/ports/manifest.js';
+ import type { SettingsPort } from '../../../core/ports/settings.js';
+ import { buildSharedBranchesEdt, isSharedEdtTopic, isSystemEdt, systemEdtReadonly as systemReadonly, type SharedEdtRepo } from '../../../core/edt/shared-edt.js';
  import type { XdgPaths } from '../xdg/index.js';
  import { ensureXdgDir } from '../xdg/index.js';
  import { edtRegistrySchema } from './schema.js';
@@ -16,20 +20,60 @@
    return join(xdg.configDir, 'edts.yaml');
  }
  
+ // What the adapter needs to synthesize the read-only "Shared branches" system EDT (FR-53): the
+ // setting that enables it, the managed-repo list and each repo's manifest. Omitted = the system
+ // EDT never exists (every pre-2.46 call site and test).
+ export interface SharedEdtSource {
+   settings: SettingsPort;
+   registry: RegistryPort;
+   manifest: ManifestPort;
+ }
+
  // edtsBaseDir locates the per-EDT SQLite databases (edtsBaseDir/<ulid>.db) that hold the
  // action_log table; edts.yaml holds the EDT metadata.
- export function createEdtRegistryPort(edtRegistryFile: string, edtsBaseDir: string): EdtRegistryPort {
+ export function createEdtRegistryPort(edtRegistryFile: string, edtsBaseDir: string, shared?: SharedEdtSource): EdtRegistryPort {
    return {
-     add: (entry) => addEdtRegistryEntry(edtRegistryFile, entry),
-     list: () => listEdtRegistry(edtRegistryFile),
-     setStatus: (ulid, status) => setEdtStatus(edtRegistryFile, ulid, status),
-     update: (ulid, patch) => updateEdtEntry(edtRegistryFile, ulid, patch),
-     remove: (ulid) => removeEdtRegistryEntry(edtRegistryFile, ulid),
+     add: async (entry) => (isSystemEdt(entry) || isSharedEdtTopic(entry.topic) ? systemReadonly() : addEdtRegistryEntry(edtRegistryFile, entry)),
+     list: async () => {
+       const listed = await listEdtRegistry(edtRegistryFile);
+       if (!listed.ok || shared === undefined) {
+         return listed;
+       }
+       const system = await synthesizeSharedEdt(shared);
+       // A synthesis failure never breaks the user's own EDT list: the entry is simply absent.
+       return ok(system === null ? listed.data : [...listed.data, system]);
+     },
+     // The system EDT has no persisted status: activation lives in the active-EDT pointer.
+     setStatus: async (ulid, status) => (isSystemEdt(ulid) ? ok(undefined) : setEdtStatus(edtRegistryFile, ulid, status)),
+     update: async (ulid, patch) => (isSystemEdt(ulid) ? systemReadonly() : updateEdtEntry(edtRegistryFile, ulid, patch)),
+     remove: async (ulid) => (isSystemEdt(ulid) ? systemReadonly() : removeEdtRegistryEntry(edtRegistryFile, ulid)),
      logAction: (ulid, actionType, outcome, detail) => logEdtAction(edtsBaseDir, ulid, actionType, outcome, detail),
      getActionLog: (ulid, limit) => getEdtActionLog(edtsBaseDir, ulid, limit),
    };
  }
  
+ // The system EDT, built fresh from the setting, the repo registry and each manifest on every
+ // call (a registered/removed repo or a changed `sharedBranch` shows at once; nothing is
+ // cached or written). null when the setting is off or unreadable, or the repo list fails.
+ async function synthesizeSharedEdt(source: SharedEdtSource): Promise<EdtRegistryEntry | null> {
+   const loaded = await source.settings.load();
+   if (!loaded.ok || !loaded.data.settings.edts.sharedBranchesEdtEnabled) {
+     return null;
+   }
+   const paths = await source.registry.list();
+   if (!paths.ok) {
+     return null;
+   }
+   const repos: SharedEdtRepo[] = [];
+   for (const repoPath of paths.data) {
+     const manifest = await source.manifest.load(repoPath);
+     if (manifest.ok) {
+       repos.push({ repoPath, manifest: manifest.data });
+     }
+   }
+   return buildSharedBranchesEdt(repos);
+ }
+
  async function ensureEdtRegistryDir(edtRegistryFile: string): Promise<Result<void>> {
    try {
      ensureXdgDir(dirname(edtRegistryFile));

@@ -592,3 +592,79 @@ describe('modifyEdt persistence (real update())', () => {
     }
   });
 });
+
+describe('edt-registry shared-branches system EDT (story 2.46)', () => {
+  function sharedSource(enabled: boolean, repos: Record<string, string | null>) {
+    const state = { enabled, repos: { ...repos } };
+    const settings = {
+      load: async () => ok({ settings: { edts: { sharedBranchesEdtEnabled: state.enabled } }, warning: null }),
+      save: async () => ok(undefined),
+    };
+    const registry = { list: async () => ok(Object.keys(state.repos)) };
+    const manifest = {
+      load: async (path: string) => {
+        const shared = state.repos[path];
+        return shared === null || shared === undefined
+          ? ({ ok: false, error: { code: 'manifest-not-found', message: 'x' } } as const)
+          : ok({ service: path.split('/').pop() as string, sharedBranch: shared, modules: {} });
+      },
+    };
+    return { state, source: { settings, registry, manifest } as never };
+  }
+
+  it('lists no system entry while the setting is off', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const { source } = sharedSource(false, { '/r/a': 'development' });
+    const port = createEdtRegistryPort(file, edtsBaseDir, source);
+    expect(await port.list()).toEqual({ ok: true, data: [] });
+  });
+
+  it('synthesizes it while on, reflects repo and sharedBranch changes at once, and never writes edts.yaml', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const { state, source } = sharedSource(true, { '/r/a': 'development', '/r/b': null });
+    const port = createEdtRegistryPort(file, edtsBaseDir, source);
+
+    const first = await port.list();
+    expect(first.ok && first.data).toHaveLength(1);
+    expect(first.ok && first.data[0]).toMatchObject({
+      topic: 'Shared branches',
+      kind: 'system-shared',
+      members: [{ service: 'a', repoPath: '/r/a', branch: 'development' }],
+    });
+
+    state.repos['/r/a'] = 'main';
+    state.repos['/r/c'] = 'develop';
+    const second = await port.list();
+    expect(second.ok && second.data[0].members.map((m) => [m.repoPath, m.branch])).toEqual([['/r/a', 'main'], ['/r/c', 'develop']]);
+
+    await expect(readFile(file, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('refuses update/remove/add of the system EDT without writing, and setStatus is a no-op', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const { source } = sharedSource(true, { '/r/a': 'development' });
+    const port = createEdtRegistryPort(file, edtsBaseDir, source);
+    const listed = await port.list();
+    if (!listed.ok) throw new Error('expected ok');
+    const system = listed.data[0];
+
+    expect(await port.update(system.ulid, { topic: 'x' })).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+    expect(await port.remove(system.ulid)).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+    expect(await port.add(system)).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+    expect(await port.add({ ...system, ulid: '01OTHER', kind: undefined, topic: ' shared branches' })).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+    expect(await port.setStatus(system.ulid, 'active')).toEqual({ ok: true, data: undefined });
+
+    await expect(readFile(file, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('keeps user EDTs listed ahead of the system one and persists only them', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const { source } = sharedSource(true, { '/r/a': 'development' });
+    const port = createEdtRegistryPort(file, edtsBaseDir, source);
+    await port.add({ ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA', topic: 'mine', createdAt: 'x', status: 'inactive', members: [] });
+
+    const listed = await port.list();
+    expect(listed.ok && listed.data.map((e) => e.topic)).toEqual(['mine', 'Shared branches']);
+    expect(await readFile(file, 'utf8')).not.toContain('Shared branches');
+  });
+});

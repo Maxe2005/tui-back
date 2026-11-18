@@ -98,7 +98,11 @@ const manifest = { load: loadManifest };
 const manifestCarry = createManifestCarryPort();
 const edtsBaseDir = join(xdg.dataDir, "edts");
 const edtRegistryFile = resolveEdtRegistryFile(xdg);
-const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
+// The settings file is read here (not only by the settings screen) because the EDT registry
+// synthesizes the read-only "Shared branches" system EDT from it.
+const settingsFile = resolveSettingsFile(xdg);
+const settings = createSettingsPort(settingsFile);
+const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir, { settings, registry, manifest });
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
 const migration = createMigrationPort();
@@ -113,8 +117,6 @@ const state = createStatePort(stateFile);
 const actionLock = createLockPort(lockDir);
 // The settings screen's persistence port — XDG_CONFIG_HOME/tui-back/settings.yaml,
 // zod-validated like the manifest/registry.
-const settingsFile = resolveSettingsFile(xdg);
-const settings = createSettingsPort(settingsFile);
 // The Logs zone's Docker touchpoint — no XDG/lock wiring needed (log ring buffers live only in
 // memory, per process).
 const docker = createDockerPort();

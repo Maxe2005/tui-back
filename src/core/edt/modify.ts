@@ -10,6 +10,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import { err, ok, type Result } from '../result.js';
+import { isSharedEdtTopic, isSystemEdt, systemEdtReadonly } from './shared-edt.js';
 
 export interface ModifyEdtResult {
   service: string;
@@ -75,6 +76,11 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
     return err('edt-not-found', `No EDT with topic "${trimmedTopic}" is registered`);
   }
 
+  // The system "Shared branches" EDT is read-only: every mutation is refused before any write.
+  if (isSystemEdt(target)) {
+    return systemEdtReadonly();
+  }
+
   // At least one operation required
   const hasOp =
     addMembers.length > 0 ||
@@ -87,6 +93,9 @@ export async function modifyEdt(params: ModifyEdtParams): Promise<Result<ModifyE
   }
   // If rename, check uniqueness (fast-fail, re-validated under lock)
   if (renameTo !== undefined) {
+    if (isSharedEdtTopic(renameTo)) {
+      return systemEdtReadonly();
+    }
     if (renameTo.trim() === '') {
       return err('invalid-argument', 'Rename topic must not be empty');
     }
@@ -428,6 +437,9 @@ export interface AddMemberUnderLockParams {
 
 export async function addMemberUnderLock(params: AddMemberUnderLockParams): Promise<Result<void>> {
   const { edtRegistry, lock, edtRegistryResourceKey, edt, member } = params;
+  if (isSystemEdt(edt)) {
+    return systemEdtReadonly();
+  }
   return persistModifiedEntry({
     edtRegistry,
     edtRegistryResourceKey,
