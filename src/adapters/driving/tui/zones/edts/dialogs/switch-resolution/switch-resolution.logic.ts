@@ -4,6 +4,7 @@
 // edt-slice seam until this view resolves `proceed` (with `buildResolutions(rows)`) or
 // `cancel`. The layout mirrors the create wizard's Step 3 (see the main reducer below).
 import { resolve } from 'node:path';
+import { isSystemEdt } from '../../../../../../../core/edt/shared-edt.js';
 import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
@@ -30,7 +31,8 @@ export type OtherEdtBranches = Readonly<Record<string, readonly EdtBranchClaim[]
 export function otherEdtBranches(edts: readonly EdtRegistryEntry[], outgoingUlid: string | null): OtherEdtBranches {
   const claims: Record<string, EdtBranchClaim[]> = {};
   for (const entry of edts) {
-    if (entry.ulid === outgoingUlid) {
+    // The system EDT registers no branch of its own (it only sits on shared branches).
+    if (entry.ulid === outgoingUlid || isSystemEdt(entry)) {
       continue;
     }
     for (const member of entry.members) {

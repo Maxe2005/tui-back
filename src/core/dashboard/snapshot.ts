@@ -13,6 +13,7 @@ import type { StatePort } from '../ports/state.js';
 import { ok, type Result } from '../result.js';
 import { resolveManifestStatus, type ServiceStatus } from '../service-status/index.js';
 import { isProtectedBranch } from '../edt/shared-branches.js';
+import { isSystemEdt } from '../edt/shared-edt.js';
 import { readServiceDivergence, type BranchDivergenceStatus } from '../edt/list.js';
 import { driftOf, readOthers, type DashboardOtherService, type DriftState } from './drift.js';
 
@@ -209,6 +210,7 @@ async function readService(
             .filter(
               (entry) =>
                 entry.ulid !== activeUlid &&
+                !isSystemEdt(entry) &&
                 entry.members.some((other) => resolve(other.repoPath) === path && other.branch === divergence.branch),
             )
             .map((entry) => entry.topic),

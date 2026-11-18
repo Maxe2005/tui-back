@@ -33,6 +33,8 @@ export function settingsFooterContext(
   state: {
     generalEditing: boolean;
     edtsGroup: SettingsGroupId | null;
+    // True while the EDTs group list's cursor rests on the shared-branches switch row.
+    edtsToggleRow?: boolean;
     logsGroup: LogsSettingsGroupId | null;
     paletteGroup?: PaletteSettingsGroupId | null;
     // True while a Logs "persisted filter rules" action waits for its confirmation.
@@ -47,7 +49,10 @@ export function settingsFooterContext(
     case 'command-palette':
       return state.paletteGroup == null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.paletteGroup];
     case 'edts':
-      return state.edtsGroup === null ? 'settings-groups' : GROUP_FOOTER_CONTEXTS[state.edtsGroup];
+      if (state.edtsGroup === null) {
+        return state.edtsToggleRow === true ? 'settings-groups-toggle' : 'settings-groups';
+      }
+      return GROUP_FOOTER_CONTEXTS[state.edtsGroup];
     case 'shared-types':
       return 'settings-shared-types';
     case 'services':

@@ -35,6 +35,21 @@ describe('resolveUpdatePaneRows', () => {
   });
 });
 
+describe('formatServiceUpdateContext: shared-branches EDT', () => {
+  it('names the system EDT without the "EDT" prefix, case-insensitively', () => {
+    expect(formatServiceUpdateContext('develop', 'main', 'Shared branches')).toBe('develop → main (Shared branches)');
+    expect(formatServiceUpdateContext('develop', 'main', 'shared BRANCHES')).toBe('develop → main (Shared branches)');
+  });
+});
+
+describe('formatLastUpdateRecap: shared-branches EDT', () => {
+  it('labels the scope "all shared branches"', () => {
+    const recap = formatLastUpdateRecap('Shared branches', [{ service: 'api', outcome: 'updated' }], null, { api: 'development' });
+    expect(recap?.title).toBe('Last update — Shared branches');
+    expect(recap?.contextLines[0]).toBe('Scope: all shared branches');
+  });
+});
+
 describe('formatLastUpdateRecap', () => {
   it('is null before any run finished', () => {
     expect(formatLastUpdateRecap(null, [], null, {})).toBeNull();

@@ -6,6 +6,7 @@
 import { resolve as resolvePath } from 'node:path';
 import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useWindowSize } from 'ink';
+import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../core/edt/shared-edt.js';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import type { GroupUpdateRepoResult, UpdateBlockerChoice } from '../../../../../core/scripts/group-update.js';
@@ -128,6 +129,9 @@ export function formatUpdateSummary(topic: string, results: readonly GroupUpdate
   const failed = results.filter((row) => row.outcome === 'failed').length;
   if (topic === 'all-repos') {
     return `All repos: ${updated} updated, ${skipped} skipped, ${failed} failed.`;
+  }
+  if (isSharedEdtTopic(topic)) {
+    return `${SHARED_EDT_TOPIC} (all shared branches): ${updated} updated, ${skipped} skipped, ${failed} failed.`;
   }
   return `EDT "${topic}": ${updated} updated, ${skipped} skipped, ${failed} failed.`;
 }

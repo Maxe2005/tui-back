@@ -81,6 +81,18 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
   { id: 'heal-restart', label: 'Heal restart mode' },
 ];
 
+// The group list's trailing row: a single boolean toggled directly with Space (no drill-in),
+// `edts.sharedBranchesEdtEnabled`. Its row index follows the last group.
+export const SHARED_EDT_TOGGLE_LABEL = 'Show the shared-branches EDT';
+export const SHARED_EDT_TOGGLE_NOTE = 'Adds the system "Shared branches" EDT (every service on its shared branch) to the EDTs zone, quick-pick and `edt switch`.';
+
+// Number of rows of the EDTs tab's top-level list: the groups plus the toggle row.
+export const EDTS_TOP_LEVEL_ROW_COUNT = SETTINGS_GROUPS.length + 1;
+
+export function isSharedEdtToggleRow(cursor: number): boolean {
+  return cursor === SETTINGS_GROUPS.length;
+}
+
 export const SWITCH_RESTART_LABELS: Record<SwitchRestartMode, string> = { none: 'None', simple: 'Simple restart', clean: 'Clean restart' };
 
 // Left/Right/Space cycle none → simple → clean (Left goes back).

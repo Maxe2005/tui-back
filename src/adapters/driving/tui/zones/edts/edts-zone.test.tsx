@@ -45,7 +45,13 @@ import {
   truncateBranchLabel,
   validateBranchEditValue,
   BRANCH_MAX_WIDTH,
+  SYSTEM_EDT_NOTICE,
+  resolveOutgoingTopic,
 } from './edts-zone.logic.js';
+import { SHARED_EDT_TOPIC, SHARED_EDT_ULID, EDT_SYSTEM_READONLY_MESSAGE } from '../../../../../core/edt/shared-edt.js';
+import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
+import { initialSwitchResolution } from './dialogs/switch-resolution/switch-resolution.logic.js';
+import { edtsFooterContext } from './edts-footer-context.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 function edtEntry(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
@@ -634,6 +640,73 @@ describe('formatEdtRowMeta', () => {
         edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }, { service: 'b', repoPath: '/b', branch: 'main' }] }),
       ),
     ).toBe('2 members');
+  });
+});
+
+describe('system "Shared branches" EDT', () => {
+  const system = () =>
+    edtEntry({
+      ulid: SHARED_EDT_ULID,
+      topic: SHARED_EDT_TOPIC,
+      kind: 'system-shared',
+      members: [
+        { service: 'api', repoPath: '/api', branch: 'development' },
+        { service: 'web', repoPath: '/web', branch: 'main' },
+      ],
+    });
+
+  it('row meta carries the text badge `shared`', () => {
+    expect(formatEdtRowMeta(system())).toBe('[shared] 2 members');
+  });
+
+  it('detail lists the kind and each member on its shared branch', () => {
+    const detail = formatEdtDetail(system(), false);
+    expect(detail).toContain('Kind: shared');
+    expect(detail).toContain('- api (development)');
+    expect(detail).toContain('- web (main)');
+  });
+
+  it('offers switch only (nothing when active, nothing on the service panes)', () => {
+    expect(formatAvailableActionsHint('edts', false, true)).toContain('Switch');
+    expect(formatAvailableActionsHint('edts', true, true)).toBe('');
+    expect(formatAvailableActionsHint('edt-services', false, true)).toBe('');
+    expect(formatAvailableActionsHint('other-services', false, true)).toBe('');
+  });
+
+  it('the readonly notice carries the 2.46 message and code', () => {
+    expect(SYSTEM_EDT_NOTICE).toContain(EDT_SYSTEM_READONLY_MESSAGE);
+    expect(SYSTEM_EDT_NOTICE).toContain('edt-system-readonly');
+  });
+
+  it('quick-pick: switch keeps the system EDT, modify/delete/create-from exclude it', () => {
+    const user = edtEntry({ ulid: 'u1', topic: 'mine' });
+    const rows = [system(), user];
+    expect(quickCandidates('switch', rows, null).map((e) => e.topic)).toEqual([SHARED_EDT_TOPIC, 'mine']);
+    for (const mode of ['modify', 'delete', 'create-from'] as const) {
+      expect(quickCandidates(mode, rows, null).map((e) => e.topic)).toEqual(['mine']);
+    }
+  });
+
+  it('leaving the active system EDT gives the resolution view no outgoing topic (no adopt)', () => {
+    const user = edtEntry({ ulid: 'u1', topic: 'mine' });
+    expect(resolveOutgoingTopic([system(), user], SHARED_EDT_ULID)).toBeNull();
+    expect(resolveOutgoingTopic([system(), user], 'u1')).toBe('mine');
+    expect(resolveOutgoingTopic([system(), user], null)).toBeNull();
+    expect(initialSwitchResolution(null, [], {}, 1).globalAction).toBe('discard');
+  });
+
+  it('create wizard never seeds from the system EDT', () => {
+    const dialog = initialCreateDialog(system());
+    expect(dialog.selectedMembers).toEqual([]);
+    expect(dialog.seedFromEdt).toBeNull();
+  });
+
+  it('every new footer context is declared', () => {
+    expect(FOOTER_CONTEXTS['edts-system-switch'].hints.length).toBeGreaterThan(0);
+    expect(FOOTER_CONTEXTS['edts-system-readonly'].hints.length).toBeGreaterThan(0);
+    expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false, systemEdt: 'switch' })).toBe('edts-system-switch');
+    expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false, systemEdt: 'readonly' })).toBe('edts-system-readonly');
+    expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false })).toBeNull();
   });
 });
 

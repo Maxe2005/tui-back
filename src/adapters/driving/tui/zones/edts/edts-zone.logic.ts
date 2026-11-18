@@ -5,6 +5,7 @@
 import type { ActivationBlockedRepo } from '../../../../../core/edt/activate.js';
 import type { MemberBranchPlan } from '../../../../../core/edt/create.js';
 import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../core/edt/delete.js';
+import { EDT_SYSTEM_READONLY_CODE, EDT_SYSTEM_READONLY_MESSAGE, isSystemEdt } from '../../../../../core/edt/shared-edt.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { SwitchEdtRepoResult } from '../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
@@ -322,14 +323,30 @@ export function findRetryableFailedRow(failedRows: readonly FailedResultRow[]): 
 // independently-colored suffix), so this stays a pure member-count formatter.
 export function formatEdtRowMeta(entry: EdtRegistryEntry): string {
   const count = entry.members.length;
-  return `${count} member${count === 1 ? '' : 's'}`;
+  const members = `${count} member${count === 1 ? '' : 's'}`;
+  // A text badge, never colour alone, marks the system EDT.
+  return isSystemEdt(entry) ? `[${SHARED_EDT_BADGE}] ${members}` : members;
 }
 
+// The topic of the EDT being left, for the dirty-work resolution view; null when there is none or
+// it is the system EDT (nothing to adopt dirty work into: stash or discard only).
+export function resolveOutgoingTopic(edts: readonly EdtRegistryEntry[], activeUlid: string | null): string | null {
+  const outgoing = activeUlid === null ? undefined : edts.find((entry) => entry.ulid === activeUlid);
+  return outgoing === undefined || isSystemEdt(outgoing) ? null : outgoing.topic;
+}
+
+export const SHARED_EDT_BADGE = 'shared';
+
+// What Enter / a mutating key says on the system EDT: the 2.46 refusal, with its code.
+export const SYSTEM_EDT_NOTICE = `${EDT_SYSTEM_READONLY_CODE}: ${EDT_SYSTEM_READONLY_MESSAGE}`;
+
 export function formatEdtDetail(entry: EdtRegistryEntry, isActive: boolean): string {
+  const system = isSystemEdt(entry);
   const lines = [
     `Topic: ${entry.topic}`,
+    ...(system ? [`Kind: ${SHARED_EDT_BADGE} (system, read-only: switch and update only)`] : []),
     `Status: ${isActive ? 'active' : entry.status}`,
-    entry.members.length === 0 ? 'Members: none' : 'Members:',
+    entry.members.length === 0 ? 'Members: none' : system ? 'Members (every service on its shared branch):' : 'Members:',
     ...entry.members.map((member) => `  - ${member.service} (${member.branch})`),
   ];
   return lines.join('\n');
@@ -375,7 +392,11 @@ export function formatEdtActionHistory(
 // The context-derived "Available:" hint line — what Enter actually does in the focused pane.
 // Never lists `c`/`m`: they are not direct keys. The zone's render joins it with
 // formatEdtDetail/formatEdtActionHistory using the same '\n\n' separator.
-export function formatAvailableActionsHint(paneFocus: PaneFocus, focusedIsActiveEdt: boolean): string {
+export function formatAvailableActionsHint(paneFocus: PaneFocus, focusedIsActiveEdt: boolean, focusedIsSystemEdt = false): string {
+  if (focusedIsSystemEdt) {
+    // Read-only: only a switch is offered (and not to itself when already active).
+    return paneFocus === 'edts' && !focusedIsActiveEdt ? formatHint(['Enter', 'Switch']) : '';
+  }
   switch (paneFocus) {
     case 'edts':
       return formatHint(['Enter', focusedIsActiveEdt ? 'Modify' : 'Switch']);
@@ -396,11 +417,12 @@ export function resolveActionHint(
   paneFocus: PaneFocus,
   focusedIsActiveEdt: boolean,
   hiddenActionHints: readonly string[],
+  focusedIsSystemEdt = false,
 ): string {
   if (hiddenActionHints.includes(paneFocus)) {
     return '';
   }
-  return formatAvailableActionsHint(paneFocus, focusedIsActiveEdt);
+  return formatAvailableActionsHint(paneFocus, focusedIsActiveEdt, focusedIsSystemEdt);
 }
 
 // A hidden hint (resolveActionHint returning '') must vanish cleanly — no dangling blank
@@ -833,7 +855,9 @@ export function initialQuickPickDialog(mode: QuickPickMode, notFound: string | n
 // `seed` (edt-create-from's root EDT) pre-checks Step 2 with its members, in root order; Step 3's
 // per-row seeding happens on entering it (wizard.logic.ts's enterBranchStep), once the global
 // name is known. The topic always starts empty — never derived from the root.
-export function initialCreateDialog(seed?: EdtRegistryEntry): CreateDialogState {
+export function initialCreateDialog(rawSeed?: EdtRegistryEntry): CreateDialogState {
+  // The system EDT is never a template: a system seed is ignored (a blank wizard opens).
+  const seed = rawSeed !== undefined && isSystemEdt(rawSeed) ? undefined : rawSeed;
   return {
     kind: 'create',
     step: 1,

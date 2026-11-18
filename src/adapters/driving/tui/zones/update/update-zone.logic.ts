@@ -3,6 +3,7 @@
 // lastServiceOutcomes merge the store applies on run completion. The useInput callback stays a
 // thin dispatcher over these unit-tested functions.
 import { resolve } from 'node:path';
+import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../core/edt/shared-edt.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type {
@@ -264,9 +265,10 @@ export function formatLastUpdateRecap(
     return null;
   }
   const isAll = topic === 'all-repos';
-  const title = isAll ? 'Last update — all repos' : `Last update — EDT "${topic}"`;
+  const shared = isSharedEdtTopic(topic);
+  const title = isAll ? 'Last update — all repos' : shared ? `Last update — ${SHARED_EDT_TOPIC}` : `Last update — EDT "${topic}"`;
   const contextLines = [
-    isAll ? 'Scope: every managed repo' : `Scope: members of EDT "${topic}"`,
+    isAll ? 'Scope: every managed repo' : shared ? 'Scope: all shared branches' : `Scope: members of EDT "${topic}"`,
     `Services covered: ${String(results.length)}`,
   ];
   const resultLines = results.map((row) => {
@@ -449,7 +451,7 @@ export function buildServiceStepViews(
 // confirmed override, else the manifest's shared branch; `target` the service's branch, and the
 // EDT topic of the run when it had one.
 export function formatServiceUpdateContext(source: string | undefined, target: string | null, topic: string | null): string {
-  const edt = topic !== null && topic !== 'all-repos' ? ` (EDT ${topic})` : '';
+  const edt = topic !== null && topic !== 'all-repos' ? (isSharedEdtTopic(topic) ? ` (${SHARED_EDT_TOPIC})` : ` (EDT ${topic})`) : '';
   return `${source ?? 'shared branch'} → ${target ?? '?'}${edt}`;
 }
 export type UpdateFooterInput = {
