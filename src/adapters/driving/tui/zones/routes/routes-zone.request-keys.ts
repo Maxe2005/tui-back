@@ -8,7 +8,7 @@ import {
   resolveTreePanelKeyAction,
 } from '../../shared/components/json-tree/model.js';
 import { moveRoutesSelection, resolveRoutesDirection } from './routes-zone.logic.js';
-import { nextRequestSection, removeRequestRow, type RequestRowSection } from './routes-request.logic.js';
+import { nextRequestSection, type RequestRowSection } from './routes-request.logic.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 
 export function handleRequestTabKey(c: RoutesZoneCtx, input: string, key: Key): void {
@@ -121,11 +121,6 @@ export function handleRequestTabKey(c: RoutesZoneCtx, input: string, key: Key): 
   }
   if (rowSection !== 'params' && (input === 'a' || input === 'A')) {
     setRowAddPrompt({ section: rowSection, input: { value: '', cursor: 0 }, error: null });
-    return;
-  }
-  if (rowSection !== 'params' && (input === 'd' || input === 'D') && rows[at] !== undefined && paneRouteKey !== null) {
-    updateRequestDraft(paneRouteKey, (previous) => ({ ...previous, [rowSection]: removeRequestRow(previous[rowSection], at) }));
-    setRowCursor(Math.max(0, Math.min(at, rows.length - 2)));
     return;
   }
   return;

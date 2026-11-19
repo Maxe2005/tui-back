@@ -1,4 +1,4 @@
-// tui/zones/routes: routes-zone.list-keys — key handlers for the route list: the inline filter input while editing, and the list-focused shortcuts (e / f / s / Enter / jumps / arrows).
+// tui/zones/routes: routes-zone.list-keys — key handlers for the route list: the inline filter input while editing, and the list-focused shortcuts (e / f / p / Enter / jumps / arrows).
 import type { Key } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
 import { canEditRouteBody } from '../../shared/components/json-tree/model.js';
@@ -52,9 +52,10 @@ export function handleListKey(c: RoutesZoneCtx, input: string, key: Key): void {
     setFilterEditing(true);
     return;
   }
-  // `s` opens the saved-request picker: Enter reloads a fresh row into the Request tab
-  // (stale rows render flagged and never load), `d` on a stale row deletes it.
-  if (input === 's' || input === 'S') {
+  // `p` opens the saved-request picker: Enter reloads a fresh row into the Request tab
+  // (stale rows render flagged and never load), `d` on a stale row deletes it. Not `s`:
+  // that is the shared-types zone mnemonic and switches zone.
+  if ((input === 'p' || input === 'P') && key.ctrl !== true && key.meta !== true) {
     openPicker();
     return;
   }

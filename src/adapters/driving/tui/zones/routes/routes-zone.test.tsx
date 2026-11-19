@@ -360,19 +360,35 @@ describe('RoutesZone saved requests', () => {
     });
   }
 
-  it('hints [s] saved next to the route list', async () => {
+  it('hints [p] picker next to the route list', async () => {
     const store = createAppStore();
     seedSavedHints(store);
     expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list');
-    expect(FOOTER_CONTEXTS['routes-list'].hints).toContainEqual(['s', 'saved']);
+    expect(FOOTER_CONTEXTS['routes-list'].hints).toContainEqual(['p', 'picker']);
   });
 
-  it('hints [s] save in the focused Request tab, never on the Response tab', async () => {
+  it('no Routes footer context advertises s for save/pick or d for delete on request editors', () => {
+    const hintKeys = (id: keyof typeof FOOTER_CONTEXTS): string[] => FOOTER_CONTEXTS[id].hints.map((hint) => hint[0]);
+    for (const id of ['routes-section', 'routes-rows-readonly', 'routes-rows', 'routes-rows-empty'] as const) {
+      expect(FOOTER_CONTEXTS[id].hints).toContainEqual(['w', 'save']);
+      expect(hintKeys(id)).not.toContain('s');
+      expect(hintKeys(id)).not.toContain('d');
+    }
+    for (const id of ['routes-list', 'routes-list-editable'] as const) {
+      expect(FOOTER_CONTEXTS[id].hints).toContainEqual(['p', 'picker']);
+      expect(hintKeys(id)).not.toContain('s');
+    }
+    for (const id of ['routes-body-tree', 'routes-body-tree-add'] as const) {
+      expect(hintKeys(id)).not.toContain('d');
+    }
+  });
+
+  it('hints [w] save in the focused Request tab, never on the Response tab', async () => {
     const store = createAppStore();
     seedSavedHints(store);
     store.setState({ routesPaneFocus: 'detail', routesPaneTab: 'request' });
     expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-section');
-    expect(FOOTER_CONTEXTS['routes-section'].hints).toContainEqual(['s', 'save']);
+    expect(FOOTER_CONTEXTS['routes-section'].hints).toContainEqual(['w', 'save']);
     store.setState({ routesPaneTab: 'response' });
     expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-response-empty');
     expect(JSON.stringify(FOOTER_CONTEXTS['routes-response-empty'].hints)).not.toContain("'save'");

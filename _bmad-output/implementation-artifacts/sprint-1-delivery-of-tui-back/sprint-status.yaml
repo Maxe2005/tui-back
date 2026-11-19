@@ -63,7 +63,7 @@ development_status:
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-10-routes-keys-free-of-zone-mnemonics-and-no-d-on-request-editors: backlog
+  6-10-routes-keys-free-of-zone-mnemonics-and-no-d-on-request-editors: review
   6-11-favorite-routes-per-edt-persistence-use-cases-and-cli: backlog
   6-12-favorites-pane-above-the-routes-list-and-add-to-favorites-key: backlog
   6-13-recent-routes-and-quick-re-fire: backlog

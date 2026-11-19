@@ -1,6 +1,6 @@
-// tui/shared/components/json-tree/body-draft: body draft seeding/gating/pruning, the editor status
-// line and error-path remapping after a delete.
-import { BodyEditError, JsonPathSegment, MAX_BODY_DRAFTS, parseJsonPath, rebuildConcretePath } from './body-edit-path.js';
+// tui/shared/components/json-tree/body-draft: body draft seeding/gating/pruning and the editor status
+// line.
+import { BodyEditError, MAX_BODY_DRAFTS } from './body-edit-path.js';
 
 export type EditableRoute = { bodyExample?: unknown; bodyContentType?: string };
 
@@ -60,66 +60,4 @@ export function formatBodyEditStatus(firstError: string | null, hiddenCount: num
     return hiddenPart !== null ? `✖ ${firstError} · ${hiddenPart}` : `✖ ${firstError}`;
   }
   return hiddenPart ?? '0 lines hidden — still sent';
-}
-
-// True when a concrete path falls under a container prefix (exact match, `.child`, or
-// `[i]` continuation); the root prefix matches everything.
-export function isPathUnderPrefix(path: string, prefix: string): boolean {
-  if (prefix === '') {
-    return true;
-  }
-  return path === prefix || path.startsWith(`${prefix}.`) || path.startsWith(`${prefix}[`);
-}
-
-// Re-align a per-path error map after deleting `deletedPath`: the removed subtree's
-// errors drop, and when an array item is spliced, errors on later siblings shift down
-// by one (`scores[2]` becomes `scores[1]`) so they stay pinned to their values.
-// Object deletes only drop the subtree (keys never shift). Unparseable paths pass
-// through untouched; a malformed deleted path falls back to a plain subtree drop.
-export function remapErrorsForDelete<T>(errors: Readonly<Record<string, T>>, deletedPath: string): Record<string, T> {
-  const segments = parseJsonPath(deletedPath);
-  if (segments === null || segments.length === 0) {
-    const kept: Record<string, T> = {};
-    for (const [path, entry] of Object.entries(errors)) {
-      if (!isPathUnderPrefix(path, deletedPath)) {
-        kept[path] = entry;
-      }
-    }
-    return kept;
-  }
-  const parentSegments = segments.slice(0, -1);
-  const last = segments[segments.length - 1] as JsonPathSegment;
-  const removedIndex = last.type === 'index' ? last.index : null;
-  const remapped: Record<string, T> = {};
-  for (const [path, entry] of Object.entries(errors)) {
-    if (isPathUnderPrefix(path, deletedPath)) {
-      continue;
-    }
-    if (removedIndex === null) {
-      remapped[path] = entry;
-      continue;
-    }
-    const pathSegments = parseJsonPath(path);
-    if (pathSegments === null || pathSegments.length <= parentSegments.length) {
-      remapped[path] = entry;
-      continue;
-    }
-    const head = pathSegments.slice(0, parentSegments.length);
-    if (JSON.stringify(head) !== JSON.stringify(parentSegments)) {
-      remapped[path] = entry;
-      continue;
-    }
-    const sibling = pathSegments[parentSegments.length] as JsonPathSegment;
-    if (sibling.type !== 'index' || sibling.index <= removedIndex) {
-      remapped[path] = entry;
-      continue;
-    }
-    const shifted: JsonPathSegment[] = [
-      ...parentSegments,
-      { type: 'index', index: sibling.index - 1 },
-      ...pathSegments.slice(parentSegments.length + 1),
-    ];
-    remapped[rebuildConcretePath(shifted)] = entry;
-  }
-  return remapped;
 }

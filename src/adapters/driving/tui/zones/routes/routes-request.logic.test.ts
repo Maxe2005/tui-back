@@ -10,7 +10,6 @@ import {
   formatByteSize,
   missingRequiredParams,
   nextRequestSection,
-  removeRequestRow,
   resolveFireBlock,
   resolveRouteIndex,
   seedRequestDraft,
@@ -156,12 +155,11 @@ describe('row editing', () => {
     });
   });
 
-  it('removes and edits rows by index', () => {
+  it('edits rows by index', () => {
     const rows = [
       { name: 'a', value: '1', required: false },
       { name: 'b', value: '2', required: false },
     ];
-    expect(removeRequestRow(rows, 0)).toEqual([{ name: 'b', value: '2', required: false }]);
     expect(setRequestRowValue(rows, 1, 'z')[1]).toEqual({ name: 'b', value: 'z', required: false });
   });
 });

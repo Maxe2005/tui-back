@@ -600,7 +600,7 @@ describe('RoutesZone body editor', () => {
     }
   });
 
-  it('deletes the selected entry and clamps the selection', async () => {
+  it('d / D leave the body untouched on any line', async () => {
     const store = seedEditor();
     const { instance, stdout, stdin } = mount(store, 30);
     try {
@@ -611,8 +611,9 @@ describe('RoutesZone body editor', () => {
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, 'd');
-      expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: [] });
-      expect(lastFrame(stdout)).not.toContain('"x"');
+      await press(instance, stdin, 'D');
+      expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
+      expect(lastFrame(stdout)).toContain('"x"');
     } finally {
       instance.unmount();
     }
@@ -742,30 +743,28 @@ describe('RoutesZone body editor', () => {
     }
   });
 
-  it('T1: drops deleted-subtree errors, preserves errors on append, remaps shifted siblings', async () => {
+  it('T1: preserves errors on append and leaves them untouched when d is pressed', async () => {
     const store = seedEditor();
     store.getState().ensureBodyDraft(EDITOR_KEY, { name: 'ada', scores: [1, 2, 3] });
+    const scoresError = { reason: 'expected a number, got "x"', kind: 'number' as const };
     store.getState().setBodyEditErrors(EDITOR_KEY, {
       name: { reason: 'expected a number, got "ada"', kind: 'number' },
-      'scores[2]': { reason: 'expected a number, got "x"', kind: 'number' },
+      'scores[2]': scoresError,
     });
     const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, 'e');
-      // Rows: root, name, scores, [0], [1], [2] — delete `name`.
+      // Rows: root, name, scores, [0], [1], [2] — `d` on `name` does nothing.
       await press(instance, stdin, KEYS.down);
       await press(instance, stdin, 'd');
-      expect(errorsOf(store)).toEqual({ 'scores[2]': { reason: 'expected a number, got "x"', kind: 'number' } });
+      expect(draftOf(store)).toMatchObject({ name: 'ada', scores: [1, 2, 3] });
+      expect(Object.keys(errorsOf(store)).sort()).toEqual(['name', 'scores[2]']);
       // Append to `scores`: shifts no indices, so the sibling error is preserved.
+      await press(instance, stdin, KEYS.down);
       await press(instance, stdin, 'a');
       expect(draftOf(store)).toMatchObject({ scores: [1, 2, 3, ''] });
-      expect(errorsOf(store)).toEqual({ 'scores[2]': { reason: 'expected a number, got "x"', kind: 'number' } });
-      // Delete `scores[0]`: the later sibling error remaps down to `scores[1]`.
-      await press(instance, stdin, KEYS.down);
-      await press(instance, stdin, 'd');
-      expect(draftOf(store)).toMatchObject({ scores: [2, 3, ''] });
-      expect(errorsOf(store)).toEqual({ 'scores[1]': { reason: 'expected a number, got "x"', kind: 'number' } });
+      expect(errorsOf(store)['scores[2]']).toEqual(scoresError);
       expect(lastFrame(stdout)).toContain('✖');
     } finally {
       instance.unmount();
@@ -997,7 +996,7 @@ describe('RoutesZone request step & sub-tabs', () => {
     }
   });
 
-  it('adds, edits and deletes header rows; duplicates are rejected', async () => {
+  it('adds and edits header rows, duplicates are rejected, d never deletes a row', async () => {
     const fireRoute = vi.fn(async () => {});
     const store = seedWorkbench(fireRoute);
     const { instance, stdout, stdin } = mount(store, 30);
@@ -1022,7 +1021,8 @@ describe('RoutesZone request step & sub-tabs', () => {
       await press(instance, stdin, KEYS.ctrlR);
       expect(fireRoute).toHaveBeenLastCalledWith('GET /health', 'GET', '/health', { headers: { 'X-T': '1' } });
       await press(instance, stdin, 'd');
-      expect(store.getState().requestDrafts['GET /health']?.headers).toEqual([]);
+      await press(instance, stdin, 'D');
+      expect(store.getState().requestDrafts['GET /health']?.headers).toEqual([{ name: 'X-T', value: '1', required: false }]);
     } finally {
       instance.unmount();
     }
@@ -1195,7 +1195,7 @@ describe('RoutesZone saved requests', () => {
     }
   }
 
-  it('s on the list opens the picker with fresh and stale rows; Esc closes it', async () => {
+  it('p on the list opens the picker with fresh and stale rows; Esc closes it', async () => {
     const store = seedSaved(
       fakeSavedPort(),
       [
@@ -1206,7 +1206,7 @@ describe('RoutesZone saved requests', () => {
     const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'p');
       const frame = lastFrame(stdout);
       expect(frame).toContain('Saved requests');
       expect(frame).toContain('fresh-one');
@@ -1221,7 +1221,23 @@ describe('RoutesZone saved requests', () => {
     }
   });
 
-  it('s in the Request tab saves under a fresh name and confirms in the hint', async () => {
+  it('s no longer opens the picker on the list nor the save prompt in the Request tab', async () => {
+    const store = seedSaved(fakeSavedPort(), [{ ...record('fresh-one', { query: { q: '1' } }), stale: false }]);
+    const { instance, stdout, stdin } = mount(store, 30);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 's');
+      expect(lastFrame(stdout)).not.toContain('Saved requests');
+      await press(instance, stdin, KEYS.enter);
+      expect(store.getState().routesPaneFocus).toBe('detail');
+      await press(instance, stdin, 's');
+      expect(lastFrame(stdout)).not.toContain('Name:');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('w in the Request tab saves under a fresh name and confirms in the hint', async () => {
     const port = fakeSavedPort();
     const store = seedSaved(port, []);
     const { instance, stdout, stdin } = mount(store, 30);
@@ -1229,7 +1245,7 @@ describe('RoutesZone saved requests', () => {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter);
       expect(store.getState().routesPaneFocus).toBe('detail');
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'w');
       expect(lastFrame(stdout)).toContain('Name:');
       await type(instance, stdin, 'my-req');
       await press(instance, stdin, KEYS.enter);
@@ -1249,7 +1265,7 @@ describe('RoutesZone saved requests', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter);
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'w');
       await type(instance, stdin, 'taken');
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
@@ -1272,7 +1288,7 @@ describe('RoutesZone saved requests', () => {
     const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'p');
       expect(lastFrame(stdout)).toContain('fresh-one');
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
@@ -1292,7 +1308,7 @@ describe('RoutesZone saved requests', () => {
     try {
       await instance.waitUntilRenderFlush();
       expect(store.getState().routesSelected).toBe(0);
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'p');
       expect(lastFrame(stdout)).toContain('for-users');
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
@@ -1311,7 +1327,7 @@ describe('RoutesZone saved requests', () => {
     const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'p');
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
       expect(lastFrame(stdout)).toContain('Saved requests');
@@ -1330,7 +1346,7 @@ describe('RoutesZone saved requests', () => {
     const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'p');
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
       expect(lastFrame(stdout)).toContain('Saved requests');
@@ -1708,7 +1724,7 @@ describe('RoutesZone saved prompt guards', () => {
     try {
       await instance.waitUntilRenderFlush();
       await press(instance, stdin, KEYS.enter);
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'w');
       // Empty name: Enter fails with missing-argument, which is not a duplicate.
       await press(instance, stdin, KEYS.enter);
       await settle(instance);
@@ -1738,7 +1754,7 @@ describe('RoutesZone saved prompt guards', () => {
     const { instance, stdout, stdin } = mount(store, 30);
     try {
       await instance.waitUntilRenderFlush();
-      await press(instance, stdin, 's');
+      await press(instance, stdin, 'p');
       expect(lastFrame(stdout)).toContain('stale-one');
       await press(instance, stdin, KEYS.enter);
       await settle(instance);

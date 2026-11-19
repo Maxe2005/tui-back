@@ -120,9 +120,10 @@ export function handlePaneKey(c: RoutesZoneCtx, input: string, key: Key): void {
   if (key.ctrl === true || key.meta === true) {
     return;
   }
-  // `s` saves the draft under a name (prefilled with the origin name when the draft
+  // `w` saves the draft under a name (prefilled with the origin name when the draft
   // came from a saved request); every inline sub-editor above already owns its keys.
-  if ((input === 's' || input === 'S') && paneTab === 'request') {
+  // Not `s`: that is the shared-types zone mnemonic.
+  if ((input === 'w' || input === 'W') && paneTab === 'request') {
     openSavePrompt();
     return;
   }

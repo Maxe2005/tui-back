@@ -34,7 +34,6 @@ export type TreeKeyAction =
   | 'toggle-panel'
   | 'edit-value'
   | 'add-entry'
-  | 'delete-entry'
   | 'change-type'
   | 'open-raw';
 
@@ -80,9 +79,6 @@ export function resolveTreeKeyAction(input: string, key: TreeKeyFlags): TreeKeyA
     case 'a':
     case 'A':
       return 'add-entry';
-    case 'd':
-    case 'D':
-      return 'delete-entry';
     case 't':
     case 'T':
       return 'change-type';

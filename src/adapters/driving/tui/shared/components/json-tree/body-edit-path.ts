@@ -250,43 +250,6 @@ export function addEntryAtPath(value: unknown, parentPath: string, keyName?: str
   return { ok: false, reason: `can only add to an object or array`, value };
 }
 
-// Immutable removal at a concrete path. The root cannot be deleted (nothing would
-// remain); array items splice (later indices shift), object keys drop with their whole
-// subtree. Failures preserve the original value.
-export function removeEntryAtPath(value: unknown, path: string): EditResult {
-  if (path === '') {
-    return { ok: false, reason: 'cannot delete the root value', value };
-  }
-  const segments = parseJsonPath(path);
-  if (segments === null || segments.length === 0) {
-    return { ok: false, reason: `not a valid path: "${path}"`, value };
-  }
-  const last = segments[segments.length - 1] as JsonPathSegment;
-  const parent = getAtSegments(value, segments.slice(0, -1));
-  if (!parent.found) {
-    return { ok: false, reason: `no editable value at "${path}"`, value };
-  }
-  if (last.type === 'key') {
-    if (parent.value === null || typeof parent.value !== 'object' || Array.isArray(parent.value)) {
-      return { ok: false, reason: `no editable value at "${path}"`, value };
-    }
-    const record = { ...(parent.value as Record<string, unknown>) };
-    if (!Object.prototype.hasOwnProperty.call(record, last.key)) {
-      return { ok: false, reason: `no editable value at "${path}"`, value };
-    }
-    delete record[last.key];
-    const result = setAtSegments(value, segments.slice(0, -1), record);
-    return result.ok ? { ok: true, value: result.value } : { ok: false, reason: `no editable value at "${path}"`, value };
-  }
-  if (!Array.isArray(parent.value) || last.index < 0 || last.index >= (parent.value as unknown[]).length) {
-    return { ok: false, reason: `no editable value at "${path}"`, value };
-  }
-  const copy = [...(parent.value as unknown[])];
-  copy.splice(last.index, 1);
-  const result = setAtSegments(value, segments.slice(0, -1), copy);
-  return result.ok ? { ok: true, value: result.value } : { ok: false, reason: `no editable value at "${path}"`, value };
-}
-
 const SCALAR_CYCLE: readonly JsonScalarKind[] = ['string', 'number', 'boolean', 'null'];
 
 // Cycle a scalar's kind string → number → boolean → null → string (containers are not

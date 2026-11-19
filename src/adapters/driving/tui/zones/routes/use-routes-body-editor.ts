@@ -15,9 +15,7 @@ import {
   type JsonTreeState,
   moveTreeSelection,
   parseRawJsonBuffer,
-  remapErrorsForDelete,
   removeActiveRule,
-  removeEntryAtPath,
   resolveAddParentPath,
   scalarKindOf,
   setValueAtPath,
@@ -294,22 +292,6 @@ export function useRoutesBodyEditor(c: RoutesBaseCtx) {
           return;
         }
         setAddPrompt({ parentPath, input: { value: '', cursor: 0 }, error: null });
-        return;
-      }
-      case 'delete-entry': {
-        const frame = frameEditorTreeState(editorTreeState, draft);
-        const row = frame.rows[frame.selected];
-        if (row === undefined || row.path === '') {
-          return;
-        }
-        const result = removeEntryAtPath(draft, row.path);
-        if (!result.ok) {
-          return;
-        }
-        updateBodyDraft(routeKey, () => result.value);
-        // The removed subtree's errors drop; later array siblings remap down by one.
-        setBodyEditErrors(routeKey, remapErrorsForDelete(readEditorErrors(), row.path));
-        amendEditorTreeState((live) => ({ ...live, selected: editorWithClampedSelection(live, result.value) }));
         return;
       }
       case 'change-type': {
