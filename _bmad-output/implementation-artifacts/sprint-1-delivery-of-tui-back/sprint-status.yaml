@@ -33,32 +33,44 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-11
-last_updated: 2026-11-12
+last_updated: 2026-11-16
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back
 
 development_status:
-  # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-11-09); only open work is listed here.
+  # Completed stories are archived in sprint-status-archive.yaml (trimmed 2026-11-16); only open work is listed here.
   epic-1: done
   epic-1-retrospective: done
 
-  epic-2: done
+  epic-2: in-progress
+  2-45-edt-switch-restart-only-services-whose-checkout-moved: backlog
+  2-46-shared-branches-edt-model-guards-setting-switch-and-update: backlog
+  2-47-shared-branches-edt-in-the-edts-zone-and-the-settings-screen: backlog
+  2-48-fast-forward-the-shared-branches-without-switching: backlog
   epic-2-retrospective: optional
 
   epic-3: done
   epic-3-retrospective: optional
 
-  epic-4: done
+  epic-4: in-progress
+  4-8-manifest-declared-generated-files-regenerated-on-update-conflict: backlog
+  4-9-update-conflict-auto-resolution-in-the-cli-and-mcp: backlog
   epic-4-retrospective: optional
 
   epic-5: done
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-4-see-response-and-relevant-logs-together: backlog
-  6-5-manage-the-saved-request-library-across-edts: backlog
+  6-10-routes-keys-free-of-zone-mnemonics-and-no-d-on-request-editors: backlog
+  6-11-favorite-routes-per-edt-persistence-use-cases-and-cli: backlog
+  6-12-favorites-pane-above-the-routes-list-and-add-to-favorites-key: backlog
+  6-13-recent-routes-and-quick-re-fire: backlog
+  6-14-smoke-run-of-the-edts-favorite-routes-core-and-cli: backlog
+  6-15-smoke-run-in-the-routes-zone: backlog
+  6-16-raw-body-mode-as-a-full-multi-line-text-editor: backlog
+  6-17-http-method-colors: backlog
   epic-6-retrospective: optional
 
   epic-7: done
@@ -71,17 +83,7 @@ development_status:
   epic-9-retrospective: optional
 
   epic-10: done
-  # Distribution (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 10-1 -> 10-2 -> 10-3 -> 10-4. Epic 9 already merged into devlopment (8ad7b011).
-  10-1-repair-the-bin-one-binary-tui-routing: done
-  10-2-completion-bash-subcommand: done
-  10-3-install-subcommand: done
-  10-4-publication-install-sh-and-docs: done
   epic-10-retrospective: optional
 
   epic-11: done
-  # MCP server (2026-11-05): sprint-change-proposal-2026-11-05.md. Order: 11-1 -> 11-2 -> 11-3 -> 11-4. Starts after 10-1; 11-4 needs 10-3.
-  11-1-mcp-skeleton-and-read-only-tools: done
-  11-2-authorization-gate-and-write-tools: done
-  11-3-destructive-tools-and-long-operations: done
-  11-4-install-registration-and-docs: done
   epic-11-retrospective: optional

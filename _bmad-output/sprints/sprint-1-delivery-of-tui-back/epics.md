@@ -38,8 +38,8 @@ FR-18: Service health (up / down / restarting) is visible inline with the log vi
 FR-19: For any managed repo whose manifest activates a route-explorer module, the tool lists the routes that module's scanner discovers for that repo.
 FR-20: A developer can fire a request against any route discovered via FR-19, with authentication for protected routes handled automatically in dev mode.
 FR-21: A developer can save a request (method, path, body, headers), and when re-firing a saved request, can further customize it before sending — then either overwrite the original saved request or save the customized version as a new one.
-FR-22: Firing a request (saved or ad hoc) surfaces its response and the relevant aggregated logs for the affected services in the same place, immediately after — with the affected-service set learned progressively per route rather than pre-configured.
-FR-23: A developer's saved requests form one global library, not siloed per EDT; each EDT can independently hide individual saved requests from its own view and mark others as favorites (per-EDT or global).
+FR-22: Withdrawn 2026-11-16 (Sprint Change Proposal): logs are read in the Logs zone; a fired request no longer opens correlated logs.
+FR-23: A developer's saved requests form one global library, not siloed per EDT. (Per-EDT hide and per-EDT / global favorites of saved requests withdrawn 2026-11-16; favoriting is done on routes, FR-50.)
 FR-24 (added 2026-09-16, Sprint Change Proposal): A developer can delete an EDT they no longer need, choosing per member service whether to leave its branch alone or delete it too — informed by that branch's merge status (into its `sharedBranch`) and any uncommitted work — with deletion blocked while the EDT is active and blocked per-service when the branch is also registered as another EDT's own branch for that repo.
 FR-28 (added 2026-10-01, Sprint Change Proposal): Merge source from another EDT — global merge-source strategy (shared branches / another EDT) in the EDT-scoped update configuration, with per-service manual resolution for services absent from the chosen EDT.
 FR-30 (added 2026-10-05, Sprint Change Proposal): Smart group update — `shared-types` is processed first, then published, propagated and committed, per an update-configuration setting.
@@ -58,6 +58,10 @@ FR-46 (added 2026-11-05): The package exposes one `tui-back` binary: `tui-back <
 FR-47 (added 2026-11-05): `npx -y github:<owner>/tui-back install` installs the tool globally with the `tb`/`tbt` aliases and bash completion through an idempotent `~/.bashrc` block; `--uninstall` reverses it; Node < 24 stops with exact fix instructions.
 FR-48 (added 2026-11-05): `tui-back mcp` exposes every subcommand as an MCP tool; write and destructive tools run only after explicit per-call human approval, and are refused when the client cannot ask.
 FR-49 (added 2026-11-05): The log filter is an ordered list of rules (text/regex, show/hide, whole line/matched text only), kept across restarts and savable as named rule sets; history recall restores every field.
+FR-50 (added 2026-11-16): Each EDT keeps its own favorite routes (repo, method, path), shown in a pane above the routes list; one key adds or removes the selected or open route; the last fired routes of the session are listed with their status and the last request can be re-fired in one keypress.
+FR-51 (added 2026-11-16): The favorite routes of an EDT can be fired together (smoke run) and reported as a status table; mutating requests are never sent unless explicitly included.
+FR-52 (added 2026-11-16, Sprint Change Proposal 2): A service's manifest may declare generated files and the command that rebuilds them (`generatedFiles`); an update merge conflict that touches only such files is settled by re-running the command, in the TUI, the CLI and MCP.
+FR-53 (added 2026-11-16, Sprint Change Proposal 3): A preconfigured, non-creatable "shared branches" EDT, enabled from the settings, gathers every managed service on its shared branch; activating it switches every repo to its shared branch and its update refreshes them all (a quick fast-forward without switching is also available).
 
 ### NonFunctional Requirements
 
@@ -113,7 +117,7 @@ UX-DR19: Implement Dashboard zone states (rewritten 2026-10-15, Sprint Change Pr
 UX-DR20: Implement EDTs zone states — empty (explicit "create first EDT" prompt), populated (list with branch + ahead/behind per service), no-upstream/offline divergence display, duplicate-topic rejection, zero-member-at-creation rejection, per-service branch-creation failure reporting, shared-branch rejection (with explanation before any git write), member added/removed without disturbing others, zero-member EDT display (never an error), member branch change (protected-switch rule), protected-switch-blocked-during-update prompt, interrupted-update recovery offer, and member/non-member service categorization with per-service contextual actions (amended 2026-08-26, Sprint Change Proposal, Story 2.18); fixed, resizable borders between EDT selector/EDT SERVICES/OTHER SERVICES (amended 2026-08-27, Sprint Change Proposal, Story 2.21). Amended 2026-09-16 (Sprint Change Proposal): adds "EDT deleted" (per-service branch-disposition confirmation, active-EDT-blocked, cross-EDT branch-collision-blocked-per-service — Story 2.29), "EDT quick-pick" (filterable list for `edt-switch`/`edt-modify` with no argument, including its own "no matching EDT" state — Story 2.30), and "Create from existing EDT" (member checklist pre-seeded from a root EDT, root-branch-derived base-branch suggestion — Story 2.31) as new named states. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): EDT SERVICES/OTHER SERVICES lists adopt the same bounded/scrollable list primitive as the Logs zone (UX-DR33), for the same reason.
 UX-DR21: Implement Update zone states — idle (last outcome visible), no-op-on-zero-member message, all-repos confirmation gate, second-run-blocked message, in-progress per-service spinner, per-service outcome summary (updated/skipped/failed, none silently absent), assisted-resolution guided menu (stash/open-in-editor/cancel-repo/cancel-run), mid-merge/mid-rebase distinct state, migration-failure detail + re-trigger with re-verify, and quit-mid-run confirmation with next-launch interrupted-run resume offer.
 UX-DR22: Implement Logs zone states — no-members explicit state, live streaming with debounced/batched re-renders, filter applied without interrupting the stream, invalid-regex inline rejection, service-down/crashed-mid-stream inline display with auto-reconnect, inline health (up/down/restarting), and restart-in-progress control disabling to prevent a second concurrent restart. Amended 2026-09-18 (Sprint Change Proposal, Story 5.4): adds filter-history browsing (arrow-recall and grid-browser, see UX-DR32) as a new named state. Amended 2026-09-20 (Sprint Change Proposal, Story 5.5): service lists, the hints panel, and `LogFilterEditor` (including its history-grid browser) now render within a bounded, scrollable window (UX-DR33) rather than unconditionally, preventing terminal-overflow rendering corruption.
-UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure vs. genuinely-empty-list as distinct states, fired/response view with correlated logs in the same pane, auth-error as a distinct state from a generic request failure (with automatic token refresh), unlearned-affected-service-set default-proposal-and-adjust flow, stale-saved-request flagging (never fired silently), save-as-new name-collision rejection, and library hide/favorite behavior (per-EDT vs. global, independent scopes). Amended 2026-09-30 (Sprint Change Proposal, Stories 6.6–6.9): the Routes zone's right pane is a focusable two-tab pane (Request / Response, Logs added by Story 6.4) reached with `Enter` from the list; request editing is a mandatory step before any fire; the response is browsed in a JsonTree with session-persistent, per-route filters (UX-DR34).
+UX-DR23: Implement Routes zone states — scan-in-progress spinner, scan-failure vs. genuinely-empty-list as distinct states, fired/response view with correlated logs in the same pane, auth-error as a distinct state from a generic request failure (with automatic token refresh), unlearned-affected-service-set default-proposal-and-adjust flow, stale-saved-request flagging (never fired silently), save-as-new name-collision rejection, and library hide/favorite behavior (per-EDT vs. global, independent scopes). Amended 2026-09-30 (Sprint Change Proposal, Stories 6.6–6.9): the Routes zone's right pane is a focusable two-tab pane (Request / Response, Logs added by Story 6.4) reached with `Enter` from the list; request editing is a mandatory step before any fire; the response is browsed in a JsonTree with session-persistent, per-route filters (UX-DR34). *(Amended 2026-11-16, Sprint Change Proposal: no correlated logs, no affected-service-set flow and no saved-request hide/favorite in the Routes zone; added a Favorites/Recent pane, the smoke-run table, per-method colors, a full-text raw body editor and the key map `*` favorite, `w` save, `p` picker, `t` smoke run, `Ctrl+R` re-fire, no `d` on request editors — Stories 6.10–6.17.)*
 UX-DR24: Implement shared-types zone states (rewritten 2026-10-05) — no-members explicit state, version-entry field (`0.1.` prefix) + consumer checklist, independent options (`npm i`, clean restart, commit), per-service propagation result/skip reason/independent retry, publish-in-progress per-step status with spinner, publish-step-failure detail + resume, publish-success chaining into propagation, niche declared-version drift view, and quit-mid-run confirmation. UX-DR21 gains a `shared-types` row (off / publish if the merge changed something / always) in the update configuration.
 UX-DR25: Implement cross-cutting focus/selection treatment (`list-row` selected state) uniformly across every zone's list/detail split.
 UX-DR26: Implement the accessibility floor — status never conveyed by color alone (glyph always paired), every keyboard primitive available without a mouse, comfortable warm-off-white-on-charcoal reading contrast.
@@ -130,7 +134,7 @@ UX-DR31 (added 2026-08-26, Sprint Change Proposal, Story 2.19): Implement the se
 UX-DR32 (added 2026-09-18, Sprint Change Proposal, Story 5.4): Implement filter-history recall in the Logs zone's filter editor — `↑`/`↓` arrow-browse over a scope+mode-specific history (global/per-service × text/regex, each independent) with draft preservation (the in-progress, uncommitted draft is restored when browsing back past the most recent entry), any printable character or Backspace pressed while browsing snapping back to the draft with that keypress applied on top of it, and `↓` from the draft (not browsing) opening the reused `command-grid` component (UX-DR30) as a grid browser over the full history. Amended 2026-09-28 (Sprint Change Proposal, Story 5.6): generalized into a shared input-history recall pattern with two consumers — the Logs filter editor (above, scope+mode-keyed lists, with the `↓`-from-draft grid browser) and the `:` command bar (UX-DR29, a single command list, no grid browser). The push/dedup/trim rules, arrow-browse with draft preservation and skip-equal-to-draft, and snap-back-on-keypress behavior are one implementation shared by both; each consumer only supplies its own history list(s) and its own size/dedup settings.
 UX-DR32 amended 2026-11-05 (Sprint Change Proposal, Stories 5.8–5.10): a filter carries an action (show/hide) and a target (line/match) shown beside the query; history entries store and restore both; the filter editor manages an ordered rule list, and rule lists plus named rule sets persist.
 UX-DR33 (added 2026-09-20, Sprint Change Proposal, Story 5.5): Implement the `bounded-list` component — a scrollable window over any list or panel whose content can exceed the terminal's available rows, extracted from `keybinding-help.tsx`'s `resolveHelpWindow`/`clampHelpOffset`; shows a subtle more-above/below indicator when scrolled away from either end, recalculates live off `useWindowSize()`. Reused by the Logs zone (service lists, hints panel, `LogFilterEditor`) and the EDTs zone (EDT SERVICES/OTHER SERVICES lists).
-UX-DR34 (added 2026-09-30, Sprint Change Proposal, Stories 6.6–6.9): Implement the `JsonTree` component and the Routes right-pane sub-tabs — a shared, windowed, line-by-line navigable JSON tree (built on `bounded-list`, UX-DR33) with per-node fold and global key show/hide rules (per route, session-only, stored by normalized path / key name), in read-only (response) and edit (request body) modes; hidden content is never removed from a request body, and a truncated or non-JSON response falls back to raw text with a visible reason. Pane sub-tabs switch with `Ctrl+→`/`Ctrl+←`, fallback `Ctrl+N`/`Ctrl+P` (the same convention as the EDT create wizard).
+UX-DR34 (added 2026-09-30, Sprint Change Proposal, Stories 6.6–6.9): Implement the `JsonTree` component and the Routes right-pane sub-tabs — a shared, windowed, line-by-line navigable JSON tree (built on `bounded-list`, UX-DR33) with per-node fold and global key show/hide rules (per route, session-only, stored by normalized path / key name), in read-only (response) and edit (request body) modes; hidden content is never removed from a request body, and a truncated or non-JSON response falls back to raw text with a visible reason. Pane sub-tabs switch with `Ctrl+→`/`Ctrl+←`, fallback `Ctrl+N`/`Ctrl+P` (the same convention as the EDT create wizard). *(Amended 2026-11-16: no Logs sub-tab; raw edit mode becomes a full multi-line text editor — Story 6.16.)*
 UX-DR35 (added 2026-10-01, Sprint Change Proposal, Story 7.3): Every zone builds its layout through one shared zone-layout contract declaring its panes and the boundaries between them (orientation, default ratio, min/max); the contract provides splitter rendering, accent recoloring when targeted, Ctrl+W resize-mode, Tab boundary cycling and per-zone persisted ratios — no zone hand-rolls a split.
 UX-DR36 amended 2026-10-12 (Story 7.11): an open overlay (settings, help, registry, reset, command bar) is the sole consumer of keys; zones are inert behind it via one shared predicate, with a regression guard.
 UX-DR36 (added 2026-10-01, Sprint Change Proposal, Story 7.4): Interaction consistency contract — the same intent uses the same key, wording and component in every zone (list cursor, edit/commit/cancel, confirm dialogs, destructive-action confirmation, filter, footer hint format, modal titles, empty/error/loading states). Recorded as a table in EXPERIENCE.md; deviations require a documented reason. Amended 2026-10-05 (Sprint Change Proposal, Story 7.7): Shift+Tab always reverses Tab; every zone declares focus movement through one shared navigation primitive (H/V arrows, Tab/Shift+Tab, Ctrl+N/P per zone).
@@ -160,20 +164,20 @@ FR-13: Epic 4 - Publish a new shared-types version
 FR-14: Epic 4 - Version history library (redefined 2026-10-12, Story 4.6)
 FR-15: Epic 4 - Propagate a version to chosen services
 FR-30: Epic 4 - Smart group update (added 2026-10-05, Sprint Change Proposal — Story 4.4)
-FR-31: Epic 4 - Auto-resolve shared-types-only merge conflicts (added 2026-10-05, Sprint Change Proposal — Story 4.5)
+FR-31: Epic 4 - Auto-resolve shared-types-only merge conflicts (added 2026-10-05, Sprint Change Proposal — Story 4.5; also applied by the CLI and MCP updates — Story 4.9)
 FR-16: Epic 5 - Aggregated live log stream
 FR-17: Epic 5 - Filter the aggregated stream
 FR-18: Epic 5 - Inline service health
 FR-19: Epic 6 - Route discovery via a pluggable scanner module
 FR-20: Epic 6 - Fire a request with automatic dev-mode auth
 FR-21: Epic 6 - Save, customize, and re-fire a request
-FR-22: Epic 6 - See response and relevant logs together
-FR-23: Epic 6 - Manage the saved-request library across EDTs
+FR-22: withdrawn (2026-11-16) — logs are read in the Logs zone
+FR-23: Epic 6 - The saved-request library is global (Stories 6.3, 6.3b); hide/favorite of saved requests withdrawn (2026-11-16)
 FR-29: Epic 7 - Container-less managed services (added 2026-10-01, Sprint Change Proposal — Story 7.2)
 FR-32: Epic 7 - Per-service last-run detail in Update (added 2026-10-05, Sprint Change Proposal — Story 7.8)
 FR-35: Epic 7/5 - Service actions: open IDE, simple/clean restart (added 2026-10-12 — Stories 7.12, 5.7, 8.3)
 FR-36: Epics 3/4/5 - Configurable defaults: Update globals, st options, Logs restart mode (added 2026-10-12 — Stories 3.20, 4.7, 5.7)
-FR-37: Epic 2 - Post-switch service restart (none/simple/clean), parallel, verified per-service state; default in settings (added 2026-10-14 — Story 2.44)
+FR-37: Epic 2 - Post-switch service restart (none/simple/clean), parallel, verified per-service state; default in settings (added 2026-10-14 — Story 2.44; clarified 2026-11-16: only services whose checkout moved — Story 2.45)
 FR-38: Epic 8 - Branch drift detection & realignment: Attention lines, `realign` command + shortcut, selection table, optional restart, settings defaults (added 2026-10-15 — Stories 8.6, 8.7, 8.8)
 FR-39: Epic 9 - Service/container terminal inside the tool: type commands, scroll, cancel, full screen (added 2026-11-04 — Stories 9.1–9.4)
 FR-40: Epic 9 - Every service action available from Dashboard and Logs through one registry (added 2026-11-04 — Stories 9.2, 9.5)
@@ -184,6 +188,10 @@ FR-46: Epic 10 - Single installable binary: `tui-back` (CLI) and `tui-back tui` 
 FR-47: Epic 10 - Guided install and uninstall: global npm install, aliases, bash completion (added 2026-11-05 — Stories 10.2, 10.3, 10.4)
 FR-48: Epic 11 - MCP server exposing every subcommand, with human authorization for write and destructive tools (added 2026-11-05 — Stories 11.1–11.4)
 FR-49: Epic 5 - Log filter action (show/hide) and target (line/match), stored in filter history (added 2026-11-05 — Story 5.8; stackable rules: Story 5.9; persisted rules and named sets: Story 5.10)
+FR-50: Epic 6 - Favorite routes per EDT, recents, quick re-fire (added 2026-11-16 — Stories 6.11, 6.12, 6.13; UX of Stories 6.10, 6.16, 6.17)
+FR-51: Epic 6 - Smoke run of the EDT's favorite routes (added 2026-11-16 — Stories 6.14, 6.15)
+FR-52: Epic 4 - Manifest-declared generated files regenerated on update conflict (added 2026-11-16 — Stories 4.8, 4.9)
+FR-53: Epic 2 - Shared-branches EDT: preconfigured, settings-enabled, switch + update on every shared branch (added 2026-11-16 — Stories 2.46, 2.47, 2.48)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
 
@@ -226,7 +234,7 @@ A developer can launch the tool, see the full navigation shell (top bar, six zon
 
 ### Epic 2: EDT Workspace Management
 A developer can create, modify, and safely switch between EDTs (no uncommitted work ever lost), with branch/divergence visibility across every managed repo, and the guarantee that non-member repos stay on `development`.
-**FRs covered:** FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-37 (Story 2.44, added 2026-10-14)
+**FRs covered:** FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-37 (Story 2.44, added 2026-10-14; clarified by Story 2.45), FR-53 (Stories 2.46–2.48, added 2026-11-16)
 **Implementation notes:** Per-EDT SQLite storage (AD-7), centralized git branch-scope safety gate (AD-8), EDTs zone (UX-DR20), blast-radius isolation (NFR-2).
 
 ### Epic 3: Group Update & Migrations
@@ -402,7 +410,7 @@ As a developer, I want to choose in `:settings` the defaults the Update configur
 
 ## Epic 4: `shared-types` Propagation & Smart Update
 A developer can propagate a `shared-types` version to the active EDT's consuming services, publish new versions, and let a group update handle `shared-types` automatically — publish, propagate, commit and conflict resolution.
-**FRs covered:** FR-13, FR-14 (redefined 2026-10-12: version history library), FR-15, FR-30, FR-31, FR-36 (4.7)
+**FRs covered:** FR-13, FR-14 (redefined 2026-10-12: version history library), FR-15, FR-30, FR-31, FR-36 (4.7), FR-52 (4.8, 4.9)
 **Implementation notes:** First company-specific module, validating AD-4/AD-5 (AD-18); shared-types zone (UX-DR24). Prerequisites: Epic 7 done; Epic 3 merged into `devlopment` for Stories 4.4/4.5 (Sprint Change Proposal 2026-10-05).
 
 ### Epic 5: Aggregated Log Observability
@@ -411,8 +419,8 @@ A developer can view a live, filterable, aggregated log stream across multiple s
 **Implementation notes:** Bounded in-memory ring buffer (AD-11), debounced/batched render performance budget (AD-12, NFR-1 — the surface most exposed to Ink's rendering ceiling), Logs zone (UX-DR22).
 
 ### Epic 6: Route Explorer
-A developer can discover a repo's routes, fire a request with automatic dev-mode auth, save/customize/re-fire requests in a global library, and see the response and correlated logs together.
-**FRs covered:** FR-19, FR-20, FR-21, FR-22, FR-23
+A developer can discover a repo's routes, fire a request with automatic dev-mode auth, save/customize/re-fire requests in a global library, keep the EDT's favorite routes at hand, and re-fire or smoke-run them quickly. Logs are read in the Logs zone (Epic 5). *(Amended 2026-11-16, Sprint Change Proposal: Stories 6.4 and 6.5 removed; Stories 6.10–6.17 added.)*
+**FRs covered:** FR-19, FR-20, FR-21, FR-23 (amended), FR-50, FR-51 (FR-22 withdrawn 2026-11-16)
 **Implementation notes:** Second pluggable module (NestJS/OpenAPI scanner + `jose` dev-JWT auth), `global.db` (AD-7), Routes zone (UX-DR23).
 
 ### Epic 7: TUI Consistency, Dashboard & Code Hygiene
@@ -2324,6 +2332,76 @@ As a developer, I want to restart my services as part of an EDT switch and see w
 - Build in this order, one commit each: `HealthProbePort` + adapter → manifest `healthUrl` (+ docs + skill) → `verifyService` → `switch.restartMode` setting → `restartAfterSwitch` over the pool → store + dialog selector → report view → CLI flag.
 - Bounded rendering (AD-19): the report goes through `BoundedList`; register any new dialog in `dialog-registry.tsx`.
 
+### Story 2.45: EDT Switch — Restart Only the Services Whose Checkout Actually Moved
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+> Amends FR-37 (Story 2.44's rule "targets are the services whose branch changed in this switch" was never true for a repo already on the target branch).
+
+As a developer, I want a switch to restart only the services that really changed branch, so that I do not restart every container for nothing.
+
+**Acceptance Criteria:**
+
+- **Given** a switch **When** a repo is already on the branch the switch would check out **and** nothing was stashed, restored, discarded or adopted for it **Then** its result row is `unchanged` (new outcome, detail "already on `<branch>`"), no checkout is run, and it is **not** a restart target (`skipped (unchanged)` in the restart report).
+- **Given** a repo already on the target branch **When** its dirty work is stashed, a target-tagged stash is restored, uncommitted paths are discarded, or work is adopted **Then** the working tree changed: its row keeps `switched` / `adopted` / `discarded` and it is a restart target.
+- **Given** a repo whose branch differs from the target **When** switched **Then** behaviour is exactly today's (`switched`, restart target, `no container` skipped as before).
+- **Given** the TUI switch dialog, the EDT-creation wizard Step 4 and the quick-pick **When** they show results **Then** an `unchanged` row is rendered dim like `switched` and never counts as needing attention (`switch-resolution.logic.ts:546` stays correct: `unchanged` is not a failure).
+- **Given** the CLI `edt switch` and the MCP tool **When** they emit the envelope **Then** `unchanged` is an additive value of the row outcome (documented in the output schema); existing values are unchanged; the restart rows' `unchanged` skip reason is already supported.
+- **Given** the switch sequence **Then** FR-37's consequence text is satisfied literally: only services whose branch changed in the switch and that declare a container are restarted.
+
+Implementation notes: in `switchMemberRepo` / `switchNonMemberRepo`, compare `git.currentBranch` (already read during classification, `switch.ts:480`) with the resolved target; if equal and the dirty plan is `none` and no target stash exists (`hasStash` is already a non-destructive existence check, `GitPort`), return `unchanged` before `checkoutExpectedBranch`. Verify `restoreStash` reports whether it actually restored (today `Result<void>`); extend the result if not. `CHANGED_OUTCOMES` stays `switched|adopted|discarded`. Tests: same-branch repo not restarted; same-branch with stash restore restarted; mixed switch (3 repos: 1 moved, 1 already there, 1 no container); CLI and MCP envelope.
+
+### Story 2.46: Shared-Branches EDT: Model, Guards, Setting, Switch & Update
+
+> Added 2026-11-16 (Sprint Change Proposal 3). Adds FR-53; adds AD-27; amends AD-8 and FR-7. Builds on Stories 2.39–2.41 (switch core), 2.44/2.45 (restart) and Epic 3 (update).
+
+As a developer, I want a preconfigured EDT that puts every service on its shared branch and updates them together, so that I can refresh all my shared branches in one move without creating or maintaining an EDT for it.
+
+**Acceptance Criteria:**
+
+- **Given** `settings.yaml` **When** it has no `edts.sharedBranchesEdtEnabled` **Then** the default is `false`, nothing changes anywhere, and an invalid value falls back to the default with the usual warning.
+- **Given** the setting is `true` **When** the EDT list is read (TUI, `tui-back edt list`, MCP) **Then** it contains one extra entry, topic `Shared branches`, `kind: "system-shared"`, whose members are every registered managed repo on its manifest `sharedBranch`; with the setting `false` the entry is absent from every listing and `edt switch shared-branches` fails `edt-not-found`.
+- **Given** a repo is registered or removed, or a manifest's `sharedBranch` changes **When** the EDT is listed again **Then** it reflects it at once; `edts.yaml` is never written by any of this.
+- **Given** any mutation of the system EDT (modify topic, rename, add / remove a member, delete, or creating an EDT named like it) **When** attempted from the TUI, the CLI or MCP **Then** it fails `edt-system-readonly` with an explanation, before any write.
+- **Given** the system EDT **When** switching to it **Then** the normal switch runs: each repo's dirty work is handled per the resolution dialog / flags, then each repo is checked out to its `sharedBranch` (fetched first if absent locally); the AD-8 gate accepts those checkouts (and only those) through the carve-out; per-repo outcomes and the optional post-switch restart (FR-37, only services whose checkout moved — Story 2.45) work unchanged.
+- **Given** the system EDT is the outgoing EDT **When** a switch finds a dirty repo **Then** "adopt into the outgoing EDT" is unavailable (stash or discard only), the dialog says why, and the CLI rejects `--adopt-branch` for it before touching anything.
+- **Given** the system EDT is active **When** a group update runs with the EDT scope **Then** every service pulls its shared branch (fast-forward semantics of today's `pull`), with the usual migrate / restart toggles, concurrency, live tracking and assisted resolution; a service not on its shared branch (checked out elsewhere since the switch) is reported as such and skipped, never switched silently.
+- **Given** the setting is turned off **When** the system EDT is the active EDT **Then** the change is refused with a message naming the switch to make first; when it is not active, it disappears immediately.
+- **Given** the active-EDT pointer names the system EDT while the setting is off **When** the app starts **Then** it falls back to no active EDT with a warning, nothing is written to any repo.
+- **Given** the AD-8 carve-out **When** tested **Then** commit, merge, rename, delete and push on a shared branch are still rejected for the system EDT, and the same checkout is still rejected for an ordinary EDT.
+
+**Implementation notes:** build order, one commit each: setting + schema → `shared-edt.ts` pure builder → registry adapter synthesis + readonly guards → AD-8 carve-out + tests → switch dirty-resolution rule (no adopt) → update on the system EDT (skip-if-not-on-shared) → CLI `edt list` field and rejections → MCP schema (additive). Reuse `branch-owners` (it must not list the system EDT as "using" a shared branch in branch choosers, Story 2.43).
+
+### Story 2.47: Shared-Branches EDT in the EDTs Zone and the Settings Screen
+
+> Added 2026-11-16 (Sprint Change Proposal 3). Depends on Story 2.46.
+
+As a developer, I want to switch the feature on in the settings and then see and activate the EDT like any other, so that using it needs no new concept in the interface.
+
+**Acceptance Criteria:**
+
+- **Given** the `:settings` EDTs tab **When** rendered **Then** a toggle "Show the shared-branches EDT" (off by default, `Space` toggles, persisted and applied live, UX-DR7 hints) is shown with a one-line description; turning it off while the EDT is active shows the refusal message inline.
+- **Given** the setting is on **When** the EDTs zone renders **Then** the system EDT appears in the list with a distinct marker (`shared` badge, text, not colour alone) and sorts first or last (decided in the spec), a detail pane showing its members and each service's shared branch, and its recent actions like any EDT.
+- **Given** the system EDT is selected **When** the zone's actions are offered **Then** `switch` (the existing dialog, with the adopt choice hidden per Story 2.46) and `update` are available; modify, rename, member editing and delete are not offered, and their keys show the `edt-system-readonly` explanation instead of acting.
+- **Given** the EDT-creation wizard and the quick-pick switch **When** opened **Then** the wizard never offers the system EDT as a template or a name, and the quick-pick lists it only while enabled.
+- **Given** the system EDT is active **When** the footer and the Update zone render **Then** they show the active EDT as `Shared branches` and the update scope label "all shared branches"; the Dashboard and branch-owners views treat it as any EDT without flagging its branches as "used by another EDT".
+- **Given** the keybinding help (`?`) **When** the zone is focused **Then** every key shown for the system EDT row is declared in `footer-contexts.ts`.
+
+### Story 2.48: Fast-Forward the Shared Branches Without Switching (optional, backlog)
+
+> Added 2026-11-16 (Sprint Change Proposal 3), at Max's follow-up: the update on the shared-branches EDT runs fast-forward **and** migrations; when only speed matters, a quick fast-forward without switching is useful. Depends on Story 2.46; ship it after 2.47 if the daily use confirms the need.
+
+As a developer, I want to bring every local shared branch up to date without leaving my current EDT, so that I can start a new EDT or compare against fresh shared branches in seconds.
+
+**Acceptance Criteria:**
+
+- **Given** the shared-branches EDT is enabled **When** the quick fast-forward is triggered (a key on its row in the EDTs zone, keys declared in `footer-contexts.ts`; `tui-back edt fast-forward-shared`; the matching MCP tool, class `write`) **Then** each managed service's **local shared branch** is fast-forwarded from `origin` (`GitPort.fetch(repoPath, sharedBranch)`), with the active EDT, every working tree and every checked-out branch left untouched.
+- **Given** a service whose shared branch is the one checked out **When** its worktree is clean **Then** it is fast-forwarded in place (`pull`, fast-forward only); **When** it is dirty, or the branch has diverged (local commits not on origin) **Then** it is reported `skipped` with its reason (`dirty` / `diverged`), never forced, never stashed.
+- **Given** a service whose shared branch is absent locally **Then** it is fetched into a new local branch; a missing or unreachable `origin` is reported `failed` for that service only.
+- **Given** the run **When** it ends **Then** per-service rows (`fast-forwarded` / `already up to date` / `skipped (reason)` / `failed`) are shown in a bounded list (AD-19) and emitted in the AD-3 envelope; no migration and no restart is run (that is what the full update on the active EDT is for); the exit code is non-zero if any row `failed`.
+- **Given** the AD-8 gate **When** the fast-forward runs **Then** it passes through a second narrow carve-out for the system EDT's quick action: fast-forward of a local shared branch from its own `origin` counterpart only; no other write on a protected branch is allowed.
+- **Given** the setting is off **Then** the action is unavailable in the TUI and refused by the CLI and MCP with `edt-not-found`.
+
 ## Epic 3: Group Update & Migrations
 
 A developer can run a group update (pull, migrate, restart) scoped to the active EDT, to all managed repos, or to a single service — configured beforehand (service selection, per-service branch, migrate/clean-restart toggles) and followed live per-service — with assisted resolution of conflicts and migration failures.
@@ -2719,6 +2797,41 @@ As a developer, I want the st zone's option checkboxes to start the way I like, 
 
 **Implementation notes:** the busy signal is lifted from the zone's local state into a store flag (`sharedTypesBusy`) so the shell can pass it to `ZoneTabBar`, mirroring `updateRunning`; `ZoneTabBar`'s `updateRunning` prop becomes a generic per-zone `busy` map (Update keeps its incident count).
 
+### Story 4.8: Manifest-Declared Generated Files, Regenerated on Update Conflict
+
+> Added 2026-11-16 (Sprint Change Proposal 2). Adds FR-52; amends AD-4; adds AD-26. Builds on Stories 3.4 (assisted resolution), 4.5 (the resolver seam) and 3.8 (`restartCommands`).
+
+As a developer, I want conflicts on files that a command regenerates to be settled by running that command, so that a barrel (`index.ts`) conflict never interrupts an update.
+
+**Acceptance Criteria:**
+
+- **Given** a manifest declaring `generatedFiles: [{ glob: "**/index.ts", command: "npm run barrels" }]` **When** it is loaded **Then** it validates; an entry with a blank `glob` or `command`, an absolute or `..` glob, or an unknown key fails validation with a precise message (`manifest-validation-failed`); an absent key means no generated files and changes nothing for existing manifests.
+- **Given** a merge or pull conflict in a repo declaring `generatedFiles` **When** the conflicted paths all match a declared glob **Then** the declared command runs once in the repo directory, no conflict marker remains in the matched files afterwards, the matched files that differ are staged (`GitPort.stagePaths`, AD-8), and the merge completes through the existing flow; the row's conflict outcome is `auto-resolved`.
+- **Given** conflicted paths that match no declared glob **When** the resolver runs **Then** it does not touch them: they stay conflicted and the existing assisted-resolution flow (Story 3.4) presents them; the generated files are regenerated **only once every other conflicted path is settled** (the resolver is idempotent and is re-run after the developer's edits and before each menu presentation); until then the row's outcome is `partial`.
+- **Given** the declared command fails (non-zero exit, unspawnable shell, or a conflict marker still present in a matched file) **When** it ran **Then** nothing is staged, the conflict stays open, and the run tracking shows the issue (command, exit status, first lines of output); the developer can fix and retry through the same menu.
+- **Given** the command modified files that match no declared glob **When** it finished **Then** those files are neither staged nor reverted, and the issue line lists them.
+- **Given** two declared entries with the same `command` **When** both match **Then** the command runs once.
+- **Given** a repo that also has the `shared-types-consumer` module **When** its merge conflicts on `package.json` and on `index.ts` **Then** both resolvers run through one composed seam (each settles only its own files); the outcome is `auto-resolved` only if together they settled every conflicted path, otherwise `partial`.
+- **Given** the docs **When** updated **Then** `docs/tui-back-manifest.md` documents `generatedFiles` (semantics, glob rules, ordering, failure behaviour, the trust note, an example for the `shared-types` source repo, the error row) **and** the `manifest-generator` skill detects likely candidates (a `barrels`/`generate`-style script, generated-file headers) and offers the entry.
+
+**Implementation notes:** `core/scripts/auto-resolve-generated.ts` returns the existing `AutoResolveResult`; `compose-auto-resolvers.ts` folds N resolvers into one `AutoResolveConflict` (results merged: `touched` OR-ed, issues joined) so `groupUpdate`'s signature is unchanged. No git write beyond `stagePaths` (the generator overwrites the conflicted files itself). Tests: pure resolver with a fake git and command port (all-generated, mixed, command failure, marker left, extra files touched, duplicate commands, idempotent rerun); schema tests; composition tests; manifest docs and skill updated in the same commits as the schema (one commit each: schema → resolver → composition + TUI wiring → docs + skill).
+
+### Story 4.9: Update Conflict Auto-Resolution in the CLI and MCP
+
+> Added 2026-11-16 (Sprint Change Proposal 2). Closes the FR-31 parity gap found in §1 (finding 4).
+
+As a developer or an agent running `tui-back update`, I want the same automatic conflict resolution the TUI has, so that a script or an MCP session does not stop on a conflict the tool can settle.
+
+**Acceptance Criteria:**
+
+- **Given** the CLI `tui-back update …` (main, all-repos, single-service) **When** a service's merge conflicts **Then** the composed auto-resolvers of Story 4.8 (the `shared-types` consumer resolver when its module is declared, the generated-files resolver when `generatedFiles` is declared) run exactly as in the TUI.
+- **Given** the resolvers settle every conflicted path **When** the run continues **Then** the service completes (migrate → restart) and the envelope row carries `conflict: "auto-resolved"`.
+- **Given** a conflict the resolvers cannot fully settle **When** run non-interactively **Then** behaviour is exactly today's for the CLI (the service is skipped or paused as it is now, repo left mid-merge with the issue named); the envelope row carries `conflict: "partial"` or `"left-to-user"` and the resolver's `issue` text.
+- **Given** the MCP `update` tool **When** invoked **Then** it behaves as the CLI (same use-case and wiring); no new tool and no change to the authorization policy (AD-25: it was already a write tool).
+- **Given** the existing TUI behaviour **When** this story lands **Then** it is unchanged (one shared builder of the composed resolver replaces the TUI-local one; no duplicated wiring).
+
+**Implementation notes:** extract `buildAutoResolveConflict` from `update-slice.ts` into a driving-neutral factory (`core` use-case wiring helper or a shared function in `adapters/driving`), used by both the slice and `commands/update.ts`; the envelope's conflict field already exists in `GroupUpdateRunDetail` (`group-update.ts:83-86`). Tests: CLI e2e with a conflicting fixture repo for each resolver and for a mixed conflict.
+
 ## Epic 5: Aggregated Log Observability
 
 A developer can view a live, filterable, aggregated log stream across multiple services, with inline health status and a developer-triggered restart control.
@@ -3086,7 +3199,7 @@ So that a rule like `^\[Nest\] …` hides or keeps what I see, and the remaining
 
 ## Epic 6: Route Explorer
 
-A developer can discover a repo's routes, fire a request with automatic dev-mode auth, save/customize/re-fire requests in a global library, and see the response and correlated logs together.
+A developer can discover a repo's routes, fire a request with automatic dev-mode auth, save/customize/re-fire requests in a global library, keep the EDT's favorite routes at hand, and re-fire or smoke-run them quickly. Logs are read in the Logs zone (Epic 5). *(Amended 2026-11-16, Sprint Change Proposal: Stories 6.4 and 6.5 removed; Stories 6.10–6.17 added.)*
 
 ### Story 6.1: Route Discovery via a Pluggable Scanner Module
 
@@ -3169,59 +3282,6 @@ So that I build a personal library of realistic examples without losing the abil
 **Then** that request is flagged stale and can be deleted — it is never fired silently
 
 > Amended 2026-09-30 (Sprint Change Proposal): the "customize before firing" mechanics — body, headers, query and params editing, and the mandatory request step — are delivered by Stories 6.8/6.9; 6.3 builds saving on top of them. "Ad hoc customize-then-fire always works without saving" is satisfied by 6.9's request step. Saving also persists the request's JsonTree filters/folds (per-route session state from 6.7), so a saved/favorite request reopens with the same view.
-
-### Story 6.4: See Response and Relevant Logs Together
-
-As a developer,
-I want the response and the relevant aggregated logs to appear together immediately after firing,
-So that I can trace an issue without opening a separate terminal.
-
-**Acceptance Criteria:**
-
-**Given** a request is fired (ad hoc or saved)
-**When** the response arrives
-**Then** it is shown together with the relevant aggregated logs for the affected services, in the same view, with no separate correlation step (FR-22, integrates Epic 5's log stream)
-
-**Given** a route is fired for the first time
-**When** the tool doesn't yet know its affected services
-**Then** it proposes a default candidate set (the active EDT's members, logs windowed to the few seconds around the fire) rather than asking the developer to configure it upfront
-
-**Given** the proposed candidate set
-**When** the developer adds or removes services from it (before or after firing)
-**Then** the adjusted set is saved against that route and reused automatically on every later fire — no per-fire reconfiguration
-
-**Given** a route's real dependencies change over time
-**When** the developer wants to update them
-**Then** the learned affected-service set can be edited or reset later
-
-> Amended 2026-09-30 (Sprint Change Proposal): the correlated logs are shown in the third **Logs** sub-tab of the Routes right pane (Story 6.9's tab model), shown together with the response's summary line; the response and logs remain reachable without a separate step.
-
-### Story 6.5: Manage the Saved-Request Library Across EDTs
-
-As a developer,
-I want my saved requests to form one global library with per-EDT hide/favorite controls,
-So that a request saved in one EDT is still useful from any other, without clutter.
-
-**Acceptance Criteria:**
-
-**Given** a request saved while working in one EDT
-**When** a different EDT is active
-**Then** that request is discoverable and fireable from it too, without re-saving (FR-23)
-
-**Given** a developer hides a saved request from one EDT's view
-**When** hidden
-**Then** it is not removed from the global library or from any other EDT's view
-
-**Given** a developer favorites a saved request per-EDT
-**When** favorited
-**Then** it appears in that EDT's quick-access list only
-**And Given** a request is marked a global favorite instead
-**When** favorited
-**Then** it appears in every EDT's quick-access list by default
-
-**Given** hide and favorite are the only clutter-management tools in v1
-**When** the library is viewed
-**Then** no folder or tagging system is offered
 
 ### Story 6.6: Scanner Extension — Parameters & Request-Body Skeletons
 
@@ -3368,8 +3428,8 @@ without the two fighting for the same space.
   Auth errors keep their distinct rendering (6.2), now inside the Response tab.
 - **Given** the right pane has the focus **When** `Ctrl+→` (fallback `Ctrl+N`) or `Ctrl+←`
   (fallback `Ctrl+P`) is pressed **Then** the sub-tab changes to the next/previous one, without
-  wrapping. Number keys and `[` `]` are **not** used. The tab strip shows the active tab; a
-  third **Logs** tab is displayed only once Story 6.4 provides it (the tab model supports it).
+  wrapping. Number keys and `[` `]` are **not** used. The tab strip shows the active tab; the tab
+  model stays extensible, but no Logs tab is planned (logs are read in the Logs zone — amended 2026-11-16).
 - **Given** the developer switches route or sub-tab **When** they come back **Then** each
   route's request draft and last response are kept for the session (a reload of the routes
   list for a different repo still drops them, as it does today).
@@ -3389,6 +3449,135 @@ resolver in `create-wizard/wizard.logic.ts` is generalized to a shared
 unchanged). The routes slice moves from one global `fireStatus/fireResult/fireError` triple to
 per-route `requestDrafts` / `responses` maps plus a `routesPaneFocus: 'list' | 'detail'` and
 `routesPaneTab: 'request' | 'response'`.
+
+### Story 6.10: Routes Keys Free of Zone Mnemonics & No `d` on Request Editors
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+As a developer, I want the Routes shortcuts to work wherever I am and the request to keep its shape, so that no key is silently swallowed by another zone and I cannot delete a field, header or query row by accident.
+
+**Acceptance Criteria:**
+
+- **Given** the Routes list has the focus **When** `p` is pressed **Then** the global saved-request picker opens (it was `s`, dead because `s` switches to the shared-types zone); `s` on the list keeps switching zone.
+- **Given** the right pane's Request tab **When** `w` is pressed **Then** the save-name prompt opens (it was `s`); `s` is no longer bound in the pane.
+- **Given** the Routes footer and `?` help **When** rendered **Then** they show `p picker` / `w save` and no Routes context mentions `s` for saving or picking (`footer-contexts.ts`: `routes-list`, `routes-list-editable`, `routes-section`, `routes-rows-readonly`, `routes-rows`, `routes-rows-empty`).
+- **Given** the body tree editor **When** `d` / `D` is pressed on any line **Then** nothing happens and the body hints no longer show `d delete`; `a` (add), value edit, `t` (change type) and `r` (raw mode) keep working.
+- **Given** the Query and Headers sections **When** `d` / `D` is pressed on a row **Then** nothing happens and the `d delete` hint is gone from `routes-rows`; `a` still adds a row and editing a value (including emptying it) still works; path params still cannot be removed.
+- **Given** the other uses of `d` **Then** they are unchanged: `d` on a Saved-tab row (with its confirm), `d` on a stale row of the picker, `d` / `Space` on a JsonTree filter rule.
+
+Implementation notes: remove the `delete-entry` action from the body editor key map and `routes-zone.tsx` (plus `remapErrorsForDelete` if it becomes unused) and the Query/Headers branch at `:1547` (`removeRequestRow` if unreferenced); delete the pure `removeEntry` / `removeEntryAtPath` and their tests when nothing references them (AD-17: no dead code). Update the interaction tests that press `s` or `d`; add assertions that `d` leaves body, Query and Headers unchanged.
+
+### Story 6.11: Favorite Routes per EDT — Persistence, Use-Cases & CLI
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+As a developer, I want each EDT to remember its favorite routes, so that the routes I test for this task are one keypress away and do not follow me into other EDTs.
+
+**Acceptance Criteria:**
+
+- **Given** an EDT **When** a route is marked favorite **Then** `edts.yaml` stores it on that EDT's entry as `favoriteRoutes: [{ repoPath, method, path }]` (method upper-cased, path in template form as discovered); marking it again is a no-op (toggle off removes it); no duplicates.
+- **Given** an `edts.yaml` written before this story **When** loaded **Then** it validates unchanged (field optional) and an EDT without it has no favorites.
+- **Given** another EDT is active **When** favorites are read **Then** only that EDT's favorites are returned; deleting an EDT removes its favorites with its entry.
+- **Given** a favorite whose route a rescan no longer discovers **When** favorites are listed **Then** it is returned flagged `stale` (never silently dropped, never fired silently); the developer can remove it.
+- **Given** the CLI **When** `tui-back routes favorites list|add|remove` is run (`--edt <topic>` defaulting to the active EDT, `--repo`, `--method`, `--path`) **Then** it uses the same core use-cases and the AD-3 envelope (FR-1 parity); an unknown EDT or an invalid method is rejected before anything is written.
+
+Implementation notes: `EdtRegistryPort.update` patch gains `favoriteRoutes`; use-cases in `core/routes/favorites.ts` (`toggleFavoriteRoute`, `listFavoriteRoutes` with stale flag from the cached scan). Writes go through the registry's existing per-resource lock (AD-9).
+
+### Story 6.12: Favorites Pane Above the Routes List & Add-to-Favorites Key
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+As a developer, I want a "Favorites of this EDT" pane above the routes list and a key that favorites the route I am on, so that I reach my usual routes without searching.
+
+**Acceptance Criteria:**
+
+- **Given** the Routes zone **When** it renders **Then** a **Favorites** pane sits above the list (bounded, scrollable, AD-19) showing `METHOD path` and the summary; it shows a teaching line when empty ("press `*` on a route to add it") and is hidden-height-aware on small terminals (the list always keeps a minimum height).
+- **Given** the list has the focus **When** `*` is pressed on a route **Then** that route is toggled in the active EDT's favorites and the pane updates immediately.
+- **Given** a route is open (focus in the right pane, any tab, not inside an inline text editor) **When** `*` is pressed **Then** the open route is toggled the same way; inside an inline editor (a field, the name prompt, the filter) the key types `*` normally.
+- **Given** the list has the focus **When** `Tab` / `Shift+Tab` is pressed **Then** the focus moves between the list and the Favorites pane; in the pane arrows / `j` / `k` move and `Enter` selects that route in the list and opens the right pane on **Request** (same mandatory request step as 6.9, never fires directly); `*` or `d` on a favorite removes it; `Esc` returns to the list.
+- **Given** a stale favorite **When** rendered **Then** it is dim with a `stale` suffix, `Enter` on it is refused with a message, and it can be removed.
+- **Given** the active EDT changes **When** the zone re-renders **Then** the pane shows the new EDT's favorites; a favorite whose repo is not the displayed repo is not listed (assumption 1).
+- **Given** the footer and `?` help **When** the focus is in the list, the pane or the right pane **Then** they show `* favorite` and the pane's own keys, declared in `footer-contexts.ts` (UX-DR7).
+
+Implementation notes: new `zones/routes/routes-favorites-pane.tsx` + `routes-favorites.logic.ts` (pure focus / cursor logic, unit-tested); the zone only wires it; the store slice gains `favoriteRoutes` + `toggleFavoriteRoute` calling the 6.11 use-case. Touch `routes-zone.tsx` minimally (it is on Epic 12's list of large files).
+
+### Story 6.13: Recent Routes & Quick Re-Fire
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+As a developer iterating on a route, I want to see the routes I just fired and re-fire the last request in one keypress, so that edit-code → fire → read becomes a tight loop.
+
+**Acceptance Criteria:**
+
+- **Given** requests were fired this session **When** the Favorites pane renders **Then** a **Recent** section below the favorites lists the last 10 distinct fired routes of the displayed repo (most recent first) with the last status code and duration; it is session-only and empty-hidden.
+- **Given** the list, the Favorites pane or a Recent row has the focus **When** `Ctrl+R` is pressed **Then** the selected route's current draft is re-fired (same `fireRequest` core path, same required-parameter and auth rules as 6.9); the pane switches to **Response**; a route never fired or with missing required params opens **Request** with the missing names listed instead, nothing sent.
+- **Given** the Response tab **When** `Ctrl+R` is pressed **Then** the same draft is re-fired in place (already the case for Request; the Response tab gains it).
+- **Given** Enter on a Recent row **Then** it behaves like Enter on a favorite (opens Request, never fires).
+
+### Story 6.14: Smoke Run of the EDT's Favorite Routes — Core & CLI
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+As a developer, I want to fire all my favorite routes at once and see a status table, so that after a switch or a restart I know in one gesture what is up.
+
+**Acceptance Criteria:**
+
+- **Given** an EDT with favorites **When** the smoke run starts **Then** each non-stale favorite of the repo is fired sequentially (bounded concurrency from `update.concurrency`, never two on the same repo at once) through the existing `fireRequest` core path with its current draft, or its default draft (path params from `example`, 6.6 `bodyExample`).
+- **Given** a favorite with a mutating method (`POST`, `PUT`, `PATCH`, `DELETE`) **When** the smoke run is not explicitly allowed to include them **Then** it is reported `skipped (mutating)` and never sent; `--include-mutating` (CLI) or a confirmation listing the exact routes (TUI, 6.15) is required to fire them.
+- **Given** a favorite with unfilled required path parameters or a stale route **Then** it is `skipped` with its reason (`missing params: id`, `stale`), never `failed`.
+- **Given** a result **When** reported **Then** each row has status code, duration, size and a closed outcome `ok` (2xx) / `client-error` / `server-error` / `auth-error` (distinct, as in 6.2) / `network-error` / `skipped`; the run never rejects; one failure never stops the others.
+- **Given** the CLI `tui-back routes smoke [--edt] [--repo] [--include-mutating]` **When** run **Then** rows are emitted in the AD-3 envelope and the exit code is non-zero if any fired row is not `ok`.
+
+### Story 6.15: Smoke Run in the Routes Zone
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+As a developer, I want to run the smoke test from the Favorites pane and read the table in place, so that I do not leave the TUI to check my routes.
+
+**Acceptance Criteria:**
+
+- **Given** the Favorites pane has favorites **When** `t` is pressed (verified free in the zone at implementation; otherwise the next free letter, recorded in the spec) **Then** the smoke run starts; rows update live (`pending → firing → outcome`) with glyph **and** colour (never colour alone), the table is bounded (AD-19), the TUI stays responsive and the developer may leave the zone.
+- **Given** mutating favorites exist **When** the run is started **Then** a confirm dialog lists them by `METHOD path`; confirming includes them, declining runs the safe ones only.
+- **Given** a result row **When** `Enter` is pressed **Then** the route opens in the right pane on **Response** with that fire's response kept as the route's last response.
+- **Given** a run in flight **When** the developer starts another smoke run **Then** it is rejected with a clear message; `Esc` cancels pending (not yet fired) rows.
+- **Given** the summary line **When** the run ends **Then** it counts ok / client-error / server-error / auth-error / network-error / skipped.
+
+### Story 6.16: Raw Body Mode as a Full Multi-Line Text Editor
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+> Amends Story 6.8's raw-text mode (`r`).
+
+As a developer, I want the raw body mode to behave like a real text editor, so that I can navigate, select, paste and fix a JSON payload without fighting the cursor.
+
+**Acceptance Criteria:**
+
+- **Given** raw mode opened with `r` **When** it renders **Then** the buffer is shown as numbered lines, windowed to the pane height (AD-19), with a visible cursor and the line/column in the status; long lines scroll horizontally or wrap consistently (decided in the spec, covered by tests).
+- **Given** the cursor **When** `←/→/↑/↓`, `Home`/`End` (line), `Ctrl+Home`/`Ctrl+End` (document), `PgUp`/`PgDn` and `Ctrl+←`/`Ctrl+→` (word) are pressed **Then** it moves as in a standard editor, keeping the desired column across shorter lines and scrolling the window to follow it.
+- **Given** `Shift` + a movement key **When** pressed **Then** a selection extends and is rendered; typing, `Backspace` or `Delete` replaces or removes it; `Ctrl+A` selects all.
+- **Given** editing keys **When** pressed **Then** `Enter` splits the line and keeps the current indentation (one more level after `{` or `[`), `Tab` inserts two spaces, `Backspace`/`Delete` join lines at their ends, and `Ctrl+K` removes from the cursor to the end of the line.
+- **Given** a multi-line paste into the terminal **When** received **Then** it is inserted at the cursor as one edit (bracketed paste when the terminal supports it), including large payloads, without being interpreted as key presses.
+- **Given** `Ctrl+Z` / `Ctrl+Y` **When** pressed **Then** the last edits are undone / redone (bounded history).
+- **Given** a format key (a free key, shown in the footer; chosen and verified at implementation) **When** pressed on valid JSON **Then** the buffer is pretty-printed with two-space indentation; on invalid JSON it is refused with the parse error.
+- **Given** leaving raw mode **When** the buffer is invalid JSON **Then** the developer stays in raw mode, the error (with line/column) is shown, and the cursor jumps to the error position; the previous valid body is preserved. A valid buffer replaces the body, as today (6.8).
+- **Given** the footer and `?` help **When** raw mode is active **Then** the raw-mode keys are declared in `footer-contexts.ts` (UX-DR7); no raw-mode key collides with the tab navigation (`Ctrl+→`/`Ctrl+←` are word movement **only** inside the raw editor, which owns input there; leaving it restores the tab keys).
+
+Implementation notes: a pure, fully unit-tested multi-line buffer model in `shared/text-edit` (lines, cursor, selection, undo stack, word / page / document movement, indent rules, paste insert); `JsonRawEditor` renders it and `routes-zone.tsx` only forwards keys (no new logic in the large zone file). `TextInputState` and the single-line `TextInputLine` stay untouched for the other inputs. Check Ink's key mapping for `Ctrl+Home` / `Ctrl+End` / `Shift+arrows` / `PgUp` / `PgDn` and bracketed paste before fixing the key table; any key the terminal cannot report gets a documented fallback.
+
+### Story 6.17: HTTP Method Colors
+
+> Added 2026-11-16 (Sprint Change Proposal `sprint-change-proposal-2026-11-16.md`).
+
+As a developer scanning the routes list, I want each method in its own color, so that I recognise GET, POST, PUT, PATCH and DELETE at a glance.
+
+**Acceptance Criteria:**
+
+- **Given** the theme module **When** extended **Then** it exposes one token per method (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, plus a neutral fallback for `HEAD`/`OPTIONS`/others), defined for the supported color depths and checked by the theme's existing contrast / palette tests.
+- **Given** the Routes list, the Favorites and Recent panes (6.12, 6.13), the Saved tab and picker rows, the smoke-run table (6.15) and the Request tab header **When** a route is rendered **Then** its method text is drawn in its method color; the method is always printed as text, so color is never the only signal (works with `NO_COLOR` / monochrome).
+- **Given** a selected or stale (dim) row **When** rendered **Then** selection and stale styling still read correctly (the method color is kept for selection; a stale row is dimmed whole).
+- **Given** an unknown method **Then** the fallback color is used, never an error.
+
+Implementation notes: a single `methodColor(method)` helper in `shared/theme` used by every surface; no per-zone color literals.
 
 ## Epic 7: TUI Consistency, Dashboard & Code Hygiene
 
