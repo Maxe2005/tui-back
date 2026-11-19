@@ -1008,3 +1008,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-48-fast-forward-the-shared-branches-without-switching.md`
   summary: Make the TUI in-progress guard bidirectional so switch/activate/update also refuse while a shared-branches fast-forward runs, and vice versa for switch/activate.
   evidence: `fastForwardShared` in `edt-slice.ts` only checks update/restart/fast-forward flags; a switch or activate in flight is not checked, and the other actions do not check `fastForwardSharedRunning`.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-8-split-the-update-and-logs-slices.md`
+  summary: `update-slice.config.ts` (~537 lines) and `update-slice.run.ts` (~615 lines) still exceed the ~400-line target.
+  evidence: Review of story 12.8; the spec's file list put run/shared-types hook/auto-resolve and the config flow in single modules, so they were left whole and justified in their headers.
