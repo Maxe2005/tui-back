@@ -1,0 +1,178 @@
+// tui/zones/edts: use-edts-handlers — builds each dialog's input/submit handlers from its own
+// factory under dialogs/ (plain functions, no hooks: they close over this render's values, the
+// deps object is recreated every render) plus the Enter-on-EDT opener.
+import type { AppStore } from '../../store/app-store.js';
+import { createAddToEdtDialogHandlers } from './dialogs/add-to-edt-dialog.js';
+import { createCreateWizardHandlers } from './dialogs/create-wizard/create-wizard.js';
+import { createDeleteDialogHandlers } from './dialogs/delete-dialog.js';
+import { createModifyDialogHandlers } from './dialogs/modify-dialog.js';
+import { createQuickPickDialogHandlers } from './dialogs/quick-pick-dialog.js';
+import { createServiceActionsDialogHandlers } from './dialogs/service-actions-dialog.js';
+import { createSwitchDialogHandlers } from './dialogs/switch-dialog.js';
+import { initialModifyDialog, initialSwitchDialog } from './edts-zone.logic.js';
+import type { EdtsDerived } from './use-edts-derived.js';
+import type { EdtsState } from './use-edts-state.js';
+
+export function createEdtsHandlers(useStore: AppStore, s: EdtsState & EdtsDerived) {
+  const {
+    setDialog,
+    switchEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    setCurrentEdtAction,
+    focusedEdt,
+    switchDirtyRepos,
+    resolveSwitchDirtyRepos,
+    runSwitchRestart,
+    clearSwitchRestart,
+    switchRestart,
+    defaultRestartMode,
+    createEdtAction,
+    requestQuit,
+    edtsRows,
+    candidates,
+    listCreateBranchesAction,
+    activateEdtAction,
+    clampedEdtsSelected,
+    activeEdtUlid,
+    modifyEdtAction,
+    createMemberBranchAction,
+    renameBranchAction,
+    deleteEdtAction,
+    resolveMemberDeleteStatusesAction,
+  } = s;
+
+  const { handleSwitchDialogInput, dispatchResolutionDecision, startSwitch } = createSwitchDialogHandlers({
+    setDialog,
+    switchEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    setCurrentEdtAction,
+    focusedEdt,
+    switchDirtyRepos,
+    resolveSwitchDirtyRepos,
+    runSwitchRestart,
+    clearSwitchRestart,
+    switchRestart,
+    defaultRestartMode,
+  });
+
+  const { handleCreateInput, loadPendingBranchLists, handleCancelRequest, dispatchActivationDecision } = createCreateWizardHandlers({
+    setDialog,
+    createEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    requestQuit,
+    setCurrentEdtAction,
+    focusedEdt,
+    edtsRows,
+    candidates,
+    listCreateBranches: listCreateBranchesAction,
+    activateEdtAction,
+    // "Switch now" hands off to the switch dialog on the new EDT, resolved from the store's `edts`
+    // the wizard just reloaded (this render's `edtsRows` predates the create).
+    startSwitch: (created) => {
+      const target = useStore.getState().edts?.find((entry) => entry.ulid === created.ulid);
+      if (target === undefined) {
+        // The reload failed: the EDT exists but cannot be switched to from here.
+        setDialog((prev) =>
+          prev.kind === 'create'
+            ? {
+                ...prev,
+                submitting: false,
+                error: `EDT “${created.topic}” was created but could not be found after reload — switch to it from the EDT list.`,
+                activation: { ...prev.activation, created, outcome: 'not-activated' },
+              }
+            : prev,
+        );
+        void logEdtAction(
+          created.ulid,
+          'create',
+          'failed',
+          `Created EDT "${created.topic}" — not activated: not found after reloading the EDT list, the switch was not run`,
+        );
+        return;
+      }
+      startSwitch(target);
+    },
+  });
+
+  function openEdtAction() {
+    const target = edtsRows[clampedEdtsSelected];
+    if (target === undefined) {
+      return;
+    }
+    if (activeEdtUlid !== null && target.ulid === activeEdtUlid) {
+      setDialog(initialModifyDialog(target));
+    } else {
+      setDialog(initialSwitchDialog(target));
+    }
+  }
+
+  const { handleModifyDialogInput } = createModifyDialogHandlers({
+    setDialog,
+    modifyEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    setCurrentEdtAction,
+    createMemberBranchAction,
+    renameBranchAction,
+    focusedEdt,
+    candidates,
+  });
+  const { handleServiceActionsInput } = createServiceActionsDialogHandlers({
+    setDialog,
+    modifyEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    createMemberBranchAction,
+    candidates,
+  });
+  const { handleAddToEdtInput } = createAddToEdtDialogHandlers({
+    setDialog,
+    modifyEdtAction,
+    loadEdts,
+    loadEdtsBranches,
+    logEdtAction,
+    createMemberBranchAction,
+    renameBranchAction,
+  });
+  const { handleDeleteDialogInput, loadMemberStatuses } = createDeleteDialogHandlers({
+    setDialog,
+    deleteEdtAction,
+    resolveMemberDeleteStatusesAction,
+    loadEdts,
+    loadEdtsBranches,
+    setCurrentEdtAction,
+  });
+  const { handleQuickPickDialogInput } = createQuickPickDialogHandlers({
+    setDialog,
+    setCurrentEdtAction,
+    edtsRows,
+    activeEdtUlid,
+  });
+
+  return {
+    handleSwitchDialogInput,
+    dispatchResolutionDecision,
+    startSwitch,
+    handleCreateInput,
+    loadPendingBranchLists,
+    handleCancelRequest,
+    dispatchActivationDecision,
+    openEdtAction,
+    handleModifyDialogInput,
+    handleServiceActionsInput,
+    handleAddToEdtInput,
+    handleDeleteDialogInput,
+    loadMemberStatuses,
+    handleQuickPickDialogInput,
+  };
+}
+
+export type EdtsHandlers = ReturnType<typeof createEdtsHandlers>;
