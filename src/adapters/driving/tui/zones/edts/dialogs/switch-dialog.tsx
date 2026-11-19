@@ -219,6 +219,8 @@ function resultLabel(row: SwitchEdtRepoResult): string | null {
       return `✔ ${row.service} — overwritten (${row.detail?.discardedPaths?.length ?? 0} file(s))`;
     case 'switched':
       return `✔ ${row.service} — switched`;
+    case 'unchanged':
+      return `✔ ${row.service} — unchanged (already on branch)`;
     case 'failed':
       return null;
   }
@@ -246,7 +248,7 @@ function SwitchResultsView({ dialog, results, compact = false }: { dialog: Switc
         items={compact ? [] : results.filter((row) => resultLabel(row) !== null)}
         chromeRows={14}
         renderItem={(row, index) => (
-          <Text key={`${row.service}:${index}`} color={row.outcome === 'switched' ? colors['text-dim'] : colors.success} wrap="truncate-end">
+          <Text key={`${row.service}:${index}`} color={row.outcome === 'switched' || row.outcome === 'unchanged' ? colors['text-dim'] : colors.success} wrap="truncate-end">
             {'  '}
             {resultLabel(row)}
           </Text>

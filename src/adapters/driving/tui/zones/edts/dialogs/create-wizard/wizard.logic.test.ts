@@ -66,6 +66,13 @@ function validThroughStep3(overrides: Partial<CreateDialogState> = {}, branchOve
   });
 }
 
+describe('checkNameAvailability: reserved system topic', () => {
+  it('rejects "Shared branches" in any case as taken, even when no EDT lists it', () => {
+    expect(checkNameAvailability('Shared branches', [])).toBe('taken');
+    expect(checkNameAvailability('  SHARED BRANCHES ', [])).toBe('taken');
+  });
+});
+
 describe('checkNameAvailability', () => {
   it('a free name is available', () => {
     expect(checkNameAvailability('auth-flow', EDTS)).toBe('available');
@@ -524,11 +531,13 @@ describe('Step 4 helpers', () => {
         { service: 'a', outcome: 'failed', detail: { code: 'x', message: 'boom' } },
         { service: 'b', outcome: 'discarded', detail: { code: 'discarded', message: '', discardedPaths: ['f.ts'] } },
         { service: 'c', outcome: 'switched' },
+        { service: 'd', outcome: 'unchanged' },
       ]),
     ).toEqual([
       { service: 'a', message: 'boom' },
       { service: 'b', message: 'files overwritten (1): f.ts — then switched to its target branch' },
       { service: 'c', message: 'switched to its target branch' },
+      { service: 'd', message: 'already on its target branch' },
     ]);
   });
 });

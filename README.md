@@ -69,13 +69,13 @@ To remove it: `claude mcp remove tui-back`, or delete the `tui-back` entry from 
 
 Run freely, no approval.
 
-`dashboard`, `edts`, `list-repos`, `list-routes`, `request-list`, `ping`, `registry-validate`
+`dashboard`, `edt-list`, `edts`, `list-repos`, `list-routes`, `request-list`, `ping`, `registry-validate`
 
 #### write
 
 Change workspace state; each call needs your approval.
 
-`register`, `scan`, `edt-create`, `edt-modify`, `edt-switch`, `realign`, `heal`, `fire-request`, `request-fire`
+`register`, `scan`, `edt-create`, `edt-modify`, `edt-switch`, `edt-fast-forward-shared`, `realign`, `heal`, `fire-request`, `request-fire`
 
 #### destructive
 

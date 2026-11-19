@@ -72,11 +72,24 @@ function switchFooterContext(dialog: SwitchDialogState, resolutionPending: boole
 // `switchDirtyRepos` is set), so the resolution view owns the keyboard.
 export function edtsFooterContext(
   dialog: EdtDialogState,
-  state: { registryEmpty: boolean; resolutionPending: boolean },
+  state: {
+    registryEmpty: boolean;
+    resolutionPending: boolean;
+    // The focused EDT is the system "Shared branches" one: 'switch' when Enter can switch to it,
+    // 'readonly' when every key but navigation explains the read-only rule. 'fast-forward' is the
+    // edts pane on the already-active system EDT: only the `f` quick action remains. Only read with no dialog open.
+    systemEdt?: 'switch' | 'readonly' | 'fast-forward' | null;
+  },
 ): FooterContextId | null {
   switch (dialog.kind) {
     case 'none':
-      return null;
+      if (state.systemEdt === 'switch') {
+        return 'edts-system-switch';
+      }
+      if (state.systemEdt === 'fast-forward') {
+        return 'edts-system-fast-forward';
+      }
+      return state.systemEdt === 'readonly' ? 'edts-system-readonly' : null;
     case 'create':
       return wizardFooterContext(dialog, state.registryEmpty);
     case 'switch-confirm':
@@ -103,5 +116,7 @@ export function edtsFooterContext(
       return 'issues-list';
     case 'quick-pick':
       return 'menu';
+    case 'fast-forward-shared':
+      return dialog.status === 'running' ? 'busy' : 'close';
   }
 }

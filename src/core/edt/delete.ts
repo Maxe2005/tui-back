@@ -12,6 +12,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result } from '../result.js';
+import { isSystemEdt, systemEdtReadonly } from './shared-edt.js';
 
 export type MemberDisposition = 'leave' | 'delete';
 
@@ -58,6 +59,10 @@ export async function deleteEdt(params: DeleteEdtParams): Promise<Result<DeleteE
   const target = listed.data.find((candidate) => candidate.topic === topic);
   if (target === undefined) {
     return err('edt-not-found', `No EDT with topic "${topic}" is registered`);
+  }
+
+  if (isSystemEdt(target)) {
+    return systemEdtReadonly();
   }
 
   // The active EDT can never be deleted — rejected before any git/file write, and never

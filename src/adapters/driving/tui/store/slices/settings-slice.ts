@@ -2,6 +2,7 @@
 // settings.yaml and applied to the live store immediately, with no separate save step.
 import type { StateCreator } from 'zustand';
 import { DEFAULT_SETTINGS, type Settings } from '../../../../../core/ports/settings.js';
+import { assertSharedEdtCanBeDisabled } from '../../../../../core/edt/shared-edt.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
 // A partial update accepted by updateSettings — each present top-level key shallow-merges
@@ -70,19 +71,38 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
       }
     },
     updateSettings: async (partial) => {
-      settingsVersion += 1;
       const current = get().settings;
+      // The "Shared branches" EDT cannot be switched off while it is the active EDT: the whole
+      // update is refused (nothing applied or persisted) with a message naming the switch to
+      // make first, surfaced through `settingsWarning` (the settings screen shows it inline).
+      if (partial.edts?.sharedBranchesEdtEnabled === false && current.edts.sharedBranchesEdtEnabled) {
+        // The pointer on disk is the truth; the in-memory cache is only the fallback when the
+        // read fails.
+        const onDisk = deps ? await deps.state.readActiveEdt() : undefined;
+        const active = onDisk?.ok ? onDisk.data : get().activeEdt;
+        const allowed = assertSharedEdtCanBeDisabled(active);
+        if (!allowed.ok) {
+          set({ settingsWarning: allowed.error.message });
+          return;
+        }
+      }
+      // A later accepted update supersedes a stale refusal message.
+      set({ settingsWarning: null });
+      settingsVersion += 1;
+      // Re-read after the awaits above: the live value, not the snapshot taken at call time.
+      const latest = get().settings;
+      const toggledShared = partial.edts?.sharedBranchesEdtEnabled !== undefined && partial.edts.sharedBranchesEdtEnabled !== latest.edts.sharedBranchesEdtEnabled;
       const next: Settings = {
-        general: { ...current.general, ...partial.general },
-        commandPalette: { ...current.commandPalette, ...partial.commandPalette },
-        edts: { ...current.edts, ...partial.edts },
-        logs: { ...current.logs, ...partial.logs },
-        update: { ...current.update, ...partial.update },
-        sharedTypes: { ...current.sharedTypes, ...partial.sharedTypes },
-        switch: { ...current.switch, ...partial.switch },
-        realign: { ...current.realign, ...partial.realign },
-        services: { ...current.services, ...partial.services },
-        dashboard: { ...current.dashboard, ...partial.dashboard },
+        general: { ...latest.general, ...partial.general },
+        commandPalette: { ...latest.commandPalette, ...partial.commandPalette },
+        edts: { ...latest.edts, ...partial.edts },
+        logs: { ...latest.logs, ...partial.logs },
+        update: { ...latest.update, ...partial.update },
+        sharedTypes: { ...latest.sharedTypes, ...partial.sharedTypes },
+        switch: { ...latest.switch, ...partial.switch },
+        realign: { ...latest.realign, ...partial.realign },
+        services: { ...latest.services, ...partial.services },
+        dashboard: { ...latest.dashboard, ...partial.dashboard },
       };
       // Optimistic: applies to the live store immediately, before persistence even starts —
       // no separate save step.
@@ -99,6 +119,11 @@ export function createSettingsSlice(deps?: AppStoreDeps): StateCreator<AppState,
           set({ settingsWarning: result.error.message });
         } else {
           set({ settingsWarning: null });
+          // The registry adapter synthesizes (or omits) the system EDT from the persisted
+          // setting: reload the EDT list so the zone reflects the toggle live.
+          if (toggledShared) {
+            await get().loadEdts();
+          }
         }
       };
       const chained = settingsSaveChain.then(run, run);

@@ -1378,7 +1378,7 @@ describe('AppShell command-entry bar (:)', () => {
     // the rendered COMMAND grid without needing to stub extra commands.
     const store = createAppStore();
     store.setState({
-      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] } },
+      settings: { general: { quitShortcutEnabled: true, editorCommand: '' }, commandPalette: { gridMaxRows: 2, historySize: 20, historyDedup: true }, edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false }, update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] } },
     });
     const { instance, stdin, stdout } = mount(store);
     try {
@@ -1444,7 +1444,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: false, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
 
@@ -1640,7 +1640,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 9, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {
@@ -1709,7 +1709,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 550, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
 
@@ -1745,7 +1745,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
         logs: {
           bufferSize: DEFAULT_SETTINGS.logs.bufferSize,
@@ -1965,7 +1965,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {
@@ -1998,7 +1998,7 @@ describe('AppShell settings screen (:settings)', () => {
       expect(settingsPort.save).toHaveBeenCalledWith({
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       });
     } finally {

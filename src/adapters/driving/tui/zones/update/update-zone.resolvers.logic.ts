@@ -1,4 +1,5 @@
 // tui/zones/update: prompt/label constants, run-result formatters and the trigger/confirm key resolvers.
+import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../core/edt/shared-edt.js';
 import type { GroupUpdateRepoResult } from '../../../../../core/scripts/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { SummaryTone } from '../../shared/components/index.js';
@@ -68,6 +69,9 @@ export function formatUpdateSummary(topic: string, results: readonly GroupUpdate
   const failed = results.filter((row) => row.outcome === 'failed').length;
   if (topic === 'all-repos') {
     return `All repos: ${updated} updated, ${skipped} skipped, ${failed} failed.`;
+  }
+  if (isSharedEdtTopic(topic)) {
+    return `${SHARED_EDT_TOPIC} (all shared branches): ${updated} updated, ${skipped} skipped, ${failed} failed.`;
   }
   return `EDT "${topic}": ${updated} updated, ${skipped} skipped, ${failed} failed.`;
 }

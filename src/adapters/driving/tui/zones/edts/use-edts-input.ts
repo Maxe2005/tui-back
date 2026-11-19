@@ -1,6 +1,7 @@
 // tui/zones/edts: use-edts-input — the zone's single `useInput` dispatcher: an open dialog owns
 // the keystroke (routed to its handler); otherwise the base view handles Tab / reload / issues /
 // per-pane navigation. Inert behind any overlay or Ctrl+W resize-mode.
+import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
@@ -11,6 +12,7 @@ import {
   initialIssuesDialog,
   initialServiceActionsDialog,
   PANE_FOCUS_NAV,
+  SYSTEM_EDT_NOTICE,
 } from './edts-zone.logic.js';
 import type { EdtsZoneCtx } from './edts-zone.ctx.js';
 
@@ -36,6 +38,10 @@ export function useEdtsInput(c: EdtsZoneCtx): void {
     clampedOtherServicesSelected,
     focusedEdt,
     openEdtAction,
+    runFastForwardShared,
+    readonlyNotice,
+    setReadonlyNotice,
+    focusedIsSystem,
     handleCreateInput,
     handleSwitchDialogInput,
     handleModifyDialogInput,
@@ -47,6 +53,9 @@ export function useEdtsInput(c: EdtsZoneCtx): void {
 
   const zoneInputActive = useZoneInputActive(useStore);
   useInput((input, key) => {
+    if (readonlyNotice !== null) {
+      setReadonlyNotice(null);
+    }
     if (dialog.kind === 'create') {
       handleCreateInput(dialog, input, key);
       return;
@@ -73,6 +82,13 @@ export function useEdtsInput(c: EdtsZoneCtx): void {
     }
     if (dialog.kind === 'quick-pick') {
       handleQuickPickDialogInput(dialog, input, key);
+      return;
+    }
+    if (dialog.kind === 'fast-forward-shared') {
+      // Inert while running; the results close with Esc or Enter.
+      if (dialog.status === 'done' && (key.escape || key.return)) {
+        setDialog({ kind: 'none' });
+      }
       return;
     }
     if (dialog.kind === 'issues') {
@@ -113,6 +129,11 @@ export function useEdtsInput(c: EdtsZoneCtx): void {
     }
 
     if (paneFocus === 'edts') {
+      // Quick action on the system "Shared branches" row only (it exists only while the setting is on).
+      if (input === 'f' && focusedIsSystem) {
+        void runFastForwardShared();
+        return;
+      }
       const jump = resolveSelectionJump(key);
       if (jump !== null) {
         setEdtsSelected(jumpSelection(jump, edtsRows.length));
@@ -142,7 +163,9 @@ export function useEdtsInput(c: EdtsZoneCtx): void {
       }
       if (key.return) {
         const service = edtServices[clampedEdtServicesSelected];
-        if (service !== undefined && focusedEdt !== undefined) {
+        if (service !== undefined && focusedEdt !== undefined && isSystemEdt(focusedEdt)) {
+          setReadonlyNotice(SYSTEM_EDT_NOTICE);
+        } else if (service !== undefined && focusedEdt !== undefined) {
           setDialog(initialServiceActionsDialog(focusedEdt, service.path, service.service));
         }
       }
@@ -162,7 +185,9 @@ export function useEdtsInput(c: EdtsZoneCtx): void {
     }
     if (key.return) {
       const service = otherServices[clampedOtherServicesSelected];
-      if (service !== undefined && focusedEdt !== undefined) {
+      if (service !== undefined && focusedEdt !== undefined && isSystemEdt(focusedEdt)) {
+        setReadonlyNotice(SYSTEM_EDT_NOTICE);
+      } else if (service !== undefined && focusedEdt !== undefined) {
         setDialog(initialAddToEdtDialog(focusedEdt, service.path, service.service, service.branch, service.sharedBranch));
       }
     }

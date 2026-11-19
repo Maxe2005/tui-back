@@ -15,6 +15,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { RegistryPort } from '../ports/registry.js';
 import { err, ok, type Result } from '../result.js';
+import { isSharedEdtTopic, systemEdtReadonly } from './shared-edt.js';
 
 export interface CreateBranchOptions {
   create: boolean;
@@ -78,6 +79,11 @@ export async function createEdt(params: CreateEdtParams): Promise<Result<CreateE
   const topic = params.topic.trim();
   if (topic === '') {
     return err('missing-argument', 'Usage: tui-back edt create --topic <topic> --member <path> [...options]');
+  }
+
+  // The reserved system-EDT topic is refused before anything else (and before any write).
+  if (isSharedEdtTopic(topic)) {
+    return systemEdtReadonly();
   }
 
   const members = params.members.map((member) => resolve(member));

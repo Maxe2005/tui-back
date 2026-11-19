@@ -76,6 +76,8 @@ export const settingsSchema: z.ZodType<Settings> = z
           .max(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS)
           .optional()
           .default(DEFAULT_SETTINGS.edts.branchDropdownMaxRows),
+        // Optional-with-default like its siblings: an older `edts:` block must keep loading.
+        sharedBranchesEdtEnabled: z.boolean().optional().default(DEFAULT_SETTINGS.edts.sharedBranchesEdtEnabled),
       })
       .strict()
       .optional()

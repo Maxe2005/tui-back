@@ -361,7 +361,7 @@ describe('subcommand registry guards', () => {
   it('completion script derives the real edt/registry verbs and flags from the live registry', async () => {
     const piped = await runCli(['completion', 'bash'], buildTestSubcommands(), false);
     const script: string = JSON.parse(piped.output).data.script;
-    expect(script).toContain('edt) words="create switch modify delete" ;;');
+    expect(script).toContain('edt) words="create switch modify delete list fast-forward-shared" ;;');
     expect(script).toContain('registry) words="clean validate" ;;');
     expect(script).toContain('completion) words="bash" ;;');
     expect(script).toMatch(/"edt switch"\) words="[^"]*--to[^"]*--force/);
@@ -918,6 +918,118 @@ describe('subcommand registry guards', () => {
     });
   });
 
+  describe('edt list and the system shared-branches EDT', () => {
+    const system = {
+      ulid: '01SHAREDBRANCHES0000000000',
+      topic: 'Shared branches',
+      kind: 'system-shared' as const,
+      createdAt: '1970-01-01T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'development' }],
+    };
+    const user = {
+      ulid: '01USER',
+      topic: 'demo',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
+    };
+    const registryOf = (entries: Array<typeof system | typeof user>): EdtRegistryPort => ({
+      add: async () => ok(undefined),
+      list: async () => ok(entries),
+      setStatus: async () => ok(undefined),
+      update: async () => ok(undefined),
+      remove: async () => ok(undefined),
+    });
+    const edtOf = (entries: Array<typeof system | typeof user>) => {
+      const edt = buildTestSubcommands({ edtRegistry: registryOf(entries) }).find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+      return edt;
+    };
+
+    it('lists every EDT with kind "user" or "system-shared"', async () => {
+      const result = await edtOf([user, system]).run(['list']);
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: { edts: [{ topic: 'demo', kind: 'user' }, { topic: 'Shared branches', kind: 'system-shared' }] },
+      });
+    });
+
+    it('reports status active for the entry the active-EDT pointer names, even the system one', async () => {
+      const state = { ...fakeState(), readActiveEdt: async () => ok(system.ulid as string | null) };
+      const edt = buildTestSubcommands({ edtRegistry: registryOf([user, system]), state }).find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+
+      const result = await edt.run(['list']);
+
+      expect(result).toMatchObject({ ok: true, data: { edts: [{ topic: 'demo', status: 'inactive' }, { topic: 'Shared branches', status: 'active' }] } });
+    });
+
+    it('has no system entry when the registry does not synthesize it (setting off)', async () => {
+      const result = await edtOf([user]).run(['list']);
+      expect(result).toMatchObject({ ok: true, data: { edts: [{ kind: 'user' }] } });
+    });
+
+    it('rejects extra arguments', async () => {
+      expect(await edtOf([user]).run(['list', 'x'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+
+    it('delete, modify and create refuse the system EDT with edt-system-readonly', async () => {
+      const edt = edtOf([system]);
+      expect(await edt.run(['delete', 'Shared branches'])).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+      expect(await edt.run(['modify', '--topic', 'Shared branches', '--rename-to', 'x'])).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+      expect(await edt.run(['create', '--topic', 'shared branches', '--member', '/repo/a'])).toMatchObject({ ok: false, error: { code: 'edt-system-readonly' } });
+    });
+
+    it('switching to the system topic fails edt-not-found when it is not listed', async () => {
+      expect(await edtOf([user]).run(['switch', '--to', 'Shared branches'])).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+    });
+  });
+
+  describe('edt fast-forward-shared', () => {
+    const system = {
+      ulid: '01SHAREDBRANCHES0000000000',
+      topic: 'Shared branches',
+      kind: 'system-shared' as const,
+      createdAt: '1970-01-01T00:00:00.000Z',
+      status: 'inactive' as const,
+      members: [
+        { service: 'svc-a', repoPath: '/repo/a', branch: 'development' },
+        { service: 'svc-b', repoPath: '/repo/b', branch: 'development' },
+      ],
+    };
+    const edtWith = (entries: Array<typeof system>, git: Partial<GitPort>) => {
+      const edt = buildTestSubcommands({
+        edtRegistry: { ...fakeEdtRegistry(), list: async () => ok(entries) },
+        git: fakeGitPort({ branchExistsLocally: async () => ok(true), fetchRemote: async () => ok(undefined), listUnpushedCommits: async () => ok([]), isBranchMerged: async () => ok(false), currentBranch: async () => ok('feat/x'), fetch: async () => ok(undefined), ...git }),
+      }).find((subcommand) => subcommand.name === 'edt');
+      if (!edt) throw new Error('expected edt subcommand');
+      return edt;
+    };
+
+    it('returns the per-service rows', async () => {
+      const result = await edtWith([system], {}).run(['fast-forward-shared']);
+      expect(result).toMatchObject({ ok: true, data: { rows: [{ service: 'svc-a', outcome: 'fast-forwarded' }, { service: 'svc-b', outcome: 'fast-forwarded' }] } });
+    });
+
+    it('fails fast-forward-failed, carrying every row, when a service failed', async () => {
+      const result = await edtWith([system], { fetchRemote: async (p: string) => (p === '/repo/a' ? err('git-fetch-error', 'offline') : ok(undefined)) }).run(['fast-forward-shared']);
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'fast-forward-failed', details: { rows: [{ outcome: 'failed' }, { outcome: 'fast-forwarded' }] } },
+      });
+    });
+
+    it('is edt-not-found when the system EDT is not listed (setting off)', async () => {
+      expect(await edtWith([], {}).run(['fast-forward-shared'])).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+    });
+
+    it('rejects extra arguments', async () => {
+      expect(await edtWith([system], {}).run(['fast-forward-shared', '--x'])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    });
+  });
+
   describe('edt switch --restart (FR-37)', () => {
     const target = {
       ulid: 'ulid-1',
@@ -927,7 +1039,7 @@ describe('subcommand registry guards', () => {
       members: [{ service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' }],
     };
 
-    function restartSetup(opts: { healthy?: boolean; mode?: 'none' | 'simple' | 'clean'; withHealthUrl?: boolean; healthCheckDisabled?: string[] } = {}) {
+    function restartSetup(opts: { healthy?: boolean; mode?: 'none' | 'simple' | 'clean'; withHealthUrl?: boolean; healthCheckDisabled?: string[]; currentBranch?: string } = {}) {
       const writeActiveEdt = vi.fn(async () => ok(undefined));
       const containerRestart = vi.fn(async () => ok(undefined));
       const probe = vi.fn(async () => ok({ healthy: opts.healthy ?? true, status: opts.healthy === false ? 503 : 200, ...(opts.healthy === false ? { reason: 'HTTP 503' } : {}) }));
@@ -968,6 +1080,7 @@ describe('subcommand registry guards', () => {
           restartContainer: async () => ok(undefined),
         },
         healthProbe: { probe },
+        ...(opts.currentBranch !== undefined ? { git: fakeGitPort({ currentBranch: async () => ok(opts.currentBranch as string) }) } : {}),
       });
       const edt = subcommands.find((subcommand) => subcommand.name === 'edt');
       if (!edt) throw new Error('expected edt subcommand');
@@ -999,6 +1112,16 @@ describe('subcommand registry guards', () => {
       expect(result.ok && (result.data as { restart: unknown[] }).restart).toEqual(
         expect.arrayContaining([{ service: 'svc-a', mode: 'simple', state: 'functional' }]),
       );
+    });
+
+    it('emits an additive `unchanged` row and restarts nothing for a repo already on its target branch', async () => {
+      const { edt, containerRestart } = restartSetup({ currentBranch: 'feat/a' });
+      const result = await edt.run(['switch', '--to', 'demo', '--restart', 'simple']);
+      expect(result.ok).toBe(true);
+      const data = result.ok ? (result.data as { results: { service: string; outcome: string }[]; restart: unknown[] }) : null;
+      expect(data?.results).toContainEqual(expect.objectContaining({ service: 'svc-a', outcome: 'unchanged' }));
+      expect(containerRestart).not.toHaveBeenCalled();
+      expect(data?.restart).toEqual(expect.arrayContaining([{ service: 'svc-a', mode: 'simple', state: 'skipped', detail: 'unchanged' }]));
     });
 
     it('--restart never probes a service whose health check is disabled in settings', async () => {

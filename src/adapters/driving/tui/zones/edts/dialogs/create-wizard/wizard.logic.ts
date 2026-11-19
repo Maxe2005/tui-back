@@ -2,6 +2,7 @@
 // wizard (Nom -> Services -> Branches -> Activation) — name availability, step gating and
 // breadcrumb, Step 3's branch resolution, row views and memberPlans, edt-create-from seeding, and
 // Step 4's helpers. Step 4's key reducer lives in activation.logic.ts.
+import { isSharedEdtTopic } from '../../../../../../../core/edt/shared-edt.js';
 import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
 import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
@@ -48,7 +49,8 @@ export function checkNameAvailability(topic: string, edts: readonly Pick<EdtRegi
   if (trimmed === '') {
     return 'empty';
   }
-  return edts.some((entry) => entry.topic === trimmed) ? 'taken' : 'available';
+  // The system "Shared branches" topic is reserved (any case), whether or not the setting lists it.
+  return isSharedEdtTopic(trimmed) || edts.some((entry) => entry.topic === trimmed) ? 'taken' : 'available';
 }
 
 export type AdvanceCheck = { ok: true } | { ok: false; error: string };
@@ -626,6 +628,9 @@ export function summarizeActivationResults(results: readonly SwitchEdtRepoResult
     if (row.outcome === 'discarded') {
       const paths = row.detail?.discardedPaths ?? [];
       return { service: row.service, message: `files overwritten (${paths.length}): ${paths.join(', ')} — then switched to its target branch` };
+    }
+    if (row.outcome === 'unchanged') {
+      return { service: row.service, message: 'already on its target branch' };
     }
     return { service: row.service, message: 'switched to its target branch' };
   });

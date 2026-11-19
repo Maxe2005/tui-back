@@ -4,9 +4,10 @@
 // resolve() so a registry-stored shape (trailing slash, relative segments) still matches.
 import { resolve } from 'node:path';
 import type { EdtRegistryEntry } from '../ports/edt-registry.js';
+import { isSystemEdt } from './shared-edt.js';
 
 export function branchOwners(
-  edts: readonly Pick<EdtRegistryEntry, 'ulid' | 'topic' | 'members'>[],
+  edts: readonly Pick<EdtRegistryEntry, 'ulid' | 'topic' | 'members' | 'kind'>[],
   repoPath: string,
   branch: string,
   excludeUlid?: string,
@@ -15,6 +16,9 @@ export function branchOwners(
   return edts
     .filter(
       (edt) =>
+        // The system "Shared branches" EDT never "uses" a shared branch for ownership purposes:
+        // it must not annotate choosers nor block renames.
+        !isSystemEdt(edt) &&
         edt.ulid !== excludeUlid &&
         edt.members.some((member) => member.branch === branch && resolve(member.repoPath) === target),
     )
@@ -25,7 +29,7 @@ export function branchOwners(
 // order). Branches nobody owns are absent, so a lookup doubles as the "owned?" test. Feeds the
 // choosers' annotations without the pickers/inputs ever importing the EDT list.
 export function branchOwnersMap(
-  edts: readonly Pick<EdtRegistryEntry, 'ulid' | 'topic' | 'members'>[],
+  edts: readonly Pick<EdtRegistryEntry, 'ulid' | 'topic' | 'members' | 'kind'>[],
   repoPath: string,
   branches: readonly string[],
   excludeUlid?: string,

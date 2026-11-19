@@ -12,7 +12,7 @@ import type { ResultError } from '../../result.js';
 
 export interface SwitchEdtRepoResult {
   service: string;
-  outcome: 'switched' | 'adopted' | 'discarded' | 'failed';
+  outcome: 'switched' | 'adopted' | 'discarded' | 'unchanged' | 'failed';
   // `discardedPaths`: on a `discarded` row, exactly the paths the discard removed (captured
   // before `discardAll`, untracked directories expanded to files).
   // `adoptedBranch`: on an `adopted` row, the branch the work was adopted onto in the
@@ -58,6 +58,9 @@ export interface SwitchDirtyRepo {
   // True when the repo also has a dirty `.tui-back.yaml`: it is carried over untouched, outside
   // any resolution, and never listed in `dirtyPaths`.
   manifestCarried?: boolean;
+  // True when the outgoing EDT is the system "Shared branches" EDT: "adopt into the outgoing
+  // EDT" is unavailable (stash or discard only) — the dialog hides the choice and says why.
+  adoptUnavailable?: boolean;
 }
 
 export type SwitchDirtyReposChoice =

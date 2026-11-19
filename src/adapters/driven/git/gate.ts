@@ -1,11 +1,16 @@
 // adapters/driven/git/gate: the branch-scope safety gate (AD-8) every git write passes through — protected-branch and cross-EDT checks, plus the current-branch variant for branch-less writes.
 import { resolve } from 'node:path';
 import { isProtectedBranch } from '../../../core/edt/shared-branches.js';
+import { isSystemEdt } from '../../../core/edt/shared-edt.js';
 import { type EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import { type ManifestPort } from '../../../core/ports/manifest.js';
 import { type Result, err, ok } from '../../../core/result.js';
 import { currentBranch } from './refs.js';
 
+// Carve-outs: `fetch` / `pull --ff-only` of a shared branch (remote.ts) are deliberately
+// ungated — they can only fast-forward it from its own origin counterpart (switch, update and the
+// `fastForwardShared` quick action).
+//
 // The reusable branch-scope safety gate (AD-8): resolves the protected set from the
 // repo's own manifest at check time — never trusted from the caller — and rejects
 // before any `git` invocation. A repo whose manifest cannot load fails the gate too (it is
@@ -40,6 +45,8 @@ export async function assertAllowedBranch(
     const target = resolve(repoPath);
     const ownedByOther = listed.data.some(
       (candidate) =>
+        // The system shared-branches EDT is not a "user" of any branch.
+        !isSystemEdt(candidate) &&
         candidate.ulid !== edtId &&
         candidate.members.some((member) => resolve(member.repoPath) === target && member.branch === branchName),
     );

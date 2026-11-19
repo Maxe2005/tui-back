@@ -9,7 +9,8 @@ import { createModifyDialogHandlers } from './dialogs/modify-dialog.js';
 import { createQuickPickDialogHandlers } from './dialogs/quick-pick-dialog.js';
 import { createServiceActionsDialogHandlers } from './dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers } from './dialogs/switch-dialog.js';
-import { initialModifyDialog, initialSwitchDialog } from './edts-zone.logic.js';
+import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
+import { initialFastForwardDialog, initialModifyDialog, initialSwitchDialog, SYSTEM_EDT_NOTICE } from './edts-zone.logic.js';
 import type { EdtsDerived } from './use-edts-derived.js';
 import type { EdtsState } from './use-edts-state.js';
 
@@ -17,6 +18,9 @@ export function createEdtsHandlers(useStore: AppStore, s: EdtsState & EdtsDerive
   const {
     setDialog,
     switchEdtAction,
+    fastForwardSharedAction,
+    mountedRef,
+    setReadonlyNotice,
     loadEdts,
     loadEdtsBranches,
     logEdtAction,
@@ -105,10 +109,44 @@ export function createEdtsHandlers(useStore: AppStore, s: EdtsState & EdtsDerive
     if (target === undefined) {
       return;
     }
+    if (isSystemEdt(target)) {
+      // Switch only: the active system EDT has nothing left to do from Enter (no modify).
+      if (activeEdtUlid !== null && target.ulid === activeEdtUlid) {
+        setReadonlyNotice(SYSTEM_EDT_NOTICE);
+      } else {
+        setDialog(initialSwitchDialog(target));
+      }
+      return;
+    }
     if (activeEdtUlid !== null && target.ulid === activeEdtUlid) {
       setDialog(initialModifyDialog(target));
     } else {
       setDialog(initialSwitchDialog(target));
+    }
+  }
+
+  // Fast-forwards every local shared branch from origin — no switch, migration or restart. The
+  // dialog opens at once ("running") and swaps to the per-service rows when the run lands.
+  async function runFastForwardShared(): Promise<void> {
+    setDialog(initialFastForwardDialog());
+    let result: Awaited<ReturnType<typeof fastForwardSharedAction>>;
+    try {
+      result = await fastForwardSharedAction();
+    } catch (error) {
+      result = { ok: false, error: { code: 'fast-forward-failed', message: error instanceof Error ? error.message : String(error) } };
+    }
+    // The zone may have unmounted while the run was in flight.
+    if (!mountedRef.current) {
+      return;
+    }
+    setDialog(
+      result.ok
+        ? { kind: 'fast-forward-shared', status: 'done', rows: result.data.rows, error: null }
+        : { kind: 'fast-forward-shared', status: 'done', rows: [], error: `${result.error.code}: ${result.error.message}` },
+    );
+    if (result.ok) {
+      // Branch positions may have moved: refresh the divergence badges.
+      void loadEdtsBranches();
     }
   }
 
@@ -166,6 +204,7 @@ export function createEdtsHandlers(useStore: AppStore, s: EdtsState & EdtsDerive
     handleCancelRequest,
     dispatchActivationDecision,
     openEdtAction,
+    runFastForwardShared,
     handleModifyDialogInput,
     handleServiceActionsInput,
     handleAddToEdtInput,

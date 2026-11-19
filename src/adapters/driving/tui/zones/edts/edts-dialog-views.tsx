@@ -2,6 +2,8 @@
 import { CreateWizardView } from './dialogs/create-wizard/create-wizard.js';
 import { AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
 import { DeleteDialogView } from './dialogs/delete-dialog.js';
+import { FastForwardDialogView } from './dialogs/fast-forward-dialog.js';
+import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
 import { IssuesDialogView } from './dialogs/issues-dialog.js';
 import { ModifyDialogView } from './dialogs/modify-dialog.js';
 import { QuickPickDialogView, resolveQuickPickCandidates } from './dialogs/quick-pick-dialog.js';
@@ -49,9 +51,14 @@ export function EdtsDialogViews({ c }: { c: EdtsZoneCtx }) {
       {dialog.kind === 'delete-confirm' ? <DeleteDialogView dialog={dialog} /> : null}
 
       {dialog.kind === 'quick-pick' ? (
-        <QuickPickDialogView dialog={dialog} pool={resolveQuickPickCandidates(dialog.mode, edtsRows, activeEdtUlid)} />
+        <QuickPickDialogView
+          dialog={dialog}
+          pool={resolveQuickPickCandidates(dialog.mode, edtsRows, activeEdtUlid)}
+          systemOnly={dialog.mode !== 'switch' && edtsRows.length > 0 && edtsRows.every((entry) => isSystemEdt(entry))}
+        />
       ) : null}
 
+      {dialog.kind === 'fast-forward-shared' ? <FastForwardDialogView dialog={dialog} /> : null}
       {dialog.kind === 'issues' ? <IssuesDialogView unreachable={unreachable} errors={errors} /> : null}
     </>
   );

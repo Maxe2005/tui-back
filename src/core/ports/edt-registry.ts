@@ -20,6 +20,10 @@
    createdAt: string;
    status: EdtStatus;
    members: EdtMember[];
+   // Absent for an ordinary (user) EDT. 'system-shared' marks the read-only "Shared branches"
+   // EDT the registry adapter synthesizes while edts.sharedBranchesEdtEnabled is on; it is never
+   // persisted to edts.yaml (core/edt/shared-edt.ts).
+   kind?: 'system-shared';
  }
  
  export interface EdtActionLogEntry {

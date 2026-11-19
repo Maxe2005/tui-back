@@ -23,7 +23,7 @@ import { GENERAL_SETTINGS_ROWS, resolveGeneralSettingsKey } from './settings/gen
 import { resolveUpdateSettingsKey } from './settings/update.logic.js';
 import { PALETTE_SETTINGS_GROUPS, type PaletteSettingsGroupId, adjustFilterHistoryGridMaxRows, adjustFilterHistorySize, adjustGridMaxRows, parseFilterHistoryGridMaxRowsDigit, parseGridMaxRowsDigit } from './settings/palette.logic.js';
 import { LOGS_CLEAR_ROWS, LOGS_RULES_ROWS, LOGS_SETTINGS_GROUPS, type LogsRulesConfirm, type LogsSettingsGroupId, adjustLogBufferSize, parseLogBufferSizeDigit } from './settings/logs.logic.js';
-import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, SETTINGS_GROUPS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
+import { EDTS_TOP_LEVEL_ROW_COUNT, isSharedEdtToggleRow, HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, SETTINGS_GROUPS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from './settings/edts.logic.js';
 import { settingsFooterContext } from './settings/footer-context.logic.js';
 import { SharedTypesTab } from './settings/shared-types-tab.js';
 import { ServicesTab } from './settings/services-tab.js';
@@ -155,6 +155,11 @@ export function SettingsScreen({
   // combination is "not drilled in" for Esc purposes. An open editor-command edit on the
   // General tab counts too: Left/Right/Tab belong to the text field while it is open, and Esc
   // cancels the edit rather than closing the screen.
+  // The group cursor is shared by tab visits: coming back to the EDTs tab starts on its first row.
+  useEffect(() => {
+    setGroupCursor(0);
+  }, [tab]);
+
   const drilledIn =
     (tab === 'general' && generalEditing !== null) || (tab === 'edts' && edtsGroup !== null) || (tab === 'logs' && logsGroup !== null) ||
     (tab === 'command-palette' && paletteGroup !== null);
@@ -164,6 +169,7 @@ export function SettingsScreen({
     settingsFooterContext(tab, {
       generalEditing: generalEditing !== null,
       edtsGroup,
+      edtsToggleRow: isSharedEdtToggleRow(groupCursor),
       logsGroup,
       paletteGroup,
       logsRulesConfirming: logsRulesConfirm !== null,
@@ -529,9 +535,14 @@ export function SettingsScreen({
 
     if (!drilledIn) {
       // The group-list level — Up/Down navigates, Enter drills in.
-      const moved = nextCursorForKey(key, groupCursor, SETTINGS_GROUPS.length);
+      const moved = nextCursorForKey(key, groupCursor, EDTS_TOP_LEVEL_ROW_COUNT);
       if (moved !== null) {
         setGroupCursor(moved);
+        return;
+      }
+      if (input === ' ' && isSharedEdtToggleRow(groupCursor)) {
+        // Applied live; a refusal (system EDT active) lands in `settingsWarning`, shown inline.
+        void updateSettings({ edts: { sharedBranchesEdtEnabled: !useStore.getState().settings.edts.sharedBranchesEdtEnabled } });
         return;
       }
       if (key.return) {

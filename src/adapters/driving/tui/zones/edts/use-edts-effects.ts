@@ -1,7 +1,8 @@
 // tui/zones/edts: use-edts-effects — the zone's lifecycle effects, first half, in their original
 // declaration order (mount load, cursor reset, footer context, auto-open create, input-capture
 // flag, branch-picker fetch, command-triggered dialogs, action-log load).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
 import { branchOwnersMap } from '../../../../../core/edt/branch-owners.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
 import { edtsFooterContext } from './edts-footer-context.js';
@@ -11,7 +12,9 @@ import {
   initialModifyDialog,
   initialQuickPickDialog,
   initialSwitchDialog,
+  SYSTEM_EDT_NOTICE,
 } from './edts-zone.logic.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { EdtsZoneCtx } from './edts-zone.ctx.js';
 
 export function useEdtsEffects(c: EdtsZoneCtx): void {
@@ -22,6 +25,11 @@ export function useEdtsEffects(c: EdtsZoneCtx): void {
     edts,
     edtsStatus,
     edtsRows,
+    edtsSelected,
+    setEdtsSelected,
+    setReadonlyNotice,
+    userEdtCount,
+    systemEdtFooter,
     focusedEdt,
     activeEdtUlid,
     switchDirtyRepos,
@@ -53,12 +61,35 @@ export function useEdtsEffects(c: EdtsZoneCtx): void {
     setOtherServicesSelected(0);
   }, [focusedEdt?.ulid]);
 
-  useFooterContext('edts', edtsFooterContext(dialog, { registryEmpty: edtsRows.length === 0, resolutionPending: switchDirtyRepos !== null }), useStore);
+  // A reload can insert or drop the system EDT (the setting toggled), shifting every index:
+  // re-anchor the selection on the same EDT by ulid (the clamp covers a vanished one).
+  const prevEdtsRef = useRef<readonly EdtRegistryEntry[] | null>(null);
+  const edtsSelectedRef = useRef(0);
+  useEffect(() => {
+    const previous = prevEdtsRef.current;
+    if (previous !== null && edts !== null && previous !== edts && previous.length > 0) {
+      const anchored = previous[Math.min(edtsSelectedRef.current, previous.length - 1)]?.ulid;
+      const index = edts.findIndex((entry) => entry.ulid === anchored);
+      if (index >= 0) {
+        setEdtsSelected(index);
+      }
+    }
+  }, [edts]);
+  useEffect(() => {
+    prevEdtsRef.current = edts;
+    edtsSelectedRef.current = edtsSelected;
+  });
+
+  useFooterContext(
+    'edts',
+    edtsFooterContext(dialog, { registryEmpty: userEdtCount === 0, resolutionPending: switchDirtyRepos !== null, systemEdt: systemEdtFooter }),
+    useStore,
+  );
 
   // No EDT exists -> the create wizard, never a bare/empty list. Auto-opens once the list has
   // genuinely resolved to empty (never while still loading, never on a load error).
   useEffect(() => {
-    if (edtsStatus === 'idle' && edts !== null && edts.length === 0 && dialog.kind === 'none') {
+    if (edtsStatus === 'idle' && edts !== null && edts.filter((entry) => !isSystemEdt(entry)).length === 0 && dialog.kind === 'none') {
       setDialog(initialCreateDialog());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,7 +182,10 @@ export function useEdtsEffects(c: EdtsZoneCtx): void {
         // If a topic was specified, find the EDT and open modify dialog pre-targeted
         if (currentEdtAction.target !== 'select EDT') {
           const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
-          if (targetEdt) {
+          if (targetEdt && isSystemEdt(targetEdt)) {
+            setReadonlyNotice(SYSTEM_EDT_NOTICE);
+            setCurrentEdtAction(null);
+          } else if (targetEdt) {
             setDialog(initialModifyDialog(targetEdt));
             setCurrentEdtAction(null);
           } else {
@@ -171,7 +205,9 @@ export function useEdtsEffects(c: EdtsZoneCtx): void {
         if (currentEdtAction.target !== 'select EDT') {
           const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
           setDialog(
-            targetEdt
+            targetEdt && isSystemEdt(targetEdt)
+              ? initialQuickPickDialog('create-from', SYSTEM_EDT_NOTICE)
+              : targetEdt
               ? initialCreateDialog(targetEdt)
               : initialQuickPickDialog('create-from', `EDT not found: "${currentEdtAction.target}"`),
           );
@@ -185,7 +221,10 @@ export function useEdtsEffects(c: EdtsZoneCtx): void {
         // rejection message (never auto-switched).
         if (currentEdtAction.target !== 'select EDT') {
           const targetEdt = edtsRows.find((e) => e.topic === currentEdtAction.target);
-          if (targetEdt) {
+          if (targetEdt && isSystemEdt(targetEdt)) {
+            setReadonlyNotice(SYSTEM_EDT_NOTICE);
+            setCurrentEdtAction(null);
+          } else if (targetEdt) {
             setDialog(initialDeleteDialog(targetEdt, targetEdt.ulid === activeEdtUlid));
             setCurrentEdtAction(null);
           } else {

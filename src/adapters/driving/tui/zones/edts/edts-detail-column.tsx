@@ -4,8 +4,9 @@
 import { Box } from 'ink';
 import { DetailPane } from '../../shared/components/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { StateLine } from '../../shared/components/state-line.js';
-import { spacing } from '../../shared/theme/theme.js';
+import { colors, spacing } from '../../shared/theme/theme.js';
 import {
   appendHint,
   formatEdtActionHistory,
@@ -31,6 +32,8 @@ export function EdtsDetailColumn({ c }: { c: EdtsZoneCtx }) {
     focusedOtherService,
     status,
     error,
+    focusedIsSystem,
+    readonlyNotice,
   } = c;
   return (
     <Box flexDirection="column" minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
@@ -41,7 +44,7 @@ export function EdtsDetailColumn({ c }: { c: EdtsZoneCtx }) {
               ? formatEdtDetail(focusedEdt, focusedEdt.ulid === activeEdtUlid) +
                 '\n\n' +
                 formatEdtActionHistory(edtActionLog, currentEdtAction, hiddenActionTypes) +
-                appendHint(resolveActionHint('edts', focusedEdt.ulid === activeEdtUlid, hiddenActionHints))
+                appendHint(resolveActionHint('edts', focusedEdt.ulid === activeEdtUlid, hiddenActionHints, focusedIsSystem))
               : 'No EDT selected.'}
           </DetailPane>
           {edtsStatus === 'error' && edtsError ? <DimAnnotation text={edtsError} /> : null}
@@ -52,7 +55,7 @@ export function EdtsDetailColumn({ c }: { c: EdtsZoneCtx }) {
         <>
           <DetailPane title={focusedEdtService ? focusedEdtService.service : 'Service'}>
             {(focusedEdtService ? formatServiceDetail(focusedEdtService) : 'No service selected.') +
-              appendHint(resolveActionHint('edt-services', false, hiddenActionHints))}
+              appendHint(resolveActionHint('edt-services', false, hiddenActionHints, focusedIsSystem))}
           </DetailPane>
           {focusedEdtService?.detail ? <DimAnnotation text={focusedEdtService.detail.message} /> : null}
           {status === 'error' && error ? <DimAnnotation text={error} /> : null}
@@ -61,12 +64,13 @@ export function EdtsDetailColumn({ c }: { c: EdtsZoneCtx }) {
         <>
           <DetailPane title={focusedOtherService ? focusedOtherService.service : 'Service'}>
             {(focusedOtherService ? formatServiceDetail(focusedOtherService) : 'No service selected.') +
-              appendHint(resolveActionHint('other-services', false, hiddenActionHints))}
+              appendHint(resolveActionHint('other-services', false, hiddenActionHints, focusedIsSystem))}
           </DetailPane>
           {focusedOtherService?.detail ? <DimAnnotation text={focusedOtherService.detail.message} /> : null}
           {status === 'error' && error ? <DimAnnotation text={error} /> : null}
         </>
       )}
+      {readonlyNotice !== null ? <ClampedParagraph color={colors.warning} maxLines={4}>{`▲ ${readonlyNotice}`}</ClampedParagraph> : null}
     </Box>
   );
 }

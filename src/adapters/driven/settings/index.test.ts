@@ -72,7 +72,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
         warning: null,
@@ -228,7 +228,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
         warning: null,
@@ -523,7 +523,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
         warning: null,
@@ -548,12 +548,37 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 15, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: ['edts'], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
         warning: null,
       },
     });
+  });
+
+  it('defaults edts.sharedBranchesEdtEnabled to false and reads an explicit true', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'edts:\n  branchDropdownMaxRows: 7\n');
+    const absent = await loadSettings(file);
+    expect(absent.ok && absent.data.settings.edts.sharedBranchesEdtEnabled).toBe(false);
+
+    await writeFile(file, 'edts:\n  sharedBranchesEdtEnabled: true\n');
+    const enabled = await loadSettings(file);
+    expect(enabled.ok && enabled.data.settings.edts.sharedBranchesEdtEnabled).toBe(true);
+  });
+
+  it('falls back to defaults with a field-naming warning when edts.sharedBranchesEdtEnabled is not a boolean', async () => {
+    const root = await tempRoot();
+    const file = join(root, 'settings.yaml');
+    await writeFile(file, 'edts:\n  sharedBranchesEdtEnabled: "yes"\n');
+
+    const result = await loadSettings(file);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.data.settings).toEqual(DEFAULT_SETTINGS);
+    expect(result.data.warning).toContain('edts.sharedBranchesEdtEnabled');
   });
 
   it('loads a valid edts.branchDropdownMaxRows value as-is', async () => {
@@ -638,7 +663,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 750, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
         warning: null,
@@ -661,7 +686,7 @@ describe('loadSettings', () => {
         settings: {
           general: { quitShortcutEnabled: true, editorCommand: '' },
           commandPalette: { gridMaxRows: 12, historySize: 20, historyDedup: true },
-          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+          edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
           update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
         },
         warning: null,
@@ -706,7 +731,7 @@ describe('saveSettings', () => {
     const settings = {
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 10, historySize: 20, historyDedup: true },
-      edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5 },
+      edts: { hiddenActionHints: ['other-services'], hiddenActionTypes: ['create'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
       update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
     };
 
@@ -724,14 +749,14 @@ describe('saveSettings', () => {
     await saveSettings(file, {
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
-      edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+      edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
       update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
     });
 
     expect(parse(await readFile(file, 'utf8'))).toEqual({
       general: { quitShortcutEnabled: true, editorCommand: '' },
       commandPalette: { gridMaxRows: 20, historySize: 20, historyDedup: true },
-      edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+      edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
       update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
     });
   });
@@ -745,7 +770,7 @@ describe('createSettingsPort', () => {
     const settings = {
       general: { quitShortcutEnabled: false, editorCommand: '' },
       commandPalette: { gridMaxRows: 5, historySize: 20, historyDedup: true },
-      edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'], branchDropdownMaxRows: 5 },
+      edts: { hiddenActionHints: ['edts'], hiddenActionTypes: ['switch'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
       update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 }, switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
     };
 

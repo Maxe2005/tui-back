@@ -35,6 +35,7 @@ import {
   type ModifyEdtData,
 } from '../../../../../core/edt/modify.js';
 import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../core/edt/shared-edt.js';
 import {
   deleteEdt as deleteEdtUseCase,
   resolveMemberDeleteStatuses as resolveMemberDeleteStatusesUseCase,
@@ -43,6 +44,7 @@ import {
   type MemberDisposition,
 } from '../../../../../core/edt/delete.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
+import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../core/edt/fast-forward-shared.js';
 import type { Result } from '../../../../../core/result.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 
@@ -61,6 +63,12 @@ export const NO_BRANCH_CREATION: CreateBranchOptions = { create: false, base: DE
 export const UPDATE_IN_PROGRESS_CODE = 'update-in-progress';
 export const UPDATE_IN_PROGRESS_MESSAGE =
   'A group update is in progress — wait for it to finish before activating or switching an EDT.';
+
+// The "fast-forward the shared branches" quick action moves local branches, so it
+// never overlaps a group update, a restart run or another fast-forward.
+export const FAST_FORWARD_IN_PROGRESS_CODE = 'fast-forward-in-progress';
+export const FAST_FORWARD_IN_PROGRESS_MESSAGE =
+  'An update, a restart or another fast-forward is in progress — wait for it to finish before fast-forwarding the shared branches.';
 
 // A restart run (post-switch, standalone, or a group update) is in flight — see the exclusion
 // notes on `runSwitchRestart`.
@@ -141,6 +149,9 @@ export type EdtActionLogEntry = {
 
 export type EdtSlice = {
   activeEdt: string | null;
+  // Set at load when the persisted pointer named the system EDT while it is disabled (fell back
+  // to no active EDT); null otherwise.
+  activeEdtWarning: string | null;
   setActiveEdt: (edt: string | null) => void;
   // The EDTs zone's branch/divergence listing (FR-9). `edtsBranches` is null before first load;
   // successful load replaces it with array (never leaves stale mid-refresh).
@@ -169,6 +180,12 @@ export type EdtSlice = {
   // `activated` updates cached active pointer like switchEdt.
   activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
+  // Quick action on the system "Shared branches" EDT: fast-forwards each service's local shared
+  // branch from origin with no switch, migration or restart (core/edt/fast-forward-shared.ts).
+  // Rejected while an update, a restart run or another fast-forward is in flight; `edt-not-found`
+  // when the setting is off. Never touches the active-EDT pointer.
+  fastForwardSharedRunning: boolean;
+  fastForwardShared: () => Promise<Result<{ rows: FastForwardSharedRow[] }>>;
   // The optional post-switch restart phase (FR-37): a second call after a successful switchEdt,
   // never part of it. `null` until a run starts; kept after it ends so the report survives
   // leaving the zone, until clearSwitchRestart. Starting one while an update, another restart
@@ -244,7 +261,8 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
   let getState: (() => AppState) | null = null;
   const createState: StateCreator<AppState, [], [], EdtSlice> = (set, get) => ({
     activeEdt: null,
-    setActiveEdt: (edt) => set({ activeEdt: edt }),
+    activeEdtWarning: null,
+    setActiveEdt: (edt) => set({ activeEdt: edt, activeEdtWarning: null }),
     edtsBranches: null,
     edtsBranchesStatus: 'idle',
     edtsBranchesError: null,
@@ -302,11 +320,17 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       // (including genuinely-empty, which auto-opens create prompt) just because active-EDT
       // pointer read failed alongside it. Degrade only pointer to "no active EDT known".
       const activeUlid = await deps.state.readActiveEdt();
+      // A pointer naming the system "Shared branches" EDT while the setting is off (it is then
+      // absent from the list) falls back to no active EDT, with a warning; nothing is written.
+      const pointer = resolveActiveEdtPointer(activeUlid.ok ? activeUlid.data : null, listed.data);
+      // The system EDT sorts first (the registry appends it last); user EDTs keep their order.
+      const sorted = [...listed.data.filter((edt) => isSystemEdt(edt)), ...listed.data.filter((edt) => !isSystemEdt(edt))];
       set({
-        edts: listed.data,
+        edts: sorted,
         edtsStatus: 'idle',
         edtsError: null,
-        activeEdt: activeUlid.ok ? activeUlid.data : null,
+        activeEdt: pointer.active,
+        activeEdtWarning: pointer.warning,
       });
     },
     createEdt: async (params) => {
@@ -355,7 +379,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         overwrite: params.overwrite,
       });
       if (result.ok && result.data.status === 'activated') {
-        set({ activeEdt: result.data.ulid });
+        set({ activeEdt: result.data.ulid, activeEdtWarning: null });
         void get().loadTabVisibility();
       }
       return result;
@@ -437,6 +461,21 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
       set({ switchDirtyRepos: null });
       resolve?.(choice);
     },
+    fastForwardSharedRunning: false,
+    fastForwardShared: async () => {
+      if (!deps) {
+        return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
+      }
+      if (get().fastForwardSharedRunning || get().updateStatus === 'running' || get().switchRestart?.status === 'running') {
+        return { ok: false, error: { code: FAST_FORWARD_IN_PROGRESS_CODE, message: FAST_FORWARD_IN_PROGRESS_MESSAGE } };
+      }
+      set({ fastForwardSharedRunning: true });
+      try {
+        return await fastForwardSharedUseCase({ edtRegistry: deps.edtRegistry, git: deps.git });
+      } finally {
+        set({ fastForwardSharedRunning: false });
+      }
+    },
     switchEdt: async (params) => {
       if (!deps) {
         return { ok: false, error: { code: 'store-not-wired', message: NO_DEPS_ERROR } };
@@ -472,7 +511,7 @@ export function createEdtSlice(deps?: AppStoreDeps): StateCreator<AppState, [], 
         if (result.ok) {
           // Success updates store's cached active-EDT pointer immediately — direct consequence
           // of this switch, not continuous fs.watch/poll re-sync.
-          set({ activeEdt: result.data.ulid });
+          set({ activeEdt: result.data.ulid, activeEdtWarning: null });
           // Switching active EDT swaps whole member set — reload gated-tab visibility so
           // newly (in)active member's tab flips immediately.
           void get().loadTabVisibility();

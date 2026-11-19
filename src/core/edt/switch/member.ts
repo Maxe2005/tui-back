@@ -6,7 +6,7 @@ import type { EdtMember } from '../../ports/edt-registry.js';
 import type { GitPort } from '../../ports/git.js';
 import type { Manifest } from '../../ports/manifest.js';
 import type { Result, ResultError } from '../../result.js';
-import { checkoutExpectedBranch } from '../checkout-expected.js';
+import { checkoutExpectedBranch, memberTargetSpec } from '../checkout-expected.js';
 import { executeDirtyPlan, planDirtyWork, restoreAndFail, stashMessage, type Prepared } from './dirty.js';
 import {
   failed,
@@ -107,16 +107,29 @@ export async function switchMemberRepo(
 ): Promise<SwitchEdtRepoResult> {
   const { git, target } = context;
   const { service, repoPath, branch } = member;
+  let alreadyThere = false;
+  let skipped = false;
 
   // Resolve (and gate) the destination before touching the working tree, so a missing member
   // branch never follows an irreversible discard (or a needless stash).
   const checkedOut = await checkoutExpectedBranch({
     git,
     repoPath,
-    spec: { kind: 'member', branch, edtUlid: target.ulid },
+    spec: memberTargetSpec(target.ulid, branch),
     prepare: async () => {
+      // Read before the dirty plan (which never changes the branch).
+      alreadyThere = await isAlreadyOn(git, repoPath, branch);
       const plan = await planDirtyWork(context, service, repo, resolution);
       return plan.ok ? executeDirtyPlan(context, service, repoPath, plan.value) : plan;
+    },
+    skipCheckout: async (prepared) => {
+      if (!alreadyThere || !prepared.untouched) {
+        return false;
+      }
+      // A target-tagged stash would be popped: the working tree changes, so not `unchanged`.
+      const stashed = await git.hasStash(repoPath, stashMessage(target.ulid));
+      skipped = stashed.ok && !stashed.data;
+      return skipped;
     },
     onResolveFailed: (error) => failed(service, error),
     onCheckoutFailed: (prepared, error) => failAfterPrepare(git, service, repoPath, prepared, error),
@@ -125,12 +138,27 @@ export async function switchMemberRepo(
     return checkedOut.row;
   }
 
+  if (skipped) {
+    return unchangedRow(service, branch);
+  }
+
   const popped = await git.restoreStash(repoPath, stashMessage(target.ulid));
   if (!popped.ok) {
     return failAfterCheckout(service, checkedOut.value, popped.error);
   }
 
   return succeeded(service, checkedOut.value);
+}
+
+// True when the repo already sits on `target` (a failed or detached read counts as "no": the
+// caller then keeps today's checkout path).
+async function isAlreadyOn(git: GitPort, repoPath: string, target: string): Promise<boolean> {
+  const current = await git.currentBranch(repoPath);
+  return current.ok && current.data !== '' && current.data !== 'HEAD' && current.data === target;
+}
+
+function unchangedRow(service: string, branch: string): SwitchEdtRepoResult {
+  return { service, outcome: 'unchanged', detail: { code: 'unchanged', message: `already on \`${branch}\`` } };
 }
 
 // Any repo that is not a target member: its dirty work handled per its state, then checked
@@ -156,6 +184,8 @@ export async function switchNonMemberRepo(
     return plan.row;
   }
 
+  let skipped = false;
+
   // Resolve the destination before touching the working tree, so a failed fetch never
   // follows an irreversible discard.
   const checkedOut = await checkoutExpectedBranch({
@@ -163,11 +193,20 @@ export async function switchNonMemberRepo(
     repoPath,
     spec: { kind: 'shared', branch: sharedBranch },
     prepare: () => executeDirtyPlan(context, service, repoPath, plan.value),
+    // Non-members never pop a stash: only the (untouched) plan matters.
+    skipCheckout: async (prepared) => {
+      skipped = prepared.untouched && (await isAlreadyOn(git, repoPath, sharedBranch));
+      return skipped;
+    },
     onResolveFailed: (error) => failed(service, error),
     onCheckoutFailed: (prepared, error) => failAfterPrepare(git, service, repoPath, prepared, error),
   });
   if (!checkedOut.ok) {
     return checkedOut.row;
+  }
+
+  if (skipped) {
+    return unchangedRow(service, sharedBranch);
   }
 
   return succeeded(service, checkedOut.value);

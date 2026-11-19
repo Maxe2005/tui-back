@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../components/checkbox-list-item.js';
 import { DimAnnotation } from '../components/dim-annotation.js';
 import { colors } from '../theme/theme.js';
-import { HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId } from './edts.logic.js';
+import { SHARED_EDT_TOGGLE_LABEL, SHARED_EDT_TOGGLE_NOTE, HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId } from './edts.logic.js';
 import type { Settings } from '../../../../../core/ports/settings.js';
 
 export type EdtsTabProps = {
@@ -30,6 +30,15 @@ export function EdtsTab({ settings, edtsGroup, groupCursor, hintCursor, actionTy
               </Box>
             );
           })}
+          <Box flexDirection="row">
+            <Text color={colors.accent} wrap="truncate-end">{groupCursor === SETTINGS_GROUPS.length ? '›' : ' '}</Text>
+            <CheckboxListItem
+              label={SHARED_EDT_TOGGLE_LABEL}
+              selected={groupCursor === SETTINGS_GROUPS.length}
+              state={settings.edts.sharedBranchesEdtEnabled ? 'checked' : 'unchecked'}
+            />
+          </Box>
+          <DimAnnotation text={SHARED_EDT_TOGGLE_NOTE} />
         </Box>
       ) : null}
 

@@ -8,7 +8,7 @@ import {
   resolutionRepos,
   type LocalBranchList,
 } from './dialogs/switch-resolution/switch-resolution.logic.js';
-import { initialSwitchDialog, type DeleteDialogState } from './edts-zone.logic.js';
+import { initialSwitchDialog, resolveOutgoingTopic, type DeleteDialogState } from './edts-zone.logic.js';
 import type { EdtsZoneCtx } from './edts-zone.ctx.js';
 
 export function useEdtsDialogEffects(c: EdtsZoneCtx): void {
@@ -57,7 +57,8 @@ export function useEdtsDialogEffects(c: EdtsZoneCtx): void {
       return;
     }
     const dirty = switchDirtyRepos;
-    const outgoingTopic = activeEdtUlid !== null ? (edtsRows.find((entry) => entry.ulid === activeEdtUlid)?.topic ?? null) : null;
+    // Leaving the system EDT: nothing to adopt dirty work into (no outgoing topic -> discard/stash only).
+    const outgoingTopic = resolveOutgoingTopic(edtsRows, activeEdtUlid);
     // Branches other EDTs register per repo, so a row sitting on one is retargeted to the global
     // name and such a name is rejected inline.
     const claims = otherEdtBranches(edtsRows, activeEdtUlid);

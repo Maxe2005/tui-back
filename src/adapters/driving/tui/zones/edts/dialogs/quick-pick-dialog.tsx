@@ -3,6 +3,7 @@
 // shared/components/filterable-pick-list.tsx; this file owns only the per-mode candidate pool
 // and which pre-targeted dialog a selection opens.
 import { Box, Text, type Key } from 'ink';
+import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { AppState } from '../../../store/app-store.js';
 import {
@@ -14,6 +15,7 @@ import { ModalDialog } from '../../../shared/components/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   initialCreateDialog,
+  SYSTEM_EDT_NOTICE,
   initialDeleteDialog,
   initialModifyDialog,
   initialSwitchDialog,
@@ -23,8 +25,9 @@ import {
 } from '../edts-zone.logic.js';
 import { ClampedParagraph } from '../../../shared/components/truncated-text.js';
 
-// The candidate pool for a given mode: switch mode filters out the active EDT; modify, delete and
-// create-from modes offer every EDT, active included (any EDT can be the root of a new one).
+// The candidate pool for a given mode: switch mode filters out the active EDT (the system "Shared
+// branches" EDT stays, being switchable); modify, delete and create-from modes offer every user EDT,
+// active included (any EDT can be the root of a new one) but never the read-only system EDT.
 export function resolveQuickPickCandidates(
   mode: QuickPickMode,
   edtsRows: readonly EdtRegistryEntry[],
@@ -33,7 +36,7 @@ export function resolveQuickPickCandidates(
   if (mode === 'switch') {
     return edtsRows.filter((entry) => entry.ulid !== activeEdtUlid);
   }
-  return [...edtsRows];
+  return edtsRows.filter((entry) => !isSystemEdt(entry));
 }
 
 // The pool as shared pick items: filtered and labelled by topic only (no secondary text),
@@ -107,11 +110,12 @@ export function createQuickPickDialogHandlers(deps: QuickPickDialogDeps) {
   return { handleQuickPickDialogInput };
 }
 
-export function QuickPickDialogView({ dialog, pool }: { dialog: QuickPickDialogState; pool: readonly EdtRegistryEntry[] }) {
+export function QuickPickDialogView({ dialog, pool, systemOnly = false }: { dialog: QuickPickDialogState; pool: readonly EdtRegistryEntry[]; systemOnly?: boolean }) {
   return (
     <ModalDialog title={QUICK_PICK_TITLE[dialog.mode]} open={true}>
       <Box flexDirection="column">
         {dialog.notFound !== null ? <ClampedParagraph color={colors.error} maxLines={4}>{`${dialog.notFound}`}</ClampedParagraph> : null}
+        {systemOnly && pool.length === 0 ? <ClampedParagraph color={colors.warning} maxLines={4}>{SYSTEM_EDT_NOTICE}</ClampedParagraph> : null}
         <FilterablePickList
           label="Filter"
           state={dialog}

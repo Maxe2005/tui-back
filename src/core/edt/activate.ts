@@ -15,6 +15,7 @@ import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result } from '../result.js';
 import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import { failed, resolveTargetBranch, type SwitchEdtRepoResult, type TargetBranchSpec } from './switch.js';
+import { memberTargetSpec } from './checkout-expected.js';
 
 export interface ActivateEdtParams {
   edtRegistry: EdtRegistryPort;
@@ -183,7 +184,7 @@ async function preflightRepo(
   let spec: TargetBranchSpec;
   if (found !== undefined) {
     service = found.service;
-    spec = { kind: 'member', branch: found.branch, edtUlid: ulid };
+    spec = memberTargetSpec(ulid, found.branch);
   } else {
     const loaded = await manifest.load(repoPath);
     if (!loaded.ok) {

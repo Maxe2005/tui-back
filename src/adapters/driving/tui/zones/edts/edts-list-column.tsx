@@ -17,6 +17,9 @@ export function EdtsListColumn({ c }: { c: EdtsZoneCtx }) {
     edtsLoading,
     edtsStatus,
     edtsRows,
+    userEdtCount,
+    focusedIsSystem,
+    focusedIsActive,
     clampedEdtsSelected,
     activeEdtUlid,
     dialogOpen,
@@ -47,7 +50,7 @@ export function EdtsListColumn({ c }: { c: EdtsZoneCtx }) {
         <Text color={paneFocus === 'edts' ? colors.accent : colors['text-dim']}>EDTS</Text>
         {edtsLoading ? <StateLine kind="loading" subject="EDTs" /> : null}
         {edtsStatus === 'error' ? <StateLine kind="error" subject="EDTs" retry /> : null}
-        {!edtsLoading && edtsStatus !== 'error' && edtsRows.length === 0 ? (
+        {!edtsLoading && edtsStatus !== 'error' && userEdtCount === 0 ? (
           <StateLine kind="empty" subject="EDTs" />
         ) : null}
         <BoundedList
@@ -71,7 +74,15 @@ export function EdtsListColumn({ c }: { c: EdtsZoneCtx }) {
           />
           )}
         />
-        {!dialogOpen ? <DimAnnotation text={formatHints([['Enter', 'switch/modify'], ['Tab', 'focus']])} /> : null}
+        {!dialogOpen ? (
+          <DimAnnotation
+            text={formatHints([
+              ['Enter', focusedIsSystem ? (focusedIsActive ? 'read-only' : 'switch') : 'switch/modify'],
+              ...(focusedIsSystem ? ([['f', 'fast-forward']] as const) : []),
+              ['Tab', 'focus'],
+            ])}
+          />
+        ) : null}
         </>
         }
         second={

@@ -10,6 +10,7 @@ import { type CheckoutStep } from '../checkout-expected.js';
 import { MANIFEST_FILE } from '../manifest-carry.js';
 import { addMemberUnderLock } from '../modify.js';
 import { isProtectedBranch } from '../shared-branches.js';
+import { isSystemEdt } from '../shared-edt.js';
 import {
   failed,
   type ClassifiedSwitchRepo,
@@ -71,6 +72,23 @@ export async function resolveDirtyRepos(input: {
   }
 
   const policy = params.dirtyPolicy;
+
+  // The system EDT cannot receive adopted work (it is read-only and has no branch of its own to
+  // adopt onto): rejected before anything is touched. With it outgoing, every managed repo is a
+  // state-1 member, so dirty work is auto-stashed — "stash or discard only" holds.
+  if (outgoing !== undefined && isSystemEdt(outgoing)) {
+    const dirtyPaths = new Set(dirtyRows.map((row) => row.repoPath));
+    const adoptRequested =
+      (policy?.kind === 'adopt' && dirtyRows.length > 0) ||
+      [...resolutions].some(([repoPath, resolution]) => resolution.kind === 'adopt' && dirtyPaths.has(repoPath));
+    if (adoptRequested) {
+      return err(
+        'switch-adopt-unavailable',
+        `Cannot adopt uncommitted changes into "${outgoing.topic}": it is a system EDT. Stash (the default) or discard them (--discard-dirty) instead. Nothing was touched.`,
+      );
+    }
+  }
+
   if (policy !== undefined) {
     if (policy.kind === 'adopt' && outgoing === undefined && needingResolution.length > 0) {
       return err(
@@ -163,6 +181,9 @@ async function describeDirtyRepo(
     protectedBranches: loaded.ok ? (loaded.data.protectedBranches ?? []) : [],
     owningEdtTopics: repo.owningTopics,
   };
+  if (outgoing !== undefined && isSystemEdt(outgoing)) {
+    row.adoptUnavailable = true;
+  }
   const everyDirtyPath = await git.listDirtyPaths(repo.repoPath);
   if (everyDirtyPath.ok && everyDirtyPath.data.includes(MANIFEST_FILE)) {
     row.manifestCarried = true;
@@ -188,6 +209,8 @@ type DirtyPlan =
 // The executed plan's effect, carried to the checkout step.
 export interface Prepared {
   outcome: 'switched' | 'adopted' | 'discarded';
+  // True when the dirty plan was `none` (the working tree was left untouched).
+  untouched: boolean;
   // The outgoing-tagged stash this repo's work sits in, when one was created by this switch.
   stashTag?: string;
   adoptedInto?: EdtRegistryEntry;
@@ -260,14 +283,14 @@ export async function executeDirtyPlan(
   const { git } = context;
   switch (plan.kind) {
     case 'none':
-      return { ok: true, value: { outcome: 'switched' } };
+      return { ok: true, value: { outcome: 'switched', untouched: true } };
     case 'stash': {
       const tag = stashMessage(plan.outgoingUlid);
       const stashed = await git.stashSave(repoPath, tag);
       if (!stashed.ok) {
         return { ok: false, row: failed(service, stashed.error) };
       }
-      return { ok: true, value: { outcome: 'switched', stashTag: tag } };
+      return { ok: true, value: { outcome: 'switched', stashTag: tag, untouched: false } };
     }
     case 'discard': {
       const captured = await git.listDirtyPaths(repoPath, { expandUntracked: true });
@@ -275,7 +298,7 @@ export async function executeDirtyPlan(
         return { ok: false, row: failed(service, captured.error) };
       }
       if (captured.data.length === 0) {
-        return { ok: true, value: { outcome: 'switched' } };
+        return { ok: true, value: { outcome: 'switched', untouched: false } };
       }
       if (plan.confirmedPaths !== undefined) {
         const confirmed = new Set(plan.confirmedPaths);
@@ -308,7 +331,7 @@ export async function executeDirtyPlan(
           },
         };
       }
-      return { ok: true, value: { outcome: 'discarded', discardedPaths: captured.data } };
+      return { ok: true, value: { outcome: 'discarded', discardedPaths: captured.data, untouched: false } };
     }
     case 'adopt':
       return adoptDirtyWork(context, service, repoPath, plan.outgoing, plan.branch);
@@ -366,7 +389,7 @@ async function adoptDirtyWork(
     return { ok: false, row: await restoreAndFail(git, service, repoPath, tag, registered.error, note) };
   }
 
-  return { ok: true, value: { outcome: 'adopted', stashTag: tag, adoptedInto: outgoing, adoptedBranch: branch } };
+  return { ok: true, value: { outcome: 'adopted', untouched: false, stashTag: tag, adoptedInto: outgoing, adoptedBranch: branch } };
 }
 
 // Restores the stash this switch just created (onto the branch the repo still sits on) and

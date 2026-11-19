@@ -2,6 +2,7 @@
 // issue summary, clamped cursors, the EDT-membership partition, the terminal-rows budgets for the
 // lists / wizard / switch resolution tables, and the loading flags.
 import { useWindowSize } from 'ink';
+import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { autoStashedRepos } from './dialogs/switch-resolution/switch-resolution.logic.js';
@@ -30,7 +31,7 @@ const CREATE_WIZARD_CHROME_ROWS = 17;
 const SWITCH_RESOLUTION_CHROME_ROWS = 17;
 
 export function useEdtsDerived(s: EdtsState) {
-  const { services, status, unreachable, errors, edts, edtsStatus, switchDirtyRepos, edtServicesSelected, otherServicesSelected, edtsSelected, dialog } = s;
+  const { services, status, unreachable, errors, edts, edtsStatus, switchDirtyRepos, edtServicesSelected, otherServicesSelected, edtsSelected, dialog, paneFocus, activeEdtUlid } = s;
   // On a load error show only the error — never stale rows left over from an earlier successful
   // load, nor the detail pane content that would still reference them.
   const rows = status === 'error' ? [] : (services ?? []);
@@ -42,6 +43,20 @@ export function useEdtsDerived(s: EdtsState) {
   const edtsRows = edtsStatus === 'error' ? [] : (edts ?? []);
   const clampedEdtsSelected = edtsRows.length === 0 ? 0 : Math.min(edtsSelected, edtsRows.length - 1);
   const focusedEdt: EdtRegistryEntry | undefined = edtsRows[clampedEdtsSelected];
+
+  // "Empty" means no user EDT: the system EDT alone must still auto-open the create wizard.
+  const userEdtCount = edtsRows.filter((entry) => !isSystemEdt(entry)).length;
+  // The focused EDT is the read-only system "Shared branches" one: Enter switches to it (unless it
+  // is already active); every other action key explains the read-only rule instead.
+  const focusedIsSystem = isSystemEdt(focusedEdt);
+  const focusedIsActive = focusedEdt !== undefined && focusedEdt.ulid === activeEdtUlid;
+  const systemEdtFooter: 'switch' | 'readonly' | 'fast-forward' | null = !focusedIsSystem
+    ? null
+    : paneFocus === 'edts'
+      ? focusedIsActive
+        ? 'fast-forward'
+        : 'switch'
+      : 'readonly';
 
   const candidates = rows; // the flat services list doubles as the create/modify candidate pool
   const candidateState = resolveCandidateListState(status, candidates.length);
@@ -86,6 +101,10 @@ export function useEdtsDerived(s: EdtsState) {
     edtsRows,
     clampedEdtsSelected,
     focusedEdt,
+    userEdtCount,
+    focusedIsSystem,
+    focusedIsActive,
+    systemEdtFooter,
     candidates,
     candidateState,
     edtServices,

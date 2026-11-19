@@ -9,7 +9,8 @@ const completionFixture = [
     usage:
       'tui-back edt create --topic <topic> [--create-branches]\n' +
       'tui-back edt switch --to <topic> [--force] (remark)\n' +
-      'tui-back edt delete <topic> [--branches x]',
+      'tui-back edt delete <topic> [--branches x]\n' +
+      'tui-back edt fast-forward-shared',
   },
   {
     name: 'registry',
@@ -25,7 +26,7 @@ describe('generateBashCompletion', () => {
   });
 
   it('completes verbs for edt and registry only', () => {
-    expect(script).toContain('edt) words="create switch delete" ;;');
+    expect(script).toContain('edt) words="create switch delete fast-forward-shared" ;;');
     expect(script).toContain('registry) words="clean validate" ;;');
     expect(script).not.toContain('register) words=');
   });
@@ -33,6 +34,7 @@ describe('generateBashCompletion', () => {
   it('scopes flags per verb and per command', () => {
     expect(script).toContain('"edt switch") words="--to --force"');
     expect(script).toContain('"edt create") words="--topic --create-branches"');
+    expect(script).toContain('"edt fast-forward-shared") words=""');
     expect(script).toContain('"registry clean") words="--yes --path"');
     expect(script).toContain('"register") words="--reset"');
   });

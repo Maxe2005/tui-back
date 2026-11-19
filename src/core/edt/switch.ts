@@ -14,6 +14,7 @@ import type { EdtRegistryEntry, EdtStatus } from '../ports/edt-registry.js';
 import type { Manifest } from '../ports/manifest.js';
 import { err, ok, type Result } from '../result.js';
 import { withCarriedManifest } from './manifest-carry.js';
+import { isSystemEdt } from './shared-edt.js';
 import { resolveDirtyRepos } from './switch/dirty.js';
 import { switchMemberRepo, switchNonMemberRepo } from './switch/member.js';
 import {
@@ -58,7 +59,9 @@ export function classifySwitchRepos(
     const repoPath = resolve(rawPath);
     const inOutgoing = outgoing !== undefined && hasMember(outgoing, repoPath);
     const owningTopics = edts
-      .filter((entry) => entry.ulid !== outgoing?.ulid && hasMember(entry, repoPath))
+      // The system EDT lists every repo, so it only counts as an owner when it IS the target
+      // (otherwise a non-member would read as "member of another EDT" because of it).
+      .filter((entry) => entry.ulid !== outgoing?.ulid && (!isSystemEdt(entry) || entry.ulid === target.ulid) && hasMember(entry, repoPath))
       .map((entry) => entry.topic);
     const state: SwitchRepoState = inOutgoing ? 1 : owningTopics.length > 0 ? 2 : 3;
     const found = target.members.find((candidate) => resolve(candidate.repoPath) === repoPath);

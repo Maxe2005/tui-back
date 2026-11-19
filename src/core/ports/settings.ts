@@ -62,6 +62,10 @@ export interface Settings {
     // many substring-matched branches render below the field before a `… N more` overflow
     // line. Applies live on every render; no per-service override.
     branchDropdownMaxRows: number;
+    // Opt-in preconfigured "Shared branches" EDT (FR-53): when on, the EDT registry synthesizes
+    // a read-only system entry putting every managed service on its manifest `sharedBranch`.
+    // Default off; never written to edts.yaml.
+    sharedBranchesEdtEnabled: boolean;
   };
   // The Logs zone's per-service in-memory ring-buffer size (core/logs/index.ts) — how many
   // lines each pane keeps from the live tail before dropping the oldest. Captured once per
@@ -149,7 +153,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Default true, for anyone who never opens :settings.
   general: { quitShortcutEnabled: true, editorCommand: '' },
   commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-  edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+  edts: { hiddenActionHints: [], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
   // filterHistorySize=20 covers a session's worth of committed filters per (scope, mode) list
   // without state.json growing unbounded; filterHistoryGridMaxRows=8 mirrors
   // commandPalette.gridMaxRows' default, unrelated as the two settings are.

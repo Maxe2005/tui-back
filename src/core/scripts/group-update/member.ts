@@ -23,6 +23,7 @@ import {
   resolveUnpushedCommits,
 } from "./blockers.js";
 import { resolveMidRunConflict } from "./conflict.js";
+import { isSystemEdt } from "../../edt/shared-edt.js";
 
 const OUTPUT_EXCERPT_LINES = 3;
 
@@ -175,6 +176,15 @@ export async function updateWithLoadedManifest(
   // (or pulling) whatever happens to be checked out would update the wrong line of work.
   // No git write and no restart below this point runs for this repo.
   if (expectedBranch !== undefined && current.data !== expectedBranch) {
+    // The system "Shared branches" EDT expects every repo on its shared branch; one checked out
+    // elsewhere since the switch is reported and skipped — never switched silently, never failed.
+    if (isSystemEdt(edtUlid)) {
+      return skipped(
+        service,
+        "not-on-shared-branch",
+        `Repo ${repoPath} is on branch "${current.data}", not on its shared branch "${expectedBranch}" — skipped, left untouched`,
+      );
+    }
     return {
       row: {
         service,

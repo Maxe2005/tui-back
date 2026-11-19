@@ -1,6 +1,8 @@
 // tui/zones/edts: remaining EDT dialog states and their initialisers.
 import type { ActivationBlockedRepo } from '../../../../../core/edt/activate.js';
 import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../core/edt/delete.js';
+import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
+import type { FastForwardSharedRow } from '../../../../../core/edt/fast-forward-shared.js';
 import type { SwitchEdtRepoResult } from '../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
@@ -56,7 +58,7 @@ export type SwitchDialogState = {
   // seam (initialized by the zone when `switchDirtyRepos` turns non-null).
   resolution: SwitchResolutionState | null;
   // An ok switch that adopted/discarded/failed anything keeps the dialog open on this per-repo
-  // summary (Enter/Esc close it); an all-`switched` run closes.
+  // summary (Enter/Esc close it); an all-`switched`/`unchanged` run closes.
   results?: SwitchEdtRepoResult[];
   // This switch's post-switch restart choice (FR-37). Undefined = inherit the
   // `switch.restartMode` setting (the dialog never writes it back); the create wizard's
@@ -266,6 +268,19 @@ export type QuickPickDialogState = {
   notFound: string | null;
 } & FilterablePickListState;
 
+// The "fast-forward the shared branches" quick action: running while the core call
+// is in flight, then the per-service rows (or a refusal) until Enter/Esc.
+export type FastForwardDialogState = {
+  kind: 'fast-forward-shared';
+  status: 'running' | 'done';
+  rows: FastForwardSharedRow[];
+  error: string | null;
+};
+
+export function initialFastForwardDialog(): FastForwardDialogState {
+  return { kind: 'fast-forward-shared', status: 'running', rows: [], error: null };
+}
+
 export type EdtDialogState =
   | { kind: 'none' }
   | CreateDialogState
@@ -275,7 +290,8 @@ export type EdtDialogState =
   | AddToEdtDialogState
   | DeleteDialogState
   | IssuesDialogState
-  | QuickPickDialogState;
+  | QuickPickDialogState
+  | FastForwardDialogState;
 
 export function initialIssuesDialog(): IssuesDialogState {
   return { kind: 'issues' };
@@ -288,7 +304,9 @@ export function initialQuickPickDialog(mode: QuickPickMode, notFound: string | n
 // `seed` (edt-create-from's root EDT) pre-checks Step 2 with its members, in root order; Step 3's
 // per-row seeding happens on entering it (wizard.logic.ts's enterBranchStep), once the global
 // name is known. The topic always starts empty — never derived from the root.
-export function initialCreateDialog(seed?: EdtRegistryEntry): CreateDialogState {
+export function initialCreateDialog(rawSeed?: EdtRegistryEntry): CreateDialogState {
+  // The system EDT is never a template: a system seed is ignored (a blank wizard opens).
+  const seed = rawSeed !== undefined && isSystemEdt(rawSeed) ? undefined : rawSeed;
   return {
     kind: 'create',
     step: 1,

@@ -1,6 +1,6 @@
 // tui/zones/edts: use-edts-state — the EDTs zone's store selectors and local `useState`s. No
 // derivation, no effects: those live in the layers built on top.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AppStore } from '../../store/app-store.js';
 import { seedDialog, type InitialDialogKind } from './edts-zone.dialog-seed.js';
 import type { EdtDialogState, PaneFocus } from './edts-zone.logic.js';
@@ -21,6 +21,7 @@ export function useEdtsState(useStore: AppStore, initialPaneFocus: PaneFocus, in
   // The create wizard's Step 4 first-EDT activation.
   const activateEdtAction = useStore((state) => state.activateEdt);
   const switchEdtAction = useStore((state) => state.switchEdt);
+  const fastForwardSharedAction = useStore((state) => state.fastForwardShared);
   // The switch dirty-repo confirm seam (edt-slice.ts).
   const switchDirtyRepos = useStore((state) => state.switchDirtyRepos);
   const resolveSwitchDirtyRepos = useStore((state) => state.resolveSwitchDirtyRepos);
@@ -65,6 +66,17 @@ export function useEdtsState(useStore: AppStore, initialPaneFocus: PaneFocus, in
   const [edtServicesSelected, setEdtServicesSelected] = useState(0);
   const [otherServicesSelected, setOtherServicesSelected] = useState(0);
   const [dialog, setDialog] = useState<EdtDialogState>(() => seedDialog(initialDialogKind, useStore));
+  // Inline refusal shown when a blocked key (modify, rename, member edit, delete, create-from) is
+  // used on the system EDT; cleared by the next keypress.
+  const [readonlyNotice, setReadonlyNotice] = useState<string | null>(null);
+  // The zone may unmount while an async run (fast-forward) is in flight.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   return {
     services,
@@ -81,6 +93,7 @@ export function useEdtsState(useStore: AppStore, initialPaneFocus: PaneFocus, in
     createEdtAction,
     activateEdtAction,
     switchEdtAction,
+    fastForwardSharedAction,
     switchDirtyRepos,
     resolveSwitchDirtyRepos,
     runSwitchRestart,
@@ -115,6 +128,9 @@ export function useEdtsState(useStore: AppStore, initialPaneFocus: PaneFocus, in
     setOtherServicesSelected,
     dialog,
     setDialog,
+    readonlyNotice,
+    setReadonlyNotice,
+    mountedRef,
   };
 }
 

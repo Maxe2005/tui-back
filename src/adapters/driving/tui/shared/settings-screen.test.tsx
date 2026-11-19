@@ -309,6 +309,16 @@ describe('SettingsScreen branch-dropdown-rows group (branch autocomplete shared 
     expect(output).toContain('Branch dropdown rows');
   });
 
+  it('renders the shared-branches switch row, unchecked by default and checked when enabled', async () => {
+    const store = createAppStore();
+    const off = await renderToString(<SettingsScreen useStore={store} initialTab="edts" />);
+    expect(off).toContain('Show the shared-branches EDT');
+    expect(off).toContain('Adds the system "Shared branches" EDT');
+    store.setState({ settings: { ...DEFAULT_SETTINGS, edts: { ...DEFAULT_SETTINGS.edts, sharedBranchesEdtEnabled: true } } });
+    const on = await renderToString(<SettingsScreen useStore={store} initialTab="edts" />);
+    expect(on).not.toBe(off);
+  });
+
   it('drilled into "Branch dropdown rows", renders the live value with its adjust hint', async () => {
     const store = createAppStore();
     store.setState({
@@ -474,7 +484,7 @@ describe('SettingsScreen', () => {
   it('reflects hidden hints from the store for the EDTs tab data path', () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false } },
     });
     expect(store.getState().settings.edts.hiddenActionHints).toEqual(['edt-services']);
   });
@@ -482,7 +492,7 @@ describe('SettingsScreen', () => {
   it('reflects hidden action types from the store for the EDTs tab data path', () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false } },
     });
     expect(store.getState().settings.edts.hiddenActionTypes).toEqual(['modify']);
   });
@@ -594,7 +604,7 @@ describe('SettingsScreen', () => {
   it('drilled into "Hint visibility", renders every hideable hint as a checkbox row, checked where hidden', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: ['edt-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false } },
     });
     const output = await renderToString(
       <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="hint-visibility" />,
@@ -612,7 +622,7 @@ describe('SettingsScreen', () => {
   it('drilled into "Recent action types", renders create/switch/modify as a checkbox row, checked where hidden', async () => {
     const store = createAppStore();
     store.setState({
-      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 } },
+      settings: { ...DEFAULT_SETTINGS, edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false } },
     });
     const output = await renderToString(
       <SettingsScreen useStore={store} initialTab="edts" initialEdtsGroup="action-types" />,
@@ -765,6 +775,7 @@ describe('settingsFooterContext', () => {
     expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'grid-max-rows' })).toBe('settings-adjust');
     expect(settingsFooterContext('command-palette', { ...closed, paletteGroup: 'history-dedup' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', closed)).toBe('settings-groups');
+    expect(settingsFooterContext('edts', { ...closed, edtsToggleRow: true })).toBe('settings-groups-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'hint-visibility' })).toBe('settings-toggle');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'branch-dropdown-rows' })).toBe('settings-adjust');
     expect(settingsFooterContext('edts', { ...closed, edtsGroup: 'switch-restart' })).toBe('settings-toggle');
