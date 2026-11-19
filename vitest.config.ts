@@ -9,6 +9,9 @@ export default defineConfig({
     // Render assertions match plain text; a FORCE_COLOR/COLORTERM in the caller's shell would
     // wrap it in ANSI codes and split the expected strings.
     env: { FORCE_COLOR: '0', NO_COLOR: '1' },
+    // The black-box e2e files spawn the real binary and git; split across files they run in
+    // parallel workers, so a loaded machine can push a multi-spawn case past the 5s default.
+    testTimeout: 20_000,
     exclude: [...configDefaults.exclude, '.claude/**'],
   },
 });

@@ -165,6 +165,7 @@ export function ResetScreen({ useStore = useAppStore, onClose = () => {}, initia
       backgroundColor={colors.surface}
       borderColor={colors.error}
       borderStyle="double"
+      flexShrink={0}
       padding={spacing['1']}
       flexDirection="column"
     >
