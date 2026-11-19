@@ -60,7 +60,7 @@ development_status:
   epic-13-retrospective: optional
 
   epic-14: in-progress
-  14-1-directory-audit-and-target-tree: review
+  14-1-directory-audit-and-target-tree: done
   14-2-reorganize-shared-components-and-shared: backlog
   14-3-reorganize-store-slices-and-zone-folders: backlog
   14-4-reorganize-core-folders: backlog

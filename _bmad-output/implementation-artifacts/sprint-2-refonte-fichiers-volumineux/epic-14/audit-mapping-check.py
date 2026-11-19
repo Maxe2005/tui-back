@@ -56,6 +56,20 @@ sh=[
  (r'(repo-registry-screen|reset-screen|settings-screen|screens)[.\-a-z]*','screens'),
 ]
 g_sh=section(T+'/shared','14.2',sh)
+# ---- settings
+st=[(r'(edts|general|logs|palette|services|shared-types|update)(-tab|\.logic)\.tsx?','@tab'),(r'footer-context\.logic\.ts|settings-tabs\.logic\.ts','.')]
+g_st=collections.OrderedDict()
+for n in direct(T+'/shared/settings'):
+    m=re.fullmatch(r'(edts|general|logs|palette|services|shared-types|update)(-tab|\.logic)\.tsx?',n)
+    g_st.setdefault(m.group(1) if m else '.',[]).append(n)
+assert all(len(v)==2 for k,v in g_st.items() if k!='.') and len(g_st)==8
+# ---- tui root
+tr=[
+ (r'app-shell\.tsx|single-instance[.a-z]*','.'),
+ (r'app-shell\.(test-support\.tsx|test\.tsx|bounds\.test\.tsx|resize\.test\.tsx|alternate-screen\.test\.tsx|footer\.test\.tsx)','app-shell-tests'),
+ (r'app-shell\.(command-bar|load-activation|navigation|overlays|reset|settings)\.test\.tsx','app-shell-tests/flows'),
+]
+g_tr=section(T,'14.5',tr)
 # ---- hooks (poll folded in)
 hk=[(r'.*','.')]
 g_hk=section(T+'/shared/hooks','14.2',hk)
@@ -203,6 +217,8 @@ pass
 for t,d,st,g,nt in [
  ('', T+'/shared/components','14.2',g_comp,'Role-based. `json-tree/` (10 files) already exists and stays. `index.ts` is an existing barrel: only its internal `./x.js` paths change (not a new shim).'),
  ('', T+'/shared','14.2',g_sh,'`@components/pickers` = moves to `shared/components/pickers/` (it is imported by `branch-picker.tsx` and by the create-wizard). `poll/` (2 files: `in-flight-guard.ts`, `in-flight-guard.test.ts`) additionally moves into `shared/hooks/` (14.2) so `shared` ends at 10 subdirectories (screens, bounds, components, hooks, input-history, keys, scrollable-output, settings, test-support, theme).'),
+ ('', T+'/shared/settings','14.2',g_st,'One folder per tab (7), each holding the tab view and its logic. No tab has a test file today; any future `<tab>.*.test.ts(x)` goes in the same folder. `settings-screen.tsx` (moved to `shared/screens/` by this story) imports `../settings/<tab>/<file>.js`.'),
+ ('', T,'14.5',g_tr,'Root keeps `app-shell.tsx` and `single-instance.*` (3 files). Test files go to a dedicated `app-shell-tests/` folder (12 files in total, so split in two to stay at 10 or fewer). `app-shell.tsx` itself does not move, so `bin/tui.ts` and the importers `../../app-shell.js` (`zones/dashboard/dashboard-zone.bounds.test.tsx`, `shared/bounds/bounds-matrix.test.tsx`; `terminal-view.interaction.test.tsx` gains one level in 14.2) keep working.'),
  ('', T+'/shared/hooks','14.2',g_hk,'Not a split: listed to prove the `poll/` fold-in (5 existing + 2 moved = 7 files, no name collision: `in-flight-guard.ts`, `in-flight-guard.test.ts` do not exist in `hooks/`).'),
  ('', T+'/store/slices','14.3',g_sl,'One folder per domain. `update-slice.*` is 13 files, so it is split again by concern.'),
  ('', T+'/zones/update','14.3',g_upd,''),

@@ -1,6 +1,6 @@
 # Directory audit and target tree (story 14.1)
 
-Status: **proposal, awaiting user approval** (14.2 must not start before). Documentation only: no file under `src/` was touched.
+Status: **approved by user 2026-11-19** (all 7 decisions; two were changed from the first proposal: `shared/settings` and the `tui` root are now split, not kept flat). 14.2 may start. Documentation only: no file under `src/` was touched.
 
 Counts come from `git ls-files src` at baseline `012b9465` (730 tracked files, tests included), after epics 12 and 13. "Files" = direct files of the directory; "Subdirs" = direct subdirectories. Threshold: more than 10 of either.
 
@@ -12,7 +12,7 @@ The counts differ from the sprint-start audit in the epic context (e.g. `slices`
 |---|---|---|---|---|
 | `src/adapters/driving/tui/shared/components` | 66 | 1 | **split** by role into 8 folders | 14.2 |
 | `src/adapters/driving/tui/shared` | 28 | 10 | **split** (screens group) + fold `poll/` into `hooks/` | 14.2 |
-| `src/adapters/driving/tui/shared/settings` | 16 | 0 | **keep flat** (Ask First 1, section 5) | 14.2 |
+| `src/adapters/driving/tui/shared/settings` | 16 | 0 | **split**: one folder per tab (7) | 14.2 |
 | `src/adapters/driving/tui/store/slices` | 50 | 0 | **split** by domain (7 folders, `update/` nested) | 14.3 |
 | `src/adapters/driving/tui/zones/update` | 45 | 0 | **split** by concern (6 folders) | 14.3 |
 | `src/adapters/driving/tui/zones/logs` | 40 | 0 | **split** by concern (5 folders) | 14.3 |
@@ -30,11 +30,11 @@ The counts differ from the sprint-start audit in the epic context (e.g. `slices`
 | `src/adapters/driving/cli` | 15 | 1 | **split** (dispatch group) | 14.5 |
 | `src/adapters/driving/cli/commands` | 15 | 0 | **split** (edt group) | 14.5 |
 | `src/bin` | 15 | 0 | **split** (move e2e tests to `e2e/`) | 14.5 |
-| `src/adapters/driving/tui` | 15 | 5 | **keep flat** (Ask First 1, section 5) | n/a |
+| `src/adapters/driving/tui` | 15 | 5 | **split**: app-shell tests to `app-shell-tests/` | 14.5 |
 
 Directories left as is: everything not in the table above is at or under 10 files and 10 subdirs. Exactly 10 files before the audit (not over, kept): `shared/components/json-tree`, `zones/shared-types`, `shared/keys`. `core/scripts/group-update` (10 files) is not "kept": it is regrouped (moved down into `group-update/steps/`, see section 4).
 
-After the proposal every directory is at most 10 files and 10 subdirs, except `shared/settings` (16 files) and the `tui` root (15 files), both kept flat on purpose (Ask First 1). Resulting folders at exactly 10 files: `components/lists`, `slices/logs`, `core/edt/lifecycle`, `core/edt/switch` (3 existing + 7 moved), `core/scripts/group-update`, `core/scripts/group-update/steps`, `core/scripts/registry`, `cli/dispatch`, `bin/e2e`, `components/pickers` (8 + 2). At 9: `components/layout`, `shared/screens`, `zones/edts/logic`, `zones/logs/panes`, `zones/routes/panes`, `zones/update/services`.
+After the proposal every directory is at most 10 files and 10 subdirs (checked by the mapping script). Resulting folders at exactly 10 files: `components/lists`, `slices/logs`, `core/edt/lifecycle`, `core/edt/switch` (3 existing + 7 moved), `core/scripts/group-update`, `core/scripts/group-update/steps`, `core/scripts/registry`, `cli/dispatch`, `bin/e2e`, `components/pickers` (8 + 2). `tui` root ends with 3 files (`app-shell.tsx`, `single-instance.ts`, `single-instance.test.ts`) and 6 subdirs; `shared/settings` ends with 2 root files and 7 subdirs of 2 files each. At 9: `components/layout`, `shared/screens`, `zones/edts/logic`, `zones/logs/panes`, `zones/routes/panes`, `zones/update/services`.
 
 `tui/shared` subdirectories, before (10): `bounds, components, hooks, input-history, keys, poll, scrollable-output, settings, test-support, theme`. After (10): the same minus `poll` (folded into `hooks/`) plus `screens` (itself holding `command-bar/`, `terminal-view/`, `dialogs/`).
 
@@ -51,7 +51,9 @@ After the proposal every directory is at most 10 files and 10 subdirs, except `s
 tui/shared/
   components/{inputs,pickers,lists,dialogs,layout,chrome,feedback,display,json-tree}/  (+ index.ts, ink-smoke.test.tsx, render-to-string.ts)
   screens/{command-bar,terminal-view,dialogs}/  (+ 9 screen files)
-  hooks/ (absorbs poll/)  bounds/  input-history/  keys/  scrollable-output/  settings/  test-support/  theme/
+  hooks/ (absorbs poll/)  bounds/  input-history/  keys/  scrollable-output/  test-support/  theme/
+  settings/{edts,general,logs,palette,services,shared-types,update}/  (+ footer-context.logic.ts, settings-tabs.logic.ts)
+tui/ root: app-shell.tsx, single-instance.*, app-shell-tests/{flows}/
 tui/store/slices/{logs,update/{config,health,run},shared-types,terminal,maintenance,workspace,app}/
 tui/zones/update/{hooks,config,incidents,services,report,logic}/
 tui/zones/logs/{hooks,keys,filters,panes,logic}/
@@ -119,6 +121,31 @@ Role-based. `json-tree/` (10 files) already exists and stays. `index.ts` is an e
 | `screens/command-bar/` | `command-bar.history.interaction.test.tsx`, `command-bar.test.tsx`, `command-bar.tsx`, `command-grid.logic.ts` | 4 |
 | `screens/dialogs/` | `heal-dialog.interaction.test.tsx`, `heal-dialog.logic.ts`, `heal-dialog.test.tsx`, `heal-dialog.tsx`, `realign-dialog.interaction.test.tsx`, `realign-dialog.logic.ts`, `realign-dialog.test.tsx`, `realign-dialog.tsx` | 8 |
 | `screens/terminal-view/` | `terminal-view.interaction.test.tsx`, `terminal-view.logic.test.ts`, `terminal-view.logic.ts`, `terminal-view.tsx` | 4 |
+
+### `src/adapters/driving/tui/shared/settings` — 16 files (= `git ls-files` direct-file count, non-code files included) → story 14.2
+
+One folder per tab (7), each holding the tab view and its logic. No tab has a test file today; any future `<tab>.*.test.ts(x)` goes in the same folder. `settings-screen.tsx` (moved to `shared/screens/` by this story) imports `../settings/<tab>/<file>.js`.
+
+| Target folder (under this directory) | Files | Count |
+|---|---|---|
+| `.` (stays in place) | `footer-context.logic.ts`, `settings-tabs.logic.ts` | 2 |
+| `edts/` | `edts-tab.tsx`, `edts.logic.ts` | 2 |
+| `general/` | `general-tab.tsx`, `general.logic.ts` | 2 |
+| `logs/` | `logs-tab.tsx`, `logs.logic.ts` | 2 |
+| `palette/` | `palette-tab.tsx`, `palette.logic.ts` | 2 |
+| `services/` | `services-tab.tsx`, `services.logic.ts` | 2 |
+| `shared-types/` | `shared-types-tab.tsx`, `shared-types.logic.ts` | 2 |
+| `update/` | `update-tab.tsx`, `update.logic.ts` | 2 |
+
+### `src/adapters/driving/tui` — 15 files (= `git ls-files` direct-file count, non-code files included) → story 14.5
+
+Root keeps `app-shell.tsx` and `single-instance.*` (3 files). Test files go to a dedicated `app-shell-tests/` folder (12 files in total, so split in two to stay at 10 or fewer). `app-shell.tsx` itself does not move, so `bin/tui.ts` and the importers `../../app-shell.js` (`zones/dashboard/dashboard-zone.bounds.test.tsx`, `shared/bounds/bounds-matrix.test.tsx`; `terminal-view.interaction.test.tsx` gains one level in 14.2) keep working.
+
+| Target folder (under this directory) | Files | Count |
+|---|---|---|
+| `.` (stays in place) | `app-shell.tsx`, `single-instance.test.ts`, `single-instance.ts` | 3 |
+| `app-shell-tests/` | `app-shell.alternate-screen.test.tsx`, `app-shell.bounds.test.tsx`, `app-shell.footer.test.tsx`, `app-shell.resize.test.tsx`, `app-shell.test-support.tsx`, `app-shell.test.tsx` | 6 |
+| `app-shell-tests/flows/` | `app-shell.command-bar.test.tsx`, `app-shell.load-activation.test.tsx`, `app-shell.navigation.test.tsx`, `app-shell.overlays.test.tsx`, `app-shell.reset.test.tsx`, `app-shell.settings.test.tsx` | 6 |
 
 ### `src/adapters/driving/tui/shared/hooks` — 7 files (= `git ls-files` direct-file count, non-code files included) → story 14.2
 
@@ -279,7 +306,7 @@ Existing `switch-resolution/` (4 files) stays as a sibling.
 
 ### `src/bin` — 15 files (= `git ls-files` direct-file count, non-code files included) → story 14.5
 
-Non-pure edits for the e2e files: see "5.1 Non-pure edits".
+See section 5 for the two non-pure edits needed in the e2e files.
 
 | Target folder (under this directory) | Files | Count |
 |---|---|---|
@@ -292,9 +319,7 @@ Non-pure edits for the e2e files: see "5.1 Non-pure edits".
 
 ## 5. Ask First: decisions needed before 14.2
 
-1. **Keep flat despite counts.**
-   - `tui/shared/settings` (16 files): seven `<tab>-tab.tsx` / `<tab>.logic.ts` pairs plus `footer-context.logic.ts` and `settings-tabs.logic.ts`. Any split would be alphabetical, or would separate a tab from its logic and break co-location. Proposed: keep. (Alternative if rejected: `tabs-a/`, `tabs-b/`; not recommended.)
-   - `tui` root (15 files): 12 are `app-shell.*.test.tsx` produced by the epic 13 split, plus `app-shell.tsx`, `app-shell.test-support.tsx`, `single-instance.*`. An `app-shell/` folder would itself hold 13 files. Proposed: keep.
+1. **Keep flat: resolved.** The first proposal kept `shared/settings` and the `tui` root flat; the user rejected both. `shared/settings` is split into one folder per tab (14.2) and the app-shell tests move to `app-shell-tests/` (14.5), both in the mapping.
 2. **Port paths change (names do not).** `core/ports/<port>.ts` becomes `core/ports/<group>/<port>.ts` (all ~100 import sites updated in 14.4). Interface and type names stay exported unchanged, as the epic requires. Alternative: keep `core/ports` flat at 20 files. If approved as proposed, say so explicitly because the epic wording "stay importable under their current names" could also be read as a path guarantee.
 3. **Non-pure edits** beyond import specifiers: approve the table in "5.1 Non-pure edits" below.
 4. **No renaming** of any file or folder already existing is proposed. New folder names are listed above; confirm or amend them before 14.2.
@@ -322,7 +347,12 @@ Found by grepping `import.meta.url`, `new URL(`, `readFileSync`, `file:`/path al
 | 14.5 | `bin/e2e/install-sh.e2e.test.ts` | `'../../install.sh'`, `'../../package.json'` and the `npm pack` `cwd` `'../../'` each gain one `../` (`'../../../'`) |
 | 14.5 | `bin/mcp.ts`, `adapters/driving/mcp/tool-registry.test.ts` | none (do not move); they read `package.json`/`README.md` by fixed depth from directories that stay |
 | 14.4 | `core/scripts/group-update/*.ts`, `group-update.ts` | `./group-update/x.js` -> `./steps/x.js`; `steps/*` imports gain one `../` |
+| 14.2 | `shared/screens/settings-screen.tsx` (moved from `shared/`) | its `./settings/<x>.js` imports and `export * from './settings/...logic.js'` become `../settings/<tab>/<x>.js` (footer-context stays `../settings/footer-context.logic.js`); the 7 tab files also gain `../` on imports of `shared/` modules. Importers of the re-exports (`settings-screen.js`) are updated for the new `screens/` path. `settings-tabs.logic.ts` and `footer-context.logic.ts` stay in `settings/` |
+| 14.5 | `app-shell-tests/*.test.tsx`, `app-shell.test-support.tsx` | `./app-shell.js` -> `../app-shell.js` (`../../app-shell.js` from `flows/`), every `./shared/...`, `./store/...`, `./zones/...` import gains one `../` (two from `flows/`); `flows/*` import the support as `../app-shell.test-support.js` |
+| 14.5 | importers of `app-shell.js` | none to change: `bin/tui.ts`, `zones/dashboard/dashboard-zone.bounds.test.tsx`, `shared/bounds/bounds-matrix.test.tsx` keep their paths (`app-shell.tsx` does not move); `shared/terminal-view.interaction.test.tsx` only gains a level in 14.2 |
 | 14.2 | `shared/components/index.ts` | re-export paths gain the role folder |
+
+Guard allow-lists checked against the two new splits: `focus-navigation.guard.test.ts`, `hints.guard.test.ts` and `bounded-rendering.guard.test.ts` hold no `shared/settings` or `app-shell` entry (the bounded-rendering allow-list is empty). The only hard-coded path touched is `dialog-registry.tsx`'s `shared/settings-screen.tsx` -> `shared/screens/settings-screen.tsx` (14.2, already in its row).
 
 `src/bin/tui-back.mjs` is not moved. The sibling `tui-back.e2e.*.test.ts` that spawn it do so through `e2e.test-support.ts` `scriptPath`.
 
@@ -341,15 +371,15 @@ Found by grepping `import.meta.url`, `new URL(`, `readFileSync`, `file:`/path al
 - **Commits**: `typecheck` must pass at every commit, so each `git mv` commit includes the matching import fixes (and the 5.1 edits). "Moves first, edits second" means moves are not mixed with other changes, not that imports are fixed in a later commit.
 - **Role-assignment criteria** (ambiguous files): a file goes where its primary role is, judged by (1) what imports it most, (2) what it renders or computes, (3) co-location with its `.logic`/`.test`. `branch-owners-text` -> `pickers/` (helper of `branch-picker`, also used by the wizard). `hints.ts` -> `dialogs/` (static key hints shown by the help dialog and footers, tested next to `keybinding-help`). `text-edit.ts` -> `inputs/` (editing helper of `text-input-line`). `dev-auth` and `health-probe` ports -> `ports/runtime/` (they describe runtime service interaction, not persistence or VCS).
 
-### 5.4 Approval checklist (default = what this document proposes)
+### 5.4 Approval checklist (approved by user 2026-11-19)
 
-- [ ] Ask First 1: keep `shared/settings` flat: **yes**
-- [ ] Ask First 1: keep `tui` root flat: **yes**
-- [ ] Ask First 2: regroup `core/ports` (paths change, names do not): **yes**
-- [ ] Ask First 5: group `core` and `adapters/driven` into families: **yes**
-- [ ] New family and folder names (`core/{workspace,runtime,insight}`, `driven/{runtime,vcs,storage}`, `ports/{runtime,vcs,storage,modules}`, `components/{inputs,pickers,lists,dialogs,layout,chrome,feedback,display}`, `shared/screens`, `slices/{logs,update,shared-types,terminal,maintenance,workspace,app}`): **accept**
-- [ ] Fold `shared/poll/` into `shared/hooks/`: **yes**
-- [ ] Non-pure edits listed in 5.1: **accept**
+- [x] Ask First 1: do NOT keep `shared/settings` flat: split one folder per tab (**changed by user**, 14.2). Approved by user 2026-11-19
+- [x] Ask First 1: do NOT keep `tui` root flat: tests to `app-shell-tests/` (**changed by user**, 14.5). Approved by user 2026-11-19
+- [x] Ask First 2: regroup `core/ports` (paths change, names do not). Approved by user 2026-11-19
+- [x] Ask First 5: group `core` and `adapters/driven` into families. Approved by user 2026-11-19
+- [x] New family and folder names (`core/{workspace,runtime,insight}`, `driven/{runtime,vcs,storage}`, `ports/{runtime,vcs,storage,modules}`, `components/{inputs,pickers,lists,dialogs,layout,chrome,feedback,display}`, `shared/screens`, `slices/{logs,update,shared-types,terminal,maintenance,workspace,app}`). Approved by user 2026-11-19
+- [x] Fold `shared/poll/` into `shared/hooks/`. Approved by user 2026-11-19
+- [x] Non-pure edits listed in 5.1. Approved by user 2026-11-19
 
 ### Overlaps between stories (flagged)
 
