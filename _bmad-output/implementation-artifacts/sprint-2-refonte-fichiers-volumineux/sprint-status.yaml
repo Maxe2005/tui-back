@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-12-2026 15:07
-last_updated: 2026-11-18
+last_updated: 2026-11-19
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -56,7 +56,7 @@ development_status:
   13-3-split-group-update-and-switch-tests: done
   13-4-split-app-shell-and-store-tests: done
   13-5-split-logs-zone-and-update-zone-tests: done
-  13-6-split-cli-e2e-and-git-tests: backlog
+  13-6-split-cli-e2e-and-git-tests: done
   epic-13-retrospective: optional
 
   epic-14: backlog
