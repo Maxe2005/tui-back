@@ -71,3 +71,32 @@ Dispatch's single `subcommand registry guards` describe cannot be kept whole (~2
 - Totals 164 + 129 + 136 = 429; sorted title lists identical to the baseline (dispatch modulo the topic suffix). Largest produced test file: 568 lines; largest test-support: 200.
 - E2E wall time went from ~87s (one file) to ~43s (parallel files). Because the files now run in parallel, `vitest.config.ts` raises `testTimeout` to 20s: a loaded full run otherwise timed out a few multi-spawn cases.
 - Gates: `npm test`, typecheck and depcheck pass.
+
+## Suggested Review Order
+
+**Config change (only non-move edit)**
+
+- Suite-wide timeout raised because split e2e files now run in parallel workers.
+  [`vitest.config.ts:12`](../../../../vitest.config.ts#L12)
+
+**Shared test-support modules**
+
+- Git helpers and `cleanupTmpDirs`, reused by the e2e support.
+  [`git.test-support.ts:1`](../../../../src/adapters/driven/git/git.test-support.ts#L1)
+
+- CLI fakes and `buildTestSubcommands` shared by the dispatch topics.
+  [`dispatch.test-support.ts:1`](../../../../src/adapters/driving/cli/dispatch.test-support.ts#L1)
+
+- Binary runner and repo builders shared by the e2e topics.
+  [`e2e.test-support.ts:1`](../../../../src/bin/e2e.test-support.ts#L1)
+
+**Topic files (verbatim moves)**
+
+- Readline `vi.mock` kept only in the file that needs the TTY flow.
+  [`dispatch.registry.test.ts:1`](../../../../src/adapters/driving/cli/dispatch.registry.test.ts#L1)
+
+- Representative git operation-family file.
+  [`git.merge.test.ts:1`](../../../../src/adapters/driven/git/git.merge.test.ts#L1)
+
+- Representative e2e command-family file.
+  [`tui-back.e2e.edt-switch-delete.test.ts:1`](../../../../src/bin/tui-back.e2e.edt-switch-delete.test.ts#L1)
