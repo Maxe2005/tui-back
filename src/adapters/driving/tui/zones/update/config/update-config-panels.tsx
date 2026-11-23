@@ -8,7 +8,7 @@ import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js'
 import { BranchAutocompleteInput } from '../../../shared/components/inputs/branch-autocomplete-input.js';
 import { createSuggestFieldState, type SuggestFieldState } from '../../../shared/components/inputs/suggest-field.logic.js';
 import { colors } from '../../../shared/theme/theme.js';
-import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../../edts/dialogs/branch-plan-table.js';
+import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../../edts/dialogs/edt/branch-plan-table.js';
 import type { UpdateConfigDraft, UpdateConfigRow } from './update-config-dialog.logic.js';
 import {
   CONFIG_MIN_ROWS,

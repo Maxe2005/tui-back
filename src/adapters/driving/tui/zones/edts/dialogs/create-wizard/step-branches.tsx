@@ -9,7 +9,7 @@ import { TextInputLine } from '../../../../shared/components/inputs/text-input-l
 import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { BranchStepState, CreateDialogState, EdtDialogState } from '../../logic/edts-zone.logic.js';
-import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan-table.js';
+import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../edt/branch-plan-table.js';
 import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
 import { OverrideBoxView } from './override-box.js';
 import { buildStep3Rows, refreshSeededNames, type BranchCandidate, type RowView } from './wizard.logic.js';

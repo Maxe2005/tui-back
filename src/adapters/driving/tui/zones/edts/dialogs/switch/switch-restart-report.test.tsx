@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RestartRow } from '../../../../../../core/edt/switch/restart/switch-restart.js';
-import { renderToString } from '../../../shared/components/render-to-string.js';
+import type { RestartRow } from '../../../../../../../core/edt/switch/restart/switch-restart.js';
+import { renderToString } from '../../../../shared/components/render-to-string.js';
 import { describeRestartRow, describeRestartSummary, RESTART_PHASE_BADGES, SwitchRestartReport } from './switch-restart-report.js';
 
 const row = (phase: RestartRow['phase'], extra: Partial<RestartRow> = {}): RestartRow => ({ service: `s-${phase}`, repoPath: `/r/${phase}`, phase, ...extra });

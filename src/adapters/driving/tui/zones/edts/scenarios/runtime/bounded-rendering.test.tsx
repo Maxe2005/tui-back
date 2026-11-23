@@ -8,9 +8,9 @@ import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../../../../shared
 import { renderToString } from '../../../../shared/components/render-to-string.js';
 import { adversarialEdt, adversarialServices, failedRows, MULTILINE_ERROR } from '../../../../shared/test-support/dialog-registry.js';
 import { EdtsZone } from '../../edts-zone.js';
-import { IssuesDialogView } from '../../dialogs/issues-dialog.js';
-import { DeleteDialogView } from '../../dialogs/delete-dialog.js';
-import { FastForwardDialogView } from '../../dialogs/fast-forward-dialog.js';
+import { IssuesDialogView } from '../../dialogs/edt/issues-dialog.js';
+import { DeleteDialogView } from '../../dialogs/edt/delete-dialog.js';
+import { FastForwardDialogView } from '../../dialogs/actions/fast-forward-dialog.js';
 import { initialDeleteDialog } from '../../logic/edts-zone.logic.js';
 import { frameLines } from '../../../../shared/test-support/matrix.js';
 

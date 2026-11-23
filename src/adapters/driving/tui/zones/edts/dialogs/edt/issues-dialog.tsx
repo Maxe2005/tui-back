@@ -3,15 +3,15 @@
 // has no createXDialogHandlers factory (edts-zone.tsx's useInput closes it inline) — just a
 // view fed straight from the zone's store selectors.
 import { Box } from 'ink';
-import { useInput } from '../../../shared/hooks/use-input.js';
+import { useInput } from '../../../../shared/hooks/use-input.js';
 import { useState, type ReactNode } from 'react';
-import type { BranchDivergenceEntryError } from '../../../../../../core/edt/lifecycle/list.js';
-import { BoundedBlocks } from '../../../shared/components/lists/bounded-list.js';
-import { TruncatedText } from '../../../shared/components/display/truncated-text.js';
-import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
-import { colors } from '../../../shared/theme/theme.js';
-import { explainIssueErrorCode, explainUnreachable } from '../logic/edts-zone.logic.js';
-import { StateLine } from '../../../shared/components/feedback/state-line.js';
+import type { BranchDivergenceEntryError } from '../../../../../../../core/edt/lifecycle/list.js';
+import { BoundedBlocks } from '../../../../shared/components/lists/bounded-list.js';
+import { TruncatedText } from '../../../../shared/components/display/truncated-text.js';
+import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
+import { colors } from '../../../../shared/theme/theme.js';
+import { explainIssueErrorCode, explainUnreachable } from '../../logic/edts-zone.logic.js';
+import { StateLine } from '../../../../shared/components/feedback/state-line.js';
 
 export type IssuesDialogViewProps = {
   unreachable: readonly string[];

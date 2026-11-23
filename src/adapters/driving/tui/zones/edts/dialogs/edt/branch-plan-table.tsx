@@ -4,9 +4,9 @@
 // cells joined by ` │ `. Every cell is capped to BRANCH_MAX_WIDTH so no column can push the table
 // past the modal; a cell without its own color takes the row color.
 import { Box, Text } from 'ink';
-import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
-import { colors } from '../../../shared/theme/theme.js';
-import { BRANCH_MAX_WIDTH, truncateBranchLabel } from '../logic/edts-zone.logic.js';
+import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
+import { colors } from '../../../../shared/theme/theme.js';
+import { BRANCH_MAX_WIDTH, truncateBranchLabel } from '../../logic/edts-zone.logic.js';
 
 export function PanelTitle({ text, focused }: { text: string; focused: boolean }) {
   return (

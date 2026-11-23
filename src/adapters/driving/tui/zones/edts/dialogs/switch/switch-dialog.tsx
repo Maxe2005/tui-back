@@ -2,17 +2,17 @@
 // the dirty-service resolution view (switch-resolution/) shown while the core switch is parked
 // on the edt-slice seam, and a per-repo results summary kept open after an adopt/discard/failure.
 import { Box, Text, type Key } from 'ink';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
-import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../core/edt/switch/switch.js';
-import { isChangedSwitchOutcome, restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../core/edt/switch/restart/switch-restart.js';
-import { cycleSwitchRestartMode } from '../../../../../../core/ports/storage/settings.js';
-import type { AppState } from '../../../store/app-store.js';
-import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
-import { FailedResultList } from '../../../shared/components/lists/failed-result-list.js';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/storage/edt-registry.js';
+import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch/switch.js';
+import { isChangedSwitchOutcome, restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../../core/edt/switch/restart/switch-restart.js';
+import { cycleSwitchRestartMode } from '../../../../../../../core/ports/storage/settings.js';
+import type { AppState } from '../../../../store/app-store.js';
+import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';
+import { FailedResultList } from '../../../../shared/components/lists/failed-result-list.js';
 import { SwitchRestartReport } from './switch-restart-report.js';
-import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
-import { RestartModeSelector } from '../../../shared/components/pickers/restart-mode-selector.js';
-import { colors } from '../../../shared/theme/theme.js';
+import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
+import { RestartModeSelector } from '../../../../shared/components/pickers/restart-mode-selector.js';
+import { colors } from '../../../../shared/theme/theme.js';
 import {
   initialSwitchDialog,
   isSwitchBlockedError,
@@ -20,11 +20,11 @@ import {
   summarizeFailedResults,
   type EdtDialogState,
   type SwitchDialogState,
-} from '../logic/edts-zone.logic.js';
-import { SwitchResolutionView } from './switch-resolution/switch-resolution-view.js';
-import { describeSwitchForLog, needsResultsView, reduceSwitchResolutionKey } from './switch-resolution/switch-resolution.logic.js';
-import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
-import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
+} from '../../logic/edts-zone.logic.js';
+import { SwitchResolutionView } from '../switch-resolution/switch-resolution-view.js';
+import { describeSwitchForLog, needsResultsView, reduceSwitchResolutionKey } from '../switch-resolution/switch-resolution.logic.js';
+import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 
 export type SwitchDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

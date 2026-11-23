@@ -11,7 +11,7 @@ import { healthCheckEnabledFrom } from '../../../../../../core/ports/storage/set
 import type { Result } from '../../../../../../core/result.js';
 import { createServiceActions, type RestartMode, type ServiceActions } from '../../../../../../core/service-actions/index.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
-import { describeRestartSummary } from '../../../zones/edts/dialogs/switch-restart-report.js';
+import { describeRestartSummary } from '../../../zones/edts/dialogs/switch/switch-restart-report.js';
 
 export const HEAL_NOTICE_TIMEOUT_MS = 5000;
 export const HEAL_BUSY_MESSAGE = 'A service restart is already in progress — wait for it to finish before healing.';

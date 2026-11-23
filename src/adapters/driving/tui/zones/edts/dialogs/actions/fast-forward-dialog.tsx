@@ -3,13 +3,13 @@
 // BoundedList so any number of services stays inside the terminal. Running: nothing to press.
 // Done: Enter/Esc close it (the zone's useInput handles keys, like the issues dialog).
 import { Box } from 'ink';
-import type { FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
-import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
-import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
-import { StateLine } from '../../../shared/components/feedback/state-line.js';
-import { TruncatedText } from '../../../shared/components/display/truncated-text.js';
-import { colors } from '../../../shared/theme/theme.js';
-import type { FastForwardDialogState } from '../logic/edts-zone.logic.js';
+import type { FastForwardSharedRow } from '../../../../../../../core/edt/branches/fast-forward-shared.js';
+import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
+import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
+import { StateLine } from '../../../../shared/components/feedback/state-line.js';
+import { TruncatedText } from '../../../../shared/components/display/truncated-text.js';
+import { colors } from '../../../../shared/theme/theme.js';
+import type { FastForwardDialogState } from '../../logic/edts-zone.logic.js';
 
 type Badge = { glyph: string; color: string; label: string };
 

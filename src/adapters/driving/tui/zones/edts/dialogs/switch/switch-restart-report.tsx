@@ -3,12 +3,12 @@
 // summary with the non-green services first. Glyph AND colour per phase, never colour alone; the
 // glyph set extends the Update zone's (↻ restarting, ⣾ in progress, ✖ failed, ○ down).
 import { Box, Text } from 'ink';
-import { orderRestartRows, summarizeRestartRows, type RestartRow, type RestartRowPhase } from '../../../../../../core/edt/switch/restart/switch-restart.js';
-import type { AppState } from '../../../store/app-store.js';
-import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
-import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
-import { STATUS_BADGES } from '../../../shared/components/feedback/status-badge.js';
-import { colors } from '../../../shared/theme/theme.js';
+import { orderRestartRows, summarizeRestartRows, type RestartRow, type RestartRowPhase } from '../../../../../../../core/edt/switch/restart/switch-restart.js';
+import type { AppState } from '../../../../store/app-store.js';
+import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
+import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';
+import { STATUS_BADGES } from '../../../../shared/components/feedback/status-badge.js';
+import { colors } from '../../../../shared/theme/theme.js';
 
 type Badge = { glyph: string; color: string; label: string };
 

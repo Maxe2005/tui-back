@@ -2,13 +2,13 @@
 // factory under dialogs/ (plain functions, no hooks: they close over this render's values, the
 // deps object is recreated every render) plus the Enter-on-EDT opener.
 import type { AppStore } from '../../../store/app-store.js';
-import { createAddToEdtDialogHandlers } from '../dialogs/add-to-edt-dialog.js';
+import { createAddToEdtDialogHandlers } from '../dialogs/edt/add-to-edt-dialog.js';
 import { createCreateWizardHandlers } from '../dialogs/create-wizard/create-wizard.js';
-import { createDeleteDialogHandlers } from '../dialogs/delete-dialog.js';
-import { createModifyDialogHandlers } from '../dialogs/modify-dialog.js';
-import { createQuickPickDialogHandlers } from '../dialogs/quick-pick-dialog.js';
-import { createServiceActionsDialogHandlers } from '../dialogs/service-actions-dialog.js';
-import { createSwitchDialogHandlers } from '../dialogs/switch-dialog.js';
+import { createDeleteDialogHandlers } from '../dialogs/edt/delete-dialog.js';
+import { createModifyDialogHandlers } from '../dialogs/edt/modify-dialog.js';
+import { createQuickPickDialogHandlers } from '../dialogs/actions/quick-pick-dialog.js';
+import { createServiceActionsDialogHandlers } from '../dialogs/actions/service-actions-dialog.js';
+import { createSwitchDialogHandlers } from '../dialogs/switch/switch-dialog.js';
 import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
 import { initialFastForwardDialog, initialModifyDialog, initialSwitchDialog, SYSTEM_EDT_NOTICE } from '../logic/edts-zone.logic.js';
 import type { EdtsDerived } from './use-edts-derived.js';

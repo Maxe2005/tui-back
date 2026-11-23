@@ -3,16 +3,16 @@
 // shared/components/filterable-pick-list.tsx; this file owns only the per-mode candidate pool
 // and which pre-targeted dialog a selection opens.
 import { Box, Text, type Key } from 'ink';
-import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
-import type { AppState } from '../../../store/app-store.js';
+import { isSystemEdt } from '../../../../../../../core/edt/shared-edt/shared-edt.js';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/storage/edt-registry.js';
+import type { AppState } from '../../../../store/app-store.js';
 import {
   FilterablePickList,
   handleFilterablePickListKey,
   type FilterablePickItem,
-} from '../../../shared/components/pickers/filterable-pick-list.js';
-import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
-import { colors } from '../../../shared/theme/theme.js';
+} from '../../../../shared/components/pickers/filterable-pick-list.js';
+import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
+import { colors } from '../../../../shared/theme/theme.js';
 import {
   initialCreateDialog,
   SYSTEM_EDT_NOTICE,
@@ -22,8 +22,8 @@ import {
   type EdtDialogState,
   type QuickPickDialogState,
   type QuickPickMode,
-} from '../logic/edts-zone.logic.js';
-import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
+} from '../../logic/edts-zone.logic.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 
 // The candidate pool for a given mode: switch mode filters out the active EDT (the system "Shared
 // branches" EDT stays, being switchable); modify, delete and create-from modes offer every user EDT,

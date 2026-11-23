@@ -12,7 +12,7 @@ import { resolveBoundaryFlex } from '../../zones/zone-layouts.js';
 import { EdtsZone } from './edts-zone.js';
 import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
 import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
-import { resolveQuickPickCandidates as quickCandidates, toQuickPickItems } from './dialogs/quick-pick-dialog.js';
+import { resolveQuickPickCandidates as quickCandidates, toQuickPickItems } from './dialogs/actions/quick-pick-dialog.js';
 import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
 import {
   initialCreateDialog,

@@ -1,14 +1,14 @@
 // tui/zones/edts/dialogs: the EDT SERVICES row contextual menu ("Remove from EDT" / "Change
 // branch for this EDT" / disabled "Restart"), opened by Enter.
 import { Box, Text, type Key } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
-import type { AppState } from '../../../store/app-store.js';
-import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/pickers/branch-picker.js';
-import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
-import { FailedResultList, type FailedResultRow } from '../../../shared/components/lists/failed-result-list.js';
-import { MenuList, resolveMenuKey } from '../../../shared/components/lists/menu-list.js';
-import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
-import { colors } from '../../../shared/theme/theme.js';
+import type { ServiceBranchDivergence } from '../../../../../../../core/edt/lifecycle/list.js';
+import type { AppState } from '../../../../store/app-store.js';
+import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../../shared/components/pickers/branch-picker.js';
+import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';
+import { FailedResultList, type FailedResultRow } from '../../../../shared/components/lists/failed-result-list.js';
+import { MenuList, resolveMenuKey } from '../../../../shared/components/lists/menu-list.js';
+import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
+import { colors } from '../../../../shared/theme/theme.js';
 import {
   createPickerSession,
   findRetryableFailedRow,
@@ -16,7 +16,7 @@ import {
   summarizeFailedResults,
   type EdtDialogState,
   type ServiceActionsDialogState,
-} from '../logic/edts-zone.logic.js';
+} from '../../logic/edts-zone.logic.js';
 
 export type ServiceActionsDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

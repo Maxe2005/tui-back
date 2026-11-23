@@ -1,12 +1,12 @@
 // tui/zones/edts/dialogs: the OTHER SERVICES row's Add-to-EDT dialog, opened by Enter.
 import { Box, Text, type Key } from 'ink';
-import type { AppState } from '../../../store/app-store.js';
-import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/pickers/branch-picker.js';
-import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
-import { FailedResultList, type FailedResultRow } from '../../../shared/components/lists/failed-result-list.js';
-import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
-import { colors } from '../../../shared/theme/theme.js';
-import { summarizeFailedResults, type AddToEdtDialogState, type EdtDialogState } from '../logic/edts-zone.logic.js';
+import type { AppState } from '../../../../store/app-store.js';
+import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../../shared/components/pickers/branch-picker.js';
+import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';
+import { FailedResultList, type FailedResultRow } from '../../../../shared/components/lists/failed-result-list.js';
+import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
+import { colors } from '../../../../shared/theme/theme.js';
+import { summarizeFailedResults, type AddToEdtDialogState, type EdtDialogState } from '../../logic/edts-zone.logic.js';
 
 export type AddToEdtDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;
