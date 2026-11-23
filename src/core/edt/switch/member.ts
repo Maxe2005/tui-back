@@ -6,7 +6,7 @@ import type { EdtMember } from '../../ports/edt-registry.js';
 import type { GitPort } from '../../ports/git.js';
 import type { Manifest } from '../../ports/manifest.js';
 import type { Result, ResultError } from '../../result.js';
-import { checkoutExpectedBranch, memberTargetSpec } from '../checkout-expected.js';
+import { checkoutExpectedBranch, memberTargetSpec } from '../branches/checkout-expected.js';
 import { executeDirtyPlan, planDirtyWork, restoreAndFail, stashMessage, type Prepared } from './dirty.js';
 import {
   failed,

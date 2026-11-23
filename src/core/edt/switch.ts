@@ -267,4 +267,4 @@ function blockedBy(outgoing: EdtRegistryEntry): Result<never> {
 
 // ---- Destination rule (shared with activate.ts and realign) ---------------------------------
 
-export { resolveTargetBranch, type TargetBranchSpec } from './checkout-expected.js';
+export { resolveTargetBranch, type TargetBranchSpec } from './branches/checkout-expected.js';

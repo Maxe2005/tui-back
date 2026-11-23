@@ -7,7 +7,7 @@ import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
 import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
 import { ownerRefusalText } from '../../../../shared/components/pickers/branch-owners-text.js';
-import { isProtectedBranch, type BranchProtection } from '../../../../../../../core/edt/shared-branches.js';
+import { isProtectedBranch, type BranchProtection } from '../../../../../../../core/edt/branches/shared-branches.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import type { FailedResultRow } from '../../../../shared/components/lists/failed-result-list.js';
 import {

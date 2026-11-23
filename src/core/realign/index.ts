@@ -4,7 +4,7 @@
 // mid-merge repo is skipped. One closed row per selected service; the run never rejects.
 import { resolve } from 'node:path';
 import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../dashboard/drift.js';
-import { checkoutExpectedBranch, memberTargetSpec, type TargetBranchSpec } from '../edt/checkout-expected.js';
+import { checkoutExpectedBranch, memberTargetSpec, type TargetBranchSpec } from '../edt/branches/checkout-expected.js';
 import { MANIFEST_FILE, withCarriedManifest } from '../edt/manifest-carry.js';
 import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention, type RestartReport, type RestartRow } from '../edt/switch-restart.js';
 import { withActionLock } from '../locking.js';

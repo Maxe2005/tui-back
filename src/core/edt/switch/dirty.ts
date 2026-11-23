@@ -6,10 +6,10 @@ import type { EdtRegistryEntry } from '../../ports/edt-registry.js';
 import type { GitPort } from '../../ports/git.js';
 import type { ManifestPort } from '../../ports/manifest.js';
 import { err, ok, type Result, type ResultError } from '../../result.js';
-import { type CheckoutStep } from '../checkout-expected.js';
+import { type CheckoutStep } from '../branches/checkout-expected.js';
 import { MANIFEST_FILE } from '../manifest-carry.js';
 import { addMemberUnderLock } from '../modify.js';
-import { isProtectedBranch } from '../shared-branches.js';
+import { isProtectedBranch } from '../branches/shared-branches.js';
 import { isSystemEdt } from '../shared-edt.js';
 import {
   failed,

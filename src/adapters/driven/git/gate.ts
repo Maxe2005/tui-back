@@ -1,6 +1,6 @@
 // adapters/driven/git/gate: the branch-scope safety gate (AD-8) every git write passes through — protected-branch and cross-EDT checks, plus the current-branch variant for branch-less writes.
 import { resolve } from 'node:path';
-import { isProtectedBranch } from '../../../core/edt/shared-branches.js';
+import { isProtectedBranch } from '../../../core/edt/branches/shared-branches.js';
 import { isSystemEdt } from '../../../core/edt/shared-edt.js';
 import { type EdtRegistryPort } from '../../../core/ports/edt-registry.js';
 import { type ManifestPort } from '../../../core/ports/manifest.js';

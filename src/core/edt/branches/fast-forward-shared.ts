@@ -4,10 +4,10 @@
 // restart, and the active EDT, other branches and worktrees are never touched. Only a
 // fast-forward from the branch's own `origin` counterpart is ever performed (AD-8 carve-out:
 // `fetch` and `pull --ff-only` carry no write-gate, see adapters/driven/git/remote.ts).
-import { err, ok, type Result } from '../result.js';
-import type { GitPort } from '../ports/git.js';
-import type { EdtRegistryPort } from '../ports/edt-registry.js';
-import { isSystemEdt } from './shared-edt.js';
+import { err, ok, type Result } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
+import type { EdtRegistryPort } from '../../ports/edt-registry.js';
+import { isSystemEdt } from '../shared-edt.js';
 
 export type FastForwardOutcome = 'fast-forwarded' | 'up-to-date' | 'skipped' | 'failed';
 export type FastForwardSkipReason = 'dirty' | 'diverged';

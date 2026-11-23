@@ -15,7 +15,7 @@ import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result } from '../result.js';
 import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import { failed, resolveTargetBranch, type SwitchEdtRepoResult, type TargetBranchSpec } from './switch.js';
-import { memberTargetSpec } from './checkout-expected.js';
+import { memberTargetSpec } from './branches/checkout-expected.js';
 
 export interface ActivateEdtParams {
   edtRegistry: EdtRegistryPort;

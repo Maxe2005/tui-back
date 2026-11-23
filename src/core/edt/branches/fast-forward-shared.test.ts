@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import type { GitPort } from '../ports/git.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
+import { err, ok } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
 import { anyFastForwardFailed, fastForwardShared } from './fast-forward-shared.js';
-import { buildSharedBranchesEdt } from './shared-edt.js';
+import { buildSharedBranchesEdt } from '../shared-edt.js';
 
 const system = buildSharedBranchesEdt([
   { repoPath: '/r/a', manifest: { service: 'a', sharedBranch: 'development' } },

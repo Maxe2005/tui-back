@@ -5,7 +5,7 @@
 // goes to the NEW EDT's ulid; pure logic lives in wizard.logic.ts and activation.logic.ts.
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
-import { branchOwnersMap } from '../../../../../../../core/edt/branch-owners.js';
+import { branchOwnersMap } from '../../../../../../../core/edt/branches/branch-owners.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import type { AppState } from '../../../../store/app-store.js';
 import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';

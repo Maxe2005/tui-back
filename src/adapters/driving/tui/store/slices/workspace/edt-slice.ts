@@ -44,7 +44,7 @@ import {
   type MemberDisposition,
 } from '../../../../../../core/edt/delete.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
-import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../../core/edt/fast-forward-shared.js';
+import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
 import type { Result } from '../../../../../../core/result.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 

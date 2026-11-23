@@ -2,7 +2,7 @@
 // service's local shared branch from origin without switching EDT. Needs the
 // "Shared branches" EDT setting on (`edt-not-found` otherwise); exits non-zero when any row failed.
 import { err, ok, type Result } from '../../../../core/result.js';
-import { anyFastForwardFailed, fastForwardShared, FAST_FORWARD_FAILED_CODE } from '../../../../core/edt/fast-forward-shared.js';
+import { anyFastForwardFailed, fastForwardShared, FAST_FORWARD_FAILED_CODE } from '../../../../core/edt/branches/fast-forward-shared.js';
 import type { GitPort } from '../../../../core/ports/git.js';
 import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
 

@@ -2,7 +2,7 @@
 import type { ActivationBlockedRepo } from '../../../../../../core/edt/activate.js';
 import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../../core/edt/delete.js';
 import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
-import type { FastForwardSharedRow } from '../../../../../../core/edt/fast-forward-shared.js';
+import type { FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
 import type { SwitchEdtRepoResult } from '../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../../shared/components/pickers/branch-picker.js';
