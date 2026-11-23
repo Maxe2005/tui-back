@@ -2,8 +2,8 @@
 // the keyboard registers one of these ids while it is open; the footer then shows exactly that
 // context's hints (and the `?` help lists the same rows), and falls back to the zone hints when
 // the last one closes. Hints are data so the footer, the help and the tests read one list.
-import type { Hint } from '../shared/components/hints.js';
-import { KEY_UP_DOWN } from '../shared/components/hints.js';
+import type { Hint } from '../shared/components/dialogs/hints.js';
+import { KEY_UP_DOWN } from '../shared/components/dialogs/hints.js';
 
 const MOVE: Hint = [KEY_UP_DOWN, 'move'];
 const CONFIRM: Hint = ['Enter', 'confirm'];
@@ -419,6 +419,22 @@ export const FOOTER_CONTEXTS = {
   'settings-groups': {
     label: 'Settings group list',
     hints: [MOVE, ['Enter', 'open'], TAB_SWITCH, CLOSE],
+  },
+  'edts-system-switch': {
+    label: 'EDTs zone, shared-branches EDT (switchable)',
+    hints: [MOVE, ['Enter', 'switch'], ['f', 'fast-forward'], ['Tab', 'focus'], [':', 'cmd'], ['?', 'help']],
+  },
+  'edts-system-fast-forward': {
+    label: 'EDTs zone, shared-branches EDT (active)',
+    hints: [MOVE, ['f', 'fast-forward'], ['Tab', 'focus'], [':', 'cmd'], ['?', 'help']],
+  },
+  'edts-system-readonly': {
+    label: 'EDTs zone, shared-branches EDT (read-only)',
+    hints: [MOVE, ['Enter', 'explain read-only'], ['Tab', 'focus'], [':', 'cmd'], ['?', 'help']],
+  },
+  'settings-groups-toggle': {
+    label: 'Settings group list, shared-branches switch',
+    hints: [MOVE, ['Space', 'toggle'], TAB_SWITCH, CLOSE],
   },
   'settings-toggle': {
     label: 'Settings toggle group',

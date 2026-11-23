@@ -1,6 +1,7 @@
+import { SHARED_EDT_ULID } from '../../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
 import { describe, expect, it } from 'vitest';
-import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
-import type { TextEditKey } from '../../../../shared/components/text-edit.js';
+import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/workspace/edt/switch/switch.js';
+import type { TextEditKey } from '../../../../shared/components/inputs/text-edit.js';
 import {
   buildResolutions,
   buildRows,
@@ -122,6 +123,13 @@ describe('switch-resolution rows', () => {
     const noManifest = repo({ service: 'svc-m', repoPath: '/repo/m', sharedBranch: null });
     expect(validateRow(row('fresh', noManifest), {})).toBe('unreadable manifest — cannot validate the branch; choose Discard or cancel');
     expect(validateRow({ repo: detached, hasOutgoing: true, claims: [], plan: { kind: 'discard', source: 'perso' } }, {})).toBeNull();
+  });
+
+  it('the system EDT never claims a branch', () => {
+    const edts = [
+      { ulid: SHARED_EDT_ULID, topic: 'Shared branches', kind: 'system-shared' as const, createdAt: '', status: 'inactive' as const, members: [{ service: 'svc-b', repoPath: '/repo/b', branch: 'development' }] },
+    ];
+    expect(otherEdtBranches(edts, null)).toEqual({});
   });
 
   it('a row on a branch another EDT registers for that repo targets the global name; that branch is rejected inline', () => {
@@ -250,6 +258,9 @@ describe('reduceSwitchResolutionKey', () => {
 describe('results & log detail', () => {
   it('keeps the dialog open on anything beyond a plain switch and records adopted branches and discarded paths', () => {
     expect(needsResultsView([{ service: 'a', outcome: 'switched' }])).toBe(false);
+    expect(needsResultsView([{ service: 'a', outcome: 'unchanged' }, { service: 'b', outcome: 'switched' }])).toBe(false);
+    expect(needsResultsView([{ service: 'a', outcome: 'unchanged' }, { service: 'b', outcome: 'unchanged' }])).toBe(false);
+    expect(needsResultsView([{ service: 'a', outcome: 'unchanged' }, { service: 'b', outcome: 'failed' }])).toBe(true);
     const results: SwitchEdtRepoResult[] = [
       { service: 'a', outcome: 'adopted', detail: { code: 'adopted', message: 'm', adoptedBranch: 'mon-topic' } },
       { service: 'b', outcome: 'discarded', detail: { code: 'discarded', message: 'm', discardedPaths: ['x.txt', 'y/z.txt'] } },

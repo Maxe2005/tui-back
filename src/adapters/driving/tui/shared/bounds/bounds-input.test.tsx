@@ -2,7 +2,7 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it } from 'vitest';
-import { CommandBar } from '../command-bar.js';
+import { CommandBar } from '../screens/command-bar/command-bar.js';
 import { createAppStore } from '../../store/app-store.js';
 import { FakeTtyStdout, fakeInteractiveTtyStdin } from '../test-support/fake-tty.js';
 import { BoundsProvider } from './bounds-context.js';

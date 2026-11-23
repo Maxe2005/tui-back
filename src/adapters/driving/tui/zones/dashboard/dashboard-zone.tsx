@@ -5,9 +5,9 @@
 // Overlays make the zone inert.
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
-import type { DashboardOtherService } from '../../../../../core/dashboard/snapshot.js';
+import type { DashboardOtherService } from '../../../../../core/insight/dashboard/snapshot.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
@@ -15,7 +15,7 @@ import { DashboardBody } from './dashboard-body.js';
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import { actionForKey, buildAttentionItems, edtKeyEffect, resolveEdtSection, nextAttentionIndex, resolveDashboardBody, rowIndexForAttention } from './dashboard.logic.js';
 import { LaunchBanner } from './launch-banner.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 
 export const EMPTY_REGISTRY_MESSAGE = 'No repos registered yet.';
 export const EMPTY_REGISTRY_HINT = 'Press [:] to scan a root path and register repos.';

@@ -4,18 +4,19 @@
 // state, so the matrix reaches them through the owning zone instead. `overlay` entries are
 // app-level overlays that are not a ModalDialog (the Terminal view) but get the same matrix.
 import { createElement, type ReactElement } from 'react';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
+import type { ServiceBranchDivergence } from '../../../../../core/workspace/edt/lifecycle/list.js';
 import { createAppStore } from '../../store/app-store.js';
-import { createFilterablePickListState } from '../components/filterable-pick-list.js';
-import { KeybindingHelp } from '../components/keybinding-help.js';
-import { IssuesDialogView } from '../../zones/edts/dialogs/issues-dialog.js';
-import { DeleteDialogView } from '../../zones/edts/dialogs/delete-dialog.js';
-import { ServiceActionsDialogView } from '../../zones/edts/dialogs/service-actions-dialog.js';
-import { AddToEdtDialogView } from '../../zones/edts/dialogs/add-to-edt-dialog.js';
-import { ModifyDialogView } from '../../zones/edts/dialogs/modify-dialog.js';
-import { SwitchDialogView } from '../../zones/edts/dialogs/switch-dialog.js';
-import { QuickPickDialogView } from '../../zones/edts/dialogs/quick-pick-dialog.js';
+import { createFilterablePickListState } from '../components/pickers/filterable-pick-list.js';
+import { KeybindingHelp } from '../components/dialogs/keybinding-help.js';
+import { IssuesDialogView } from '../../zones/edts/dialogs/edt/issues-dialog.js';
+import { FastForwardDialogView } from '../../zones/edts/dialogs/actions/fast-forward-dialog.js';
+import { DeleteDialogView } from '../../zones/edts/dialogs/edt/delete-dialog.js';
+import { ServiceActionsDialogView } from '../../zones/edts/dialogs/actions/service-actions-dialog.js';
+import { AddToEdtDialogView } from '../../zones/edts/dialogs/edt/add-to-edt-dialog.js';
+import { ModifyDialogView } from '../../zones/edts/dialogs/edt/modify-dialog.js';
+import { SwitchDialogView } from '../../zones/edts/dialogs/switch/switch-dialog.js';
+import { QuickPickDialogView } from '../../zones/edts/dialogs/actions/quick-pick-dialog.js';
 import { CreateWizardView } from '../../zones/edts/dialogs/create-wizard/create-wizard.js';
 import {
   initialAddToEdtDialog,
@@ -25,19 +26,19 @@ import {
   initialQuickPickDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
-} from '../../zones/edts/edts-zone.logic.js';
+} from '../../zones/edts/logic/edts-zone.logic.js';
 import { initialSwitchResolution } from '../../zones/edts/dialogs/switch-resolution/switch-resolution.logic.js';
-import { UpdateServicePickDialog } from '../../zones/update/update-service-pick-dialog.js';
-import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-dialog.js';
-import { UpdateIncidentsDialog } from '../../zones/update/update-incidents-dialog.js';
-import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
-import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
-import { CommandBar } from '../command-bar.js';
-import { RepoRegistryScreen } from '../repo-registry-screen.js';
-import { SettingsScreen } from '../settings-screen.js';
-import { RealignDialog } from '../realign-dialog.js';
-import { TerminalView } from '../terminal-view.js';
-import { HealDialog } from '../heal-dialog.js';
+import { UpdateServicePickDialog } from '../../zones/update/services/update-service-pick-dialog.js';
+import { UpdateServiceMenuDialog } from '../../zones/update/services/update-service-menu-dialog.js';
+import { UpdateIncidentsDialog } from '../../zones/update/incidents/update-incidents-dialog.js';
+import { LogFilterEditor } from '../../zones/logs/filters/log-filter-editor.js';
+import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/panes/logs-actions-menu.js';
+import { CommandBar } from '../screens/command-bar/command-bar.js';
+import { RepoRegistryScreen } from '../screens/repo-registry-screen.js';
+import { SettingsScreen } from '../screens/settings-screen.js';
+import { RealignDialog } from '../screens/dialogs/realign-dialog.js';
+import { TerminalView } from '../screens/terminal-view/terminal-view.js';
+import { HealDialog } from '../screens/dialogs/heal-dialog.js';
 
 export const LONG_TEXT = 'x'.repeat(5000);
 export const MULTILINE_ERROR = `first line of a failure\n${'\u001b[31mred\u001b[0m '.repeat(40)}\nthird line ${LONG_TEXT}`;
@@ -82,7 +83,7 @@ const store = () => createAppStore();
 export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   {
     id: 'edts/issues',
-    file: 'zones/edts/dialogs/issues-dialog.tsx',
+    file: 'zones/edts/dialogs/edt/issues-dialog.tsx',
     render: () =>
       createElement(IssuesDialogView, {
         unreachable: Array.from({ length: 80 }, (_, i) => `/repos/unreachable-${i}-${'u'.repeat(200)}`),
@@ -90,8 +91,28 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
       }),
   },
   {
+    id: 'edts/fast-forward-shared',
+    file: 'zones/edts/dialogs/actions/fast-forward-dialog.tsx',
+    render: () =>
+      createElement(FastForwardDialogView, {
+        dialog: {
+          kind: 'fast-forward-shared',
+          status: 'done',
+          error: MULTILINE_ERROR,
+          rows: services.map((s, i) => ({
+            service: s.service,
+            repoPath: s.path,
+            branch: 'development',
+            outcome: (['fast-forwarded', 'up-to-date', 'skipped', 'failed'] as const)[i % 4],
+            ...(i % 4 === 2 ? { reason: 'dirty' as const } : {}),
+            ...(i % 4 === 3 ? { detail: MULTILINE_ERROR } : {}),
+          })),
+        },
+      }),
+  },
+  {
     id: 'edts/delete',
-    file: 'zones/edts/dialogs/delete-dialog.tsx',
+    file: 'zones/edts/dialogs/edt/delete-dialog.tsx',
     render: () =>
       createElement(DeleteDialogView, {
         dialog: {
@@ -112,7 +133,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/service-actions',
-    file: 'zones/edts/dialogs/service-actions-dialog.tsx',
+    file: 'zones/edts/dialogs/actions/service-actions-dialog.tsx',
     render: (rows) =>
       createElement(ServiceActionsDialogView, {
         dialog: { ...initialServiceActionsDialog(edt, '/repos/a', 'a'.repeat(300)), failedRows: failedRows(), error: MULTILINE_ERROR },
@@ -121,7 +142,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/add-to-edt',
-    file: 'zones/edts/dialogs/add-to-edt-dialog.tsx',
+    file: 'zones/edts/dialogs/edt/add-to-edt-dialog.tsx',
     render: (rows) =>
       createElement(AddToEdtDialogView, {
         dialog: { ...initialAddToEdtDialog(edt, '/repos/a', 'a'.repeat(300), 'feature/x', 'development'), failedRows: failedRows(), error: MULTILINE_ERROR },
@@ -130,7 +151,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/modify',
-    file: 'zones/edts/dialogs/modify-dialog.tsx',
+    file: 'zones/edts/dialogs/edt/modify-dialog.tsx',
     render: (rows) =>
       createElement(ModifyDialogView, {
         dialog: { ...initialModifyDialog(edt), failedRows: failedRows(), error: MULTILINE_ERROR },
@@ -141,7 +162,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/switch',
-    file: 'zones/edts/dialogs/switch-dialog.tsx',
+    file: 'zones/edts/dialogs/switch/switch-dialog.tsx',
     render: (rows) =>
       createElement(SwitchDialogView, {
         dialog: { ...initialSwitchDialog(edt), failedRows: failedRows(), error: MULTILINE_ERROR },
@@ -151,7 +172,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/quick-pick',
-    file: 'zones/edts/dialogs/quick-pick-dialog.tsx',
+    file: 'zones/edts/dialogs/actions/quick-pick-dialog.tsx',
     render: () =>
       createElement(QuickPickDialogView, {
         dialog: initialQuickPickDialog('switch', MULTILINE_ERROR),
@@ -186,14 +207,14 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   })),
   {
     id: 'edts/switch-results',
-    file: 'zones/edts/dialogs/switch-dialog.tsx',
+    file: 'zones/edts/dialogs/switch/switch-dialog.tsx',
     render: (rows) =>
       createElement(SwitchDialogView, {
         dialog: {
           ...initialSwitchDialog(edt),
           results: services.map((s, i) => ({
             service: s.service,
-            outcome: (['switched', 'adopted', 'discarded', 'failed'] as const)[i % 4],
+            outcome: (['switched', 'adopted', 'discarded', 'failed', 'unchanged'] as const)[i % 5],
             detail: { code: 'x', message: MULTILINE_ERROR, adoptedBranch: s.branch ?? 'main' },
           })),
           failedRows: failedRows(),
@@ -204,7 +225,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/switch-resolution',
-    file: 'zones/edts/dialogs/switch-dialog.tsx',
+    file: 'zones/edts/dialogs/switch/switch-dialog.tsx',
     render: (rows) => {
       const dirty = services.map((s) => ({
         service: s.service,
@@ -226,7 +247,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'update/service-pick',
-    file: 'zones/update/update-service-pick-dialog.tsx',
+    file: 'zones/update/services/update-service-pick-dialog.tsx',
     render: () =>
       createElement(UpdateServicePickDialog, {
         state: createFilterablePickListState(),
@@ -235,12 +256,12 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'update/service-menu',
-    file: 'zones/update/update-service-menu-dialog.tsx',
+    file: 'zones/update/services/update-service-menu-dialog.tsx',
     render: () => createElement(UpdateServiceMenuDialog, { service: 's'.repeat(500), cursor: 0 }),
   },
   {
     id: 'update/incidents',
-    file: 'zones/update/update-incidents-dialog.tsx',
+    file: 'zones/update/incidents/update-incidents-dialog.tsx',
     render: () =>
       createElement(UpdateIncidentsDialog, {
         incidents: Array.from({ length: 200 }, (_, i) => ({
@@ -258,7 +279,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-editor',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'global', repoPath: null, view: 'rule', mode: 'text', query: '', cursor: 0, action: 'show', target: 'line', error: MULTILINE_ERROR } as never,
@@ -276,7 +297,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rules',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'pane', repoPath: '/repo', view: 'list', listCursor: 6, ruleIndex: null, error: null, notice: LONG_TEXT, confirmClear: true } as never,
@@ -297,7 +318,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rule-sets',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'global', repoPath: null, view: 'library', libraryCursor: 6, error: MULTILINE_ERROR, notice: LONG_TEXT, setConfirm: { kind: 'delete', index: 6 } } as never,
@@ -315,7 +336,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rule-set-name',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: {
@@ -342,12 +363,12 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/actions-menu-loading',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null }), restartMode: 'simple' }),
   },
   {
     id: 'logs/actions-menu',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () =>
       createElement(LogsActionsMenu, {
         menu: actionsMenu({
@@ -364,33 +385,33 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/actions-menu-error',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }), restartMode: 'simple' }),
   },
-  { id: 'shared/keybinding-help', file: 'shared/components/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
-  { id: 'shared/command-bar', file: 'shared/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
-  { id: 'shared/repo-registry', file: 'shared/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
-  { id: 'shared/settings', file: 'shared/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },
-  { id: 'shared/realign-select', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignSelectStore() }) },
-  { id: 'shared/realign-run', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
-  { id: 'shared/realign-run-failed', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
-  { id: 'shared/realign-error', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
-  { id: 'shared/heal-confirm', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('confirm') }) },
-  { id: 'shared/heal-running', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('running') }) },
+  { id: 'shared/keybinding-help', file: 'shared/components/dialogs/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
+  { id: 'shared/command-bar', file: 'shared/screens/command-bar/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
+  { id: 'shared/repo-registry', file: 'shared/screens/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
+  { id: 'shared/settings', file: 'shared/screens/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },
+  { id: 'shared/realign-select', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignSelectStore() }) },
+  { id: 'shared/realign-run', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
+  { id: 'shared/realign-run-failed', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
+  { id: 'shared/realign-error', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
+  { id: 'shared/heal-confirm', file: 'shared/screens/dialogs/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('confirm') }) },
+  { id: 'shared/heal-running', file: 'shared/screens/dialogs/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('running') }) },
   {
     id: 'shared/heal-confirm-close',
-    file: 'shared/heal-dialog.tsx',
+    file: 'shared/screens/dialogs/heal-dialog.tsx',
     render: () => createElement(HealDialog, { useStore: healStore('running'), initial: { confirmingClose: true } }),
   },
-  { id: 'shared/heal-done', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('done') }) },
-  { id: 'shared/heal-error', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('error') }) },
-  { id: 'shared/terminal-idle', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore() }) },
-  { id: 'shared/terminal-running', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
-  { id: 'shared/terminal-fullscreen', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
-  { id: 'shared/terminal-confirm-close', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, confirming: true }), initial: { confirming: true } }) },
-  { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
+  { id: 'shared/heal-done', file: 'shared/screens/dialogs/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('done') }) },
+  { id: 'shared/heal-error', file: 'shared/screens/dialogs/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('error') }) },
+  { id: 'shared/terminal-idle', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore() }) },
+  { id: 'shared/terminal-running', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
+  { id: 'shared/terminal-fullscreen', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
+  { id: 'shared/terminal-confirm-close', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, confirming: true }), initial: { confirming: true } }) },
+  { id: 'update/config-panels', file: 'zones/update/config/update-config-panels.tsx', embedded: 'update' },
   { id: 'update/zone', file: 'zones/update/update-zone-dialogs.tsx', embedded: 'update' },
-  { id: 'routes/zone', file: 'zones/routes/routes-modals.tsx', embedded: 'routes' },
+  { id: 'routes/zone', file: 'zones/routes/panes/routes-modals.tsx', embedded: 'routes' },
   { id: 'shared-types/zone', file: 'zones/shared-types/shared-types-zone.tsx', embedded: 'shared-types' },
 ];
 

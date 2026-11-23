@@ -1,26 +1,26 @@
 // tui/zones/edts: the EDTs zone — an EDT selector with its dialogs (create wizard, switch,
 // modify, delete, quick-pick, service actions) above the EDT SERVICES / OTHER SERVICES lists,
-// all Tab-cycled panes, driving core/edt use-cases in-process (AD-2). This file only composes the
+// all Tab-cycled panes, driving core/workspace/edt use-cases in-process (AD-2). This file only composes the
 // layers: state → derived → handlers → effects → one `useInput` dispatcher (use-edts-input.ts);
 // the render lives in edts-list-column / edts-detail-column / edts-dialog-views. Every keystroke
 // decision is a pure function in edts-zone.logic.ts; DetailPane takes only Text-safe content
 // (UX-DR17), so a git-error detail renders as a DimAnnotation sibling.
 import { Box } from 'ink';
-import { ZoneLayout } from '../../shared/components/zone-layout.js';
+import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { EdtsDetailColumn } from './edts-detail-column.js';
-import { EdtsDialogViews } from './edts-dialog-views.js';
-import { EdtsListColumn } from './edts-list-column.js';
-import type { InitialDialogKind } from './edts-zone.dialog-seed.js';
+import { EdtsDetailColumn } from './views/edts-detail-column.js';
+import { EdtsDialogViews } from './views/edts-dialog-views.js';
+import { EdtsListColumn } from './views/edts-list-column.js';
+import type { InitialDialogKind } from './logic/edts-zone.dialog-seed.js';
 import type { EdtsZoneCtx } from './edts-zone.ctx.js';
-import type { PaneFocus } from './edts-zone.logic.js';
-import { useEdtsDerived } from './use-edts-derived.js';
-import { useEdtsDialogEffects } from './use-edts-dialog-effects.js';
-import { useEdtsEffects } from './use-edts-effects.js';
-import { createEdtsHandlers } from './use-edts-handlers.js';
-import { useEdtsInput } from './use-edts-input.js';
-import { useEdtsState } from './use-edts-state.js';
+import type { PaneFocus } from './logic/edts-zone.logic.js';
+import { useEdtsDerived } from './hooks/use-edts-derived.js';
+import { useEdtsDialogEffects } from './hooks/use-edts-dialog-effects.js';
+import { useEdtsEffects } from './hooks/use-edts-effects.js';
+import { createEdtsHandlers } from './hooks/use-edts-handlers.js';
+import { useEdtsInput } from './hooks/use-edts-input.js';
+import { useEdtsState } from './hooks/use-edts-state.js';
 
 export function EdtsZone({
   useStore = useAppStore,

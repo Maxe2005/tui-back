@@ -1,19 +1,19 @@
 // cli/commands/heal: the `heal` subcommand (usage, flag parsing and runner).
 import { err, ok, type Result } from '../../../../core/result.js';
-import { createServiceActions, type RestartMode } from '../../../../core/service-actions/index.js';
-import { ContainerPort } from '../../../../core/ports/container.js';
-import { planHeal, runHeal } from '../../../../core/heal/index.js';
-import { restartNeedsAttention } from '../../../../core/edt/switch-restart.js';
-import { DockerPort } from '../../../../core/ports/docker.js';
-import { EditorPort } from '../../../../core/ports/editor.js';
-import { HealthProbePort } from '../../../../core/ports/health-probe.js';
-import { ManifestPort } from '../../../../core/ports/manifest.js';
-import { RestartPort } from '../../../../core/ports/restart.js';
-import { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
-import { LockPort } from '../../../../core/ports/lock.js';
-import { DEFAULT_SETTINGS, healthCheckEnabledFrom, type SettingsPort } from '../../../../core/ports/settings.js';
-import { StatePort } from '../../../../core/ports/state.js';
-import { Subcommand } from '../dispatch.js';
+import { createServiceActions, type RestartMode } from '../../../../core/runtime/service-actions/index.js';
+import { ContainerPort } from '../../../../core/ports/runtime/container.js';
+import { planHeal, runHeal } from '../../../../core/workspace/heal/index.js';
+import { restartNeedsAttention } from '../../../../core/workspace/edt/switch/restart/switch-restart.js';
+import { DockerPort } from '../../../../core/ports/runtime/docker.js';
+import { EditorPort } from '../../../../core/ports/runtime/editor.js';
+import { HealthProbePort } from '../../../../core/ports/runtime/health-probe.js';
+import { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import { RestartPort } from '../../../../core/ports/runtime/restart.js';
+import { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import { LockPort } from '../../../../core/ports/runtime/lock.js';
+import { DEFAULT_SETTINGS, healthCheckEnabledFrom, type SettingsPort } from '../../../../core/ports/storage/settings.js';
+import { StatePort } from '../../../../core/ports/storage/state.js';
+import { Subcommand } from '../dispatch/dispatch.js';
 import { SubcommandDeps } from './deps.js';
 
 const HEAL_USAGE =

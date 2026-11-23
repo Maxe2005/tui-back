@@ -1,0 +1,64 @@
+// core/ports/edt-registry: the EDT registry port — created EDTs (ulid, topic, creation time,
+ // status, per-member branches) kept separate from RegistryPort's managed-repo path list (AD-6).
+ // Each member records the branch that service is on for this EDT. The action-log methods
+ // (per-EDT history in the EDT's SQLite db) are optional.
+ import type { Result } from '../../result.js';
+ 
+ export interface EdtMember {
+   service: string;
+   repoPath: string;
+   branch: string;
+ }
+ 
+ // A closed union, not `string`: a typo would otherwise compile, persist silently and break
+ // switchActiveEdt's exact comparisons (`status === 'interrupted'`).
+ export type EdtStatus = 'active' | 'inactive' | 'interrupted';
+ 
+ // A route the developer starred for one EDT: identity is (repoPath, method, path) with the method
+// upper-cased and the path in its discovered template form.
+export interface FavoriteRoute {
+  repoPath: string;
+  method: string;
+  path: string;
+}
+
+export interface EdtRegistryEntry {
+   ulid: string;
+   topic: string;
+   createdAt: string;
+   status: EdtStatus;
+   members: EdtMember[];
+   // Absent for an ordinary (user) EDT. 'system-shared' marks the read-only "Shared branches"
+   // EDT the registry adapter synthesizes while edts.sharedBranchesEdtEnabled is on; it is never
+   // persisted to edts.yaml (core/workspace/edt/shared-edt/shared-edt.ts).
+   kind?: 'system-shared';
+  // Absent when the EDT has no favorite routes (legacy files and an emptied list alike).
+  favoriteRoutes?: FavoriteRoute[];
+ }
+ 
+ export interface EdtActionLogEntry {
+   id: string;
+   timestamp: string;
+   actionType: string;
+   outcome: 'success' | 'failed';
+   detail: string;
+ }
+ 
+ export interface EdtRegistryPort {
+   add(entry: EdtRegistryEntry): Promise<Result<void>>;
+   list(): Promise<Result<EdtRegistryEntry[]>>;
+   // Read/find/replace/write one entry in place, under the caller's per-resource lock (AD-9).
+   // Fails with edt-not-found if ulid isn't registered.
+   update(ulid: string, patch: { topic?: string; members?: EdtMember[]; favoriteRoutes?: FavoriteRoute[] }): Promise<Result<void>>;
+   // Updates one entry's status field in place. Used by switchActiveEdt to flip the outgoing
+   // EDT to 'inactive' (or 'interrupted' under --force past a held lock) and the target EDT to
+   // 'active'. Fails with edt-not-found if ulid isn't registered.
+   setStatus(ulid: string, status: EdtStatus): Promise<Result<void>>;
+   // Removes ulid's entry entirely (no soft-delete/undo). Fails with edt-not-found if ulid
+   // isn't registered.
+   remove(ulid: string): Promise<Result<void>>;
+   // Optional: logs an action to the per-EDT SQLite action_log table.
+   logAction?(ulid: string, actionType: string, outcome: 'success' | 'failed', detail: string): Promise<Result<void>>;
+   // Optional: retrieves the action log for an EDT (most recent first, limited).
+   getActionLog?(ulid: string, limit?: number): Promise<Result<EdtActionLogEntry[]>>;
+ }

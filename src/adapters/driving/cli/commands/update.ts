@@ -1,9 +1,9 @@
 // cli/commands/update: the `update` subcommand (usage, override flags, EDT / all / from-edt flows).
 import { err } from '../../../../core/result.js';
-import { groupUpdate, type OnUpdatePhase, type UpdatePhase } from '../../../../core/scripts/group-update.js';
-import { selectionFromEdt } from '../../../../core/scripts/resolve-merge-sources.js';
-import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
-import { Subcommand, SubcommandContext } from '../dispatch.js';
+import { groupUpdate, type OnUpdatePhase, type UpdatePhase } from '../../../../core/workspace/scripts/group-update/group-update.js';
+import { selectionFromEdt } from '../../../../core/workspace/scripts/update-support/resolve-merge-sources.js';
+import { DEFAULT_SETTINGS } from '../../../../core/ports/storage/settings.js';
+import { Subcommand, SubcommandContext } from '../dispatch/dispatch.js';
 import { SubcommandDeps } from './deps.js';
 
 const UPDATE_FLAGS = '[--migrations|--no-migrations] [--clean-restart|--no-clean-restart]';
@@ -52,7 +52,7 @@ export function updateSubcommand(deps: SubcommandDeps): Subcommand {
       // explicit flags win.
       const loaded = await deps.settings.load();
       if (!loaded.ok) {
-        // stderr is separate from the stdout JSON envelope (same idiom as dispatch.ts in the parent folder).
+        // stderr is separate from the stdout JSON envelope (same idiom as dispatch/dispatch.ts in the parent folder).
         console.error(`tui-back: could not read settings, using defaults: ${loaded.error.message}`);
       } else if (loaded.data.warning !== null) {
         console.error(`tui-back: ${loaded.data.warning}`);

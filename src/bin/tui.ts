@@ -7,39 +7,39 @@ import {
   acquireTuiLock,
   readLockFile,
 } from "../adapters/driving/tui/single-instance.js";
-import { createManifestCarryPort } from "../adapters/driven/manifest/carry.js";
-import { loadManifest } from "../adapters/driven/manifest/index.js";
-import { createContainerPort } from "../adapters/driven/container/index.js";
-import { createMigrationPort } from "../adapters/driven/migration/index.js";
-import { createEditorPort } from "../adapters/driven/editor/index.js";
-import { createRestartPort } from "../adapters/driven/restart/index.js";
-import { createGitPort } from "../adapters/driven/git/index.js";
-import { createLockPort } from "../adapters/driven/lock/index.js";
+import { createManifestCarryPort } from "../adapters/driven/vcs/manifest/carry.js";
+import { loadManifest } from "../adapters/driven/vcs/manifest/index.js";
+import { createContainerPort } from "../adapters/driven/runtime/container/index.js";
+import { createMigrationPort } from "../adapters/driven/vcs/migration/index.js";
+import { createEditorPort } from "../adapters/driven/runtime/editor/index.js";
+import { createRestartPort } from "../adapters/driven/runtime/restart/index.js";
+import { createGitPort } from "../adapters/driven/vcs/git/index.js";
+import { createLockPort } from "../adapters/driven/runtime/lock/index.js";
 import {
   createRegistryPort,
   resolveRegistryFile,
-} from "../adapters/driven/registry/index.js";
+} from "../adapters/driven/storage/registry/index.js";
 import {
   createEdtRegistryPort,
   resolveEdtRegistryFile,
-} from "../adapters/driven/edt-registry/index.js";
+} from "../adapters/driven/storage/edt-registry/index.js";
 import {
   createStatePort,
   resolveStateFile,
-} from "../adapters/driven/state/index.js";
+} from "../adapters/driven/storage/state/index.js";
 import {
   createSettingsPort,
   resolveSettingsFile,
-} from "../adapters/driven/settings/index.js";
-import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/saved-requests/index.js";
-import { createDockerPort } from "../adapters/driven/docker/index.js";
-import { createShellSessionPort } from "../adapters/driven/shell-session/index.js";
-import { createHttpHealthProbe } from "../adapters/driven/health/http-probe.js";
-import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
+} from "../adapters/driven/storage/settings/index.js";
+import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/storage/saved-requests/index.js";
+import { createDockerPort } from "../adapters/driven/runtime/docker/index.js";
+import { createShellSessionPort } from "../adapters/driven/runtime/shell-session/index.js";
+import { createHttpHealthProbe } from "../adapters/driven/runtime/health/http-probe.js";
+import { resolveXdgPaths } from "../adapters/driven/storage/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
-import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/edt/resolve-tab-visibility.js";
+import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/workspace/edt/shared-edt/resolve-tab-visibility.js";
 import { err, ok } from "../core/result.js";
-import type { DependencyConsumerConfig, SourceConfig } from "../core/shared-types/list-consumers.js";
+import type { DependencyConsumerConfig, SourceConfig } from "../core/workspace/shared-types/consumers/list-consumers.js";
 
 if (!process.stdin.isTTY) {
   process.stderr.write("tui-back tui requires an interactive terminal\n");
@@ -98,7 +98,11 @@ const manifest = { load: loadManifest };
 const manifestCarry = createManifestCarryPort();
 const edtsBaseDir = join(xdg.dataDir, "edts");
 const edtRegistryFile = resolveEdtRegistryFile(xdg);
-const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
+// Built before the EDT registry, which reads it to synthesize the read-only "Shared branches"
+// system EDT.
+const settingsFile = resolveSettingsFile(xdg);
+const settings = createSettingsPort(settingsFile);
+const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir, { settings, registry, manifest });
 const git = createGitPort({ load: loadManifest }, edtRegistry);
 const container = createContainerPort();
 const migration = createMigrationPort();
@@ -111,10 +115,8 @@ const state = createStatePort(stateFile);
 // one serialize on the same resource. Named `actionLock` to tell it apart from the
 // single-instance TUI `lock` above.
 const actionLock = createLockPort(lockDir);
-// The settings screen's persistence port — XDG_CONFIG_HOME/tui-back/settings.yaml,
-// zod-validated like the manifest/registry.
-const settingsFile = resolveSettingsFile(xdg);
-const settings = createSettingsPort(settingsFile);
+// `settings` above is also the settings screen's persistence port
+// (XDG_CONFIG_HOME/tui-back/settings.yaml, zod-validated like the manifest/registry).
 // The Logs zone's Docker touchpoint — no XDG/lock wiring needed (log ring buffers live only in
 // memory, per process).
 const docker = createDockerPort();

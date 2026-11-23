@@ -29,7 +29,7 @@ describe('dialog registry', () => {
       .filter((file) => readFileSync(file, 'utf8').includes('<ModalDialog'))
       .map((file) => relative(TUI_ROOT, file))
       // ModalDialog itself and the registry fixtures are not dialogs.
-      .filter((file) => file !== 'shared/components/modal-dialog.tsx');
+      .filter((file) => file !== 'shared/components/dialogs/modal-dialog.tsx');
     const registered = new Set(DIALOG_REGISTRY.map((entry) => entry.file));
     expect(rendering.filter((file) => !registered.has(file))).toEqual([]);
   });

@@ -2,18 +2,18 @@
 // offline, member vs. non-member, long-branch-name truncation, the dialogs' rendered states —
 // plus the pure helpers behind its keystrokes (renderToString never emits keys).
 import { describe, it, expect } from 'vitest';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
+import type { ServiceBranchDivergence } from '../../../../../core/workspace/edt/lifecycle/list.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { resolveBoundaryFlex } from '../../zones/zone-layouts.js';
 import { EdtsZone } from './edts-zone.js';
-import { ServicesStepView } from './dialogs/create-wizard/step-services.js';
-import { ActivationStepView } from './dialogs/create-wizard/step-activation.js';
-import { resolveQuickPickCandidates as quickCandidates, toQuickPickItems } from './dialogs/quick-pick-dialog.js';
-import { nextTextInputValue } from '../../shared/components/text-edit.js';
+import { ServicesStepView } from './dialogs/create-wizard/steps/step-services.js';
+import { ActivationStepView } from './dialogs/create-wizard/steps/step-activation.js';
+import { resolveQuickPickCandidates as quickCandidates, toQuickPickItems } from './dialogs/actions/quick-pick-dialog.js';
+import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
 import {
   initialCreateDialog,
   appendHint,
@@ -45,7 +45,13 @@ import {
   truncateBranchLabel,
   validateBranchEditValue,
   BRANCH_MAX_WIDTH,
-} from './edts-zone.logic.js';
+  SYSTEM_EDT_NOTICE,
+  resolveOutgoingTopic,
+} from './logic/edts-zone.logic.js';
+import { SHARED_EDT_TOPIC, SHARED_EDT_ULID, EDT_SYSTEM_READONLY_MESSAGE } from '../../../../../core/workspace/edt/shared-edt/shared-edt.js';
+import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
+import { initialSwitchResolution } from './dialogs/switch-resolution/switch-resolution.logic.js';
+import { edtsFooterContext } from './logic/edts-footer-context.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 
 function edtEntry(overrides: Partial<EdtRegistryEntry> = {}): EdtRegistryEntry {
@@ -634,6 +640,76 @@ describe('formatEdtRowMeta', () => {
         edtEntry({ members: [{ service: 'a', repoPath: '/a', branch: 'main' }, { service: 'b', repoPath: '/b', branch: 'main' }] }),
       ),
     ).toBe('2 members');
+  });
+});
+
+describe('system "Shared branches" EDT', () => {
+  const system = () =>
+    edtEntry({
+      ulid: SHARED_EDT_ULID,
+      topic: SHARED_EDT_TOPIC,
+      kind: 'system-shared',
+      members: [
+        { service: 'api', repoPath: '/api', branch: 'development' },
+        { service: 'web', repoPath: '/web', branch: 'main' },
+      ],
+    });
+
+  it('row meta carries the text badge `shared`', () => {
+    expect(formatEdtRowMeta(system())).toBe('[shared] 2 members');
+  });
+
+  it('detail lists the kind and each member on its shared branch', () => {
+    const detail = formatEdtDetail(system(), false);
+    expect(detail).toContain('Kind: shared');
+    expect(detail).toContain('- api (development)');
+    expect(detail).toContain('- web (main)');
+  });
+
+  it('offers switch and fast-forward (fast-forward only when active, nothing on the service panes)', () => {
+    expect(formatAvailableActionsHint('edts', false, true)).toBe('[Enter] Switch  [f] Fast-forward');
+    expect(formatAvailableActionsHint('edts', true, true)).toBe('[f] Fast-forward');
+    expect(formatAvailableActionsHint('edt-services', false, true)).toBe('');
+    expect(formatAvailableActionsHint('other-services', false, true)).toBe('');
+  });
+
+  it('the readonly notice carries the 2.46 message and code', () => {
+    expect(SYSTEM_EDT_NOTICE).toContain(EDT_SYSTEM_READONLY_MESSAGE);
+    expect(SYSTEM_EDT_NOTICE).toContain('edt-system-readonly');
+  });
+
+  it('quick-pick: switch keeps the system EDT, modify/delete/create-from exclude it', () => {
+    const user = edtEntry({ ulid: 'u1', topic: 'mine' });
+    const rows = [system(), user];
+    expect(quickCandidates('switch', rows, null).map((e) => e.topic)).toEqual([SHARED_EDT_TOPIC, 'mine']);
+    for (const mode of ['modify', 'delete', 'create-from'] as const) {
+      expect(quickCandidates(mode, rows, null).map((e) => e.topic)).toEqual(['mine']);
+    }
+  });
+
+  it('leaving the active system EDT gives the resolution view no outgoing topic (no adopt)', () => {
+    const user = edtEntry({ ulid: 'u1', topic: 'mine' });
+    expect(resolveOutgoingTopic([system(), user], SHARED_EDT_ULID)).toBeNull();
+    expect(resolveOutgoingTopic([system(), user], 'u1')).toBe('mine');
+    expect(resolveOutgoingTopic([system(), user], null)).toBeNull();
+    expect(initialSwitchResolution(null, [], {}, 1).globalAction).toBe('discard');
+  });
+
+  it('create wizard never seeds from the system EDT', () => {
+    const dialog = initialCreateDialog(system());
+    expect(dialog.selectedMembers).toEqual([]);
+    expect(dialog.seedFromEdt).toBeNull();
+  });
+
+  it('every new footer context is declared', () => {
+    expect(FOOTER_CONTEXTS['edts-system-switch'].hints.length).toBeGreaterThan(0);
+    expect(FOOTER_CONTEXTS['edts-system-readonly'].hints.length).toBeGreaterThan(0);
+    expect(FOOTER_CONTEXTS['edts-system-fast-forward'].hints.length).toBeGreaterThan(0);
+    expect(FOOTER_CONTEXTS['edts-system-switch'].hints).toContainEqual(['f', 'fast-forward']);
+    expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false, systemEdt: 'fast-forward' })).toBe('edts-system-fast-forward');
+    expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false, systemEdt: 'switch' })).toBe('edts-system-switch');
+    expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false, systemEdt: 'readonly' })).toBe('edts-system-readonly');
+    expect(edtsFooterContext({ kind: 'none' }, { registryEmpty: false, resolutionPending: false })).toBeNull();
   });
 });
 
@@ -1758,7 +1834,7 @@ describe('EdtsZone', () => {
       settings: {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: ['edt-services', 'other-services'], hiddenActionTypes: [], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
         switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       },
@@ -1806,7 +1882,7 @@ describe('EdtsZone', () => {
       settings: {
         general: { quitShortcutEnabled: true, editorCommand: '' },
         commandPalette: { gridMaxRows: 8, historySize: 20, historyDedup: true },
-        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5 },
+        edts: { hiddenActionHints: [], hiddenActionTypes: ['modify'], branchDropdownMaxRows: 5, sharedBranchesEdtEnabled: false },
         update: { concurrency: 3, runMigrations: true, cleanRestart: false, mergeSource: 'shared' as const }, sharedTypes: { install: true, cleanRestart: false, commit: true, historyDepth: 20, maxCommitsScanned: 1000 },
         switch: { restartMode: 'none' as const }, realign: { defaultScope: 'edt' as const, restartMode: 'none' as const }, dashboard: { restartMode: 'simple' as const }, logs: { bufferSize: 500, startWithHistory: false, filterHistorySize: 20, filterHistoryGridMaxRows: 8, filterHistoryDedup: true, restartMode: 'simple' as const }, services: { healthCheckDisabled: [] as string[] },
       },

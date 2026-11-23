@@ -4,58 +4,58 @@
 // AD-2) to each slice factory, and exports the one `createAppStore()`/`useAppStore` pair.
 import { create } from 'zustand';
 import type { UseBoundStore, StoreApi } from 'zustand';
-import type { ContainerPort } from '../../../../core/ports/container.js';
-import type { DevAuthPort } from '../../../../core/ports/dev-auth.js';
-import type { DockerPort } from '../../../../core/ports/docker.js';
-import type { HealthProbePort } from '../../../../core/ports/health-probe.js';
-import type { EditorPort } from '../../../../core/ports/editor.js';
-import type { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../core/ports/git.js';
-import type { LockPort } from '../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../core/ports/manifest.js';
-import type { ManifestCarryPort } from '../../../../core/ports/manifest-carry.js';
-import type { MigrationPort } from '../../../../core/ports/migration.js';
-import type { ConsumerConfigParser, SourceConfigParser } from '../../../../core/shared-types/list-consumers.js';
-import type { SharedTypesPort } from '../../../../core/ports/shared-types.js';
-import type { RestartPort } from '../../../../core/ports/restart.js';
-import type { RegistryPort } from '../../../../core/ports/registry.js';
-import type { RouteScannerPort } from '../../../../core/ports/route-scanner.js';
-import type { SavedRequestPort } from '../../../../core/ports/saved-request.js';
-import type { ShellSessionPort } from '../../../../core/ports/shell-session.js';
-import type { SettingsPort } from '../../../../core/ports/settings.js';
-import type { StatePort } from '../../../../core/ports/state.js';
-import { createNavigationSlice, type NavigationSlice } from './slices/navigation-slice.js';
-import { createEdtSlice, type EdtSlice } from './slices/edt-slice.js';
-import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice.js';
-import { createSettingsSlice, type SettingsSlice } from './slices/settings-slice.js';
-import { createUpdateSlice, type UpdateSlice } from './slices/update-slice.js';
-import { createLogsSlice, type LogsSlice } from './slices/logs-slice.js';
-import { createCommandHistorySlice, type CommandHistorySlice } from './slices/command-history-slice.js';
-import { createResetSlice, type ResetSlice } from './slices/reset-slice.js';
-import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
-import { createDashboardSlice, type DashboardSlice } from './slices/dashboard-slice.js';
-import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types-slice.js';
-import { createRealignSlice, type RealignSlice } from './slices/realign-slice.js';
-import { createTerminalSlice, type TerminalSlice } from './slices/terminal-slice.js';
-import { createHealSlice, type HealSlice } from './slices/heal-slice.js';
+import type { ContainerPort } from '../../../../core/ports/runtime/container.js';
+import type { DevAuthPort } from '../../../../core/ports/runtime/dev-auth.js';
+import type { DockerPort } from '../../../../core/ports/runtime/docker.js';
+import type { HealthProbePort } from '../../../../core/ports/runtime/health-probe.js';
+import type { EditorPort } from '../../../../core/ports/runtime/editor.js';
+import type { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../../core/ports/vcs/git.js';
+import type { LockPort } from '../../../../core/ports/runtime/lock.js';
+import type { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import type { ManifestCarryPort } from '../../../../core/ports/vcs/manifest-carry.js';
+import type { MigrationPort } from '../../../../core/ports/vcs/migration.js';
+import type { ConsumerConfigParser, SourceConfigParser } from '../../../../core/workspace/shared-types/consumers/list-consumers.js';
+import type { SharedTypesPort } from '../../../../core/ports/modules/shared-types.js';
+import type { RestartPort } from '../../../../core/ports/runtime/restart.js';
+import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
+import type { RouteScannerPort } from '../../../../core/ports/modules/route-scanner.js';
+import type { SavedRequestPort } from '../../../../core/ports/storage/saved-request.js';
+import type { ShellSessionPort } from '../../../../core/ports/runtime/shell-session.js';
+import type { SettingsPort } from '../../../../core/ports/storage/settings.js';
+import type { StatePort } from '../../../../core/ports/storage/state.js';
+import { createNavigationSlice, type NavigationSlice } from './slices/workspace/navigation-slice.js';
+import { createEdtSlice, type EdtSlice } from './slices/workspace/edt-slice.js';
+import { createRegistrySlice, type RegistrySlice } from './slices/workspace/registry-slice.js';
+import { createSettingsSlice, type SettingsSlice } from './slices/app/settings-slice.js';
+import { createUpdateSlice, type UpdateSlice } from './slices/update/update-slice.js';
+import { createLogsSlice, type LogsSlice } from './slices/logs/logs-slice.js';
+import { createCommandHistorySlice, type CommandHistorySlice } from './slices/app/command-history-slice.js';
+import { createResetSlice, type ResetSlice } from './slices/maintenance/reset-slice.js';
+import { createRoutesSlice, type RoutesSlice } from './slices/workspace/routes-slice.js';
+import { createDashboardSlice, type DashboardSlice } from './slices/workspace/dashboard-slice.js';
+import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types/shared-types-slice.js';
+import { createRealignSlice, type RealignSlice } from './slices/maintenance/realign-slice.js';
+import { createTerminalSlice, type TerminalSlice } from './slices/terminal/terminal-slice.js';
+import { createHealSlice, type HealSlice } from './slices/maintenance/heal-slice.js';
 
-export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
-export type { ActivateEdtRequest, CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/edt-slice.js';
-export { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION } from './slices/edt-slice.js';
-export type { RegistryOutcome, RegistryRegisterResult } from './slices/registry-slice.js';
-export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryResult, RemoveStaleRegistryOutcome, RegistryEntryError } from '../../../../core/scripts/clean-registry.js';
-export type { ValidateRegistryEntryResult, ValidateRegistryOutcome } from '../../../../core/scripts/validate-registry.js';
-export type { SettingsUpdate } from './slices/settings-slice.js';
-export type { UpdateRunStatus } from './slices/update-slice.js';
-export type { LogsPaneData } from './slices/logs-slice.js';
-export type { ResetPreview } from './slices/reset-slice.js';
-export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types-slice.js';
-export type { DashboardSectionStatus } from './slices/dashboard-slice.js';
-export type { RealignCandidates, RealignDraft, RealignLiveRow, RealignLiveStatus, RealignRun } from './slices/realign-slice.js';
-export type { HealNotice, HealRun, HealRunStatus } from './slices/heal-slice.js';
-export type { TerminalKind, TerminalLine, TerminalLineKind, TerminalTarget } from './slices/terminal-slice.js';
-export type { RoutesStatus } from './slices/routes-slice.js';
-export type { RouteResponse, RoutesPaneFocus, RoutesPaneTab } from './slices/routes-slice.js';
+export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/workspace/navigation-slice.js';
+export type { ActivateEdtRequest, CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/workspace/edt-slice.js';
+export { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION } from './slices/workspace/edt-slice.js';
+export type { RegistryOutcome, RegistryRegisterResult } from './slices/workspace/registry-slice.js';
+export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryResult, RemoveStaleRegistryOutcome, RegistryEntryError } from '../../../../core/workspace/scripts/registry/clean-registry.js';
+export type { ValidateRegistryEntryResult, ValidateRegistryOutcome } from '../../../../core/workspace/scripts/registry/validate-registry.js';
+export type { SettingsUpdate } from './slices/app/settings-slice.js';
+export type { UpdateRunStatus } from './slices/update/update-slice.js';
+export type { LogsPaneData } from './slices/logs/logs-slice.js';
+export type { ResetPreview } from './slices/maintenance/reset-slice.js';
+export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types/shared-types-slice.js';
+export type { DashboardSectionStatus } from './slices/workspace/dashboard-slice.js';
+export type { RealignCandidates, RealignDraft, RealignLiveRow, RealignLiveStatus, RealignRun } from './slices/maintenance/realign-slice.js';
+export type { HealNotice, HealRun, HealRunStatus } from './slices/maintenance/heal-slice.js';
+export type { TerminalKind, TerminalLine, TerminalLineKind, TerminalTarget } from './slices/terminal/terminal-slice.js';
+export type { RoutesStatus } from './slices/workspace/routes-slice.js';
+export type { RouteResponse, RoutesPaneFocus, RoutesPaneTab } from './slices/workspace/routes-slice.js';
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
@@ -96,10 +96,10 @@ export type AppStoreDeps = {
   // The post-switch verification's HTTP touchpoint (manifest `healthUrl`). Optional like the
   // rest; without it a service declaring a healthUrl cannot be verified (explicit failed row).
   healthProbe?: HealthProbePort;
-  // The Routes zone's scanner touchpoint — the routes slice calls core/routes/list-routes.ts
+  // The Routes zone's scanner touchpoint — the routes slice calls core/insight/routes/list-routes.ts
   // in-process through it; loadRoutes degrades to an explicit error state when it is missing.
   scanner?: RouteScannerPort;
-  // The Routes zone's dev-auth touchpoint, used with the scanner by core/routes/fire-request.ts;
+  // The Routes zone's dev-auth touchpoint, used with the scanner by core/insight/routes/fire-request.ts;
   // fireRoute degrades to an explicit error state when it is missing.
   auth?: DevAuthPort;
   // The saved-request library touchpoint — the same global.db store the CLI's request-*

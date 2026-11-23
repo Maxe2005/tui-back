@@ -4,7 +4,7 @@
 // version on the npm registry by shelling out to `npm view` through an injectable runner.
 import { readFile, writeFile } from 'node:fs/promises';
 import { err, ok, type Result } from '../../../../core/result.js';
-import type { SharedTypesPort } from '../../../../core/ports/shared-types.js';
+import type { SharedTypesPort } from '../../../../core/ports/modules/shared-types.js';
 import { runProcess, type ProcessResult } from '../../process.js';
 
 export interface SharedTypesFs {

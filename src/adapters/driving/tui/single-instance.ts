@@ -1,5 +1,5 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync, unlinkSync, openSync, closeSync, constants } from 'node:fs';
-import { resolveXdgPaths, ensureXdgDir } from '../../driven/xdg/index.js';
+import { resolveXdgPaths, ensureXdgDir } from '../../driven/storage/xdg/index.js';
 
 const LOCK_DIR_NAME = 'locks';
 const LOCK_FILE_NAME = 'tui.lock';

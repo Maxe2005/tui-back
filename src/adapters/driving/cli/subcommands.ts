@@ -3,17 +3,18 @@
 // (which close over the final list). assertUniqueSubcommandNames keeps a later entry from
 // silently shadowing an earlier one.
 import { err, ok } from '../../../core/result.js';
-import type { Subcommand } from './dispatch.js';
+import type { Subcommand } from './dispatch/dispatch.js';
 import { generateBashCompletion } from './completion-spec.js';
 import { createInstallSubcommand } from './install.js';
 import type { SubcommandDeps } from './commands/deps.js';
 import { dashboardSubcommand, edtsSubcommand, listReposSubcommand, pingSubcommand, registerSubcommand, scanSubcommand } from './commands/basic.js';
-import { edtSubcommand } from './commands/edt.js';
+import { edtSubcommand } from './commands/edt/edt.js';
 import { updateSubcommand } from './commands/update.js';
 import { realignSubcommand } from './commands/realign.js';
 import { healSubcommand } from './commands/heal.js';
 import { registrySubcommand } from './commands/registry.js';
 import { fireRequestSubcommand, listRoutesSubcommand, requestDeleteSubcommand, requestFireSubcommand, requestListSubcommand } from './commands/request.js';
+import { routesSubcommand } from './commands/routes.js';
 
 const COMPLETION_USAGE = 'tui-back completion bash';
 
@@ -35,6 +36,7 @@ export function buildSubcommands(deps: SubcommandDeps): Subcommand[] {
     requestListSubcommand(deps),
     requestFireSubcommand(deps),
     requestDeleteSubcommand(deps),
+    routesSubcommand(deps),
   ];
   subcommands.push(createInstallSubcommand({ ...deps.install, commands: () => subcommands }));
   // Registered last and closing over the final list, so the generated script includes itself.

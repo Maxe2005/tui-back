@@ -9,12 +9,12 @@ const SRC = fileURLToPath(new URL('../../../../../', import.meta.url));
 // value-toggle exceptions, where Tab is not a focus-navigation key.
 const ALLOWED = new Set([
   'adapters/driving/tui/shared/keys/focus-navigation.ts',
-  'adapters/driving/tui/shared/command-bar.tsx',
-  'adapters/driving/tui/shared/components/text-edit.ts',
-  'adapters/driving/tui/shared/components/branch-picker.tsx',
-  'adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx',
-  'adapters/driving/tui/zones/routes/routes-zone.overlay-keys.ts',
-  'adapters/driving/tui/zones/routes/routes-zone.pane-keys.ts',
+  'adapters/driving/tui/shared/screens/command-bar/command-bar.tsx',
+  'adapters/driving/tui/shared/components/inputs/text-edit.ts',
+  'adapters/driving/tui/shared/components/pickers/branch-picker.tsx',
+  'adapters/driving/tui/zones/edts/dialogs/create-wizard/steps/step-branches.tsx',
+  'adapters/driving/tui/zones/routes/keys/routes-zone.overlay-keys.ts',
+  'adapters/driving/tui/zones/routes/keys/routes-zone.pane-keys.ts',
   // History view: Tab toggles the by-branch / by-version search mode, not a focus move.
   'adapters/driving/tui/zones/shared-types/shared-types-history.logic.ts',
 ]);
