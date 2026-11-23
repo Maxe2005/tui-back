@@ -6,10 +6,10 @@
 // draft actions share the same guards and `failConfigOpen` posture, so splitting them further
 // would only scatter one flow across files.
 import { resolve } from 'node:path';
-import { err, ok, type Result } from '../../../../../core/result.js';
-import type { GroupUpdateScope } from '../../../../../core/scripts/group-update.js';
-import { loadMergeSourcesFromEdt } from '../../../../../core/scripts/resolve-merge-sources.js';
-import { resolveSingleSourceOf } from './shared-types/shared-types-slice.js';
+import { err, ok, type Result } from '../../../../../../../core/result.js';
+import type { GroupUpdateScope } from '../../../../../../../core/scripts/group-update.js';
+import { loadMergeSourcesFromEdt } from '../../../../../../../core/scripts/resolve-merge-sources.js';
+import { resolveSingleSourceOf } from '../../shared-types/shared-types-slice.js';
 import {
   applyMergeStrategy,
   confirmUpdateConfigDraft,
@@ -17,7 +17,7 @@ import {
   type ConfigLayout,
   type UpdateConfigRowInput,
   type UpdateConfigDraft,
-} from '../../zones/update/update-config-dialog.logic.js';
+} from '../../../../zones/update/update-config-dialog.logic.js';
 import {
   parseUpdateServiceArg,
   type OpenUpdateConfigTarget,
@@ -25,7 +25,7 @@ import {
   type UpdateSliceContext,
   type UpdateSliceGet,
   type UpdateSliceSet,
-} from './update/update-slice.types.js';
+} from '../update-slice.types.js';
 
 export function createUpdateConfigActions(
   ctx: UpdateSliceContext,

@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err } from '../../../../../core/result.js';
-import type { ContainerPort } from '../../../../../core/ports/container.js';
-import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { RestartPort } from '../../../../../core/ports/restart.js';
-import type { RegistryPort } from '../../../../../core/ports/registry.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { createAppStore } from '../app-store.js';
-import { fakeDeps } from './update/update-slice.test-support.js';
+import { ok, err } from '../../../../../../../core/result.js';
+import type { ContainerPort } from '../../../../../../../core/ports/container.js';
+import type { EdtRegistryPort } from '../../../../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../../../../core/ports/git.js';
+import type { LockPort } from '../../../../../../../core/ports/lock.js';
+import type { ManifestPort } from '../../../../../../../core/ports/manifest.js';
+import type { RestartPort } from '../../../../../../../core/ports/restart.js';
+import type { RegistryPort } from '../../../../../../../core/ports/registry.js';
+import type { StatePort } from '../../../../../../../core/ports/state.js';
+import { createAppStore } from '../../../app-store.js';
+import { fakeDeps } from '../update-slice.test-support.js';
 
 // The pre-run configuration screen's store state — opening pre-scoped to the trigger,
 // confirming with exactly the confirmed configuration, and rejecting while a run is in flight.
