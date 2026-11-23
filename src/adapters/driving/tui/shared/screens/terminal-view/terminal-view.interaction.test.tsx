@@ -5,13 +5,13 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
-import { ok } from '../../../../core/result.js';
-import type { Manifest } from '../../../../core/ports/manifest.js';
-import type { ShellLine, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../../../../core/ports/shell-session.js';
-import { AppShell } from '../app-shell.js';
-import { createAppStore, type AppStoreDeps } from '../store/app-store.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './test-support/fake-tty.js';
-import { footerIdOf } from './test-support/mount-for-test.js';
+import { ok } from '../../../../../../core/result.js';
+import type { Manifest } from '../../../../../../core/ports/manifest.js';
+import type { ShellLine, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../../../../../../core/ports/shell-session.js';
+import { AppShell } from '../../../app-shell.js';
+import { createAppStore, type AppStoreDeps } from '../../../store/app-store.js';
+import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../test-support/fake-tty.js';
+import { footerIdOf } from '../../test-support/mount-for-test.js';
 import { TerminalView } from './terminal-view.js';
 
 const CTRL_C = '\x03';

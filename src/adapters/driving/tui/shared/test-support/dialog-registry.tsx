@@ -37,7 +37,7 @@ import { CommandBar } from '../screens/command-bar/command-bar.js';
 import { RepoRegistryScreen } from '../repo-registry-screen.js';
 import { SettingsScreen } from '../settings-screen.js';
 import { RealignDialog } from '../realign-dialog.js';
-import { TerminalView } from '../terminal-view.js';
+import { TerminalView } from '../screens/terminal-view/terminal-view.js';
 import { HealDialog } from '../heal-dialog.js';
 
 export const LONG_TEXT = 'x'.repeat(5000);
@@ -405,10 +405,10 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   { id: 'shared/heal-done', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('done') }) },
   { id: 'shared/heal-error', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('error') }) },
-  { id: 'shared/terminal-idle', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore() }) },
-  { id: 'shared/terminal-running', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
-  { id: 'shared/terminal-fullscreen', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
-  { id: 'shared/terminal-confirm-close', file: 'shared/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, confirming: true }), initial: { confirming: true } }) },
+  { id: 'shared/terminal-idle', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore() }) },
+  { id: 'shared/terminal-running', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
+  { id: 'shared/terminal-fullscreen', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
+  { id: 'shared/terminal-confirm-close', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, confirming: true }), initial: { confirming: true } }) },
   { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
   { id: 'update/zone', file: 'zones/update/update-zone-dialogs.tsx', embedded: 'update' },
   { id: 'routes/zone', file: 'zones/routes/routes-modals.tsx', embedded: 'routes' },

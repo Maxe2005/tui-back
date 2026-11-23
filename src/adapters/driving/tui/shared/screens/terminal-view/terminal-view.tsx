@@ -7,19 +7,19 @@
 // Not a ModalDialog: its body must be a measured, flex-grown box for ScrollableOutput.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
-import { markerText } from '../../../../core/shell/line-buffer.js';
-import { useAppStore, type AppStore, type TerminalLine } from '../store/app-store.js';
-import { useBounds } from './bounds/bounds-context.js';
-import { FullscreenFrame } from './components/layout/fullscreen-frame.js';
-import { ScrollableOutput } from './components/display/scrollable-output.js';
-import { nextTextInputValue, type TextInputState } from './components/inputs/text-edit.js';
-import { TextInputLine } from './components/inputs/text-input-line.js';
-import { useFooterContext } from './hooks/use-footer-context.js';
-import { useInput } from './hooks/use-input.js';
-import { resolveHistoryBrowseDown, resolveHistoryBrowseUp, type HistoryBrowseState } from './input-history/index.js';
-import { adjustScrollOffset } from './scrollable-output/index.js';
-import { colors, spacing } from './theme/theme.js';
-import { TERMINAL_BUSY_NOTICE } from '../store/slices/terminal-text.js';
+import { markerText } from '../../../../../../core/shell/line-buffer.js';
+import { useAppStore, type AppStore, type TerminalLine } from '../../../store/app-store.js';
+import { useBounds } from '../../bounds/bounds-context.js';
+import { FullscreenFrame } from '../../components/layout/fullscreen-frame.js';
+import { ScrollableOutput } from '../../components/display/scrollable-output.js';
+import { nextTextInputValue, type TextInputState } from '../../components/inputs/text-edit.js';
+import { TextInputLine } from '../../components/inputs/text-input-line.js';
+import { useFooterContext } from '../../hooks/use-footer-context.js';
+import { useInput } from '../../hooks/use-input.js';
+import { resolveHistoryBrowseDown, resolveHistoryBrowseUp, type HistoryBrowseState } from '../../input-history/index.js';
+import { adjustScrollOffset } from '../../scrollable-output/index.js';
+import { colors, spacing } from '../../theme/theme.js';
+import { TERMINAL_BUSY_NOTICE } from '../../../store/slices/terminal-text.js';
 import {
   TERMINAL_CONFIRM_CLOSE_TEXT,
   pageScrollOffset,

@@ -1,9 +1,9 @@
 // tui/shared/terminal-view.logic: the Terminal overlay's pure decisions — which action a key
 // resolves to for the current focus and run state, which footer context shows, and the layout
 // numbers. The status-line wording lives store-side (store/slices/terminal-text.ts).
-import type { FooterContextId } from '../keybindings/index.js';
-import type { TextEditKey } from './components/inputs/text-edit.js';
-import { resolveFocusStep } from './keys/focus-navigation.js';
+import type { FooterContextId } from '../../../keybindings/index.js';
+import type { TextEditKey } from '../../components/inputs/text-edit.js';
+import { resolveFocusStep } from '../../keys/focus-navigation.js';
 
 export type TerminalFocus = 'prompt' | 'output';
 
