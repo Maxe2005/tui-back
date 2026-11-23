@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { KEYBINDINGS } from '../../keybindings/index.js';
-import { createAppStore } from '../../store/app-store.js';
+import { KEYBINDINGS } from '../../../keybindings/index.js';
+import { createAppStore } from '../../../store/app-store.js';
 import {
   KeybindingHelp,
   clampHelpOffset,
   resolveHelpScroll,
   resolveHelpWindow,
-} from './index.js';
-import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
-import { renderToString } from './render-to-string.js';
-import { footerContextOf } from '../test-support/mount-for-test.js';
+} from '../index.js';
+import { clampBoundedOffset, resolveBoundedWindow } from '../bounded-list.js';
+import { renderToString } from '../render-to-string.js';
+import { footerContextOf } from '../../test-support/mount-for-test.js';
 import { filterKeybindings, withSectionHeadings } from './keybinding-help.js';
-import type { Keybinding } from '../../keybindings/index.js';
+import type { Keybinding } from '../../../keybindings/index.js';
 
 // clampHelpOffset/resolveHelpWindow are thin aliases for bounded-list.tsx's
 // clampBoundedOffset/resolveBoundedWindow, not a second copy of the window logic.

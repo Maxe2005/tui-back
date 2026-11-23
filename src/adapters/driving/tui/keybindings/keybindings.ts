@@ -1,5 +1,5 @@
 import type { ZoneId } from '../zones/zones.js';
-import { formatHints, type Hint } from '../shared/components/hints.js';
+import { formatHints, type Hint } from '../shared/components/dialogs/hints.js';
 import { FOOTER_CONTEXTS } from './footer-contexts.js';
 import { focusNavKeysLabel } from '../shared/keys/focus-navigation.js';
 export type { NavigationKey } from '../shared/keys/navigation-key.js';

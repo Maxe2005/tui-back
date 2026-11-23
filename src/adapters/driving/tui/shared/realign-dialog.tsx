@@ -8,7 +8,7 @@ import { useFooterContext } from './hooks/use-footer-context.js';
 import { useBounds } from './bounds/bounds-context.js';
 import { BoundedList } from './components/bounded-list.js';
 import { DimAnnotation } from './components/dim-annotation.js';
-import { ModalDialog } from './components/modal-dialog.js';
+import { ModalDialog } from './components/dialogs/modal-dialog.js';
 import { RestartModeSelector } from './components/restart-mode-selector.js';
 import { StateLine } from './components/state-line.js';
 import { ClampedParagraph } from './components/truncated-text.js';

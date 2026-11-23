@@ -2,7 +2,7 @@ import { Box, Text } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import { normalizeMessage } from '../../bounds/message.js';
 import { colors, spacing } from '../../theme/theme.js';
-import { formatHints } from '../hints.js';
+import { formatHints } from '../dialogs/hints.js';
 
 export function TopBar({
   activeEdt,

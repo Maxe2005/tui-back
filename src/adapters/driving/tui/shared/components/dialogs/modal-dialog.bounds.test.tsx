@@ -2,9 +2,9 @@ import { createElement } from 'react';
 import { Text, render } from 'ink';
 import { describe, expect, it } from 'vitest';
 import { ModalDialog } from './modal-dialog.js';
-import { BoundsProvider } from '../bounds/bounds-context.js';
-import { renderToString } from './render-to-string.js';
-import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../test-support/fake-tty.js';
+import { BoundsProvider } from '../../bounds/bounds-context.js';
+import { renderToString } from '../render-to-string.js';
+import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../../test-support/fake-tty.js';
 
 describe('ModalDialog bounds', () => {
   it('never exceeds its bounds, keeps the title, pins the footer', async () => {

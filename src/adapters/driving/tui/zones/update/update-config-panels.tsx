@@ -4,7 +4,7 @@
 // global line), the table (header 1 + `tableRows` incl. its more-above/below lines), one error
 // line, all truncated to a single line — nothing here can wrap.
 import { Box, Text } from 'ink';
-import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { BranchAutocompleteInput } from '../../shared/components/branch-autocomplete-input.js';
 import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/suggest-field.logic.js';
 import { colors } from '../../shared/theme/theme.js';

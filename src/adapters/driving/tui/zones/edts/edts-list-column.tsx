@@ -3,7 +3,7 @@
 import { Box, Text } from 'ink';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { formatHint, formatHints } from '../../shared/components/hints.js';
+import { formatHint, formatHints } from '../../shared/components/dialogs/hints.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { StateLine } from '../../shared/components/state-line.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';

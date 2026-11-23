@@ -4,9 +4,9 @@ import type { RoutesZoneCtx } from './routes-zone.ctx.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { FilterablePickList } from '../../shared/components/filterable-pick-list.js';
-import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../shared/theme/theme.js';
-import { formatHints } from '../../shared/components/hints.js';
+import { formatHints } from '../../shared/components/dialogs/hints.js';
 
 export function RoutesModals({ c }: { c: RoutesZoneCtx }) {
   const {

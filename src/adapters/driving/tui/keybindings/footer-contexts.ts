@@ -2,8 +2,8 @@
 // the keyboard registers one of these ids while it is open; the footer then shows exactly that
 // context's hints (and the `?` help lists the same rows), and falls back to the zone hints when
 // the last one closes. Hints are data so the footer, the help and the tests read one list.
-import type { Hint } from '../shared/components/hints.js';
-import { KEY_UP_DOWN } from '../shared/components/hints.js';
+import type { Hint } from '../shared/components/dialogs/hints.js';
+import { KEY_UP_DOWN } from '../shared/components/dialogs/hints.js';
 
 const MOVE: Hint = [KEY_UP_DOWN, 'move'];
 const CONFIRM: Hint = ['Enter', 'confirm'];

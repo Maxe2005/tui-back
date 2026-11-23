@@ -3,11 +3,11 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const TUI = fileURLToPath(new URL('../../', import.meta.url));
+const TUI = fileURLToPath(new URL('../../../', import.meta.url));
 
 // Files allowed to spell a `[Key] verb` literal: the helper that defines the format, and the
 // Dashboard, whose empty-registry sentence is still its own.
-const ALLOWED = new Set(['shared/components/hints.ts', 'zones/dashboard/dashboard-zone.tsx']);
+const ALLOWED = new Set(['shared/components/dialogs/hints.ts', 'zones/dashboard/dashboard-zone.tsx']);
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

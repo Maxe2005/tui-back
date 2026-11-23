@@ -3,7 +3,7 @@
 import { Box, Text } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { formatHint } from '../../shared/components/hints.js';
+import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { ScrollableOutput } from '../../shared/components/scrollable-output.js';
 import { colors } from '../../shared/theme/theme.js';

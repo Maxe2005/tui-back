@@ -8,7 +8,7 @@ import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { createAppStore } from '../../store/app-store.js';
 import { createFilterablePickListState } from '../components/filterable-pick-list.js';
-import { KeybindingHelp } from '../components/keybinding-help.js';
+import { KeybindingHelp } from '../components/dialogs/keybinding-help.js';
 import { IssuesDialogView } from '../../zones/edts/dialogs/issues-dialog.js';
 import { FastForwardDialogView } from '../../zones/edts/dialogs/fast-forward-dialog.js';
 import { DeleteDialogView } from '../../zones/edts/dialogs/delete-dialog.js';
@@ -388,7 +388,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
     file: 'zones/logs/logs-actions-menu.tsx',
     render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }), restartMode: 'simple' }),
   },
-  { id: 'shared/keybinding-help', file: 'shared/components/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
+  { id: 'shared/keybinding-help', file: 'shared/components/dialogs/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
   { id: 'shared/command-bar', file: 'shared/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/repo-registry', file: 'shared/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
   { id: 'shared/settings', file: 'shared/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },

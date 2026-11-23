@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
-import { useInput } from '../hooks/use-input.js';
-import { KEYBINDINGS, type Keybinding } from '../../keybindings/index.js';
-import type { NavigationKey } from '../keys/navigation-key.js';
-import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { colors } from '../theme/theme.js';
-import { useFooterContext } from '../hooks/use-footer-context.js';
+import { useInput } from '../../hooks/use-input.js';
+import { KEYBINDINGS, type Keybinding } from '../../../keybindings/index.js';
+import type { NavigationKey } from '../../keys/navigation-key.js';
+import { useAppStore, type AppStore } from '../../../store/app-store.js';
+import { colors } from '../../theme/theme.js';
+import { useFooterContext } from '../../hooks/use-footer-context.js';
 import { ModalDialog } from './modal-dialog.js';
-import { TruncatedText } from './truncated-text.js';
-import { clampBoundedOffset, resolveBoundedWindow } from './bounded-list.js';
+import { TruncatedText } from '../truncated-text.js';
+import { clampBoundedOffset, resolveBoundedWindow } from '../bounded-list.js';
 
 export const DEFAULT_HELP_VISIBLE_LINES = 10;
 

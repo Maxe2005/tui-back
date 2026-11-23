@@ -10,7 +10,7 @@ import { CheckboxListItem } from '../../../shared/components/checkbox-list-item.
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
-import { ModalDialog } from '../../../shared/components/modal-dialog.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { TextInputLine } from '../../../shared/components/text-input-line.js';
 import { nextTextInputValue } from '../../../shared/components/text-edit.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';

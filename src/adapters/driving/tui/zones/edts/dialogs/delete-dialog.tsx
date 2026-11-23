@@ -7,7 +7,7 @@ import type { AppState } from '../../../store/app-store.js';
 import { CheckboxListItem } from '../../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
-import { ModalDialog } from '../../../shared/components/modal-dialog.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   buildDeleteMemberRows,

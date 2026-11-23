@@ -7,8 +7,8 @@ export { resolveRowLayout } from './list-row.js';
 export { DetailPane } from './detail-pane.js';
 export type { SummaryTone } from './detail-pane.js';
 export { SUMMARY_LINE_COLORS } from './detail-pane.js';
-export { ModalDialog } from './modal-dialog.js';
-export type { ModalDialogProps } from './modal-dialog.js';
+export { ModalDialog } from './dialogs/modal-dialog.js';
+export type { ModalDialogProps } from './dialogs/modal-dialog.js';
 export {
   KeybindingHelp,
   filterKeybindings,
@@ -16,7 +16,7 @@ export {
   resolveHelpScroll,
   resolveHelpWindow,
   DEFAULT_HELP_VISIBLE_LINES,
-} from './keybinding-help.js';
+} from './dialogs/keybinding-help.js';
 export {
   BoundedList,
   clampBoundedOffset,
@@ -101,5 +101,5 @@ export { FullscreenFrame } from './fullscreen-frame.js';
 export type { FullscreenFrameProps } from './fullscreen-frame.js';
 export { StateLine, resolveStateLineText } from './state-line.js';
 export type { StateLineProps } from './state-line.js';
-export { formatHint, formatHints, CONFIRM_CANCEL_HINTS, KEY_UP_DOWN, HINT_SEPARATOR } from './hints.js';
-export type { Hint } from './hints.js';
+export { formatHint, formatHints, CONFIRM_CANCEL_HINTS, KEY_UP_DOWN, HINT_SEPARATOR } from './dialogs/hints.js';
+export type { Hint } from './dialogs/hints.js';

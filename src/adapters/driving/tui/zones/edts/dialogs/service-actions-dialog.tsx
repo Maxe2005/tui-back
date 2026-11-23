@@ -7,7 +7,7 @@ import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '.
 import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
 import { FailedResultList, type FailedResultRow } from '../../../shared/components/failed-result-list.js';
 import { MenuList, resolveMenuKey } from '../../../shared/components/menu-list.js';
-import { ModalDialog } from '../../../shared/components/modal-dialog.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   createPickerSession,

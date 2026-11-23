@@ -2,7 +2,7 @@
 // handling stays in LogsZone's useInput.
 import { Box, Text } from 'ink';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { formatHint } from '../../shared/components/hints.js';
+import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { FullscreenFrame } from '../../shared/components/fullscreen-frame.js';
 import { ScrollableOutput } from '../../shared/components/scrollable-output.js';

@@ -8,7 +8,7 @@ import { Box, Text, type Key } from 'ink';
 import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/dim-annotation.js';
-import { ModalDialog } from './components/modal-dialog.js';
+import { ModalDialog } from './components/dialogs/modal-dialog.js';
 import { StateLine } from './components/state-line.js';
 import { nextCursorForKey } from './keys/list-cursor.js';
 import { useFooterContext } from './hooks/use-footer-context.js';

@@ -9,7 +9,7 @@ import {
   type GridCursor,
 } from '../../shared/command-bar.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';

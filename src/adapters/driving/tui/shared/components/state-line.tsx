@@ -6,7 +6,7 @@
 import { Text } from 'ink';
 import { RETRY_HINT } from '../../keybindings/index.js';
 import { colors } from '../theme/theme.js';
-import { formatHint } from './hints.js';
+import { formatHint } from './dialogs/hints.js';
 import { Spinner } from './spinner.js';
 
 export type StateLineProps =

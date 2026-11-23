@@ -13,7 +13,7 @@ import {
   type HistoryBrowseState,
 } from './input-history/index.js';
 import { useBounds } from './bounds/bounds-context.js';
-import { ModalDialog } from './components/modal-dialog.js';
+import { ModalDialog } from './components/dialogs/modal-dialog.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import { useFooterContext } from './hooks/use-footer-context.js';

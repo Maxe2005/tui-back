@@ -7,7 +7,7 @@ import { SHELL_FIXED_ROWS, formatTooSmallMessage, isTerminalTooSmall } from './s
 import { ClampedParagraph, TruncatedText } from './shared/components/truncated-text.js';
 import { Footer, footerRowsFor, useFooterItems } from './shared/components/chrome/footer.js';
 import { InputGate, useInput } from './shared/hooks/use-input.js';
-import { KeybindingHelp } from './shared/components/keybinding-help.js';
+import { KeybindingHelp } from './shared/components/dialogs/keybinding-help.js';
 import { TopBar } from './shared/components/chrome/top-bar.js';
 import { sharedTypesBusy } from './store/slices/shared-types-slice.js';
 import { ZoneTabBar } from './shared/components/chrome/zone-tab-bar.js';

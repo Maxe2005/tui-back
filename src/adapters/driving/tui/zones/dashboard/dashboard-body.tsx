@@ -6,7 +6,7 @@ import { Box, Text } from 'ink';
 import type { DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
-import { formatHint } from '../../shared/components/hints.js';
+import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { ServiceActionsRow } from '../../shared/components/service-actions-row.js';
 import { StateLine } from '../../shared/components/state-line.js';

@@ -6,7 +6,7 @@ import { BoundedList } from '../../shared/components/bounded-list.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { MenuList } from '../../shared/components/menu-list.js';
-import { ModalDialog } from '../../shared/components/modal-dialog.js';
+import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { UpdateIncident } from '../../store/slices/update-slice.js';
 import { formatIncidentRow, UPDATE_INCIDENTS_TITLE } from './update-incidents.logic.js';

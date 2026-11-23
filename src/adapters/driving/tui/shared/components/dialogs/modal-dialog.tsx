@@ -1,9 +1,9 @@
 import { Box, Text } from 'ink';
-import { useInput } from '../hooks/use-input.js';
+import { useInput } from '../../hooks/use-input.js';
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { useBounds } from '../bounds/bounds-context.js';
-import { useElementSize } from '../hooks/use-element-size.js';
-import { colors, spacing } from '../theme/theme.js';
+import { useBounds } from '../../bounds/bounds-context.js';
+import { useElementSize } from '../../hooks/use-element-size.js';
+import { colors, spacing } from '../../theme/theme.js';
 
 export type ModalDialogProps = {
   title: string;

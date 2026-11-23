@@ -1,5 +1,5 @@
 // tui/shared/settings/edts.logic: the EDTs tab's hideable hints/action types, branch-dropdown rows helpers, group list and restart/scope labels. Pure; no Ink/React.
-import { formatHint } from '../components/hints.js';
+import { formatHint } from '../components/dialogs/hints.js';
 import {
   MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS,
   MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS,

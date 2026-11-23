@@ -4,7 +4,7 @@ import { Box, Text } from 'ink';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { formatHint } from '../../shared/components/hints.js';
+import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { STATUS_BADGES, StatusBadge } from '../../shared/components/status-badge.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { logsLegendHints, formatHealthLabel, healthBadgeState } from './logs-zone.logic.js';
