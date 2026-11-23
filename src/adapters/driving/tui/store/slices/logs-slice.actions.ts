@@ -10,7 +10,7 @@ import {
   type RestartMode,
   type ServiceAction,
 } from '../../../../../core/service-actions/index.js';
-import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS, RESTART_MODES, TERMINAL_KINDS } from './service-action-ids.js';
+import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS, RESTART_MODES, TERMINAL_KINDS } from './app/service-action-ids.js';
 import type { LogsHealthHelpers } from './logs-slice.health.js';
 import {
   LOGS_ACTION_FAILED_NOTICE,

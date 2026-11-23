@@ -1,9 +1,9 @@
 // tui/store/slices: the `:settings` screen's live, applied settings — persisted to
 // settings.yaml and applied to the live store immediately, with no separate save step.
 import type { StateCreator } from 'zustand';
-import { DEFAULT_SETTINGS, type Settings } from '../../../../../core/ports/settings.js';
-import { assertSharedEdtCanBeDisabled } from '../../../../../core/edt/shared-edt.js';
-import type { AppState, AppStoreDeps } from '../app-store.js';
+import { DEFAULT_SETTINGS, type Settings } from '../../../../../../core/ports/settings.js';
+import { assertSharedEdtCanBeDisabled } from '../../../../../../core/edt/shared-edt.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 // A partial update accepted by updateSettings — each present top-level key shallow-merges
 // into that sub-object's existing fields, e.g. `{ edts: { hiddenActionHints: [...] } }` leaves

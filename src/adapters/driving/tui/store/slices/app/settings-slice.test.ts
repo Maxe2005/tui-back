@@ -1,10 +1,10 @@
 // tui/store/slices/settings-slice: the shared-branches switch's side effects — a persisted flip
 // reloads the EDT list once (system EDT first), an unchanged or refused update does not.
 import { describe, expect, it, vi } from 'vitest';
-import { ok } from '../../../../../core/result.js';
-import { SHARED_EDT_ULID } from '../../../../../core/edt/shared-edt.js';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { ok } from '../../../../../../core/result.js';
+import { SHARED_EDT_ULID } from '../../../../../../core/edt/shared-edt.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 function entry(ulid: string, topic: string, kind?: 'system-shared'): EdtRegistryEntry {
   return { ulid, topic, createdAt: '', status: 'inactive', members: [], ...(kind ? { kind } : {}) };

@@ -4,7 +4,7 @@
 // keystroke is routed by LogsZone's useInput through resolveMenuKey.
 import { Box, Text } from 'ink';
 import type { RestartMode, ServiceAction } from '../../../../../core/service-actions/index.js';
-import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS } from '../../store/slices/service-action-ids.js';
+import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS } from '../../store/slices/app/service-action-ids.js';
 import { MenuList, type MenuItem } from '../../shared/components/lists/menu-list.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';

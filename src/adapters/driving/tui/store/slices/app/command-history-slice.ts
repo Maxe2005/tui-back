@@ -3,8 +3,8 @@
 // Settings screen's clear action and the bar's recall share one source of truth, like
 // filterHistory in logs-slice.ts; both run on the same shared persisted-history controller.
 import type { StateCreator } from 'zustand';
-import type { AppState, AppStoreDeps } from '../app-store.js';
-import { createPersistedHistoryStore, pushHistoryEntry } from '../../shared/input-history/index.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
+import { createPersistedHistoryStore, pushHistoryEntry } from '../../../shared/input-history/index.js';
 
 export type CommandHistorySlice = {
   commandHistory: string[];

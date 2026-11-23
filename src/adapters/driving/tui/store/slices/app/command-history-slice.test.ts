@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
-import { ok } from '../../../../../core/result.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { DEFAULT_SETTINGS } from '../../../../../../core/ports/settings.js';
+import { ok } from '../../../../../../core/result.js';
+import type { StatePort } from '../../../../../../core/ports/state.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 function fakeStatePort(initial: string[] | null) {
   const writes: string[][] = [];
