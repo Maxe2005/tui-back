@@ -1,7 +1,7 @@
 // tui/shared/settings/update.logic: the Update tab's rows, hints, concurrency clamp/adjust/parse and key mapping. Pure; no Ink/React.
-import type { TextEditKey } from '../components/inputs/text-edit.js';
-import { nextCursorForKey } from '../keys/list-cursor.js';
-import { MAX_UPDATE_CONCURRENCY, MIN_UPDATE_CONCURRENCY, type Settings, type UpdateMergeSourceDefault } from '../../../../../core/ports/settings.js';
+import type { TextEditKey } from '../../components/inputs/text-edit.js';
+import { nextCursorForKey } from '../../keys/list-cursor.js';
+import { MAX_UPDATE_CONCURRENCY, MIN_UPDATE_CONCURRENCY, type Settings, type UpdateMergeSourceDefault } from '../../../../../../core/ports/settings.js';
 
 // Update tab: the group-update defaults — concurrency (moved here from General), and the three
 // global defaults the 3.7 config screen and the CLI start from. A flat Up/Down row list; edits
