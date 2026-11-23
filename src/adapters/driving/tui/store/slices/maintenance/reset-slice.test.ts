@@ -5,17 +5,17 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../../../../../core/result.js';
-import type { DockerPort } from '../../../../../core/ports/docker.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../core/ports/registry.js';
-import type { SettingsPort } from '../../../../../core/ports/settings.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { err, ok } from '../../../../../../core/result.js';
+import type { DockerPort } from '../../../../../../core/ports/docker.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../../../core/ports/git.js';
+import type { LockPort } from '../../../../../../core/ports/lock.js';
+import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../../../../core/ports/registry.js';
+import type { SettingsPort } from '../../../../../../core/ports/settings.js';
+import type { StatePort } from '../../../../../../core/ports/state.js';
+import { DEFAULT_SETTINGS } from '../../../../../../core/ports/settings.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 import { RESET_NOTICE_TIMEOUT_MS, resolveResetBusyReason } from './reset-slice.js';
 
 type Disk = {

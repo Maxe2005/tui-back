@@ -2,16 +2,16 @@
 // ports, so these verify the wiring — candidates, presets seeded from settings, live rows, the
 // restart phase, the busy path and the dashboard refresh — not the use-case itself.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../../../../../core/result.js';
-import type { DockerPort } from '../../../../../core/ports/docker.js';
-import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../core/ports/registry.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../core/ports/settings.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { err, ok } from '../../../../../../core/result.js';
+import type { DockerPort } from '../../../../../../core/ports/docker.js';
+import type { EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../../../core/ports/git.js';
+import type { LockPort } from '../../../../../../core/ports/lock.js';
+import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../../../../core/ports/registry.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../../core/ports/settings.js';
+import type { StatePort } from '../../../../../../core/ports/state.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 import { applyRealignRow, matchingPreset, presetSelection } from './realign-slice.js';
 
 // a, b: drifted members; c: drifted other (no container); d: other whose branch cannot be read.

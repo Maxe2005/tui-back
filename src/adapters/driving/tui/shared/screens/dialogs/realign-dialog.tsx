@@ -15,7 +15,7 @@ import { ClampedParagraph } from '../../components/display/truncated-text.js';
 import { colors } from '../../theme/theme.js';
 import { REALIGN_SCOPES } from '../../../../../../core/ports/settings.js';
 import { useAppStore, type AppStore } from '../../../store/app-store.js';
-import { matchingPreset } from '../../../store/slices/realign-slice.js';
+import { matchingPreset } from '../../../store/slices/maintenance/realign-slice.js';
 import { BranchPlanTable } from '../../../zones/edts/dialogs/branch-plan-table.js';
 import { SwitchRestartReport } from '../../../zones/edts/dialogs/switch-restart-report.js';
 import {

@@ -2,19 +2,19 @@
 // so these verify the wiring — the plan and its notices, the mode seeded from the settings, live
 // rows, the busy guard, closing mid-run and the dashboard refresh — not the use-case itself.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RestartRow } from '../../../../../core/edt/switch-restart.js';
-import { HEAL_NOTHING_TO_DO_MESSAGE } from '../../../../../core/heal/index.js';
-import type { DockerPort, HealthState } from '../../../../../core/ports/docker.js';
-import type { HealthProbePort } from '../../../../../core/ports/health-probe.js';
-import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../core/ports/registry.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../core/ports/settings.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { err, ok } from '../../../../../core/result.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import type { RestartRow } from '../../../../../../core/edt/switch-restart.js';
+import { HEAL_NOTHING_TO_DO_MESSAGE } from '../../../../../../core/heal/index.js';
+import type { DockerPort, HealthState } from '../../../../../../core/ports/docker.js';
+import type { HealthProbePort } from '../../../../../../core/ports/health-probe.js';
+import type { EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../../../core/ports/git.js';
+import type { LockPort } from '../../../../../../core/ports/lock.js';
+import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../../../../core/ports/registry.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../../core/ports/settings.js';
+import type { StatePort } from '../../../../../../core/ports/state.js';
+import { err, ok } from '../../../../../../core/result.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 import { HEAL_BUSY_MESSAGE, HEAL_NOTICE_TIMEOUT_MS, HEAL_UNWIRED_MESSAGE, orderHealPlanRows, stepHealMode } from './heal-slice.js';
 
 // Every service declares a container and a healthUrl; `health` is the container state, and the

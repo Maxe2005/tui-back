@@ -5,13 +5,13 @@
 // notice instead of the overlay. Closing mid-run only hides the overlay: the run finishes and
 // keeps other restarts blocked through `serviceRestartInFlight` until it ends.
 import type { StateCreator } from 'zustand';
-import { restartNeedsAttention, type RestartRow } from '../../../../../core/edt/switch-restart.js';
-import { HEAL_NOTHING_TO_DO_MESSAGE, planHeal, runHeal, type HealPlan, type HealReport } from '../../../../../core/heal/index.js';
-import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
-import type { Result } from '../../../../../core/result.js';
-import { createServiceActions, type RestartMode, type ServiceActions } from '../../../../../core/service-actions/index.js';
-import type { AppState, AppStoreDeps } from '../app-store.js';
-import { describeRestartSummary } from '../../zones/edts/dialogs/switch-restart-report.js';
+import { restartNeedsAttention, type RestartRow } from '../../../../../../core/edt/switch-restart.js';
+import { HEAL_NOTHING_TO_DO_MESSAGE, planHeal, runHeal, type HealPlan, type HealReport } from '../../../../../../core/heal/index.js';
+import { healthCheckEnabledFrom } from '../../../../../../core/ports/settings.js';
+import type { Result } from '../../../../../../core/result.js';
+import { createServiceActions, type RestartMode, type ServiceActions } from '../../../../../../core/service-actions/index.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
+import { describeRestartSummary } from '../../../zones/edts/dialogs/switch-restart-report.js';
 
 export const HEAL_NOTICE_TIMEOUT_MS = 5000;
 export const HEAL_BUSY_MESSAGE = 'A service restart is already in progress — wait for it to finish before healing.';
