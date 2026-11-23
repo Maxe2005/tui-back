@@ -1,8 +1,8 @@
 // tui/zones/routes: use-routes-derived — the pane route/draft, saved-picker rows and the response/body-editor tree memos derived from the state layer.
 import { useMemo } from 'react';
-import type { FilterablePickItem } from '../../shared/components/pickers/filterable-pick-list.js';
+import type { FilterablePickItem } from '../../../shared/components/pickers/filterable-pick-list.js';
 import type { RoutesState } from './use-routes-state.js';
-import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
+import type { SavedWithStale } from '../../../../../../core/routes/saved-requests.js';
 import {
   type BodyEditError,
   canEditRouteBody,
@@ -18,10 +18,10 @@ import {
   resolveTreeListBudget,
   routeKeyFor,
   seedBodyDraft,
-} from '../../shared/components/json-tree/model.js';
-import { RESPONSE_AREA_CHROME_ROWS } from './routes-zone.constants.js';
-import { bodyTreeKey, type RequestDraft, seedRequestDraft } from './routes-request.logic.js';
-import { filterRoutes, resolveEnterFireTarget } from './routes-zone.logic.js';
+} from '../../../shared/components/json-tree/model.js';
+import { RESPONSE_AREA_CHROME_ROWS } from '../routes-zone.constants.js';
+import { bodyTreeKey, type RequestDraft, seedRequestDraft } from '../routes-request.logic.js';
+import { filterRoutes, resolveEnterFireTarget } from '../routes-zone.logic.js';
 
 export function useRoutesDerived(c: RoutesState) {
   const {

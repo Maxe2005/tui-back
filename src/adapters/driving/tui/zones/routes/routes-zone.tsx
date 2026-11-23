@@ -20,13 +20,13 @@ import { formatRoutesDisabledMessage, RoutesDisabledView, RoutesNoticeView } fro
 import { renderBodyNode, renderResponseNode } from './routes-zone.nodes.js';
 import { routesFooterContext } from './routes-zone.logic.js';
 import { type AppStore, useAppStore } from '../../store/app-store.js';
-import { useRoutesBodyEditor } from './use-routes-body-editor.js';
-import { useRoutesDerived } from './use-routes-derived.js';
-import { useRoutesEffects } from './use-routes-effects.js';
-import { useRoutesInput } from './use-routes-input.js';
-import { useRoutesPaneActions } from './use-routes-pane-actions.js';
-import { useRoutesResponseTree } from './use-routes-response-tree.js';
-import { useRoutesState } from './use-routes-state.js';
+import { useRoutesBodyEditor } from './hooks/use-routes-body-editor.js';
+import { useRoutesDerived } from './hooks/use-routes-derived.js';
+import { useRoutesEffects } from './hooks/use-routes-effects.js';
+import { useRoutesInput } from './hooks/use-routes-input.js';
+import { useRoutesPaneActions } from './hooks/use-routes-pane-actions.js';
+import { useRoutesResponseTree } from './hooks/use-routes-response-tree.js';
+import { useRoutesState } from './hooks/use-routes-state.js';
 
 export { formatRoutesDisabledMessage };
 

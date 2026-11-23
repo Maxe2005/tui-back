@@ -25,8 +25,8 @@ import {
   type TreePanelAction,
   unfoldNextDepthLevel,
   validateScalarText,
-} from '../../shared/components/json-tree/model.js';
-import { bodyTreeKey } from './routes-request.logic.js';
+} from '../../../shared/components/json-tree/model.js';
+import { bodyTreeKey } from '../routes-request.logic.js';
 
 export function useRoutesBodyEditor(c: RoutesBaseCtx) {
   const {

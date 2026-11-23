@@ -1,16 +1,16 @@
 // tui/zones/routes: use-routes-input — registers the zone's single `useInput` and dispatches to the per-mode key handlers in the original priority order.
-import type { RoutesZoneCtx } from './routes-zone.ctx.js';
+import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import {
   handleOverwriteConfirmKey,
   handlePickerDeleteConfirmKey,
   handlePickerKey,
   handleSavedTabDeleteConfirmKey,
   handleSavePromptKey,
-} from './routes-zone.overlay-keys.js';
-import { handleFilterEditingKey, handleListKey } from './routes-zone.list-keys.js';
-import { handlePaneKey } from './routes-zone.pane-keys.js';
-import { useInput } from '../../shared/hooks/use-input.js';
-import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
+} from '../routes-zone.overlay-keys.js';
+import { handleFilterEditingKey, handleListKey } from '../routes-zone.list-keys.js';
+import { handlePaneKey } from '../routes-zone.pane-keys.js';
+import { useInput } from '../../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
 
 export function useRoutesInput(c: RoutesZoneCtx): void {
   const { useStore, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, savePrompt, pickerOpen, filterEditing, paneFocused } = c;

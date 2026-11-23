@@ -16,7 +16,7 @@ import {
   type TreeKeyAction,
   type TreePanelAction,
   unfoldNextDepthLevel,
-} from '../../shared/components/json-tree/model.js';
+} from '../../../shared/components/json-tree/model.js';
 
 export function useRoutesResponseTree(c: RoutesBaseCtx) {
   const { updateJsonTreeState, setFilterPanelOpen, setPanelCursor, firedRouteKey, treeValue, treeViewport } = c;
