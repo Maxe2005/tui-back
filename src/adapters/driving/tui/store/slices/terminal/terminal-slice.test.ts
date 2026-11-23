@@ -3,11 +3,11 @@
 // batching, the busy and blank paths, cancel, close discarding the session, the bounded display
 // and the shared in-memory history.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { err, ok, type Result } from '../../../../../core/result.js';
-import type { HealthState } from '../../../../../core/ports/docker.js';
-import type { Manifest, ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { ShellLine, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../../../../../core/ports/shell-session.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { err, ok, type Result } from '../../../../../../core/result.js';
+import type { HealthState } from '../../../../../../core/ports/docker.js';
+import type { Manifest, ManifestPort } from '../../../../../../core/ports/manifest.js';
+import type { ShellLine, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../../../../../../core/ports/shell-session.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 import { NO_SHELL_ERROR, TERMINAL_FLUSH_MS, TERMINAL_MAX_LINES, appendTerminalLines } from './terminal-slice.js';
 
 type Run = {

@@ -36,7 +36,7 @@ import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
 import { createDashboardSlice, type DashboardSlice } from './slices/dashboard-slice.js';
 import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types/shared-types-slice.js';
 import { createRealignSlice, type RealignSlice } from './slices/maintenance/realign-slice.js';
-import { createTerminalSlice, type TerminalSlice } from './slices/terminal-slice.js';
+import { createTerminalSlice, type TerminalSlice } from './slices/terminal/terminal-slice.js';
 import { createHealSlice, type HealSlice } from './slices/maintenance/heal-slice.js';
 
 export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/navigation-slice.js';
@@ -53,7 +53,7 @@ export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, Shar
 export type { DashboardSectionStatus } from './slices/dashboard-slice.js';
 export type { RealignCandidates, RealignDraft, RealignLiveRow, RealignLiveStatus, RealignRun } from './slices/maintenance/realign-slice.js';
 export type { HealNotice, HealRun, HealRunStatus } from './slices/maintenance/heal-slice.js';
-export type { TerminalKind, TerminalLine, TerminalLineKind, TerminalTarget } from './slices/terminal-slice.js';
+export type { TerminalKind, TerminalLine, TerminalLineKind, TerminalTarget } from './slices/terminal/terminal-slice.js';
 export type { RoutesStatus } from './slices/routes-slice.js';
 export type { RouteResponse, RoutesPaneFocus, RoutesPaneTab } from './slices/routes-slice.js';
 

@@ -1,8 +1,8 @@
 // tui/store/slices/terminal-text: the display text the terminal slice writes — the busy notice,
 // the echoed command and the status line a finished run leaves (`exit N`, `cancelled`, errors).
 // Store-side so the slice never depends on a view module; the view reads it from here too.
-import type { Result } from '../../../../../core/result.js';
-import type { ShellRunResult } from '../../../../../core/shell/index.js';
+import type { Result } from '../../../../../../core/result.js';
+import type { ShellRunResult } from '../../../../../../core/shell/index.js';
 
 export const TERMINAL_BUSY_NOTICE = 'a command is running';
 
