@@ -1,18 +1,18 @@
 import { vi } from 'vitest';
-import { ok } from '../../../../../core/result.js';
-import type { ContainerPort } from '../../../../../core/ports/container.js';
-import type { DockerPort } from '../../../../../core/ports/docker.js';
-import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { MigrationPort } from '../../../../../core/ports/migration.js';
-import type { RestartPort } from '../../../../../core/ports/restart.js';
-import type { RegistryPort } from '../../../../../core/ports/registry.js';
-import type { SettingsPort } from '../../../../../core/ports/settings.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
-import { type AppStoreDeps } from '../app-store.js';
+import { ok } from '../../../../../../core/result.js';
+import type { ContainerPort } from '../../../../../../core/ports/container.js';
+import type { DockerPort } from '../../../../../../core/ports/docker.js';
+import type { EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../../../core/ports/git.js';
+import type { LockPort } from '../../../../../../core/ports/lock.js';
+import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
+import type { MigrationPort } from '../../../../../../core/ports/migration.js';
+import type { RestartPort } from '../../../../../../core/ports/restart.js';
+import type { RegistryPort } from '../../../../../../core/ports/registry.js';
+import type { SettingsPort } from '../../../../../../core/ports/settings.js';
+import type { StatePort } from '../../../../../../core/ports/state.js';
+import { DEFAULT_SETTINGS } from '../../../../../../core/ports/settings.js';
+import { type AppStoreDeps } from '../../app-store.js';
 
 export const MEMBERS = [
   { service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' },

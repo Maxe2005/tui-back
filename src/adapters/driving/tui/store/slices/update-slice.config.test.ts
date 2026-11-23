@@ -9,7 +9,7 @@ import type { RestartPort } from '../../../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { createAppStore } from '../app-store.js';
-import { fakeDeps } from './update-slice.test-support.js';
+import { fakeDeps } from './update/update-slice.test-support.js';
 
 // The pre-run configuration screen's store state — opening pre-scoped to the trigger,
 // confirming with exactly the confirmed configuration, and rejecting while a run is in flight.

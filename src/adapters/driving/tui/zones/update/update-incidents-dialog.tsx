@@ -8,7 +8,7 @@ import { ListRow } from '../../shared/components/lists/list-row.js';
 import { MenuList } from '../../shared/components/lists/menu-list.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../shared/theme/theme.js';
-import type { UpdateIncident } from '../../store/slices/update-slice.js';
+import type { UpdateIncident } from '../../store/slices/update/update-slice.js';
 import { formatIncidentRow, UPDATE_INCIDENTS_TITLE } from './update-incidents.logic.js';
 import { blockerMenuItems, formatBlockerBody, formatBlockerRetry } from './update-zone.js';
 

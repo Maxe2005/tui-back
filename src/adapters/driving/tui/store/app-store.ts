@@ -28,7 +28,7 @@ import { createNavigationSlice, type NavigationSlice } from './slices/workspace/
 import { createEdtSlice, type EdtSlice } from './slices/workspace/edt-slice.js';
 import { createRegistrySlice, type RegistrySlice } from './slices/workspace/registry-slice.js';
 import { createSettingsSlice, type SettingsSlice } from './slices/app/settings-slice.js';
-import { createUpdateSlice, type UpdateSlice } from './slices/update-slice.js';
+import { createUpdateSlice, type UpdateSlice } from './slices/update/update-slice.js';
 import { createLogsSlice, type LogsSlice } from './slices/logs/logs-slice.js';
 import { createCommandHistorySlice, type CommandHistorySlice } from './slices/app/command-history-slice.js';
 import { createResetSlice, type ResetSlice } from './slices/maintenance/reset-slice.js';
@@ -46,7 +46,7 @@ export type { RegistryOutcome, RegistryRegisterResult } from './slices/workspace
 export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryResult, RemoveStaleRegistryOutcome, RegistryEntryError } from '../../../../core/scripts/clean-registry.js';
 export type { ValidateRegistryEntryResult, ValidateRegistryOutcome } from '../../../../core/scripts/validate-registry.js';
 export type { SettingsUpdate } from './slices/app/settings-slice.js';
-export type { UpdateRunStatus } from './slices/update-slice.js';
+export type { UpdateRunStatus } from './slices/update/update-slice.js';
 export type { LogsPaneData } from './slices/logs/logs-slice.js';
 export type { ResetPreview } from './slices/maintenance/reset-slice.js';
 export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types/shared-types-slice.js';

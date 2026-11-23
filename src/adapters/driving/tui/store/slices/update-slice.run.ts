@@ -44,7 +44,7 @@ import {
   type UpdateSliceContext,
   type UpdateSliceGet,
   type UpdateSliceSet,
-} from './update-slice.types.js';
+} from './update/update-slice.types.js';
 
 export function createUpdateRunActions(
   ctx: UpdateSliceContext,

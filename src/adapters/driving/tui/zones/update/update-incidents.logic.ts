@@ -1,6 +1,6 @@
 // tui/zones/update: pure helpers of the incident queue popup — row formatting, age
 // and the list-mode key reducer. Rendering lives in update-incidents-dialog.tsx.
-import type { UpdateIncident } from '../../store/slices/update-slice.js';
+import type { UpdateIncident } from '../../store/slices/update/update-slice.js';
 
 export const UPDATE_INCIDENTS_TITLE = 'UPDATE INCIDENTS';
 

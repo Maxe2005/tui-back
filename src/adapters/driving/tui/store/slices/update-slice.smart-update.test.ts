@@ -4,7 +4,7 @@ import type { GitPort } from '../../../../../core/ports/git.js';
 import type { ManifestPort } from '../../../../../core/ports/manifest.js';
 import type { RestartPort } from '../../../../../core/ports/restart.js';
 import { createAppStore, type AppStoreDeps } from '../app-store.js';
-import { fakeDeps } from './update-slice.test-support.js';
+import { fakeDeps } from './update/update-slice.test-support.js';
 
 describe('update slice: smart group update (shared-types first)', () => {
   // svc-a (/repo/a) is the single source, svc-b (/repo/b) its consumer.

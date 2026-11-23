@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { UpdateIncident } from '../../store/slices/update-slice.js';
+import type { UpdateIncident } from '../../store/slices/update/update-slice.js';
 import {
   formatIncidentAge,
   formatIncidentKind,

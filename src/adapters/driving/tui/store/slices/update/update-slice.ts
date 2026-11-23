@@ -6,12 +6,12 @@
 // `createUpdateSlice(deps)` call and spreads the sub-creators (run, incident, config, health).
 // Every symbol it used to export is re-exported from here.
 import type { StateCreator } from 'zustand';
-import { createInFlightGuard } from '../../shared/hooks/in-flight-guard.js';
-import type { AppState, AppStoreDeps } from '../app-store.js';
-import { createUpdateConfigActions } from './update-slice.config.js';
-import { createUpdateHealthActions } from './update-slice.health.js';
-import { createUpdateIncidentActions } from './update-slice.incident.js';
-import { createUpdateRunActions } from './update-slice.run.js';
+import { createInFlightGuard } from '../../../shared/hooks/in-flight-guard.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
+import { createUpdateConfigActions } from '../update-slice.config.js';
+import { createUpdateHealthActions } from '../update-slice.health.js';
+import { createUpdateIncidentActions } from '../update-slice.incident.js';
+import { createUpdateRunActions } from '../update-slice.run.js';
 import type { UpdateSlice, UpdateSliceContext } from './update-slice.types.js';
 
 export {

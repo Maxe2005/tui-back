@@ -3,8 +3,8 @@ import { ok, err } from '../../../../../core/result.js';
 import type { DockerPort } from '../../../../../core/ports/docker.js';
 import type { ManifestPort } from '../../../../../core/ports/manifest.js';
 import { createAppStore } from '../app-store.js';
-import { UPDATE_HEALTH_POLL_INTERVAL_MS } from './update-slice.js';
-import { fakeDeps } from './update-slice.test-support.js';
+import { UPDATE_HEALTH_POLL_INTERVAL_MS } from './update/update-slice.js';
+import { fakeDeps } from './update/update-slice.test-support.js';
 
 // The Update zone's own service-list health poll, tested against fake ports like the logs
 // slice's poll, but through startUpdateHealthPolling/stopUpdateHealthPolling/
