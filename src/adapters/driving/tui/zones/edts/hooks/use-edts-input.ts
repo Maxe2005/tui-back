@@ -1,11 +1,11 @@
 // tui/zones/edts: use-edts-input — the zone's single `useInput` dispatcher: an open dialog owns
 // the keystroke (routed to its handler); otherwise the base view handles Tab / reload / issues /
 // per-pane navigation. Inert behind any overlay or Ctrl+W resize-mode.
-import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
-import { useInput } from '../../shared/hooks/use-input.js';
-import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
-import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
-import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
+import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
+import { useInput } from '../../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
+import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 import {
   cyclePaneFocus,
   initialAddToEdtDialog,
@@ -13,8 +13,8 @@ import {
   initialServiceActionsDialog,
   PANE_FOCUS_NAV,
   SYSTEM_EDT_NOTICE,
-} from './edts-zone.logic.js';
-import type { EdtsZoneCtx } from './edts-zone.ctx.js';
+} from '../edts-zone.logic.js';
+import type { EdtsZoneCtx } from '../edts-zone.ctx.js';
 
 export function useEdtsInput(c: EdtsZoneCtx): void {
   const {

@@ -2,16 +2,16 @@
 // issue summary, clamped cursors, the EDT-membership partition, the terminal-rows budgets for the
 // lists / wizard / switch resolution tables, and the loading flags.
 import { useWindowSize } from 'ink';
-import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import { autoStashedRepos } from './dialogs/switch-resolution/switch-resolution.logic.js';
+import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import { autoStashedRepos } from '../dialogs/switch-resolution/switch-resolution.logic.js';
 import {
   formatIssuesSummary,
   partitionServicesByEdtMembership,
   resolveCandidateListState,
   resolveIssuesSeverity,
-} from './edts-zone.logic.js';
+} from '../edts-zone.logic.js';
 import type { EdtsState } from './use-edts-state.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above the splitter,

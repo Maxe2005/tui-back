@@ -1,16 +1,16 @@
 // tui/zones/edts: use-edts-handlers — builds each dialog's input/submit handlers from its own
 // factory under dialogs/ (plain functions, no hooks: they close over this render's values, the
 // deps object is recreated every render) plus the Enter-on-EDT opener.
-import type { AppStore } from '../../store/app-store.js';
-import { createAddToEdtDialogHandlers } from './dialogs/add-to-edt-dialog.js';
-import { createCreateWizardHandlers } from './dialogs/create-wizard/create-wizard.js';
-import { createDeleteDialogHandlers } from './dialogs/delete-dialog.js';
-import { createModifyDialogHandlers } from './dialogs/modify-dialog.js';
-import { createQuickPickDialogHandlers } from './dialogs/quick-pick-dialog.js';
-import { createServiceActionsDialogHandlers } from './dialogs/service-actions-dialog.js';
-import { createSwitchDialogHandlers } from './dialogs/switch-dialog.js';
-import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
-import { initialFastForwardDialog, initialModifyDialog, initialSwitchDialog, SYSTEM_EDT_NOTICE } from './edts-zone.logic.js';
+import type { AppStore } from '../../../store/app-store.js';
+import { createAddToEdtDialogHandlers } from '../dialogs/add-to-edt-dialog.js';
+import { createCreateWizardHandlers } from '../dialogs/create-wizard/create-wizard.js';
+import { createDeleteDialogHandlers } from '../dialogs/delete-dialog.js';
+import { createModifyDialogHandlers } from '../dialogs/modify-dialog.js';
+import { createQuickPickDialogHandlers } from '../dialogs/quick-pick-dialog.js';
+import { createServiceActionsDialogHandlers } from '../dialogs/service-actions-dialog.js';
+import { createSwitchDialogHandlers } from '../dialogs/switch-dialog.js';
+import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
+import { initialFastForwardDialog, initialModifyDialog, initialSwitchDialog, SYSTEM_EDT_NOTICE } from '../edts-zone.logic.js';
 import type { EdtsDerived } from './use-edts-derived.js';
 import type { EdtsState } from './use-edts-state.js';
 

@@ -1,9 +1,9 @@
 // tui/zones/edts: use-edts-state — the EDTs zone's store selectors and local `useState`s. No
 // derivation, no effects: those live in the layers built on top.
 import { useEffect, useRef, useState } from 'react';
-import type { AppStore } from '../../store/app-store.js';
-import { seedDialog, type InitialDialogKind } from './edts-zone.dialog-seed.js';
-import type { EdtDialogState, PaneFocus } from './edts-zone.logic.js';
+import type { AppStore } from '../../../store/app-store.js';
+import { seedDialog, type InitialDialogKind } from '../edts-zone.dialog-seed.js';
+import type { EdtDialogState, PaneFocus } from '../edts-zone.logic.js';
 
 export function useEdtsState(useStore: AppStore, initialPaneFocus: PaneFocus, initialDialogKind: InitialDialogKind | undefined) {
   const services = useStore((state) => state.edtsBranches);
