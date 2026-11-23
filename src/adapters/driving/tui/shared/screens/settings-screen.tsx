@@ -17,7 +17,7 @@ import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { cycleSwitchRestartMode, cycleRealignScope } from '../../../../../core/ports/settings.js';
 import { GLOBAL_RULES_KEY } from '../../../../../core/logs/rule-sets.js';
 import { SETTINGS_TABS, SETTINGS_TAB_LABELS, nextSettingsTab, resolveSettingsTabState, type SettingsTab } from '../settings/settings-tabs.logic.js';
-import { buildServicesSettingsRows, resolveServicesSettingsKey } from '../settings/services.logic.js';
+import { buildServicesSettingsRows, resolveServicesSettingsKey } from '../settings/services/services.logic.js';
 import { resolveSharedTypesSettingsKey } from '../settings/shared-types.logic.js';
 import { GENERAL_SETTINGS_ROWS, resolveGeneralSettingsKey } from '../settings/general/general.logic.js';
 import { resolveUpdateSettingsKey } from '../settings/update.logic.js';
@@ -26,7 +26,7 @@ import { LOGS_CLEAR_ROWS, LOGS_RULES_ROWS, LOGS_SETTINGS_GROUPS, type LogsRulesC
 import { EDTS_TOP_LEVEL_ROW_COUNT, isSharedEdtToggleRow, HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, SETTINGS_GROUPS, type SettingsGroupId, adjustBranchDropdownMaxRows, parseBranchDropdownMaxRowsDigit, toggleHiddenHint } from '../settings/edts/edts.logic.js';
 import { settingsFooterContext } from '../settings/footer-context.logic.js';
 import { SharedTypesTab } from '../settings/shared-types-tab.js';
-import { ServicesTab } from '../settings/services-tab.js';
+import { ServicesTab } from '../settings/services/services-tab.js';
 import { GeneralTab } from '../settings/general/general-tab.js';
 import { UpdateTab } from '../settings/update-tab.js';
 import { PaletteTab } from '../settings/palette/palette-tab.js';
@@ -39,7 +39,7 @@ export * from '../settings/palette/palette.logic.js';
 export * from '../settings/update.logic.js';
 export * from '../settings/general/general.logic.js';
 export * from '../settings/shared-types.logic.js';
-export * from '../settings/services.logic.js';
+export * from '../settings/services/services.logic.js';
 export * from '../settings/settings-tabs.logic.js';
 
 // Self-contained Esc handling (like command-bar.tsx's `onClose`): the drill-down state is local
