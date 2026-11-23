@@ -95,8 +95,8 @@ export type {
 } from './filterable-pick-list.js';
 export { MenuList, resolveMenuKey } from './menu-list.js';
 export type { MenuItem, MenuKey, MenuStep } from './menu-list.js';
-export { ScrollableOutput } from './scrollable-output.js';
-export type { ScrollableOutputProps } from './scrollable-output.js';
+export { ScrollableOutput } from './display/scrollable-output.js';
+export type { ScrollableOutputProps } from './display/scrollable-output.js';
 export { FullscreenFrame } from './fullscreen-frame.js';
 export type { FullscreenFrameProps } from './fullscreen-frame.js';
 export { StateLine, resolveStateLineText } from './state-line.js';

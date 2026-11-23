@@ -43,7 +43,7 @@ import {
   summarizeActivationResults,
   type BreadcrumbTone,
 } from './wizard.logic.js';
-import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 
 export const CREATE_WIZARD_TITLE = 'CREATE EDT';
 

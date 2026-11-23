@@ -6,7 +6,7 @@ import { BranchAutocompleteInput } from '../../shared/components/branch-autocomp
 import { colors } from '../../shared/theme/theme.js';
 import type { ToggleOverride } from './update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 

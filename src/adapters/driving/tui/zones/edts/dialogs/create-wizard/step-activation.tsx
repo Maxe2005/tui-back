@@ -4,7 +4,7 @@
 // created, the pause panel, the overwrite confirmation, or the "created but not active" message.
 // Key handling lives in activation.logic.ts.
 import { Box, Text } from 'ink';
-import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 import { BoundedList } from '../../../../shared/components/bounded-list.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { CreateDialogState } from '../../edts-zone.logic.js';

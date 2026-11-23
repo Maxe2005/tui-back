@@ -5,7 +5,7 @@ import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { StatusBadge } from '../../shared/components/status-badge.js';
 import { FullscreenFrame } from '../../shared/components/fullscreen-frame.js';
-import { ScrollableOutput } from '../../shared/components/scrollable-output.js';
+import { ScrollableOutput } from '../../shared/components/display/scrollable-output.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { LogsPaneData } from '../../store/app-store.js';

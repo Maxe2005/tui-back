@@ -7,7 +7,7 @@ import { useInput } from '../../../shared/hooks/use-input.js';
 import { useState, type ReactNode } from 'react';
 import type { BranchDivergenceEntryError } from '../../../../../../core/edt/list.js';
 import { BoundedBlocks } from '../../../shared/components/bounded-list.js';
-import { TruncatedText } from '../../../shared/components/truncated-text.js';
+import { TruncatedText } from '../../../shared/components/display/truncated-text.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import { explainIssueErrorCode, explainUnreachable } from '../edts-zone.logic.js';

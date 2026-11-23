@@ -15,7 +15,7 @@ import { DashboardBody } from './dashboard-body.js';
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import { actionForKey, buildAttentionItems, edtKeyEffect, resolveEdtSection, nextAttentionIndex, resolveDashboardBody, rowIndexForAttention } from './dashboard.logic.js';
 import { LaunchBanner } from './launch-banner.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 
 export const EMPTY_REGISTRY_MESSAGE = 'No repos registered yet.';
 export const EMPTY_REGISTRY_HINT = 'Press [:] to scan a root path and register repos.';

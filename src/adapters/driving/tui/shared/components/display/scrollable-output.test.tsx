@@ -2,10 +2,10 @@ import { createElement } from 'react';
 import { Box, Text } from 'ink';
 import { describe, expect, it } from 'vitest';
 import { ScrollableOutput } from './scrollable-output.js';
-import { FullscreenFrame } from './fullscreen-frame.js';
-import { renderToString } from './render-to-string.js';
-import { MATRIX_SIZES, frameLines } from '../test-support/matrix.js';
-import { LONG_TEXT } from '../test-support/dialog-registry.js';
+import { FullscreenFrame } from '../fullscreen-frame.js';
+import { renderToString } from '../render-to-string.js';
+import { MATRIX_SIZES, frameLines } from '../../test-support/matrix.js';
+import { LONG_TEXT } from '../../test-support/dialog-registry.js';
 
 type Line = { text: string; err: boolean };
 

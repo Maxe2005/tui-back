@@ -7,7 +7,7 @@ import type { FastForwardSharedRow } from '../../../../../../core/edt/fast-forwa
 import { BoundedList } from '../../../shared/components/bounded-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { StateLine } from '../../../shared/components/state-line.js';
-import { TruncatedText } from '../../../shared/components/truncated-text.js';
+import { TruncatedText } from '../../../shared/components/display/truncated-text.js';
 import { colors } from '../../../shared/theme/theme.js';
 import type { FastForwardDialogState } from '../edts-zone.logic.js';
 

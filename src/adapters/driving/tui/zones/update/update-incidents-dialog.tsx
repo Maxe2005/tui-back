@@ -3,7 +3,7 @@
 // presentational — the zone owns the keys, the cursor and the mode.
 import { Box, Text } from 'ink';
 import { BoundedList } from '../../shared/components/bounded-list.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { ListRow } from '../../shared/components/list-row.js';
 import { MenuList } from '../../shared/components/menu-list.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';

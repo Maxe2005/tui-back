@@ -5,7 +5,7 @@
 // `Esc` unwinds sub-editors, then Response → Request and Saved → list, then back to the list.
 import { Box } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { FooterContext } from '../../shared/components/chrome/footer-context.js';
 import { ROUTES_LIST_CHROME_ROWS } from './routes-zone.constants.js';

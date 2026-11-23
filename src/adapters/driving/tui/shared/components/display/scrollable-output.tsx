@@ -5,8 +5,8 @@
 // window is mapped, and each line either truncates or wraps within the measured width.
 import type { ReactNode } from 'react';
 import { Box, Text, type TextProps } from 'ink';
-import { useElementSize } from '../hooks/use-element-size.js';
-import { computeLineRowCount, sliceVisibleWindow } from '../scrollable-output/index.js';
+import { useElementSize } from '../../hooks/use-element-size.js';
+import { computeLineRowCount, sliceVisibleWindow } from '../../scrollable-output/index.js';
 
 export type ScrollableOutputProps<T> = {
   lines: readonly T[];

@@ -13,7 +13,7 @@ import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan
 import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
 import { OverrideBoxView } from './override-box.js';
 import { buildStep3Rows, refreshSeededNames, type BranchCandidate, type RowView } from './wizard.logic.js';
-import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 export function overrideBoxContextFor(state: CreateDialogState, path: string, candidates: readonly BranchCandidate[]): OverrideBoxContext {

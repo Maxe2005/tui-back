@@ -6,7 +6,7 @@ import { Box } from 'ink';
 import { useBounds } from '../bounds/bounds-context.js';
 import { colors } from '../theme/theme.js';
 import { BoundedList } from './bounded-list.js';
-import { ClampedParagraph } from './truncated-text.js';
+import { ClampedParagraph } from './display/truncated-text.js';
 
 export type FailedResultRow = {
   service: string;

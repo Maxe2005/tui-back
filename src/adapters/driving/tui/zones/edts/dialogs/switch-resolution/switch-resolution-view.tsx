@@ -22,7 +22,7 @@ import {
   type SwitchResolutionBox,
   type SwitchResolutionState,
 } from './switch-resolution.logic.js';
-import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 
 const COLUMN_HEADERS = ['Service', 'Scope', 'Current branch', 'Action', 'Target branch'] as const;
 

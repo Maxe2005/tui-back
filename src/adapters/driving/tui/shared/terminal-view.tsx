@@ -11,7 +11,7 @@ import { markerText } from '../../../../core/shell/line-buffer.js';
 import { useAppStore, type AppStore, type TerminalLine } from '../store/app-store.js';
 import { useBounds } from './bounds/bounds-context.js';
 import { FullscreenFrame } from './components/fullscreen-frame.js';
-import { ScrollableOutput } from './components/scrollable-output.js';
+import { ScrollableOutput } from './components/display/scrollable-output.js';
 import { nextTextInputValue, type TextInputState } from './components/text-edit.js';
 import { TextInputLine } from './components/text-input-line.js';
 import { useFooterContext } from './hooks/use-footer-context.js';

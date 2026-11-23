@@ -1,8 +1,8 @@
 import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { ClampedParagraph, TruncatedText, clampParagraph } from './truncated-text.js';
-import { renderToString } from './render-to-string.js';
-import { FOOTER_MAX_ROWS, footerRowsFor } from './chrome/footer.js';
+import { renderToString } from '../render-to-string.js';
+import { FOOTER_MAX_ROWS, footerRowsFor } from '../chrome/footer.js';
 
 describe('clampParagraph', () => {
   it('keeps short text as is', () => {

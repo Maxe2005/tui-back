@@ -10,7 +10,7 @@ import { StateLine } from '../../shared/components/state-line.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RouteResponse } from '../../store/slices/routes-slice.js';
 import { formatFireError, formatFireStatus } from './routes-zone.logic.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 
 export function RoutesResponseTab({
   response,

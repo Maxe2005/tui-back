@@ -1,7 +1,7 @@
 // tui/zones/routes: routes-modals — the Routes zone's modal dialogs: overwrite confirm, saved-requests picker and the two delete confirms.
 import { Box, Text } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
 import { FilterablePickList } from '../../shared/components/filterable-pick-list.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';

@@ -17,7 +17,7 @@ import {
   type RequestRowSection,
   type RequestSection,
 } from './routes-request.logic.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 
 // Rows shown per Params/Query/Headers section before the list windows (the Body keeps
 // the remaining height).

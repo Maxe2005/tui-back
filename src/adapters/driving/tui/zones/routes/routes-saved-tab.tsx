@@ -10,7 +10,7 @@ import {
 } from '../../shared/components/filterable-pick-list.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 
 export function RoutesSavedTab({
   items,

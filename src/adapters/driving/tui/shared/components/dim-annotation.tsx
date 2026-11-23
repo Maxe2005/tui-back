@@ -1,6 +1,6 @@
 import { Box } from 'ink';
 import { colors } from '../theme/theme.js';
-import { ClampedParagraph } from './truncated-text.js';
+import { ClampedParagraph } from './display/truncated-text.js';
 
 export type DimAnnotationProps = {
   text: string;

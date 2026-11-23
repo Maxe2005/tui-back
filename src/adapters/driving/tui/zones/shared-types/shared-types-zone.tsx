@@ -11,7 +11,7 @@ import { CheckboxListItem, ModalDialog, Spinner, StateLine, TextInputLine } from
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { MenuList } from '../../shared/components/menu-list.js';
 import { ServiceActionsRow } from '../../shared/components/service-actions-row.js';
-import { ClampedParagraph, TruncatedText } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph, TruncatedText } from '../../shared/components/display/truncated-text.js';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { useFooterContext } from '../../shared/hooks/use-footer-context.js';

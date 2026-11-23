@@ -4,7 +4,7 @@ import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-vis
 import { CommandBar } from './shared/command-bar.js';
 import { BoundsProvider } from './shared/bounds/bounds-context.js';
 import { SHELL_FIXED_ROWS, formatTooSmallMessage, isTerminalTooSmall } from './shared/bounds/bounds.js';
-import { ClampedParagraph, TruncatedText } from './shared/components/truncated-text.js';
+import { ClampedParagraph, TruncatedText } from './shared/components/display/truncated-text.js';
 import { Footer, footerRowsFor, useFooterItems } from './shared/components/chrome/footer.js';
 import { InputGate, useInput } from './shared/hooks/use-input.js';
 import { KeybindingHelp } from './shared/components/dialogs/keybinding-help.js';

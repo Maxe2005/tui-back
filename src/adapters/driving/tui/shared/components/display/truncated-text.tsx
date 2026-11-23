@@ -4,8 +4,8 @@
 import { Box, Text } from 'ink';
 import wrapAnsi from 'wrap-ansi';
 import type { ComponentProps } from 'react';
-import { normalizeMessage, stripControl } from '../bounds/message.js';
-import { useBounds } from '../bounds/bounds-context.js';
+import { normalizeMessage, stripControl } from '../../bounds/message.js';
+import { useBounds } from '../../bounds/bounds-context.js';
 
 type TextStyleProps = Omit<ComponentProps<typeof Text>, 'children' | 'wrap'>;
 

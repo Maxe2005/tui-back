@@ -24,7 +24,7 @@ import {
 } from './update-config-panels.logic.js';
 import { UpdateServiceBox } from './update-service-box.js';
 import type { ServiceBoxContext, ServiceBoxState } from './update-service-box.logic.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 
 export const PANELS_TITLE_EDT = 'CONFIGURE UPDATE';
 export const PANELS_TITLE_ALL = 'CONFIGURE ALL-REPOS UPDATE';

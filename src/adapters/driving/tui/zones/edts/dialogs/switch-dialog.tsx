@@ -24,7 +24,7 @@ import {
 import { SwitchResolutionView } from './switch-resolution/switch-resolution-view.js';
 import { describeSwitchForLog, needsResultsView, reduceSwitchResolutionKey } from './switch-resolution/switch-resolution.logic.js';
 import { BoundedList } from '../../../shared/components/bounded-list.js';
-import { ClampedParagraph } from '../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 export type SwitchDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

@@ -10,7 +10,7 @@ import { useFooterContext } from './hooks/use-footer-context.js';
 import { useBounds } from './bounds/bounds-context.js';
 import { ModalDialog } from './components/dialogs/modal-dialog.js';
 import { RestartModeSelector } from './components/restart-mode-selector.js';
-import { ClampedParagraph } from './components/truncated-text.js';
+import { ClampedParagraph } from './components/display/truncated-text.js';
 import { colors } from './theme/theme.js';
 import { useAppStore, type AppStore } from '../store/app-store.js';
 import { SwitchRestartReport } from '../zones/edts/dialogs/switch-restart-report.js';
