@@ -4,8 +4,8 @@ import { constants } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { parse } from 'yaml';
-import { generateBashCompletion } from '../adapters/driving/cli/completion-spec.js';
-import { EXCLUDED_SUBCOMMANDS, TOOL_DEFINITIONS } from '../adapters/driving/mcp/tool-registry.js';
+import { generateBashCompletion } from '../../adapters/driving/cli/completion-spec.js';
+import { EXCLUDED_SUBCOMMANDS, TOOL_DEFINITIONS } from '../../adapters/driving/mcp/tool-registry.js';
 import { scriptPath, runCli, makeTempDir, cleanupTmpDirs } from './e2e.test-support.js';
 
 afterEach(cleanupTmpDirs);

@@ -46,9 +46,9 @@ describe('tui-back CLI (black-box)', () => {
   });
 
   it("package.json's bin field exposes exactly one executable binary, tui-back (AD-2)", async () => {
-    const pkg = await import('../../package.json', { with: { type: 'json' } });
+    const pkg = await import('../../../package.json', { with: { type: 'json' } });
     expect(Object.keys(pkg.default.bin)).toEqual(['tui-back']);
-    const target = fileURLToPath(new URL(`../../${pkg.default.bin['tui-back']}`, import.meta.url));
+    const target = fileURLToPath(new URL(`../../../${pkg.default.bin['tui-back']}`, import.meta.url));
     await access(target, constants.X_OK);
   });
 

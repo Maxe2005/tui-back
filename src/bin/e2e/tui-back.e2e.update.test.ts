@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parse } from 'yaml';
-import { lockPathFor } from '../adapters/driven/lock/helpers.js';
+import { lockPathFor } from '../../adapters/driven/lock/helpers.js';
 import { manifestYaml, tmpDirs, runCli, makeTempDir, makeGitRepo, commitManifest, runGit, cleanupTmpDirs } from './e2e.test-support.js';
 
 afterEach(cleanupTmpDirs);

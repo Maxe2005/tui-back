@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
-const scriptPath = fileURLToPath(new URL('../../install.sh', import.meta.url));
+const scriptPath = fileURLToPath(new URL('../../../install.sh', import.meta.url));
 const tmpDirs: string[] = [];
 
 afterEach(async () => {
@@ -100,7 +100,7 @@ describe('install.sh', () => {
   });
 
   it('targets the same repository as package.json', async () => {
-    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { repository: { url: string } };
+    const pkg = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { repository: { url: string } };
     const slug = /github\.com[/:]([^/]+\/[^/.]+)/.exec(pkg.repository.url)?.[1];
     const { dir, log } = await makeStubs({});
     run(dir);
@@ -108,7 +108,7 @@ describe('install.sh', () => {
   });
 
   it('ships only runtime files according to npm pack', () => {
-    const r = spawnSync('npm', ['pack', '--dry-run', '--json'], { encoding: 'utf8', cwd: fileURLToPath(new URL('../../', import.meta.url)) });
+    const r = spawnSync('npm', ['pack', '--dry-run', '--json'], { encoding: 'utf8', cwd: fileURLToPath(new URL('../../../', import.meta.url)) });
     expect(r.status).toBe(0);
     const files = (JSON.parse(r.stdout) as Array<{ files: Array<{ path: string }> }>)[0]!.files.map((f) => f.path);
     expect(files).toContain('src/bin/tui-back.mjs');
