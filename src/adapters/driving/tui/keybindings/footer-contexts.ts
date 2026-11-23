@@ -17,6 +17,7 @@ const WIZARD_PREVIOUS: Hint = ['Ctrl+←/Ctrl+P', 'previous step'];
 // Keys shared by both Routes right-pane tabs.
 const ROUTES_PANE_KEYS: readonly Hint[] = [
   ['Ctrl+R', 'fire'],
+  ['*', 'favorite'],
   ['Ctrl+←/→', 'tab'],
 ];
 const ROUTES_RULES_PANEL: readonly Hint[] = [
@@ -241,11 +242,15 @@ export const FOOTER_CONTEXTS = {
   'routes-filter': { label: 'Routes filter', hints: [['Enter', 'apply'], ['Esc', 'clear']] },
   'routes-list': {
     label: 'Routes list',
-    hints: [['Enter', 'request'], ['/ f', 'filter'], ['p', 'picker'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['*', 'favorite'], ['Tab', 'favorites'], ['/ f', 'filter'], ['p', 'picker'], ['Home/End', 'jump']],
   },
   'routes-list-editable': {
     label: 'Routes list (body editable)',
-    hints: [['Enter', 'request'], ['/ f', 'filter'], ['p', 'picker'], ['e', 'edit body'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['*', 'favorite'], ['Tab', 'favorites'], ['/ f', 'filter'], ['p', 'picker'], ['e', 'edit body'], ['Home/End', 'jump']],
+  },
+  'routes-favorites': {
+    label: 'Routes favorites',
+    hints: [['Enter', 'request'], [KEY_UP_DOWN, 'move'], ['*/d', 'remove'], ['Esc/Tab', 'list']],
   },
   'routes-response-raw': {
     label: 'Routes response (raw)',

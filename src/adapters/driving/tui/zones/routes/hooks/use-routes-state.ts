@@ -41,6 +41,10 @@ export function useRoutesState(useStore: AppStore) {
   const loadSavedRequest = useStore((state) => state.loadSavedRequest);
   const deleteSavedRequest = useStore((state) => state.deleteSavedRequest);
 
+  const favoriteRoutes = useStore((state) => state.favoriteRoutes);
+  const refreshFavoriteRoutes = useStore((state) => state.refreshFavoriteRoutes);
+  const toggleFavoriteRoute = useStore((state) => state.toggleFavoriteRoute);
+
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
 
   // Held in the store like the filter, so the cursor survives tab switches.
@@ -92,6 +96,9 @@ export function useRoutesState(useStore: AppStore) {
   const [scalarEdit, setScalarEdit] = useState<{ path: string; kind: JsonScalarKind; input: TextInputState } | null>(null);
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
   const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
+  // The Favorites pane's cursor (clamped on read) and its one-line failure notice.
+  const [favCursor, setFavCursor] = useState(0);
+  const [favNotice, setFavNotice] = useState<string | null>(null);
   const windowSize = useWindowSize();
   // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout, but the panes' content reflows
   // (the repo path wraps or unwraps, changing the list's height). Subscribing here makes this
@@ -102,6 +109,7 @@ export function useRoutesState(useStore: AppStore) {
   const [bodyAreaRef, bodyAreaSize] = useElementSize();
 
   const paneFocused = paneFocus === 'detail';
+  const favoritesFocused = paneFocus === 'favorites';
   return {
     useStore, status, carryingServices, routes, routesStatus, routesError, routesRepoPath, loadRoutes,
     fireRoute, responses, requestDrafts, ensureRequestDraft, updateRequestDraft, paneFocus, setPaneFocus,
@@ -116,7 +124,8 @@ export function useRoutesState(useStore: AppStore) {
     setPickerDeleteConfirm, savedTabState, setSavedTabState, savedTabError, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, scalarEdit, setScalarEdit, addPrompt, setAddPrompt,
     rawEditor, setRawEditor, windowSize, listAreaRef, listAreaSize, responseAreaRef, responseAreaSize,
-    bodyAreaRef, bodyAreaSize, paneFocused,
+    bodyAreaRef, bodyAreaSize, paneFocused, favoritesFocused, favoriteRoutes, refreshFavoriteRoutes,
+    toggleFavoriteRoute, favCursor, setFavCursor, favNotice, setFavNotice,
   };
 }
 

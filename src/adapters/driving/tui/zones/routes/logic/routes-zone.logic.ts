@@ -118,6 +118,8 @@ export type RoutesFooterInput = {
   unavailable: boolean;
   filterEditing: boolean;
   paneFocused: boolean;
+  // The Favorites pane above the list owns the keyboard.
+  favoritesFocused?: boolean;
   paneTab: 'request' | 'response' | 'saved';
   // Request tab: the inline save-name prompt, and whether the typed name is already taken.
   saveState: 'none' | 'naming' | 'duplicate';
@@ -138,11 +140,14 @@ export type RoutesFooterInput = {
 // focused right pane owns the keyboard. An unavailable list only claims the footer while input is
 // captured, so the zone and global keys stay advertised when they work.
 export function routesFooterContext(input: RoutesFooterInput): FooterContextId | null {
-  const captured = input.filterEditing || input.paneFocused;
+  const captured = input.filterEditing || input.paneFocused || input.favoritesFocused === true;
   if (input.unavailable) {
     return captured ? 'busy' : null;
   }
   if (!input.paneFocused) {
+    if (input.favoritesFocused === true && !input.filterEditing) {
+      return 'routes-favorites';
+    }
     if (input.filterEditing) {
       return 'routes-filter';
     }

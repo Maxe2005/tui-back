@@ -3,6 +3,7 @@
 import type { Key } from 'ink';
 import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import { ROUTES_PANE_TABS } from '../../../store/slices/workspace/routes-slice.js';
+import { toggleRouteFavorite } from './routes-zone.favorites-keys.js';
 import { handleRequestTabKey } from './routes-zone.request-keys.js';
 import { handleResponseTabKey } from './routes-zone.response-keys.js';
 import { handleSavedTabKey } from './routes-zone.saved-tab-keys.js';
@@ -101,6 +102,14 @@ export function handlePaneKey(c: RoutesZoneCtx, input: string, key: Key): void {
     setRowAddPrompt((previous) =>
       previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
     );
+    return;
+  }
+  // `*` toggles the open route's favorite (every inline editor above already owns its keys; the
+  // Saved tab's filter takes `*` as text).
+  if (input === '*' && key.ctrl !== true && key.meta !== true && paneTab !== 'saved') {
+    if (c.paneRoute !== null) {
+      toggleRouteFavorite(c, c.paneRoute.method, c.paneRoute.path);
+    }
     return;
   }
   if (key.ctrl === true && (input === 'r' || input === 'R')) {

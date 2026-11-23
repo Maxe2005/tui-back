@@ -8,12 +8,13 @@ import {
   handleSavePromptKey,
 } from '../keys/routes-zone.overlay-keys.js';
 import { handleFilterEditingKey, handleListKey } from '../keys/routes-zone.list-keys.js';
+import { handleFavoritesKey } from '../keys/routes-zone.favorites-keys.js';
 import { handlePaneKey } from '../keys/routes-zone.pane-keys.js';
 import { useInput } from '../../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
 
 export function useRoutesInput(c: RoutesZoneCtx): void {
-  const { useStore, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, savePrompt, pickerOpen, filterEditing, paneFocused } = c;
+  const { useStore, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, savePrompt, pickerOpen, filterEditing, paneFocused, favoritesFocused } = c;
   const zoneInputActive = useZoneInputActive(useStore);
   useInput(
     (input, key) => {
@@ -40,6 +41,10 @@ export function useRoutesInput(c: RoutesZoneCtx): void {
       }
       if (filterEditing) {
         handleFilterEditingKey(c, input, key);
+        return;
+      }
+      if (favoritesFocused) {
+        handleFavoritesKey(c, input, key);
         return;
       }
       if (paneFocused) {

@@ -22,14 +22,19 @@ import {
 import { RESPONSE_AREA_CHROME_ROWS } from '../routes-zone.constants.js';
 import { bodyTreeKey, type RequestDraft, seedRequestDraft } from '../logic/routes-request.logic.js';
 import { filterRoutes, resolveEnterFireTarget } from '../logic/routes-zone.logic.js';
+import { clampFavoriteCursor, visibleFavorites } from '../logic/routes-favorites.logic.js';
 
 export function useRoutesDerived(c: RoutesState) {
   const {
     routes, responses, requestDrafts, paneTab, jsonTreeStates, bodyDrafts, bodyEditErrors, savedRequests,
     selected, filter, filterPanelOpen, panelCursor, section, windowSize, responseAreaSize, bodyAreaSize,
-    paneFocused,
+    paneFocused, favoriteRoutes, routesRepoPath, favCursor,
   } = c;
   const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
+
+  // The Favorites pane rows: the displayed repo's favorites of the active EDT.
+  const favorites = useMemo(() => visibleFavorites(favoriteRoutes, routesRepoPath), [favoriteRoutes, routesRepoPath]);
+  const clampedFavCursor = clampFavoriteCursor(favCursor, favorites.length);
 
   // The pane always reflects the list cursor's route (the cursor cannot move while the pane
   // holds focus), with its own draft and last response.
@@ -160,7 +165,7 @@ export function useRoutesDerived(c: RoutesState) {
     clampedRawSelected, treeTotalBudget, treeViewport, rawViewport, editorRouteKey, editorRoute,
     editorHasDraft, editorDraft, editorTreeState, editorRules, editorRows, editorHiddenCount, editorRuleList,
     editorErrors, editorFirstError, clampedEditorSelected, clampedEditorPanelCursor, bodyTotalBudget,
-    editorViewport, editorOpen, treeActive,
+    editorViewport, editorOpen, treeActive, favorites, clampedFavCursor,
   };
 }
 

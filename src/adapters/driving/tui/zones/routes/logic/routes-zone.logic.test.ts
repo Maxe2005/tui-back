@@ -172,3 +172,12 @@ describe('routesFooterContext', () => {
     expect(routesFooterContext(input)).toBe(expected);
   });
 });
+
+describe('routesFooterContext favorites', () => {
+  it('uses the favorites context while the Favorites pane holds focus', () => {
+    const base: RoutesFooterInput = { ...UNAVAILABLE_FOOTER_INPUT, unavailable: false, favoritesFocused: true };
+    expect(routesFooterContext(base)).toBe('routes-favorites');
+    expect(routesFooterContext({ ...base, filterEditing: true })).toBe('routes-filter');
+    expect(routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, favoritesFocused: true })).toBe('busy');
+  });
+});
