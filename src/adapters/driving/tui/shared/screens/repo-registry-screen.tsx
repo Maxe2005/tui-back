@@ -5,15 +5,15 @@
 // pure function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
 import { Box, Text, type Key } from 'ink';
-import { useInput } from './hooks/use-input.js';
-import { CheckboxListItem } from './components/pickers/checkbox-list-item.js';
-import { DimAnnotation } from './components/feedback/dim-annotation.js';
-import { ModalDialog } from './components/dialogs/modal-dialog.js';
-import { StateLine } from './components/feedback/state-line.js';
-import { nextCursorForKey } from './keys/list-cursor.js';
-import { useFooterContext } from './hooks/use-footer-context.js';
-import type { FooterContextId } from '../keybindings/index.js';
-import { colors } from './theme/theme.js';
+import { useInput } from '../hooks/use-input.js';
+import { CheckboxListItem } from '../components/pickers/checkbox-list-item.js';
+import { DimAnnotation } from '../components/feedback/dim-annotation.js';
+import { ModalDialog } from '../components/dialogs/modal-dialog.js';
+import { StateLine } from '../components/feedback/state-line.js';
+import { nextCursorForKey } from '../keys/list-cursor.js';
+import { useFooterContext } from '../hooks/use-footer-context.js';
+import type { FooterContextId } from '../../keybindings/index.js';
+import { colors } from '../theme/theme.js';
 import {
   useAppStore,
   type AppStore,
@@ -24,9 +24,9 @@ import {
   type RemoveStaleRegistryOutcome,
   type ValidateRegistryEntryResult,
   type ValidateRegistryOutcome,
-} from '../store/app-store.js';
-import type { ScanResult } from '../../../../core/ports/registry.js';
-import { BoundedBlocks, BoundedList } from './components/lists/bounded-list.js';
+} from '../../store/app-store.js';
+import type { ScanResult } from '../../../../../core/ports/registry.js';
+import { BoundedBlocks, BoundedList } from '../components/lists/bounded-list.js';
 
 // Static manifest-creation guidance, always shown alongside the scan/register controls — never
 // gated to first launch only. Field names mirror the manifest zod schema

@@ -2,9 +2,9 @@
 // steps: select (checkboxes; Services force-checks and locks EDTs; Enter needs one checked),
 // summary (read-only review; Enter advances once the preview loaded), confirm (Enter executes
 // only on exactly `reset`). Esc cancels from any step — nothing was written yet.
-import { resolveResetCategories, type ResetCategory } from '../../../../core/scripts/reset-tool.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from './components/inputs/text-edit.js';
-import { nextCursorForKey } from './keys/list-cursor.js';
+import { resolveResetCategories, type ResetCategory } from '../../../../../core/scripts/reset-tool.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../components/inputs/text-edit.js';
+import { nextCursorForKey } from '../keys/list-cursor.js';
 
 export type ResetScreenStep = 'select' | 'summary' | 'confirm';
 

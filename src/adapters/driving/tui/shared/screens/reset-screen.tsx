@@ -5,15 +5,15 @@
 // border and title, never the accent.
 import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text } from 'ink';
-import { useInput } from './hooks/use-input.js';
-import { CheckboxListItem } from './components/pickers/checkbox-list-item.js';
-import { DimAnnotation } from './components/feedback/dim-annotation.js';
-import { TextInputLine } from './components/inputs/text-input-line.js';
-import { StateLine } from './components/feedback/state-line.js';
-import { useFooterContext } from './hooks/use-footer-context.js';
-import type { FooterContextId } from '../keybindings/index.js';
-import { colors, spacing } from './theme/theme.js';
-import { useAppStore, type AppStore } from '../store/app-store.js';
+import { useInput } from '../hooks/use-input.js';
+import { CheckboxListItem } from '../components/pickers/checkbox-list-item.js';
+import { DimAnnotation } from '../components/feedback/dim-annotation.js';
+import { TextInputLine } from '../components/inputs/text-input-line.js';
+import { StateLine } from '../components/feedback/state-line.js';
+import { useFooterContext } from '../hooks/use-footer-context.js';
+import type { FooterContextId } from '../../keybindings/index.js';
+import { colors, spacing } from '../theme/theme.js';
+import { useAppStore, type AppStore } from '../../store/app-store.js';
 import {
   RESET_CATEGORY_LABELS,
   RESET_CONFIRM_WORD,
@@ -27,7 +27,7 @@ import {
   type ResetLine,
   type ResetScreenState,
 } from './reset-screen.logic.js';
-import { BoundedList } from './components/lists/bounded-list.js';
+import { BoundedList } from '../components/lists/bounded-list.js';
 
 const TONE_COLORS: Record<ResetLine['tone'], string> = {
   text: colors.text,

@@ -2,9 +2,9 @@
 // plus the pure summary/result line builders. Key handling itself is covered in
 // reset-screen.logic.test.ts (renderToString never delivers a keypress).
 import { describe, expect, it } from 'vitest';
-import { createAppStore } from '../store/app-store.js';
-import { footerIdOf, mountForTest } from './test-support/mount-for-test.js';
-import { renderToString } from './components/render-to-string.js';
+import { createAppStore } from '../../store/app-store.js';
+import { footerIdOf, mountForTest } from '../test-support/mount-for-test.js';
+import { renderToString } from '../components/render-to-string.js';
 import { ResetScreen } from './reset-screen.js';
 import {
   buildResetResultLines,

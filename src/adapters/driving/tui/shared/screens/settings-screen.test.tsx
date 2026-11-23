@@ -1,9 +1,9 @@
 // tui/shared/settings-screen: pure-function tests for every key-handling decision
 // (renderToString's fake stdin never emits keys) plus render smoke coverage of every tab body.
 import { describe, it, expect, vi } from 'vitest';
-import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
-import { createAppStore } from '../store/app-store.js';
-import { renderToString } from './components/render-to-string.js';
+import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
+import { createAppStore } from '../../store/app-store.js';
+import { renderToString } from '../components/render-to-string.js';
 import {
   SHARED_TYPES_SETTINGS_ROWS,
   buildServicesSettingsRows,

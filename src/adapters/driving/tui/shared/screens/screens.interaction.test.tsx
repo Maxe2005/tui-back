@@ -3,13 +3,13 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
-import { SHARED_EDT_ULID } from '../../../../core/edt/shared-edt.js';
-import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
-import { createAppStore } from '../store/app-store.js';
+import { SHARED_EDT_ULID } from '../../../../../core/edt/shared-edt.js';
+import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
+import { createAppStore } from '../../store/app-store.js';
 import { RepoRegistryScreen } from './repo-registry-screen.js';
 import { SettingsScreen } from './settings-screen.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './test-support/fake-tty.js';
-import { footerIdOf } from './test-support/mount-for-test.js';
+import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../test-support/fake-tty.js';
+import { footerIdOf } from '../test-support/mount-for-test.js';
 
 function mount(element: ReturnType<typeof createElement>) {
   const stdout = new FakeTtyStdout();

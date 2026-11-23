@@ -3,10 +3,10 @@
 // per-path outcomes, and the "Clean stale entries" flow — plus the pure key-handling functions
 // (renderToString's fake stdin never emits keys, so useInput itself is never exercised).
 import { describe, it, expect } from 'vitest';
-import { FOOTER_CONTEXTS } from '../keybindings/index.js';
-import { createAppStore } from '../store/app-store.js';
-import { footerContextOf as contextOf } from './test-support/mount-for-test.js';
-import { renderToString } from './components/render-to-string.js';
+import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
+import { createAppStore } from '../../store/app-store.js';
+import { footerContextOf as contextOf } from '../test-support/mount-for-test.js';
+import { renderToString } from '../components/render-to-string.js';
 import {
   MANIFEST_GUIDANCE_LINES,
   RepoRegistryScreen,

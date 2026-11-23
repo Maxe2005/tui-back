@@ -34,8 +34,8 @@ import { UpdateIncidentsDialog } from '../../zones/update/update-incidents-dialo
 import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
 import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
 import { CommandBar } from '../screens/command-bar/command-bar.js';
-import { RepoRegistryScreen } from '../repo-registry-screen.js';
-import { SettingsScreen } from '../settings-screen.js';
+import { RepoRegistryScreen } from '../screens/repo-registry-screen.js';
+import { SettingsScreen } from '../screens/settings-screen.js';
 import { RealignDialog } from '../screens/dialogs/realign-dialog.js';
 import { TerminalView } from '../screens/terminal-view/terminal-view.js';
 import { HealDialog } from '../screens/dialogs/heal-dialog.js';
@@ -390,8 +390,8 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   { id: 'shared/keybinding-help', file: 'shared/components/dialogs/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
   { id: 'shared/command-bar', file: 'shared/screens/command-bar/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
-  { id: 'shared/repo-registry', file: 'shared/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
-  { id: 'shared/settings', file: 'shared/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },
+  { id: 'shared/repo-registry', file: 'shared/screens/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
+  { id: 'shared/settings', file: 'shared/screens/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/realign-select', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignSelectStore() }) },
   { id: 'shared/realign-run', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
   { id: 'shared/realign-run-failed', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
