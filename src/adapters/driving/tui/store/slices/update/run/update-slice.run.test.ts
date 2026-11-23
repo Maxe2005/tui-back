@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err } from '../../../../../core/result.js';
-import type { ContainerPort } from '../../../../../core/ports/container.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { MigrationPort } from '../../../../../core/ports/migration.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { createAppStore } from '../app-store.js';
-import { fakeDeps } from './update/update-slice.test-support.js';
+import { ok, err } from '../../../../../../../core/result.js';
+import type { ContainerPort } from '../../../../../../../core/ports/container.js';
+import type { GitPort } from '../../../../../../../core/ports/git.js';
+import type { MigrationPort } from '../../../../../../../core/ports/migration.js';
+import type { StatePort } from '../../../../../../../core/ports/state.js';
+import { createAppStore } from '../../../app-store.js';
+import { fakeDeps } from '../update-slice.test-support.js';
 
 describe('live per-service run tracking', () => {
   async function waitForCondition(condition: () => boolean): Promise<void> {
