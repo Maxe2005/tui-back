@@ -13,7 +13,7 @@ import {
   type GridLayout,
   type LogFilterScope,
   type VisibilityFlags,
-} from './logs-zone.logic.js';
+} from './logic/logs-zone.logic.js';
 
 export function LogsGrid({
   panes,

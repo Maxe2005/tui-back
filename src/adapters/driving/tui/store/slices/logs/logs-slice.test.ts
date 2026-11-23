@@ -7,7 +7,7 @@ import type { DockerPort } from '../../../../../../core/ports/docker.js';
 import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
 import type { StatePort } from '../../../../../../core/ports/state.js';
 import { createAppStore, type AppStoreDeps } from '../../app-store.js';
-import { isPaneEngagedInGlobalFilter, resolveEffectiveLines } from '../../../zones/logs/logs-zone.logic.js';
+import { isPaneEngagedInGlobalFilter, resolveEffectiveLines } from '../../../zones/logs/logic/logs-zone.logic.js';
 import { LOGS_HEALTH_POLL_INTERVAL_MS, LOGS_LISTED_HEALTH_POLL_INTERVAL_MS } from './logs-slice.js';
 
 async function flush(): Promise<void> {

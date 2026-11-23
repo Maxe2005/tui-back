@@ -1,5 +1,5 @@
 // tui/zones/logs: pane-focus cycling and grid sub-focus navigation for the LogsZone.
-import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
+import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../../shared/keys/focus-navigation.js';
 
 // Tab cycles EDT list -> other list -> panes. The info-only without-container section is
 // never a Tab stop — it has no focus state by design, so this cycle skips it by construction
@@ -72,4 +72,4 @@ export {
   isWrapped as isPaneWrapped,
   toggleWrapFlag as togglePaneWrapFlag,
   toggleAllWrapFlags as toggleAllPanesWrapFlag,
-} from '../../shared/scrollable-output/index.js';
+} from '../../../shared/scrollable-output/index.js';

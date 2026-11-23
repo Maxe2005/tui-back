@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
-import { MAX_RULES_PER_LIST } from '../../../../../core/logs/rule-sets.js';
-import type { LogLine } from '../../../../../core/ports/docker.js';
+import { FOOTER_CONTEXTS } from '../../../keybindings/index.js';
+import { MAX_RULES_PER_LIST } from '../../../../../../core/logs/rule-sets.js';
+import type { LogLine } from '../../../../../../core/ports/docker.js';
 import {
   addLogRule,
   applyLogRules,

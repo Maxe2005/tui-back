@@ -2,7 +2,7 @@
 // set-name views: one handler per view, each called while that view owns the keyboard.
 import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
-import { cycleFilterLevel, openRuleEditorState, openRuleSetNameState, backToRuleListState, toggleLogRule, deleteLogRule, moveLogRule, MAX_LOG_FILTER_RULES, type FilterEditorState } from '../logs-zone.logic.js';
+import { cycleFilterLevel, openRuleEditorState, openRuleSetNameState, backToRuleListState, toggleLogRule, deleteLogRule, moveLogRule, MAX_LOG_FILTER_RULES, type FilterEditorState } from '../logic/logs-zone.logic.js';
 import { nextCursorForKey } from '../../../shared/keys/list-cursor.js';
 import type { LogsKey, LogsZoneCtx } from '../logs-zone.ctx.js';
 

@@ -7,7 +7,7 @@ import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.j
 import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { STATUS_BADGES, StatusBadge } from '../../shared/components/feedback/status-badge.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { logsLegendHints, formatHealthLabel, healthBadgeState } from './logs-zone.logic.js';
+import { logsLegendHints, formatHealthLabel, healthBadgeState } from './logic/logs-zone.logic.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import type { LogsZoneCtx } from './logs-zone.ctx.js';
 

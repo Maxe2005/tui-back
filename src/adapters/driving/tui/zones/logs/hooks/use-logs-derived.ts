@@ -12,7 +12,7 @@ import {
   splitNoContainerRows,
   type FilterEditorState,
   type LogFilterScope,
-} from '../logs-zone.logic.js';
+} from '../logic/logs-zone.logic.js';
 import { logsActionsMenuRows } from '../logs-actions-menu.js';
 import type { LogsState } from './use-logs-state.js';
 

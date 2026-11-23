@@ -20,7 +20,7 @@ import {
   restartHintVerb,
   type LogFilterScope,
   type VisibilityFlags,
-} from './logs-zone.logic.js';
+} from './logic/logs-zone.logic.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 
 export function LogsPaneView({

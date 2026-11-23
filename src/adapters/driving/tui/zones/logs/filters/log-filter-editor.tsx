@@ -24,7 +24,7 @@ import {
   historyEntryLabel,
   type FilterEditorState,
   type LogFilterScope,
-} from '../logs-zone.logic.js';
+} from '../logic/logs-zone.logic.js';
 import { StateLine } from '../../../shared/components/feedback/state-line.js';
 
 // The filter-history grid browser's column gap — mirrors command-bar.tsx's grid spacing since

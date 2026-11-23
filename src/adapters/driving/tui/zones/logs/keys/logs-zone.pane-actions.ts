@@ -9,7 +9,7 @@ import {
   filterVisibleLines,
   isAtOldestLine,
   isPaneEngagedInGlobalFilter,
-} from '../logs-zone.logic.js';
+} from '../logic/logs-zone.logic.js';
 import type { LogsState } from '../hooks/use-logs-state.js';
 import type { LogsDerived } from '../hooks/use-logs-derived.js';
 

@@ -16,7 +16,7 @@ import {
   setPaneLogFilter,
   toggleAllPanesWrapFlag,
   toggleVisibilityFlag,
-} from '../logs-zone.logic.js';
+} from '../logic/logs-zone.logic.js';
 import type { LogsZoneCtx } from '../logs-zone.ctx.js';
 import { handleActionsMenuKey, handleFullscreenKey } from '../keys/logs-zone.overlay-keys.js';
 import { handleLibraryKey, handleRuleListKey, handleSetNameKey } from '../keys/logs-zone.rule-list-keys.js';

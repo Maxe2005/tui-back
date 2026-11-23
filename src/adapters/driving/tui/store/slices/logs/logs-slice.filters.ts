@@ -9,7 +9,7 @@ import {
   DEFAULT_VISIBILITY_FLAGS,
   filterHistoryKeyString,
   setPaneLogFilter,
-} from '../../../zones/logs/logs-zone.logic.js';
+} from '../../../zones/logs/logic/logs-zone.logic.js';
 import {
   persistedRuleLists,
   summarizeRulesWarnings,

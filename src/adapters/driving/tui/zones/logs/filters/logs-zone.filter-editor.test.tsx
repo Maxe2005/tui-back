@@ -1,5 +1,5 @@
 // tui/zones/logs: real-keypress global and pane filter editor interactions.
-import { encodeFilterHistoryEntry } from '../logs-zone.logic.js';
+import { encodeFilterHistoryEntry } from '../logic/logs-zone.logic.js';
 import { describe, it, expect, vi } from 'vitest';
 import { KEYS } from '../../../shared/test-support/fake-tty.js';
 import { LogsZone } from '../logs-zone.js';

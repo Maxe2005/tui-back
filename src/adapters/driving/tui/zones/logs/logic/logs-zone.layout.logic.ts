@@ -1,5 +1,5 @@
 // tui/zones/logs: grid and zone layout math (chrome rows, pane cells) and scroll-offset math.
-import { spacing } from '../../shared/theme/theme.js';
+import { spacing } from '../../../shared/theme/theme.js';
 
 // Picks the squarest rows x cols grid fitting n panes (ceil(sqrt(n)) columns) within the
 // terminal's available area. 0 panes is a degenerate 0x0 grid — the zone renders its own

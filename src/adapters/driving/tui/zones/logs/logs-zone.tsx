@@ -14,7 +14,7 @@ import { LogFilterEditor } from './filters/log-filter-editor.js';
 import { LogsActionsMenu } from './logs-actions-menu.js';
 import { LogsGrid } from './logs-grid.js';
 import { LogsServiceLists } from './logs-service-lists.js';
-import { isPaneEngagedInGlobalFilter, isPaneWrapped } from './logs-zone.logic.js';
+import { isPaneEngagedInGlobalFilter, isPaneWrapped } from './logic/logs-zone.logic.js';
 import type { LogsZoneCtx } from './logs-zone.ctx.js';
 import { createEditorActions } from './keys/logs-zone.editor-actions.js';
 import { createPaneActions } from './keys/logs-zone.pane-actions.js';

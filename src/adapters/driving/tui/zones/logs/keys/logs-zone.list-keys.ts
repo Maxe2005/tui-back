@@ -1,6 +1,6 @@
 // tui/zones/logs: logs-zone.list-keys — keys of the two service lists (active-EDT members, other
 // services): select-all, cursor moves, checkbox toggle, Enter to open fullscreen.
-import { isSelectAllKey, resolveSelectAllToggle } from '../logs-zone.logic.js';
+import { isSelectAllKey, resolveSelectAllToggle } from '../logic/logs-zone.logic.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 import type { LogsKey, LogsZoneCtx } from '../logs-zone.ctx.js';
 

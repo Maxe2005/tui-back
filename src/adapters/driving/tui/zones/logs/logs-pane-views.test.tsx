@@ -7,7 +7,7 @@ import type { LogsPaneData } from '../../store/app-store.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { LogsPaneView } from './logs-pane-view.js';
 import { FullscreenPane } from './fullscreen-pane.js';
-import { DEFAULT_LOG_FILTER, DEFAULT_VISIBILITY_FLAGS, type VisibilityFlags } from './logs-zone.logic.js';
+import { DEFAULT_LOG_FILTER, DEFAULT_VISIBILITY_FLAGS, type VisibilityFlags } from './logic/logs-zone.logic.js';
 
 function logLines(count: number, stream: (i: number) => LogLine['stream'] = () => 'stdout'): LogLine[] {
   return Array.from({ length: count }, (_, i) => ({ timestamp: `ts-${i}`, text: `line-${i}`, stream: stream(i) }));
