@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ok, err } from '../../../core/result.js';
+import { ok, err } from '../../../../core/result.js';
 import { renderResult } from './envelope.js';
 
 describe('renderResult — non-TTY (AD-3 envelope)', () => {

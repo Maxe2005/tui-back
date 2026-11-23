@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err } from '../../../core/result.js';
-import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import type { RegistryPort } from '../../../core/ports/storage/registry.js';
-import type { EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
-import { DEFAULT_SETTINGS } from '../../../core/ports/storage/settings.js';
+import { ok, err } from '../../../../core/result.js';
+import type { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
+import type { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import { DEFAULT_SETTINGS } from '../../../../core/ports/storage/settings.js';
 import { runCli, type Subcommand } from './dispatch.js';
-import type { DockerPort } from '../../../core/ports/runtime/docker.js';
-import { assertUniqueSubcommandNames, buildSubcommands } from './subcommands.js';
+import type { DockerPort } from '../../../../core/ports/runtime/docker.js';
+import { assertUniqueSubcommandNames, buildSubcommands } from '../subcommands.js';
 import { fakeState, fakeSubcommands, fakeEdtRegistry, fakeGitPort, buildTestSubcommands } from './dispatch.test-support.js';
 
 describe('runCli', () => {

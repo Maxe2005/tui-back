@@ -13,7 +13,7 @@ import { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js'
 import { LockPort } from '../../../../core/ports/runtime/lock.js';
 import { DEFAULT_SETTINGS, healthCheckEnabledFrom, type SettingsPort } from '../../../../core/ports/storage/settings.js';
 import { StatePort } from '../../../../core/ports/storage/state.js';
-import { Subcommand } from '../dispatch.js';
+import { Subcommand } from '../dispatch/dispatch.js';
 import { SubcommandDeps } from './deps.js';
 
 const HEAL_USAGE =

@@ -3,7 +3,7 @@
 // effects, unlike a composition root that runs on import.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Subcommand } from '../adapters/driving/cli/dispatch.js';
+import type { Subcommand } from '../adapters/driving/cli/dispatch/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
 import { createManifestCarryPort } from '../adapters/driven/manifest/carry.js';
 import { loadManifest } from '../adapters/driven/manifest/index.js';

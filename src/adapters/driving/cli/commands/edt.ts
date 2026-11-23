@@ -1,6 +1,6 @@
 // cli/commands/edt: the `edt` verb-dispatch subcommand (create / switch / modify / delete / list / fast-forward-shared).
 import { err } from '../../../../core/result.js';
-import { Subcommand } from '../dispatch.js';
+import { Subcommand } from '../dispatch/dispatch.js';
 import { SubcommandDeps } from './deps.js';
 import { EDT_CREATE_USAGE, runEdtCreate } from './edt-create.js';
 import { EDT_SWITCH_USAGE, runEdtSwitch } from './edt-switch.js';

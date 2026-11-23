@@ -9,7 +9,7 @@ import { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
 import { RegistryPort } from '../../../../core/ports/storage/registry.js';
 import { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
 import { LockPort } from '../../../../core/ports/runtime/lock.js';
-import { Subcommand } from '../dispatch.js';
+import { Subcommand } from '../dispatch/dispatch.js';
 import { SubcommandDeps } from './deps.js';
 
 const REGISTRY_CLEAN_USAGE =

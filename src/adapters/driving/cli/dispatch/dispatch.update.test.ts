@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err } from '../../../core/result.js';
-import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import type { MigrationPort } from '../../../core/ports/vcs/migration.js';
-import type { RegistryPort } from '../../../core/ports/storage/registry.js';
-import type { GitPort } from '../../../core/ports/vcs/git.js';
-import { DEFAULT_SETTINGS, type Settings, type SettingsPort } from '../../../core/ports/storage/settings.js';
+import { ok, err } from '../../../../core/result.js';
+import type { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import type { MigrationPort } from '../../../../core/ports/vcs/migration.js';
+import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
+import type { GitPort } from '../../../../core/ports/vcs/git.js';
+import { DEFAULT_SETTINGS, type Settings, type SettingsPort } from '../../../../core/ports/storage/settings.js';
 import { fakeState, buildTestSubcommands } from './dispatch.test-support.js';
 
 describe('subcommand registry guards — update', () => {

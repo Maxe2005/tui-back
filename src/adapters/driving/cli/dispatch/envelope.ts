@@ -3,7 +3,7 @@
 // one final JSON line. Every subcommand outcome (success, expected failure, unknown
 // subcommand, caught exception) flows through this single function — one output contract,
 // no per-command formatting divergence.
-import type { Result } from '../../../core/result.js';
+import type { Result } from '../../../../core/result.js';
 
 export interface RenderedResult {
   output: string;

@@ -2,7 +2,7 @@
 // and hands argv to the dispatcher. No explicit process.exit():
 // calling it right after stdout.write() does not guarantee the write is flushed when stdout
 // is a pipe, so exitCode is set and the script ends naturally.
-import { runCli } from '../adapters/driving/cli/dispatch.js';
+import { runCli } from '../adapters/driving/cli/dispatch/dispatch.js';
 import { composeSubcommands } from './composition.js';
 
 // isTTY (stdout-only) governs output rendering (human text vs. one JSON line). The

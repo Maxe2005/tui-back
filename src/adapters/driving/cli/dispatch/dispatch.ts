@@ -2,7 +2,7 @@
 // produces a rendered {output, exitCode} — never lets an exception escape uncaught, and
 // treats "no subcommand"/"unknown subcommand"/"--help" as just another Result, routed
 // through the same renderResult() as every other outcome (AD-3's "one output contract").
-import { ok, err, type Result } from '../../../core/result.js';
+import { ok, err, type Result } from '../../../../core/result.js';
 import { renderResult, type RenderedResult } from './envelope.js';
 
 /** Optional execution context supplied by non-CLI drivers (MCP): cooperative cancel + progress. */

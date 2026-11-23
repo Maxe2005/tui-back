@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err } from '../../../core/result.js';
-import type { SavedRequest } from '../../../core/ports/storage/saved-request.js';
+import { ok, err } from '../../../../core/result.js';
+import type { SavedRequest } from '../../../../core/ports/storage/saved-request.js';
 import { fakeSavedRequests, buildTestSubcommands } from './dispatch.test-support.js';
 
 describe('subcommand registry guards — routes and requests', () => {

@@ -8,7 +8,7 @@ import { registerRepo } from '../../../../core/scripts/registry/register.js';
 import { resetRepo } from '../../../../core/scripts/reset/reset.js';
 import { listRepos } from '../../../../core/scripts/registry/list-repos.js';
 import { scanRepos } from '../../../../core/scripts/registry/scan.js';
-import { Subcommand } from '../dispatch.js';
+import { Subcommand } from '../dispatch/dispatch.js';
 import { SubcommandDeps } from './deps.js';
 import { loadSettingsOrDefaults } from './shared.js';
 

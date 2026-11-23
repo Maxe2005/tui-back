@@ -4,7 +4,7 @@ import { err, ok, type Result } from '../../../../core/result.js';
 import { listRoutes } from '../../../../core/routes/list-routes.js';
 import { fireRequest, type FireRequestOptions } from '../../../../core/routes/fire-request.js';
 import { deleteSavedRequest, fireSavedRequest, listSavedRequests, saveRequest } from '../../../../core/routes/saved-requests.js';
-import { Subcommand } from '../dispatch.js';
+import { Subcommand } from '../dispatch/dispatch.js';
 import { SubcommandDeps } from './deps.js';
 
 const FIRE_REQUEST_USAGE =

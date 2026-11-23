@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { ok } from '../../../core/result.js';
-import type { Subcommand } from '../cli/dispatch.js';
+import type { Subcommand } from '../cli/dispatch/dispatch.js';
 import { buildToolRegistry, TOOL_DEFINITIONS, type ToolDefinition } from './tool-registry.js';
 
 function fake(name: string, seen: string[][] = []): Subcommand {

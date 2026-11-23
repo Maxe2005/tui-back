@@ -3,7 +3,7 @@
 // (which close over the final list). assertUniqueSubcommandNames keeps a later entry from
 // silently shadowing an earlier one.
 import { err, ok } from '../../../core/result.js';
-import type { Subcommand } from './dispatch.js';
+import type { Subcommand } from './dispatch/dispatch.js';
 import { generateBashCompletion } from './completion-spec.js';
 import { createInstallSubcommand } from './install.js';
 import type { SubcommandDeps } from './commands/deps.js';
