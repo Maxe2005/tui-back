@@ -2,8 +2,8 @@
 // reloads the EDT list once (system EDT first), an unchanged or refused update does not.
 import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../../../../../../core/result.js';
-import { SHARED_EDT_ULID } from '../../../../../../core/edt/shared-edt.js';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import { SHARED_EDT_ULID } from '../../../../../../core/edt/shared-edt/shared-edt.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 function entry(ulid: string, topic: string, kind?: 'system-shared'): EdtRegistryEntry {

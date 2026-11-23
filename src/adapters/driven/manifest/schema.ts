@@ -4,7 +4,7 @@
 // `z.ZodType<Manifest>` annotation ties the schema to core's Manifest (zod has no runtime
 // `.satisfies()`), so a field drift fails typecheck in either direction.
 import { z } from 'zod';
-import type { Manifest } from '../../../core/ports/manifest.js';
+import type { Manifest } from '../../../core/ports/vcs/manifest.js';
 import { knownModuleIds, moduleConfigSchemas } from '../modules/module-registry.js';
 
 export const moduleConfigSchema = z.record(z.string(), z.unknown());

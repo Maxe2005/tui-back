@@ -1,11 +1,11 @@
 // core/dashboard/drift: unit tests against fake ports — the realign candidate list.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import { GIT_DETACHED_HEAD, type GitPort } from '../ports/git.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/storage/edt-registry.js';
+import { GIT_DETACHED_HEAD, type GitPort } from '../ports/vcs/git.js';
+import type { ManifestPort } from '../ports/vcs/manifest.js';
+import type { RegistryPort } from '../ports/storage/registry.js';
+import type { StatePort } from '../ports/storage/state.js';
 import { driftOf, listDriftCandidates } from './drift.js';
 
 const EDT: EdtRegistryEntry = {

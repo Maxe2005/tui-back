@@ -4,9 +4,9 @@
 // auth. The manifest membership check and list-repos read the derived `knownModuleIds`.
 import { createNestjsOpenApiScanner } from './route-explorer/nestjs-openapi.js';
 import { createCookieSessionAuth } from './route-explorer/cookie-session-auth.js';
-import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
-import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
-import type { SharedTypesPort } from '../../../core/ports/shared-types.js';
+import type { DevAuthPort } from '../../../core/ports/runtime/dev-auth.js';
+import type { RouteScannerPort } from '../../../core/ports/modules/route-scanner.js';
+import type { SharedTypesPort } from '../../../core/ports/modules/shared-types.js';
 import type { ZodTypeAny } from 'zod';
 import { createSharedTypesAdapter } from './shared-types/npm-package.js';
 import { sharedTypesConsumerConfigSchema, sharedTypesSourceConfigSchema } from './shared-types/config.js';

@@ -4,7 +4,7 @@
 // assertions see raw escape sequences. Accent+bold marks the `emphasized` row; the active EDT gets
 // a discreet, non-bold `colors.info` " active" suffix instead.
 import { describe, it, expect, beforeAll } from 'vitest';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
 
 // String.fromCharCode (not a literal control byte in this source file) — keeps the escape
 // sequence unambiguous and immune to any editor/tooling that might normalize raw control

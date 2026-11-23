@@ -2,9 +2,9 @@
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import type { Result } from '../../../../../../../core/result.js';
-import type { ActivateEdtData } from '../../../../../../../core/edt/activate.js';
-import type { CreateEdtData } from '../../../../../../../core/edt/create.js';
-import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../../../core/edt/switch.js';
+import type { ActivateEdtData } from '../../../../../../../core/edt/lifecycle/activate.js';
+import type { CreateEdtData } from '../../../../../../../core/edt/lifecycle/create.js';
+import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../../../core/edt/switch/switch.js';
 import { createAppStore } from '../../../../store/app-store.js';
 import { FakeTtyStdout, KEYS } from '../../../../shared/test-support/fake-tty.js';
 import { EdtsZone } from '../../edts-zone.js';

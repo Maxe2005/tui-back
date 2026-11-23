@@ -1,13 +1,13 @@
 // cli/commands/basic: the small single-use-case commands (register, list-repos, scan, ping, edts, dashboard).
 import { err } from '../../../../core/result.js';
 import { ping } from '../../../../core/ping.js';
-import { listEdtBranchesDivergence } from '../../../../core/edt/list.js';
+import { listEdtBranchesDivergence } from '../../../../core/edt/lifecycle/list.js';
 import { buildDashboardSnapshot } from '../../../../core/dashboard/snapshot.js';
-import { healthCheckEnabledFrom } from '../../../../core/ports/settings.js';
-import { registerRepo } from '../../../../core/scripts/register.js';
-import { resetRepo } from '../../../../core/scripts/reset.js';
-import { listRepos } from '../../../../core/scripts/list-repos.js';
-import { scanRepos } from '../../../../core/scripts/scan.js';
+import { healthCheckEnabledFrom } from '../../../../core/ports/storage/settings.js';
+import { registerRepo } from '../../../../core/scripts/registry/register.js';
+import { resetRepo } from '../../../../core/scripts/reset/reset.js';
+import { listRepos } from '../../../../core/scripts/registry/list-repos.js';
+import { scanRepos } from '../../../../core/scripts/registry/scan.js';
 import { Subcommand } from '../dispatch.js';
 import { SubcommandDeps } from './deps.js';
 import { loadSettingsOrDefaults } from './shared.js';

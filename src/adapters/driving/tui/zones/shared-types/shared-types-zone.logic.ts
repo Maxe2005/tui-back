@@ -1,8 +1,8 @@
 // tui/zones/shared-types: the zone's pure decisions — the form reducer (version field,
 // consumer checklist, option toggles), the results cursor and the quit-confirm rule. The zone's
 // `useInput` stays a thin dispatcher over these.
-import type { PropagateOptions, PropagateServiceResult, PropagateStep } from '../../../../../core/shared-types/propagate-version.js';
-import { isValidVersion } from '../../../../../core/shared-types/propagate-version.js';
+import type { PropagateOptions, PropagateServiceResult, PropagateStep } from '../../../../../core/shared-types/versioning/propagate-version.js';
+import { isValidVersion } from '../../../../../core/shared-types/versioning/propagate-version.js';
 import type { ServiceAction } from '../../../../../core/service-actions/index.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/inputs/text-edit.js';
 import { resolveMenuKey, type MenuItem, type MenuKey, type MenuStep } from '../../shared/components/lists/menu-list.js';

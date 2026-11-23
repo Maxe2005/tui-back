@@ -1,8 +1,8 @@
 // cli/commands/update: the `update` subcommand (usage, override flags, EDT / all / from-edt flows).
 import { err } from '../../../../core/result.js';
-import { groupUpdate, type OnUpdatePhase, type UpdatePhase } from '../../../../core/scripts/group-update.js';
-import { selectionFromEdt } from '../../../../core/scripts/resolve-merge-sources.js';
-import { DEFAULT_SETTINGS } from '../../../../core/ports/settings.js';
+import { groupUpdate, type OnUpdatePhase, type UpdatePhase } from '../../../../core/scripts/group-update/group-update.js';
+import { selectionFromEdt } from '../../../../core/scripts/update-support/resolve-merge-sources.js';
+import { DEFAULT_SETTINGS } from '../../../../core/ports/storage/settings.js';
 import { Subcommand, SubcommandContext } from '../dispatch.js';
 import { SubcommandDeps } from './deps.js';
 

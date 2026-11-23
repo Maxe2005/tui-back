@@ -2,7 +2,7 @@
 // simple / clean by default) shared by the switch, realign and heal dialogs. It only renders the
 // choice; the owning dialog changes it for its own run and never writes it back to the settings.
 import { Box, Text } from 'ink';
-import type { SwitchRestartMode } from '../../../../../../core/ports/settings.js';
+import type { SwitchRestartMode } from '../../../../../../core/ports/storage/settings.js';
 import { colors } from '../../theme/theme.js';
 import { DimAnnotation } from '../feedback/dim-annotation.js';
 

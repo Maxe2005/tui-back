@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { restartNeedsAttention, type RestartRow } from '../edt/switch-restart.js';
-import type { HealthState } from '../ports/docker.js';
-import type { EdtRegistryEntry } from '../ports/edt-registry.js';
-import type { Manifest } from '../ports/manifest.js';
+import { restartNeedsAttention, type RestartRow } from '../edt/switch/restart/switch-restart.js';
+import type { HealthState } from '../ports/runtime/docker.js';
+import type { EdtRegistryEntry } from '../ports/storage/edt-registry.js';
+import type { Manifest } from '../ports/vcs/manifest.js';
 import { err, ok, type Result } from '../result.js';
-import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey } from '../scripts/group-update.js';
-import { serviceRestartLockKey } from '../scripts/service-restart.js';
+import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey } from '../scripts/group-update/group-update.js';
+import { serviceRestartLockKey } from '../scripts/update-support/service-restart.js';
 import type { ServiceFinalState } from '../service-actions/index.js';
 import { HEAL_NOTHING_TO_DO_MESSAGE, planHeal, runHeal, type HealPlan } from './index.js';
 

@@ -1,5 +1,5 @@
 // tui/zones/update: fullscreen service report model, windowing and report key handling.
-import type { GroupUpdateRepoResult } from '../../../../../../core/scripts/group-update.js';
+import type { GroupUpdateRepoResult } from '../../../../../../core/scripts/group-update/group-update.js';
 import { computeLineRowCount, sliceVisibleWindow } from '../../../shared/scrollable-output/index.js';
 import type { ServiceIssue } from '../logic/update-zone.status.logic.js';
 import type { ServiceStepStates } from '../logic/update-zone.steps.logic.js';

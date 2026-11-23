@@ -1,6 +1,6 @@
 // tui/store/slices: the Update slice's service-health polling (one shared timer for every
 // tracked service, independent of the Logs zone's per-pane polling).
-import { healthCheckEnabledFrom } from '../../../../../../../core/ports/settings.js';
+import { healthCheckEnabledFrom } from '../../../../../../../core/ports/storage/settings.js';
 import { resolveServiceStatus } from '../../../../../../../core/service-status/index.js';
 import {
   UPDATE_HEALTH_POLL_INTERVAL_MS,

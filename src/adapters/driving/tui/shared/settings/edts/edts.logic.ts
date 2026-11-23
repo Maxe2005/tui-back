@@ -7,7 +7,7 @@ import {
   cycleSwitchRestartMode,
   type RealignScope,
   type SwitchRestartMode,
-} from '../../../../../../core/ports/settings.js';
+} from '../../../../../../core/ports/storage/settings.js';
 
 // EDTs tab: the hideable per-context action hints (formatAvailableActionsHint's contexts).
 export type HideableActionHint = { id: string; label: string };

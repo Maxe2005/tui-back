@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../../../../../core/result.js';
-import type { ContainerPort } from '../../../../../../../core/ports/container.js';
-import type { EdtRegistryPort } from '../../../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../../../core/ports/manifest.js';
-import type { RestartPort } from '../../../../../../../core/ports/restart.js';
-import type { RegistryPort } from '../../../../../../../core/ports/registry.js';
-import type { StatePort } from '../../../../../../../core/ports/state.js';
+import type { ContainerPort } from '../../../../../../../core/ports/runtime/container.js';
+import type { EdtRegistryPort } from '../../../../../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../../../../../core/ports/vcs/git.js';
+import type { LockPort } from '../../../../../../../core/ports/runtime/lock.js';
+import type { ManifestPort } from '../../../../../../../core/ports/vcs/manifest.js';
+import type { RestartPort } from '../../../../../../../core/ports/runtime/restart.js';
+import type { RegistryPort } from '../../../../../../../core/ports/storage/registry.js';
+import type { StatePort } from '../../../../../../../core/ports/storage/state.js';
 import { createAppStore } from '../../../app-store.js';
 import { fakeDeps } from '../update-slice.test-support.js';
 

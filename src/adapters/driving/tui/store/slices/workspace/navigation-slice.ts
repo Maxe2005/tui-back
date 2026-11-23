@@ -2,7 +2,7 @@
 // ratios, Ctrl+W resize-mode, gated-tab visibility, and the small app-shell-level UI flags
 // (help, run-in-progress, zone-input-capture, quit-request, the `:` command bar).
 import type { StateCreator } from 'zustand';
-import { resolveTabVisibility, DEFAULT_TAB_VISIBILITY, type ResolveTabVisibilityData } from '../../../../../../core/edt/resolve-tab-visibility.js';
+import { resolveTabVisibility, DEFAULT_TAB_VISIBILITY, type ResolveTabVisibilityData } from '../../../../../../core/edt/shared-edt/resolve-tab-visibility.js';
 import { stepFocus, type FocusNavDirection } from '../../../shared/keys/focus-navigation.js';
 import { boundaryCount, clampBoundaryRatio, defaultZoneRatios, hasResizableBoundary } from '../../../zones/zone-layouts.js';
 import { ZONES, type ZoneId } from '../../../zones/zones.js';

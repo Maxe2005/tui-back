@@ -2,7 +2,7 @@
 // from the scanner's parameters, the fire-block rules, and the FireRequestOptions build. The
 // body itself stays the route's `bodyDrafts` entry; this file only decides whether and how it
 // travels.
-import type { Route, RouteParameter } from '../../../../../../core/ports/route-scanner.js';
+import type { Route, RouteParameter } from '../../../../../../core/ports/modules/route-scanner.js';
 import type { FireRequestOptions } from '../../../../../../core/routes/fire-request.js';
 import { canEditRouteBody } from '../../../shared/components/json-tree/model.js';
 

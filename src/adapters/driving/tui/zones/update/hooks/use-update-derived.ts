@@ -3,7 +3,7 @@
 // full report's input and content, labels, and the recap / detail-pane data. Pure derivation: no
 // effects, no key handling.
 import { resolve as resolvePath } from 'node:path';
-import type { UpdateBlockerChoice } from '../../../../../../core/scripts/group-update.js';
+import type { UpdateBlockerChoice } from '../../../../../../core/scripts/group-update/group-update.js';
 import { spacing } from '../../../shared/theme/theme.js';
 import {
   PENDING_STEPS,

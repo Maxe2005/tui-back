@@ -3,8 +3,8 @@
 // *stages* picker outcomes (rather than submitting immediately, like service-actions/add-to-edt)
 // and drives the "try a different branch/name" retry flow.
 import { Box, Text, type Key } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import type { AppState } from '../../../store/app-store.js';
 import { CheckboxListItem } from '../../../shared/components/pickers/checkbox-list-item.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/pickers/branch-picker.js';

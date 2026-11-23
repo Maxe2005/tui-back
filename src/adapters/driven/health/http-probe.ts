@@ -1,6 +1,6 @@
 // adapters/driven/health: the driven implementation of core's HealthProbePort — a single Node
 // `fetch` GET bounded by `AbortSignal.timeout`.
-import type { HealthProbePort } from '../../../core/ports/health-probe.js';
+import type { HealthProbePort } from '../../../core/ports/runtime/health-probe.js';
 import { err, ok } from '../../../core/result.js';
 
 export function createHttpHealthProbe(fetchImpl: typeof fetch = fetch): HealthProbePort {

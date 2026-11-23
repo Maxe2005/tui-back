@@ -3,14 +3,14 @@
 // restart phase, the busy path and the dashboard refresh — not the use-case itself.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../../../../core/result.js';
-import type { DockerPort } from '../../../../../../core/ports/docker.js';
-import type { EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../../core/ports/registry.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../../core/ports/settings.js';
-import type { StatePort } from '../../../../../../core/ports/state.js';
+import type { DockerPort } from '../../../../../../core/ports/runtime/docker.js';
+import type { EdtRegistryPort } from '../../../../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../../../../core/ports/vcs/git.js';
+import type { LockPort } from '../../../../../../core/ports/runtime/lock.js';
+import type { ManifestPort } from '../../../../../../core/ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../../../../core/ports/storage/registry.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../../core/ports/storage/settings.js';
+import type { StatePort } from '../../../../../../core/ports/storage/state.js';
 import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 import { applyRealignRow, matchingPreset, presetSelection } from './realign-slice.js';
 

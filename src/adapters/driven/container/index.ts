@@ -3,7 +3,7 @@
 // default), no dockerode. The executable is injectable so integration tests can stub it.
 import { runProcess } from '../process.js';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { ContainerPort } from '../../../core/ports/container.js';
+import type { ContainerPort } from '../../../core/ports/runtime/container.js';
 
 export function createContainerPort(executable = 'docker'): ContainerPort {
   return {

@@ -1,14 +1,14 @@
 // tui/store/slices/update-slice: unit tests for the Update zone's run state — the slice
-// calls the real core/scripts/group-update.ts use-case against fake ports (AD-2
+// calls the real core/scripts/group-update/group-update.ts use-case against fake ports (AD-2
 // in-process), so these verify the wiring (status transitions, runInProgress guard,
 // interrupted marking + edts refresh) rather than re-testing the use-case matrix.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../../../../core/result.js';
-import type { EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../../core/ports/git.js';
-import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
-import type { StatePort } from '../../../../../../core/ports/state.js';
-import { DEFAULT_SETTINGS } from '../../../../../../core/ports/settings.js';
+import type { EdtRegistryPort } from '../../../../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../../../../core/ports/vcs/git.js';
+import type { ManifestPort } from '../../../../../../core/ports/vcs/manifest.js';
+import type { StatePort } from '../../../../../../core/ports/storage/state.js';
+import { DEFAULT_SETTINGS } from '../../../../../../core/ports/storage/settings.js';
 import { createAppStore } from '../../app-store.js';
 import { MEMBERS, fakeDeps } from './update-slice.test-support.js';
 

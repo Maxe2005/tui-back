@@ -1,12 +1,12 @@
 // cli/commands/edt-modify: `edt modify` usage, flag parsing and runner.
 import { resolve } from 'node:path';
 import { err, type Result } from '../../../../core/result.js';
-import { modifyEdt } from '../../../../core/edt/modify.js';
-import { GitPort } from '../../../../core/ports/git.js';
-import { ManifestPort } from '../../../../core/ports/manifest.js';
-import { RegistryPort } from '../../../../core/ports/registry.js';
-import { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
-import { LockPort } from '../../../../core/ports/lock.js';
+import { modifyEdt } from '../../../../core/edt/lifecycle/modify.js';
+import { GitPort } from '../../../../core/ports/vcs/git.js';
+import { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import { RegistryPort } from '../../../../core/ports/storage/registry.js';
+import { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import { LockPort } from '../../../../core/ports/runtime/lock.js';
 
 export const EDT_MODIFY_USAGE =
   'tui-back edt modify --topic <topic> [--add-member <path> --set-branch <path>=<branch>]... [--remove-member <path>]... [--set-branch <path>=<branch>]... [--rename-to <topic>]' +

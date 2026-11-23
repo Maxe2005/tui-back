@@ -4,7 +4,7 @@ import { CheckboxListItem } from '../../components/pickers/checkbox-list-item.js
 import { DimAnnotation } from '../../components/feedback/dim-annotation.js';
 import { colors } from '../../theme/theme.js';
 import { UPDATE_SETTINGS_ROWS, UPDATE_SETTINGS_ROW_HINTS } from './update.logic.js';
-import type { Settings } from '../../../../../../core/ports/settings.js';
+import type { Settings } from '../../../../../../core/ports/storage/settings.js';
 
 export type UpdateTabProps = {
   settings: Settings;

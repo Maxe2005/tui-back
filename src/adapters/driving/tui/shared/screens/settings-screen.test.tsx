@@ -1,7 +1,7 @@
 // tui/shared/settings-screen: pure-function tests for every key-handling decision
 // (renderToString's fake stdin never emits keys) plus render smoke coverage of every tab body.
 import { describe, it, expect, vi } from 'vitest';
-import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS } from '../../../../../core/ports/storage/settings.js';
 import { createAppStore } from '../../store/app-store.js';
 import { renderToString } from '../components/render-to-string.js';
 import {
@@ -279,7 +279,7 @@ describe('clampBranchDropdownMaxRows / adjustBranchDropdownMaxRows (branch autoc
     expect(adjustBranchDropdownMaxRows(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS, 'up')).toBe(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS);
   });
 
-  it('the range is 1–20 with a default of 5 (single source of truth in core/ports/settings.ts)', () => {
+  it('the range is 1–20 with a default of 5 (single source of truth in core/ports/storage/settings.ts)', () => {
     expect(MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS).toBe(1);
     expect(MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS).toBe(20);
     expect(DEFAULT_SETTINGS.edts.branchDropdownMaxRows).toBe(5);

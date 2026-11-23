@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../result.js';
-import type { StatePort } from '../ports/state.js';
+import type { StatePort } from '../ports/storage/state.js';
 import {
   applyRuleSet,
   deleteRuleSet,

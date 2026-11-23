@@ -1,4 +1,4 @@
-import type { GatedTabStatus, ResolveTabVisibilityData } from '../../../../core/edt/resolve-tab-visibility.js';
+import type { GatedTabStatus, ResolveTabVisibilityData } from '../../../../core/edt/shared-edt/resolve-tab-visibility.js';
 
 export type ZoneId =
   | 'dashboard'

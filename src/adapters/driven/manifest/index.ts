@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { Manifest } from '../../../core/ports/manifest.js';
+import type { Manifest } from '../../../core/ports/vcs/manifest.js';
 import { createManifestSchema, manifestSchema } from './schema.js';
 
 const UNKNOWN_MODULE_ISSUE = /^Unknown module id "/;

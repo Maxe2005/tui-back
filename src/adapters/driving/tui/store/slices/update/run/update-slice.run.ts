@@ -16,13 +16,13 @@ import {
   type StageControl,
   type OnUpdatePhase,
   type UpdatePhase,
-} from '../../../../../../../core/scripts/group-update.js';
-import { serviceRestart as serviceRestartUseCase } from '../../../../../../../core/scripts/service-restart.js';
+} from '../../../../../../../core/scripts/group-update/group-update.js';
+import { serviceRestart as serviceRestartUseCase } from '../../../../../../../core/scripts/update-support/service-restart.js';
 import { openInIde } from '../../../../../../../core/service-actions/index.js';
 import { err, ok, type Result } from '../../../../../../../core/result.js';
 import { advanceServiceSteps, mergeLastServiceOutcomes } from '../../../../zones/update/logic/update-zone.logic.js';
-import { autoResolveSharedTypesConflict } from '../../../../../../../core/shared-types/resolve-conflict.js';
-import { listConsumers, type DependencyConsumer } from '../../../../../../../core/shared-types/list-consumers.js';
+import { autoResolveSharedTypesConflict } from '../../../../../../../core/shared-types/consumers/resolve-conflict.js';
+import { listConsumers, type DependencyConsumer } from '../../../../../../../core/shared-types/consumers/list-consumers.js';
 import {
   runSharedTypesPhase,
   SHARED_TYPES_PHASE_FAILED,
@@ -31,7 +31,7 @@ import {
   type SharedTypesPhaseFailure,
   type SharedTypesPhaseOutcome,
   type SharedTypesStage,
-} from '../../../../../../../core/shared-types/smart-update.js';
+} from '../../../../../../../core/shared-types/consumers/smart-update.js';
 import { resolveSingleSourceOf, resolveSourceRegistries } from '../../shared-types/shared-types-slice.js';
 import { createRaiseIncident } from '../health/update-slice.incident.js';
 import {

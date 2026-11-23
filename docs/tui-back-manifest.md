@@ -6,7 +6,7 @@ Ce document décrit exhaustivement les propriétés acceptées par le fichier
 Le schéma de référence (source de vérité) est le schéma Zod défini dans
 [`src/adapters/driven/manifest/schema.ts`](../src/adapters/driven/manifest/schema.ts),
 adossé au type `Manifest` de
-[`src/core/ports/manifest.ts`](../src/core/ports/manifest.ts).
+[`src/core/ports/vcs/manifest.ts`](../src/core/ports/vcs/manifest.ts).
 Le chargement/parsing est fait par
 [`src/adapters/driven/manifest/index.ts`](../src/adapters/driven/manifest/index.ts)
 (`loadManifest`).
@@ -319,7 +319,7 @@ Déclarer l'un ou l'autre module active l'onglet `shared-types` du TUI (affiché
 masqué ou grisé selon l'appartenance à l'EDT actif). Les opérations
 elles-mêmes (lire la version déclarée, réécrire uniquement la ligne de
 dépendance, vérifier la publication sur le registre) passent par le port
-`SharedTypesPort` ([`src/core/ports/shared-types.ts`](../src/core/ports/shared-types.ts)).
+`SharedTypesPort` ([`src/core/ports/modules/shared-types.ts`](../src/core/ports/modules/shared-types.ts)).
 
 **Mise à jour de groupe « shared-types d'abord »** : lorsque l'EDT actif contient
 exactement un dépôt `shared-types-source` (parmi les services de la mise à jour),
@@ -535,14 +535,14 @@ du fichier sur la branche cible. Il apparaît alors modifié par rapport à cett
 ## Sources
 
 - Schéma Zod : `src/adapters/driven/manifest/schema.ts`
-- Type `Manifest` : `src/core/ports/manifest.ts`
+- Type `Manifest` : `src/core/ports/vcs/manifest.ts`
 - Statut des services (`healthUrl` + conteneur) : `src/core/service-status/index.ts`
 - Loader : `src/adapters/driven/manifest/index.ts`
-- Clean restart (recette `restartCommands`) : `src/core/scripts/group-update.ts` (`runRestartStep`),
-  `src/core/scripts/service-restart.ts`, `src/core/ports/restart.ts`,
+- Clean restart (recette `restartCommands`) : `src/core/scripts/group-update/group-update.ts` (`runRestartStep`),
+  `src/core/scripts/update-support/service-restart.ts`, `src/core/ports/runtime/restart.ts`,
   `src/adapters/driven/restart/index.ts`
 - Registre des modules : `src/adapters/driven/modules/module-registry.ts`
-- Modules `shared-types` : `src/adapters/driven/modules/shared-types/config.ts`, `src/adapters/driven/modules/shared-types/npm-package.ts`, `src/core/ports/shared-types.ts`
+- Modules `shared-types` : `src/adapters/driven/modules/shared-types/config.ts`, `src/adapters/driven/modules/shared-types/npm-package.ts`, `src/core/ports/modules/shared-types.ts`
 - Scanner `route-explorer` : `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts`
 - Auth session cookie : `src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`
 - Tir de requête : `src/core/routes/fire-request.ts`

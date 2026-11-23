@@ -3,10 +3,10 @@
 // fire-time hard gate, unknown names and cookie hygiene.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '../result.js';
-import type { DevAuthPort } from '../ports/dev-auth.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { Route, RouteScannerPort } from '../ports/route-scanner.js';
-import type { SavedRequest, SavedRequestInput, SavedRequestPort } from '../ports/saved-request.js';
+import type { DevAuthPort } from '../ports/runtime/dev-auth.js';
+import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
+import type { Route, RouteScannerPort } from '../ports/modules/route-scanner.js';
+import type { SavedRequest, SavedRequestInput, SavedRequestPort } from '../ports/storage/saved-request.js';
 import { deleteSavedRequest, fireSavedRequest, listSavedRequests, overwriteSavedRequest, saveRequest } from './saved-requests.js';
 
 function manifestOk(modules: Manifest['modules'] = { 'route-explorer': { baseUrl: 'http://localhost:3000' } }): ManifestPort {

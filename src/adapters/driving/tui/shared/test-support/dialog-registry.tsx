@@ -4,8 +4,8 @@
 // state, so the matrix reaches them through the owning zone instead. `overlay` entries are
 // app-level overlays that are not a ModalDialog (the Terminal view) but get the same matrix.
 import { createElement, type ReactElement } from 'react';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
+import type { ServiceBranchDivergence } from '../../../../../core/edt/lifecycle/list.js';
 import { createAppStore } from '../../store/app-store.js';
 import { createFilterablePickListState } from '../components/pickers/filterable-pick-list.js';
 import { KeybindingHelp } from '../components/dialogs/keybinding-help.js';

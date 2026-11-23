@@ -4,7 +4,7 @@
 // the service's repoPath). bufferSize is captured per subscription, so a settings change never
 // resizes a buffer already in flight.
 import { err, ok, type Result } from '../result.js';
-import type { DockerErrorLike, DockerPort, LogLine } from '../ports/docker.js';
+import type { DockerErrorLike, DockerPort, LogLine } from '../ports/runtime/docker.js';
 
 export interface LogsManagerEntry {
   lines: LogLine[];

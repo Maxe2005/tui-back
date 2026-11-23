@@ -1,7 +1,7 @@
 // adapters/driven/docker/index.logic: pure line-parsing/merge logic for index.ts, kept apart so
 // it is unit-testable without a live docker daemon. index.ts owns every actual spawn call;
 // this module only transforms the text those calls produced.
-import type { HealthState, LogLine, LogStreamTag } from '../../../core/ports/docker.js';
+import type { HealthState, LogLine, LogStreamTag } from '../../../core/ports/runtime/docker.js';
 
 function stripTrailingCr(line: string): string {
   return line.endsWith('\r') ? line.slice(0, -1) : line;

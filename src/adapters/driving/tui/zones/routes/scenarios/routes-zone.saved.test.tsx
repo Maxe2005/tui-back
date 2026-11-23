@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createAppStore } from '../../../store/app-store.js';
 import type { AppStoreDeps } from '../../../store/app-store.js';
 import { err, ok } from '../../../../../../core/result.js';
-import type { SavedRequest, SavedRequestPort } from '../../../../../../core/ports/saved-request.js';
+import type { SavedRequest, SavedRequestPort } from '../../../../../../core/ports/storage/saved-request.js';
 import { KEYS } from '../../../shared/test-support/fake-tty.js';
 import { RoutesZone } from '../routes-zone.js';
 import { seed, mount, press, lastFrame } from '../routes-zone.test-support.js';

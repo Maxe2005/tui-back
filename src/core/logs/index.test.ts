@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../result.js';
-import type { DockerPort, LogLine } from '../ports/docker.js';
+import type { DockerPort, LogLine } from '../ports/runtime/docker.js';
 import { createLogsManager } from './index.js';
 
 function line(text: string, stream: 'stdout' | 'stderr' = 'stdout', timestamp = '2026-01-01T00:00:00.000Z'): LogLine {

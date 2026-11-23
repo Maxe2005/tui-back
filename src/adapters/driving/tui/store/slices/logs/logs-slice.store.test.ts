@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { ok, err } from "../../../../../../core/result.js";
-import type { ManifestPort } from "../../../../../../core/ports/manifest.js";
-import { DEFAULT_SETTINGS } from "../../../../../../core/ports/settings.js";
-import type { DockerPort } from "../../../../../../core/ports/docker.js";
+import type { ManifestPort } from "../../../../../../core/ports/vcs/manifest.js";
+import { DEFAULT_SETTINGS } from "../../../../../../core/ports/storage/settings.js";
+import type { DockerPort } from "../../../../../../core/ports/runtime/docker.js";
 import { createAppStore } from "../../app-store.js";
 import { manifestFor, fakeDeps } from "../../store.test-support.js";
 

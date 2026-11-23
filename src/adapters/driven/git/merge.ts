@@ -2,7 +2,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { type ManifestPort } from '../../../core/ports/manifest.js';
+import { type ManifestPort } from '../../../core/ports/vcs/manifest.js';
 import { type Result, err, ok } from '../../../core/result.js';
 import { runProcess } from '../process.js';
 import { assertCurrentBranchAllowed } from './gate.js';

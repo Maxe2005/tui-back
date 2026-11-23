@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../../../../../core/result.js';
-import type { GitPort } from '../../../../../../../core/ports/git.js';
-import type { ManifestPort } from '../../../../../../../core/ports/manifest.js';
-import type { RestartPort } from '../../../../../../../core/ports/restart.js';
+import type { GitPort } from '../../../../../../../core/ports/vcs/git.js';
+import type { ManifestPort } from '../../../../../../../core/ports/vcs/manifest.js';
+import type { RestartPort } from '../../../../../../../core/ports/runtime/restart.js';
 import { createAppStore, type AppStoreDeps } from '../../../app-store.js';
 import { fakeDeps } from '../update-slice.test-support.js';
 

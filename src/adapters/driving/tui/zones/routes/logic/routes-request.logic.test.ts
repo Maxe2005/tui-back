@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Route } from '../../../../../../core/ports/route-scanner.js';
+import type { Route } from '../../../../../../core/ports/modules/route-scanner.js';
 import {
   addRequestRow,
   bodyTreeKey,

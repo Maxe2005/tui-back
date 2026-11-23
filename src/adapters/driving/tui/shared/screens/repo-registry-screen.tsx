@@ -25,7 +25,7 @@ import {
   type ValidateRegistryEntryResult,
   type ValidateRegistryOutcome,
 } from '../../store/app-store.js';
-import type { ScanResult } from '../../../../../core/ports/registry.js';
+import type { ScanResult } from '../../../../../core/ports/storage/registry.js';
 import { BoundedBlocks, BoundedList } from '../components/lists/bounded-list.js';
 
 // Static manifest-creation guidance, always shown alongside the scan/register controls — never

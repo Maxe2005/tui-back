@@ -4,20 +4,20 @@
 // mid-merge repo is skipped. One closed row per selected service; the run never rejects.
 import { resolve } from 'node:path';
 import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../dashboard/drift.js';
-import { checkoutExpectedBranch, memberTargetSpec, type TargetBranchSpec } from '../edt/checkout-expected.js';
-import { MANIFEST_FILE, withCarriedManifest } from '../edt/manifest-carry.js';
-import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention, type RestartReport, type RestartRow } from '../edt/switch-restart.js';
+import { checkoutExpectedBranch, memberTargetSpec, type TargetBranchSpec } from '../edt/branches/checkout-expected.js';
+import { MANIFEST_FILE, withCarriedManifest } from '../edt/shared-edt/manifest-carry.js';
+import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention, type RestartReport, type RestartRow } from '../edt/switch/restart/switch-restart.js';
 import { withActionLock } from '../locking.js';
-import type { EdtRegistryPort } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
-import type { LockPort } from '../ports/lock.js';
-import type { ManifestCarryPort } from '../ports/manifest-carry.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import { REALIGN_SCOPES, type RealignScope } from '../ports/settings.js';
-import type { StatePort } from '../ports/state.js';
+import type { EdtRegistryPort } from '../ports/storage/edt-registry.js';
+import type { GitPort } from '../ports/vcs/git.js';
+import type { LockPort } from '../ports/runtime/lock.js';
+import type { ManifestCarryPort } from '../ports/vcs/manifest-carry.js';
+import type { ManifestPort } from '../ports/vcs/manifest.js';
+import type { RegistryPort } from '../ports/storage/registry.js';
+import { REALIGN_SCOPES, type RealignScope } from '../ports/storage/settings.js';
+import type { StatePort } from '../ports/storage/state.js';
 import { err, ok, type Result } from '../result.js';
-import { edtUpdateLockKey, GROUP_UPDATE_LOCK_KEY } from '../scripts/group-update.js';
+import { edtUpdateLockKey, GROUP_UPDATE_LOCK_KEY } from '../scripts/group-update/group-update.js';
 import type { RestartMode, ServiceActions } from '../service-actions/index.js';
 
 export { REALIGN_SCOPES, type RealignScope };

@@ -1,7 +1,7 @@
 // core/shell/line-buffer: the bounded ring buffer a shell session retains its output in. Only
 // the last `capacity` lines are kept; older ones are counted in `droppedCount` so the view can
 // show an "N lines dropped" marker instead of growing without bound.
-import type { ShellLine } from '../ports/shell-session.js';
+import type { ShellLine } from '../ports/runtime/shell-session.js';
 
 export interface LineBufferSnapshot {
   lines: ShellLine[];

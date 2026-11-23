@@ -6,11 +6,11 @@ import {
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
   MIN_GRID_MAX_ROWS,
   MIN_INPUT_HISTORY_SIZE,
-} from '../../../../../../core/ports/settings.js';
+} from '../../../../../../core/ports/storage/settings.js';
 
 // Command Palette tab: the grid rows per column. Clamped to a sane, always-positive range —
 // 0/negative would break groupCommandsByColumn's `Math.max(1, maxRows)` floor, and the zod
-// schema enforces the same [MIN, MAX] bound (core/ports/settings.ts holds both). Re-exported
+// schema enforces the same [MIN, MAX] bound (core/ports/storage/settings.ts holds both). Re-exported
 // here for existing importers.
 export { MIN_GRID_MAX_ROWS, MAX_GRID_MAX_ROWS };
 

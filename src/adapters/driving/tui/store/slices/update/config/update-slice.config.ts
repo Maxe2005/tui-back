@@ -7,8 +7,8 @@
 // would only scatter one flow across files.
 import { resolve } from 'node:path';
 import { err, ok, type Result } from '../../../../../../../core/result.js';
-import type { GroupUpdateScope } from '../../../../../../../core/scripts/group-update.js';
-import { loadMergeSourcesFromEdt } from '../../../../../../../core/scripts/resolve-merge-sources.js';
+import type { GroupUpdateScope } from '../../../../../../../core/scripts/group-update/group-update.js';
+import { loadMergeSourcesFromEdt } from '../../../../../../../core/scripts/update-support/resolve-merge-sources.js';
 import { resolveSingleSourceOf } from '../../shared-types/shared-types-slice.js';
 import {
   applyMergeStrategy,

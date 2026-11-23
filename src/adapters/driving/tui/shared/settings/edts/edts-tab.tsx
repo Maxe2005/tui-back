@@ -4,7 +4,7 @@ import { CheckboxListItem } from '../../components/pickers/checkbox-list-item.js
 import { DimAnnotation } from '../../components/feedback/dim-annotation.js';
 import { colors } from '../../theme/theme.js';
 import { SHARED_EDT_TOGGLE_LABEL, SHARED_EDT_TOGGLE_NOTE, HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId } from './edts.logic.js';
-import type { Settings } from '../../../../../../core/ports/settings.js';
+import type { Settings } from '../../../../../../core/ports/storage/settings.js';
 
 export type EdtsTabProps = {
   settings: Settings;

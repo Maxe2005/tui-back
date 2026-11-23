@@ -3,8 +3,8 @@
 // core realignServices in-process with live per-service rows, then refreshes the Dashboard.
 import type { StateCreator } from 'zustand';
 import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../../../../../../core/dashboard/drift.js';
-import type { RestartRow } from '../../../../../../core/edt/switch-restart.js';
-import { REALIGN_SCOPES, cycleSwitchRestartMode, healthCheckEnabledFrom, type RealignScope, type SwitchRestartMode } from '../../../../../../core/ports/settings.js';
+import type { RestartRow } from '../../../../../../core/edt/switch/restart/switch-restart.js';
+import { REALIGN_SCOPES, cycleSwitchRestartMode, healthCheckEnabledFrom, type RealignScope, type SwitchRestartMode } from '../../../../../../core/ports/storage/settings.js';
 import { realignServices, type RealignOutcome, type RealignRow } from '../../../../../../core/realign/index.js';
 import type { Result } from '../../../../../../core/result.js';
 import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';

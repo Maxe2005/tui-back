@@ -3,7 +3,7 @@
 // BoundedList so any number of services stays inside the terminal. Running: nothing to press.
 // Done: Enter/Esc close it (the zone's useInput handles keys, like the issues dialog).
 import { Box } from 'ink';
-import type { FastForwardSharedRow } from '../../../../../../core/edt/fast-forward-shared.js';
+import type { FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
 import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { StateLine } from '../../../shared/components/feedback/state-line.js';

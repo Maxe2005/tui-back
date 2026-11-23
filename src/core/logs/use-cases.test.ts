@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../result.js';
-import type { DockerPort } from '../ports/docker.js';
+import type { DockerPort } from '../ports/runtime/docker.js';
 import type { LogsManager } from './index.js';
 import { clearLogs, getServiceHealth, loadOlderLogs, subscribeLogs, unsubscribeLogs } from './use-cases.js';
 

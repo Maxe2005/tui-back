@@ -1,15 +1,15 @@
 // Fake ports and builders shared by the core use-case tests (group-update, switch).
 import { vi, type Mock } from 'vitest';
 import { ok } from '../result.js';
-import type { ContainerPort } from '../ports/container.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
-import type { LockPort } from '../ports/lock.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { MigrationPort } from '../ports/migration.js';
-import type { RestartPort } from '../ports/restart.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
+import type { ContainerPort } from '../ports/runtime/container.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../ports/storage/edt-registry.js';
+import type { GitPort } from '../ports/vcs/git.js';
+import type { LockPort } from '../ports/runtime/lock.js';
+import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
+import type { MigrationPort } from '../ports/vcs/migration.js';
+import type { RestartPort } from '../ports/runtime/restart.js';
+import type { RegistryPort } from '../ports/storage/registry.js';
+import type { StatePort } from '../ports/storage/state.js';
 
 export function calls(fn: unknown): Array<unknown[]> {
   return (fn as unknown as Mock).mock.calls;

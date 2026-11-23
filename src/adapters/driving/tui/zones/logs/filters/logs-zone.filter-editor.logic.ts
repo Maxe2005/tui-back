@@ -11,7 +11,7 @@ export type FilterHistoryKey = { scope: 'global' | 'pane'; repoPath: string | nu
 
 // The flat string key StatePort.readFilterHistory/writeFilterHistory persists each list under
 // (mirrors splitterRatios' own "keyed by a plain string, the driving layer resolves the
-// encoding" convention — core/ports/state.ts has no notion of "scope"/"mode"/repoPath). Global
+// encoding" convention — core/ports/storage/state.ts has no notion of "scope"/"mode"/repoPath). Global
 // scope ignores repoPath entirely; pane scope always carries one (openPaneFilterEditor in
 // logs-zone.tsx never opens a pane editor without one).
 export function filterHistoryKeyString(key: FilterHistoryKey): string {

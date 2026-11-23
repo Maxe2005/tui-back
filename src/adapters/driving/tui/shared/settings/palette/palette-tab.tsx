@@ -4,7 +4,7 @@ import { CheckboxListItem } from '../../components/pickers/checkbox-list-item.js
 import { DimAnnotation } from '../../components/feedback/dim-annotation.js';
 import { colors } from '../../theme/theme.js';
 import { FILTER_HISTORY_SIZE_STEP, PALETTE_SETTINGS_GROUPS, type PaletteSettingsGroupId } from './palette.logic.js';
-import type { Settings } from '../../../../../../core/ports/settings.js';
+import type { Settings } from '../../../../../../core/ports/storage/settings.js';
 
 export type PaletteTabProps = {
   settings: Settings;

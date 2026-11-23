@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { ok } from '../../../../../core/result.js';
-import type { DockerPort } from '../../../../../core/ports/docker.js';
+import type { DockerPort } from '../../../../../core/ports/runtime/docker.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { fakeTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
 import { createAppStore } from '../../store/app-store.js';

@@ -2,8 +2,8 @@
 // declaration order (mount load, cursor reset, footer context, auto-open create, input-capture
 // flag, branch-picker fetch, command-triggered dialogs, action-log load).
 import { useEffect, useRef, useState } from 'react';
-import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
-import { branchOwnersMap } from '../../../../../../core/edt/branch-owners.js';
+import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
+import { branchOwnersMap } from '../../../../../../core/edt/branches/branch-owners.js';
 import { useFooterContext } from '../../../shared/hooks/use-footer-context.js';
 import { edtsFooterContext } from '../logic/edts-footer-context.js';
 import {
@@ -14,7 +14,7 @@ import {
   initialSwitchDialog,
   SYSTEM_EDT_NOTICE,
 } from '../logic/edts-zone.logic.js';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import type { EdtsZoneCtx } from '../edts-zone.ctx.js';
 
 export function useEdtsEffects(c: EdtsZoneCtx): void {

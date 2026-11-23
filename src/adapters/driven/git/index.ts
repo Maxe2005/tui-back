@@ -5,9 +5,9 @@
 // `git branch`/`git stash`, and `git checkout <branch> --` forces a revision, never a pathspec.
 // This file only composes `createGitPort`; every operation lives in a per-family module and is
 // re-exported here so `git/index.js` keeps its public surface.
-import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../core/ports/git.js';
-import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../core/ports/vcs/git.js';
+import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
 import { currentBranch } from './refs.js';
 import { assertAllowedBranch } from './gate.js';
 import { stashSave, restoreStash, hasStash } from './stash.js';

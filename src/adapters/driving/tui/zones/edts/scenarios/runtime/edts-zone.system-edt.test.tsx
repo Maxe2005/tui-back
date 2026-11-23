@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createAppStore } from '../../../../store/app-store.js';
 import { KEYS } from '../../../../shared/test-support/fake-tty.js';
-import { SHARED_EDT_ULID, SHARED_EDT_TOPIC } from '../../../../../../../core/edt/shared-edt.js';
+import { SHARED_EDT_ULID, SHARED_EDT_TOPIC } from '../../../../../../../core/edt/shared-edt/shared-edt.js';
 import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from '../../dialogs/create-wizard/create-wizard.js';
 import { footerIdOf } from '../../../../shared/test-support/mount-for-test.js';
 import { edt, press, pressEscape, mount } from '../../edts-zone.test-support.js';

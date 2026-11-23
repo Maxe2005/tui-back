@@ -4,16 +4,16 @@
 // Dashboard, Update) renders whatever it lists, so a new entry needs no consumer change.
 // Ports are injected.
 import { withActionLock } from '../locking.js';
-import type { ContainerPort } from '../ports/container.js';
-import type { DockerPort } from '../ports/docker.js';
-import type { EditorPort } from '../ports/editor.js';
-import type { HealthProbePort } from '../ports/health-probe.js';
-import type { LockPort } from '../ports/lock.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RestartPort } from '../ports/restart.js';
+import type { ContainerPort } from '../ports/runtime/container.js';
+import type { DockerPort } from '../ports/runtime/docker.js';
+import type { EditorPort } from '../ports/runtime/editor.js';
+import type { HealthProbePort } from '../ports/runtime/health-probe.js';
+import type { LockPort } from '../ports/runtime/lock.js';
+import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
+import type { RestartPort } from '../ports/runtime/restart.js';
 import { err, ok, type Result } from '../result.js';
-import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update.js';
-import { serviceRestartLockKey } from '../scripts/service-restart.js';
+import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update/group-update.js';
+import { serviceRestartLockKey } from '../scripts/update-support/service-restart.js';
 import { DEFAULT_PROBE_REASON, combineStatus, hasContainer, isProbeEnabled, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
 
 export type RestartMode = 'simple' | 'clean';

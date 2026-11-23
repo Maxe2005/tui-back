@@ -7,7 +7,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { err, ok, type Result } from '../../../core/result.js';
-import { DEFAULT_SETTINGS, type Settings, type SettingsLoadResult, type SettingsPort } from '../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS, type Settings, type SettingsLoadResult, type SettingsPort } from '../../../core/ports/storage/settings.js';
 import type { XdgPaths } from '../xdg/index.js';
 import { ensureXdgDir } from '../xdg/index.js';
 import { settingsSchema } from './schema.js';

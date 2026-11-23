@@ -5,9 +5,9 @@
 // array length, drive the zone so failure and genuinely-empty stay distinct.
 import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
-import { ROUTES_MODULE_ID } from '../../../../../../core/edt/resolve-tab-visibility.js';
-import type { Route } from '../../../../../../core/ports/route-scanner.js';
-import type { SavedRequest } from '../../../../../../core/ports/saved-request.js';
+import { ROUTES_MODULE_ID } from '../../../../../../core/edt/shared-edt/resolve-tab-visibility.js';
+import type { Route } from '../../../../../../core/ports/modules/route-scanner.js';
+import type { SavedRequest } from '../../../../../../core/ports/storage/saved-request.js';
 import { err, ok, type Result } from '../../../../../../core/result.js';
 import { fireRequest, type FireRequestOptions, type FireResult } from '../../../../../../core/routes/fire-request.js';
 import { listRoutes } from '../../../../../../core/routes/list-routes.js';
@@ -18,7 +18,7 @@ import {
   saveRequest,
   type SavedWithStale,
 } from '../../../../../../core/routes/saved-requests.js';
-import { listRepos } from '../../../../../../core/scripts/list-repos.js';
+import { listRepos } from '../../../../../../core/scripts/registry/list-repos.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 import {
@@ -283,7 +283,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         return;
       }
 
-      // Mirrors core/edt/resolve-tab-visibility.ts's active-EDT-member resolution: prefer a
+      // Mirrors core/edt/shared-edt/resolve-tab-visibility.ts's active-EDT-member resolution: prefer a
       // carrying repo that belongs to the active EDT, else fall back to the first carrying
       // repo. A state/registry read failure degrades to the same fallback rather than
       // failing the whole load — the manifest gate above already decided listability.
