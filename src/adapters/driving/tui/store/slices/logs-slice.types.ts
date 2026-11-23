@@ -10,7 +10,7 @@ import type { RestartMode, ServiceAction, ServiceActions } from '../../../../../
 import type { Result } from '../../../../../core/result.js';
 import { GLOBAL_RULES_KEY, type StoredLogRule, type StoredRuleLists, type StoredRuleSet } from '../../../../../core/logs/rule-sets.js';
 import type { PersistedHistoryStore } from '../../shared/input-history/index.js';
-import type { InFlightGuard } from '../../shared/poll/in-flight-guard.js';
+import type { InFlightGuard } from '../../shared/hooks/in-flight-guard.js';
 import type { FilterHistoryKey, LogFilterRule, LogFilterScope, VisibilityFlags } from '../../zones/logs/logs-zone.logic.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 

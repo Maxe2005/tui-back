@@ -18,7 +18,7 @@ import {
 } from '../../../../../core/logs/rule-sets.js';
 import { err, ok } from '../../../../../core/result.js';
 import { createPersistedHistoryStore } from '../../shared/input-history/index.js';
-import { createInFlightGuard } from '../../shared/poll/in-flight-guard.js';
+import { createInFlightGuard } from '../../shared/hooks/in-flight-guard.js';
 import type { AppState, AppStoreDeps } from '../app-store.js';
 import { createLogsServiceActions } from './logs-slice.actions.js';
 import { createLogsFilterActions } from './logs-slice.filters.js';
