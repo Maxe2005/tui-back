@@ -11,17 +11,17 @@ import {
   type PropagateServiceResult,
   type PropagateStep,
   type ResumeFrom,
-} from '../../../../../core/shared-types/propagate-version.js';
-import { listConsumers, listSources, type ConsumerIssue, type DependencyConsumer, type SourceEntry, type SourceIssue } from '../../../../../core/shared-types/list-consumers.js';
-import { runPublish } from '../../../../../core/shared-types/publish-version.js';
+} from '../../../../../../core/shared-types/propagate-version.js';
+import { listConsumers, listSources, type ConsumerIssue, type DependencyConsumer, type SourceEntry, type SourceIssue } from '../../../../../../core/shared-types/list-consumers.js';
+import { runPublish } from '../../../../../../core/shared-types/publish-version.js';
 import {
   searchByBranch,
   searchByVersion,
   type BranchSearchEnd,
   type VersionHistoryEntry,
   type VersionHit,
-} from '../../../../../core/shared-types/version-history.js';
-import type { AppState, AppStoreDeps } from '../app-store.js';
+} from '../../../../../../core/shared-types/version-history.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 export type SharedTypesConsumersStatus = 'idle' | 'loading' | 'ready' | 'error';
 export type SharedTypesRunStatus = 'idle' | 'running' | 'done' | 'blocked';

@@ -1,8 +1,8 @@
 // The shared-types slice wires listConsumers/propagateVersion in-process (their behaviour is
 // covered in core), so these verify the wiring: loading, blocked runs, run tracking, retry.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../../../../../core/result.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { err, ok } from '../../../../../../core/result.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 import { sharedTypesBusy } from './shared-types-slice.js';
 
 const MODULE = 'consumer-module';

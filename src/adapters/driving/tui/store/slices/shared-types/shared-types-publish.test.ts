@@ -1,8 +1,8 @@
 // The publish side of the shared-types slice: source wiring, single-execution publish,
 // already-published re-trigger without re-run, guard notices and distinct errors.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../../../../../core/result.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { err, ok } from '../../../../../../core/result.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 const CONSUMER = 'consumer-module';
 const SOURCE = 'source-module';

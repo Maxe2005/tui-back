@@ -9,7 +9,7 @@ import { Footer, footerRowsFor, useFooterItems } from './shared/components/chrom
 import { InputGate, useInput } from './shared/hooks/use-input.js';
 import { KeybindingHelp } from './shared/components/dialogs/keybinding-help.js';
 import { TopBar } from './shared/components/chrome/top-bar.js';
-import { sharedTypesBusy } from './store/slices/shared-types-slice.js';
+import { sharedTypesBusy } from './store/slices/shared-types/shared-types-slice.js';
 import { ZoneTabBar } from './shared/components/chrome/zone-tab-bar.js';
 import { RepoRegistryScreen } from './shared/screens/repo-registry-screen.js';
 import { ResetScreen } from './shared/screens/reset-screen.js';

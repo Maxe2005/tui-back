@@ -1,9 +1,9 @@
 // The History side of the shared-types slice: streaming, single source, cancel-before-restart,
 // no stale entries after a cancel, git failure recovery and the invalid-version guard.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../../../../../core/result.js';
-import type { VersionBump, VersionBumpWalkOptions } from '../../../../../core/ports/git.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { err, ok } from '../../../../../../core/result.js';
+import type { VersionBump, VersionBumpWalkOptions } from '../../../../../../core/ports/git.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 const SOURCE = 'source-module';
 

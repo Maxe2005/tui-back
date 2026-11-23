@@ -32,7 +32,7 @@ import {
   type SharedTypesPhaseOutcome,
   type SharedTypesStage,
 } from '../../../../../core/shared-types/smart-update.js';
-import { resolveSingleSourceOf, resolveSourceRegistries } from './shared-types-slice.js';
+import { resolveSingleSourceOf, resolveSourceRegistries } from './shared-types/shared-types-slice.js';
 import { createRaiseIncident } from './update-slice.incident.js';
 import {
   appendLiveIssue,

@@ -34,7 +34,7 @@ import { createCommandHistorySlice, type CommandHistorySlice } from './slices/ap
 import { createResetSlice, type ResetSlice } from './slices/maintenance/reset-slice.js';
 import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
 import { createDashboardSlice, type DashboardSlice } from './slices/dashboard-slice.js';
-import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types-slice.js';
+import { createSharedTypesSlice, type SharedTypesSlice } from './slices/shared-types/shared-types-slice.js';
 import { createRealignSlice, type RealignSlice } from './slices/maintenance/realign-slice.js';
 import { createTerminalSlice, type TerminalSlice } from './slices/terminal-slice.js';
 import { createHealSlice, type HealSlice } from './slices/maintenance/heal-slice.js';
@@ -49,7 +49,7 @@ export type { SettingsUpdate } from './slices/app/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update-slice.js';
 export type { LogsPaneData } from './slices/logs/logs-slice.js';
 export type { ResetPreview } from './slices/maintenance/reset-slice.js';
-export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types-slice.js';
+export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types/shared-types-slice.js';
 export type { DashboardSectionStatus } from './slices/dashboard-slice.js';
 export type { RealignCandidates, RealignDraft, RealignLiveRow, RealignLiveStatus, RealignRun } from './slices/maintenance/realign-slice.js';
 export type { HealNotice, HealRun, HealRunStatus } from './slices/maintenance/heal-slice.js';
