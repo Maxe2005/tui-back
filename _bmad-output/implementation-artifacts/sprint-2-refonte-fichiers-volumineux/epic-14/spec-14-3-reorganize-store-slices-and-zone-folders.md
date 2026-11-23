@@ -66,3 +66,31 @@ Baseline: 301 test files, 5536 passed + 1 skipped (see 14.2). `npm test` fails a
 **Commands:**
 - `npx vitest run --configLoader runner && npm run typecheck && npm run depcheck` -- expected: all green, test count equal to baseline
 - `git diff --stat -M 0b36c9d2..HEAD -- src | grep -v '=>'` -- expected: only import-line/path-string edits outside renames
+
+## Suggested Review Order
+
+**Hard-coded paths (non-pure edits)**
+
+- Guard allow-list follows the routes key files into `keys/`.
+  [`focus-navigation.guard.test.ts:16`](../../../../src/adapters/driving/tui/shared/keys/focus-navigation.guard.test.ts#L16)
+
+- Dialog registry imports and `file:` entries follow the moved zone dialogs.
+  [`dialog-registry.tsx:31`](../../../../src/adapters/driving/tui/shared/test-support/dialog-registry.tsx#L31)
+
+**Store slices by domain**
+
+- Slice folders; `update/` nests config, health and run.
+  [`slices`](../../../../src/adapters/driving/tui/store/slices)
+
+**Zone sub-folders**
+
+- Update zone keeps its root files; concerns move to sub-folders.
+  [`update`](../../../../src/adapters/driving/tui/zones/update)
+
+- Edts scenario tests split into lifecycle and runtime.
+  [`scenarios`](../../../../src/adapters/driving/tui/zones/edts/scenarios)
+
+**Peripheral**
+
+- Stale comment path refreshed after the terminal slice move.
+  [`terminal-view.logic.ts`](../../../../src/adapters/driving/tui/shared/screens/terminal-view/terminal-view.logic.ts)
