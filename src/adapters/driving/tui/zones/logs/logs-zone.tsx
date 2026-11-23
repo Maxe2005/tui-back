@@ -6,7 +6,7 @@
 // and the pane/modal components.
 import { Box, Text } from 'ink';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
-import { ZoneLayout } from '../../shared/components/zone-layout.js';
+import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { FullscreenPane } from './fullscreen-pane.js';

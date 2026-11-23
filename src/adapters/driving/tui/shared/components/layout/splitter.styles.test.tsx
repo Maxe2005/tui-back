@@ -19,9 +19,9 @@ function ansiFg(hex: string): string {
 
 describe('Splitter targeted styling (the targeted boundary recolors to accent)', () => {
   it('renders colors.border, not colors.accent, when targeted is omitted (the default)', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { Splitter } = await import('./splitter.js');
-    const { colors } = await import('../theme/theme.js');
+    const { colors } = await import('../../theme/theme.js');
 
     const output = await renderToString(<Splitter orientation="horizontal" size={1} />);
 
@@ -30,9 +30,9 @@ describe('Splitter targeted styling (the targeted boundary recolors to accent)',
   });
 
   it('renders colors.border, not colors.accent, when targeted is explicitly false', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { Splitter } = await import('./splitter.js');
-    const { colors } = await import('../theme/theme.js');
+    const { colors } = await import('../../theme/theme.js');
 
     const output = await renderToString(<Splitter orientation="horizontal" size={1} targeted={false} />);
 
@@ -41,9 +41,9 @@ describe('Splitter targeted styling (the targeted boundary recolors to accent)',
   });
 
   it('renders colors.accent, not colors.border, when targeted is true', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { Splitter } = await import('./splitter.js');
-    const { colors } = await import('../theme/theme.js');
+    const { colors } = await import('../../theme/theme.js');
 
     const output = await renderToString(<Splitter orientation="horizontal" size={1} targeted={true} />);
 

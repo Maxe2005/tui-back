@@ -1,8 +1,8 @@
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
-import { useBounds } from '../bounds/bounds-context.js';
-import { colors } from '../theme/theme.js';
-import { ClampedParagraph, TruncatedText } from './display/truncated-text.js';
+import { useBounds } from '../../bounds/bounds-context.js';
+import { colors } from '../../theme/theme.js';
+import { ClampedParagraph, TruncatedText } from '../display/truncated-text.js';
 
 export type SummaryTone = 'success' | 'warning' | 'error';
 

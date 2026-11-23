@@ -3,7 +3,7 @@ import { Text } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import { TopBar } from './top-bar.js';
 import { Footer, DEFAULT_FOOTER_HINTS, footerHintsFor } from './footer.js';
-import { ZoneLayout } from '../zone-layout.js';
+import { ZoneLayout } from '../layout/zone-layout.js';
 import { ZONE_LAYOUTS, clampBoundaryRatio, resolveBoundaryFlex } from '../../../zones/zone-layouts.js';
 import { renderToString } from '../render-to-string.js';
 import { focusNavFooterHint } from '../../keys/focus-navigation.js';

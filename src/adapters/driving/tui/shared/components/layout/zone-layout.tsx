@@ -2,11 +2,11 @@
 // store, recolors its Splitter while Ctrl+W resize-mode targets it. Nest for multi-boundary zones.
 import { Box } from 'ink';
 import type { ReactNode } from 'react';
-import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { ZONE_LAYOUTS, resolveBoundaryFlex } from '../../zones/zone-layouts.js';
-import type { ZoneId } from '../../zones/zones.js';
-import { BoundsProvider, useBounds } from '../bounds/bounds-context.js';
-import { MIN_PANE_COLUMNS, MIN_PANE_ROWS, resolvePaneSplit } from '../bounds/bounds.js';
+import { useAppStore, type AppStore } from '../../../store/app-store.js';
+import { ZONE_LAYOUTS, resolveBoundaryFlex } from '../../../zones/zone-layouts.js';
+import type { ZoneId } from '../../../zones/zones.js';
+import { BoundsProvider, useBounds } from '../../bounds/bounds-context.js';
+import { MIN_PANE_COLUMNS, MIN_PANE_ROWS, resolvePaneSplit } from '../../bounds/bounds.js';
 import { Splitter } from './splitter.js';
 
 export type ZoneLayoutProps = {

@@ -12,7 +12,7 @@ import { ServiceActionsRow } from '../../shared/components/service-actions-row.j
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { StatusBadge } from '../../shared/components/feedback/status-badge.js';
 import { ClampedParagraph, TruncatedText } from '../../shared/components/display/truncated-text.js';
-import { ZoneLayout } from '../../shared/components/zone-layout.js';
+import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { STATUS_BADGES } from '../../shared/components/feedback/status-badge.js';
 import {

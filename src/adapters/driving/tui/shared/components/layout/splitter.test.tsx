@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Splitter } from './index.js';
-import { renderToString } from './render-to-string.js';
+import { Splitter } from '../index.js';
+import { renderToString } from '../render-to-string.js';
 
 describe('Splitter', () => {
   it('renders a horizontal splitter', async () => {

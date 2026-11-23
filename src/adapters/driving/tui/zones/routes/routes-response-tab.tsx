@@ -4,7 +4,7 @@
 // zone owns the tree keys and measures `areaRef`.
 import type { ReactNode } from 'react';
 import { Box, Text, type DOMElement } from 'ink';
-import { DetailPane } from '../../shared/components/detail-pane.js';
+import { DetailPane } from '../../shared/components/layout/detail-pane.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { colors } from '../../shared/theme/theme.js';

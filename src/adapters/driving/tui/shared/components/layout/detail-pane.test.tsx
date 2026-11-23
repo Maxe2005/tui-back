@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { colors } from '../theme/theme.js';
+import { colors } from '../../theme/theme.js';
 import { DetailPane, SUMMARY_LINE_COLORS } from './detail-pane.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 
 describe('SUMMARY_LINE_COLORS', () => {
   it('maps every summary tone to the exact theme color', () => {

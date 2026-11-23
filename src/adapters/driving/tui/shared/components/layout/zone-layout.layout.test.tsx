@@ -8,7 +8,7 @@ import { Box, Text } from 'ink';
 
 describe('ZoneLayout pane widths are content-independent', () => {
   it('never squeezes the other pane\'s short content when one pane holds a long unbroken run of content', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { ZoneLayout } = await import('./zone-layout.js');
 
     const longWord = 'X'.repeat(200);

@@ -4,7 +4,7 @@ import { Box, Text } from 'ink';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { StatusBadge } from '../../shared/components/feedback/status-badge.js';
-import { FullscreenFrame } from '../../shared/components/fullscreen-frame.js';
+import { FullscreenFrame } from '../../shared/components/layout/fullscreen-frame.js';
 import { ScrollableOutput } from '../../shared/components/display/scrollable-output.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';

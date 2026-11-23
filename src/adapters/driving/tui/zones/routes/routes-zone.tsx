@@ -13,7 +13,7 @@ import { RoutesDetailPane } from './routes-detail-pane.js';
 import { RoutesListPane } from './routes-list-pane.js';
 import { RoutesModals } from './routes-modals.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
-import { ZoneLayout } from '../../shared/components/zone-layout.js';
+import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { canEditRouteBody, resolveAddParentPath } from '../../shared/components/json-tree/model.js';
 import { colors } from '../../shared/theme/theme.js';
 import { formatRoutesDisabledMessage, RoutesDisabledView, RoutesNoticeView } from './routes-zone.states.js';

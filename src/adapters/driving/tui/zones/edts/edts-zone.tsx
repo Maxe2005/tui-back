@@ -6,7 +6,7 @@
 // decision is a pure function in edts-zone.logic.ts; DetailPane takes only Text-safe content
 // (UX-DR17), so a git-error detail renders as a DimAnnotation sibling.
 import { Box } from 'ink';
-import { ZoneLayout } from '../../shared/components/zone-layout.js';
+import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { EdtsDetailColumn } from './edts-detail-column.js';

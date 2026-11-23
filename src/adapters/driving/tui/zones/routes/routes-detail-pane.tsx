@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Box } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
-import { DetailPane } from '../../shared/components/detail-pane.js';
+import { DetailPane } from '../../shared/components/layout/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';

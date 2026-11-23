@@ -2,7 +2,7 @@
 // focused (DetailPane takes only Text-safe content, so a git-error detail is a DimAnnotation
 // sibling).
 import { Box } from 'ink';
-import { DetailPane } from '../../shared/components/detail-pane.js';
+import { DetailPane } from '../../shared/components/layout/detail-pane.js';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';

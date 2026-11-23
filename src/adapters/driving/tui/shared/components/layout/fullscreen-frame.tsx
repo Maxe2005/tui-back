@@ -3,7 +3,7 @@
 // standard horizontal pane padding. Open/close state stays with the caller's store.
 import type { ReactNode } from 'react';
 import { Box } from 'ink';
-import { spacing } from '../theme/theme.js';
+import { spacing } from '../../theme/theme.js';
 
 export type FullscreenFrameProps = { children?: ReactNode };
 
