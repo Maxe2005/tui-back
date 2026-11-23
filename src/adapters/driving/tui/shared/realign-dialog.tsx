@@ -6,7 +6,7 @@ import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
 import { useBounds } from './bounds/bounds-context.js';
-import { BoundedList } from './components/bounded-list.js';
+import { BoundedList } from './components/lists/bounded-list.js';
 import { DimAnnotation } from './components/feedback/dim-annotation.js';
 import { ModalDialog } from './components/dialogs/modal-dialog.js';
 import { RestartModeSelector } from './components/restart-mode-selector.js';

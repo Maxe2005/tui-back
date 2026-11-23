@@ -5,7 +5,7 @@
 // Key handling lives in activation.logic.ts.
 import { Box, Text } from 'ink';
 import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
-import { BoundedList } from '../../../../shared/components/bounded-list.js';
+import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { CreateDialogState } from '../../edts-zone.logic.js';
 import {

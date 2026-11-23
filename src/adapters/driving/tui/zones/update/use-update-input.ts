@@ -5,7 +5,7 @@
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { handleFilterablePickListKey } from '../../shared/components/index.js';
-import { resolveMenuKey } from '../../shared/components/menu-list.js';
+import { resolveMenuKey } from '../../shared/components/lists/menu-list.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 import {
   applyReportScroll,

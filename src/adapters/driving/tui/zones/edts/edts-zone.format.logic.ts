@@ -2,7 +2,7 @@
 import { EDT_SYSTEM_READONLY_CODE, EDT_SYSTEM_READONLY_MESSAGE, isSystemEdt } from '../../../../../core/edt/shared-edt.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import { resolveAssistedAction } from '../../shared/components/failed-result-list.js';
+import { resolveAssistedAction } from '../../shared/components/lists/failed-result-list.js';
 import { formatHint, formatHints } from '../../shared/components/dialogs/hints.js';
 import type { PaneFocus } from './edts-zone.focus.logic.js';
 

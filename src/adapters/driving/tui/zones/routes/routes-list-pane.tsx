@@ -1,9 +1,9 @@
 // tui/zones/routes: routes-list-pane — the left pane: route count header, repo path, inline filter and the bounded route list.
 import { Box, Text } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
-import { BoundedList } from '../../shared/components/bounded-list.js';
+import { BoundedList } from '../../shared/components/lists/bounded-list.js';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
-import { ListRow } from '../../shared/components/list-row.js';
+import { ListRow } from '../../shared/components/lists/list-row.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
 import { colors, spacing } from '../../shared/theme/theme.js';

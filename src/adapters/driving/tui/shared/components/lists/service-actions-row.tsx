@@ -4,9 +4,9 @@
 // `maxLines`; a single action wider than the line is cut with an ellipsis. Presentational only:
 // adding a registry entry needs no change here.
 import { Box, Text } from 'ink';
-import type { ServiceAction } from '../../../../../core/service-actions/index.js';
-import { normalizeMessage } from '../bounds/message.js';
-import { colors } from '../theme/theme.js';
+import type { ServiceAction } from '../../../../../../core/service-actions/index.js';
+import { normalizeMessage } from '../../bounds/message.js';
+import { colors } from '../../theme/theme.js';
 
 export const SERVICE_ACTIONS_MAX_LINES = 3;
 const ACTION_GAP = 2;

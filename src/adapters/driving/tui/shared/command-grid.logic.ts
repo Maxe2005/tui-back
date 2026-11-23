@@ -4,7 +4,7 @@
 // wires input and rendering.
 import { type Key } from 'ink';
 import { type Command } from '../commands/commands.js';
-import { resolveBoundedVisibility } from './components/bounded-list.js';
+import { resolveBoundedVisibility } from './components/lists/bounded-list.js';
 
 
 // A second `Tab` at the maximal common prefix must land within this window, on the same

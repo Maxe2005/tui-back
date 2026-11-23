@@ -12,7 +12,7 @@ import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.j
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
-import { BoundedList } from '../../shared/components/bounded-list.js';
+import { BoundedList } from '../../shared/components/lists/bounded-list.js';
 import { MAX_RULE_SETS } from '../../../../../core/logs/rule-sets.js';
 import type { StoredRuleSet } from '../../../../../core/logs/rule-sets.js';
 import {

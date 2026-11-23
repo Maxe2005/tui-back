@@ -4,7 +4,7 @@ import { useAppStore } from '../../../store/app-store.js';
 import { ZONES, type ZoneId } from '../../../zones/zones.js';
 import { colors, spacing } from '../../theme/theme.js';
 import { DetailPane } from './detail-pane.js';
-import { ListRow } from '../list-row.js';
+import { ListRow } from '../lists/list-row.js';
 import { ZoneLayout } from './zone-layout.js';
 
 export type ZonePlaceholderProps = {

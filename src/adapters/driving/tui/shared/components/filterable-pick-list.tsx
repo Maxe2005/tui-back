@@ -4,9 +4,9 @@
 // reducer the host zone's useInput calls; the host owns where the state lives, the dialog
 // chrome, the candidates and what `select`/`cancel` do.
 import { Box } from 'ink';
-import { BoundedList } from './bounded-list.js';
+import { BoundedList } from './lists/bounded-list.js';
 import { DimAnnotation } from './feedback/dim-annotation.js';
-import { ListRow } from './list-row.js';
+import { ListRow } from './lists/list-row.js';
 import { nextTextInputValue, type TextEditKey } from './inputs/text-edit.js';
 import { TextInputLine } from './inputs/text-input-line.js';
 

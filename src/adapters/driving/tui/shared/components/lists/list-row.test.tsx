@@ -1,8 +1,8 @@
 import { Box } from 'ink';
 import { describe, it, expect } from 'vitest';
-import { colors, spacing } from '../theme/theme.js';
+import { colors, spacing } from '../../theme/theme.js';
 import { ListRow, resolveRowLayout } from './list-row.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 
 describe('resolveRowLayout', () => {
   it('resolves the unselected base row: transparent accent-bar column', () => {

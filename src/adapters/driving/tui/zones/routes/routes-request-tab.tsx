@@ -4,8 +4,8 @@
 // (JsonTreeEditor / JsonRawEditor) inside a measured box.
 import type { ReactNode } from 'react';
 import { Box, Text, type DOMElement } from 'ink';
-import { BoundedList } from '../../shared/components/bounded-list.js';
-import { ListRow } from '../../shared/components/list-row.js';
+import { BoundedList } from '../../shared/components/lists/bounded-list.js';
+import { ListRow } from '../../shared/components/lists/list-row.js';
 import type { TextInputState } from '../../shared/components/inputs/text-edit.js';
 import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';

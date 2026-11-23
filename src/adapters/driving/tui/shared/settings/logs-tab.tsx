@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../components/checkbox-list-item.js';
 import { DimAnnotation } from '../components/feedback/dim-annotation.js';
 import { StateLine } from '../components/feedback/state-line.js';
-import { BoundedList } from '../components/bounded-list.js';
+import { BoundedList } from '../components/lists/bounded-list.js';
 import { colors } from '../theme/theme.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { LOGS_CLEAR_ROWS, LOGS_CLEAR_ROW_LABELS, LOGS_RULES_ROWS, LOGS_RULES_ROW_LABELS, LOGS_SETTINGS_GROUPS, LOG_BUFFER_SIZE_STEP, type LogsRulesConfirm, type LogsSettingsGroupId } from './logs.logic.js';

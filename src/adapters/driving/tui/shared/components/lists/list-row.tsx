@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { colors, spacing } from '../theme/theme.js';
+import { colors, spacing } from '../../theme/theme.js';
 
 export type ListRowProps = {
   label: string;

@@ -1,9 +1,9 @@
 export { StatusBadge } from './feedback/status-badge.js';
 export type { StatusBadgeState } from './feedback/status-badge.js';
 export { STATUS_BADGES } from './feedback/status-badge.js';
-export { ListRow } from './list-row.js';
-export type { ListRowProps, ResolvedRow } from './list-row.js';
-export { resolveRowLayout } from './list-row.js';
+export { ListRow } from './lists/list-row.js';
+export type { ListRowProps, ResolvedRow } from './lists/list-row.js';
+export { resolveRowLayout } from './lists/list-row.js';
 export { DetailPane } from './layout/detail-pane.js';
 export type { SummaryTone } from './layout/detail-pane.js';
 export { SUMMARY_LINE_COLORS } from './layout/detail-pane.js';
@@ -22,8 +22,8 @@ export {
   clampBoundedOffset,
   resolveBoundedWindow,
   resolveBoundedVisibility,
-} from './bounded-list.js';
-export type { BoundedListProps, BoundedListVisibility } from './bounded-list.js';
+} from './lists/bounded-list.js';
+export type { BoundedListProps, BoundedListVisibility } from './lists/bounded-list.js';
 export { CheckboxListItem } from './checkbox-list-item.js';
 export type { CheckboxListItemProps, ResolvedCheckboxItem } from './checkbox-list-item.js';
 export { resolveCheckboxItemLayout } from './checkbox-list-item.js';
@@ -36,8 +36,8 @@ export { Spinner } from './feedback/spinner.js';
 export type { SpinnerProps } from './feedback/spinner.js';
 export { DimAnnotation } from './feedback/dim-annotation.js';
 export type { DimAnnotationProps } from './feedback/dim-annotation.js';
-export { FailedResultList, resolveAssistedAction } from './failed-result-list.js';
-export type { FailedResultRow, AssistedAction, FailedResultListProps } from './failed-result-list.js';
+export { FailedResultList, resolveAssistedAction } from './lists/failed-result-list.js';
+export type { FailedResultRow, AssistedAction, FailedResultListProps } from './lists/failed-result-list.js';
 export { TopBar } from './chrome/top-bar.js';
 export { Footer, DEFAULT_FOOTER_HINTS } from './chrome/footer.js';
 export { ZoneTabBar, resolveZoneTabState } from './chrome/zone-tab-bar.js';
@@ -93,8 +93,8 @@ export type {
   FilterablePickListKeyResult,
   FilterablePickListProps,
 } from './filterable-pick-list.js';
-export { MenuList, resolveMenuKey } from './menu-list.js';
-export type { MenuItem, MenuKey, MenuStep } from './menu-list.js';
+export { MenuList, resolveMenuKey } from './lists/menu-list.js';
+export type { MenuItem, MenuKey, MenuStep } from './lists/menu-list.js';
 export { ScrollableOutput } from './display/scrollable-output.js';
 export type { ScrollableOutputProps } from './display/scrollable-output.js';
 export { FullscreenFrame } from './layout/fullscreen-frame.js';

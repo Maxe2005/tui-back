@@ -27,7 +27,7 @@ import {
   type ResetLine,
   type ResetScreenState,
 } from './reset-screen.logic.js';
-import { BoundedList } from './components/bounded-list.js';
+import { BoundedList } from './components/lists/bounded-list.js';
 
 const TONE_COLORS: Record<ResetLine['tone'], string> = {
   text: colors.text,

@@ -9,7 +9,7 @@ import { branchOwnersMap } from '../../../../../../../core/edt/branch-owners.js'
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import type { AppState } from '../../../../store/app-store.js';
 import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';
-import { FailedResultList } from '../../../../shared/components/failed-result-list.js';
+import { FailedResultList } from '../../../../shared/components/lists/failed-result-list.js';
 import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import {

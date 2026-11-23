@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MenuList, resolveMenuKey, type MenuItem } from './menu-list.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 
 type Value = 'a' | 'b' | 'c' | 'cancel';
 const ITEMS: readonly MenuItem<Value>[] = [

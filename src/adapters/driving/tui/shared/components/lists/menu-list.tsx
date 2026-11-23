@@ -2,8 +2,8 @@
 // chooses the highlighted row, Esc answers the menu's own "cancel" choice. The reducer is pure
 // (renderToString never delivers keys) and the view only renders the rows.
 import { Box, Text } from 'ink';
-import { nextCursorForKey } from '../keys/list-cursor.js';
-import { colors } from '../theme/theme.js';
+import { nextCursorForKey } from '../../keys/list-cursor.js';
+import { colors } from '../../theme/theme.js';
 import { ListRow } from './list-row.js';
 
 export type MenuItem<V extends string = string> = {

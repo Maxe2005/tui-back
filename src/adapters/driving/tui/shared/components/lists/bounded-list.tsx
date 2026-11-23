@@ -5,8 +5,8 @@
 // visible. Scroll state is never owned here — callers recompute it from useWindowSize().
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
-import { useRowBudget } from '../bounds/bounds-context.js';
-import { colors } from '../theme/theme.js';
+import { useRowBudget } from '../../bounds/bounds-context.js';
+import { colors } from '../../theme/theme.js';
 
 export function clampBoundedOffset(offset: number, maxOffset: number): number {
   const safeOffset = Number.isFinite(offset) ? Math.floor(offset) : 0;

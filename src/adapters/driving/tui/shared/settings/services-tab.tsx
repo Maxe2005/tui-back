@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../components/checkbox-list-item.js';
 import { DimAnnotation } from '../components/feedback/dim-annotation.js';
 import { StateLine } from '../components/feedback/state-line.js';
-import { BoundedList } from '../components/bounded-list.js';
+import { BoundedList } from '../components/lists/bounded-list.js';
 import { colors } from '../theme/theme.js';
 import { type ServicesSettingsRow } from './services.logic.js';
 import { SETTINGS_LIST_CHROME_ROWS } from './settings-tabs.logic.js';

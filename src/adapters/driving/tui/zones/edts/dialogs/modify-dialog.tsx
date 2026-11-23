@@ -9,7 +9,7 @@ import type { AppState } from '../../../store/app-store.js';
 import { CheckboxListItem } from '../../../shared/components/checkbox-list-item.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
 import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
-import { FailedResultList } from '../../../shared/components/failed-result-list.js';
+import { FailedResultList } from '../../../shared/components/lists/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { TextInputLine } from '../../../shared/components/inputs/text-input-line.js';
 import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
@@ -33,7 +33,7 @@ import {
 } from '../edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
-import { BoundedList } from '../../../shared/components/bounded-list.js';
+import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

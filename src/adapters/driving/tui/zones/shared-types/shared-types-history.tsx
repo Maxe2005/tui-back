@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { BoundedList } from '../../shared/components/bounded-list.js';
+import { BoundedList } from '../../shared/components/lists/bounded-list.js';
 import { BranchAutocompleteInput } from '../../shared/components/inputs/branch-autocomplete-input.js';
 import { Spinner, StateLine, TextInputLine } from '../../shared/components/index.js';
 import { ClampedParagraph, TruncatedText } from '../../shared/components/display/truncated-text.js';

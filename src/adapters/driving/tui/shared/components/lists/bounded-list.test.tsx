@@ -11,7 +11,7 @@ import {
   resolveBoundedVisibility,
   resolveBoundedWindow,
 } from './bounded-list.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 
 describe('clampBoundedOffset', () => {
   it('clamps negative and non-finite offsets to 0', () => {

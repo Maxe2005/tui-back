@@ -9,7 +9,7 @@ import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list
 import { ownerRefusalText } from '../../../../shared/branch-owners-text.js';
 import { isProtectedBranch, type BranchProtection } from '../../../../../../../core/edt/shared-branches.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
-import type { FailedResultRow } from '../../../../shared/components/failed-result-list.js';
+import type { FailedResultRow } from '../../../../shared/components/lists/failed-result-list.js';
 import {
   suggestBranchNameFromTopic,
   type BranchListState,

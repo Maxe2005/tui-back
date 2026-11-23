@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { MenuList, type MenuItem } from '../../shared/components/menu-list.js';
+import { MenuList, type MenuItem } from '../../shared/components/lists/menu-list.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../shared/theme/theme.js';
 

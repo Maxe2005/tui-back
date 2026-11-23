@@ -8,7 +8,7 @@ import { colors } from '../../theme/theme.js';
 import { useFooterContext } from '../../hooks/use-footer-context.js';
 import { ModalDialog } from './modal-dialog.js';
 import { TruncatedText } from '../display/truncated-text.js';
-import { clampBoundedOffset, resolveBoundedWindow } from '../bounded-list.js';
+import { clampBoundedOffset, resolveBoundedWindow } from '../lists/bounded-list.js';
 
 export const DEFAULT_HELP_VISIBLE_LINES = 10;
 

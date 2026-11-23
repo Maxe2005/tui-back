@@ -7,7 +7,7 @@ import {
   resolveHelpScroll,
   resolveHelpWindow,
 } from '../index.js';
-import { clampBoundedOffset, resolveBoundedWindow } from '../bounded-list.js';
+import { clampBoundedOffset, resolveBoundedWindow } from '../lists/bounded-list.js';
 import { renderToString } from '../render-to-string.js';
 import { footerContextOf } from '../../test-support/mount-for-test.js';
 import { filterKeybindings, withSectionHeadings } from './keybinding-help.js';

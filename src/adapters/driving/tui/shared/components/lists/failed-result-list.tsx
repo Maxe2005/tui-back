@@ -3,10 +3,10 @@
 // mapping a failure `code` to an optional guided resolution action. A new action only needs a
 // registry entry, never a change to `FailedResultList` itself.
 import { Box } from 'ink';
-import { useBounds } from '../bounds/bounds-context.js';
-import { colors } from '../theme/theme.js';
+import { useBounds } from '../../bounds/bounds-context.js';
+import { colors } from '../../theme/theme.js';
 import { BoundedList } from './bounded-list.js';
-import { ClampedParagraph } from './display/truncated-text.js';
+import { ClampedParagraph } from '../display/truncated-text.js';
 
 export type FailedResultRow = {
   service: string;

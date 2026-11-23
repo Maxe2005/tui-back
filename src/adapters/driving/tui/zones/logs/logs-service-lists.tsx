@@ -1,7 +1,7 @@
 // tui/zones/logs: logs-service-lists — the Logs zone's left pane: the active-EDT and other-services
 // checkbox lists with health badges, the info-only no-container section and the legend hints.
 import { Box, Text } from 'ink';
-import { BoundedList } from '../../shared/components/bounded-list.js';
+import { BoundedList } from '../../shared/components/lists/bounded-list.js';
 import { CheckboxListItem } from '../../shared/components/checkbox-list-item.js';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';

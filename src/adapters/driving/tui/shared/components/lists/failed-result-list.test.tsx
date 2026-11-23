@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { FailedResultList, resolveAssistedAction } from './index.js';
-import { renderToString } from './render-to-string.js';
+import { FailedResultList, resolveAssistedAction } from '../index.js';
+import { renderToString } from '../render-to-string.js';
 
 describe('resolveAssistedAction', () => {
   it('resolves branch-owned-by-other-edt to the "try a different branch" action', () => {
