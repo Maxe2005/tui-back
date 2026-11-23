@@ -3,11 +3,11 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
-import type { RestartRow } from '../../../../core/edt/switch-restart.js';
-import { createAppStore } from '../store/app-store.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './test-support/fake-tty.js';
+import type { RestartRow } from '../../../../../../core/edt/switch-restart.js';
+import { createAppStore } from '../../../store/app-store.js';
+import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../test-support/fake-tty.js';
 import { HealDialog } from './heal-dialog.js';
-import { footerIdOf } from './test-support/mount-for-test.js';
+import { footerIdOf } from '../../test-support/mount-for-test.js';
 
 const ROWS: RestartRow[] = [
   { service: 'svc-a', repoPath: '/repo/a', phase: 'pending' },

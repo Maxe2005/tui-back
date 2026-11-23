@@ -36,9 +36,9 @@ import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/log
 import { CommandBar } from '../screens/command-bar/command-bar.js';
 import { RepoRegistryScreen } from '../repo-registry-screen.js';
 import { SettingsScreen } from '../settings-screen.js';
-import { RealignDialog } from '../realign-dialog.js';
+import { RealignDialog } from '../screens/dialogs/realign-dialog.js';
 import { TerminalView } from '../screens/terminal-view/terminal-view.js';
-import { HealDialog } from '../heal-dialog.js';
+import { HealDialog } from '../screens/dialogs/heal-dialog.js';
 
 export const LONG_TEXT = 'x'.repeat(5000);
 export const MULTILINE_ERROR = `first line of a failure\n${'\u001b[31mred\u001b[0m '.repeat(40)}\nthird line ${LONG_TEXT}`;
@@ -392,19 +392,19 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'shared/command-bar', file: 'shared/screens/command-bar/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/repo-registry', file: 'shared/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
   { id: 'shared/settings', file: 'shared/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },
-  { id: 'shared/realign-select', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignSelectStore() }) },
-  { id: 'shared/realign-run', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
-  { id: 'shared/realign-run-failed', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
-  { id: 'shared/realign-error', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
-  { id: 'shared/heal-confirm', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('confirm') }) },
-  { id: 'shared/heal-running', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('running') }) },
+  { id: 'shared/realign-select', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignSelectStore() }) },
+  { id: 'shared/realign-run', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore() }) },
+  { id: 'shared/realign-run-failed', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignRunStore(MULTILINE_ERROR) }) },
+  { id: 'shared/realign-error', file: 'shared/screens/dialogs/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignErrorStore() }) },
+  { id: 'shared/heal-confirm', file: 'shared/screens/dialogs/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('confirm') }) },
+  { id: 'shared/heal-running', file: 'shared/screens/dialogs/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('running') }) },
   {
     id: 'shared/heal-confirm-close',
-    file: 'shared/heal-dialog.tsx',
+    file: 'shared/screens/dialogs/heal-dialog.tsx',
     render: () => createElement(HealDialog, { useStore: healStore('running'), initial: { confirmingClose: true } }),
   },
-  { id: 'shared/heal-done', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('done') }) },
-  { id: 'shared/heal-error', file: 'shared/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('error') }) },
+  { id: 'shared/heal-done', file: 'shared/screens/dialogs/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('done') }) },
+  { id: 'shared/heal-error', file: 'shared/screens/dialogs/heal-dialog.tsx', render: () => createElement(HealDialog, { useStore: healStore('error') }) },
   { id: 'shared/terminal-idle', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore() }) },
   { id: 'shared/terminal-running', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
   { id: 'shared/terminal-fullscreen', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },

@@ -1,11 +1,11 @@
 // tui/shared/heal-dialog: the Heal overlay's pure decisions — which view shows, what a key does
 // and the footer context. The component only feeds raw Ink keys here and dispatches the result to
 // the store's heal slice.
-import type { RestartRow } from '../../../../core/edt/switch-restart.js';
-import type { FooterContextId } from '../keybindings/index.js';
-import type { HealRun } from '../store/app-store.js';
+import type { RestartRow } from '../../../../../../core/edt/switch-restart.js';
+import type { FooterContextId } from '../../../keybindings/index.js';
+import type { HealRun } from '../../../store/app-store.js';
 
-export { HEAL_MODES } from '../store/slices/heal-slice.js';
+export { HEAL_MODES } from '../../../store/slices/heal-slice.js';
 
 export const HEAL_CONFIRM_CLOSE_TEXT = 'The heal is still running — Enter closes this view and lets it finish in the background, Esc keeps it open.';
 

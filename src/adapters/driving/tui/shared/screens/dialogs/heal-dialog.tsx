@@ -5,15 +5,15 @@
 // state in the store's heal slice.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
-import { useInput } from './hooks/use-input.js';
-import { useFooterContext } from './hooks/use-footer-context.js';
-import { useBounds } from './bounds/bounds-context.js';
-import { ModalDialog } from './components/dialogs/modal-dialog.js';
-import { RestartModeSelector } from './components/pickers/restart-mode-selector.js';
-import { ClampedParagraph } from './components/display/truncated-text.js';
-import { colors } from './theme/theme.js';
-import { useAppStore, type AppStore } from '../store/app-store.js';
-import { SwitchRestartReport } from '../zones/edts/dialogs/switch-restart-report.js';
+import { useInput } from '../../hooks/use-input.js';
+import { useFooterContext } from '../../hooks/use-footer-context.js';
+import { useBounds } from '../../bounds/bounds-context.js';
+import { ModalDialog } from '../../components/dialogs/modal-dialog.js';
+import { RestartModeSelector } from '../../components/pickers/restart-mode-selector.js';
+import { ClampedParagraph } from '../../components/display/truncated-text.js';
+import { colors } from '../../theme/theme.js';
+import { useAppStore, type AppStore } from '../../../store/app-store.js';
+import { SwitchRestartReport } from '../../../zones/edts/dialogs/switch-restart-report.js';
 import { HEAL_CONFIRM_CLOSE_TEXT, HEAL_MODES, describeHealPlan, healFooterContext, healView, resolveHealKey } from './heal-dialog.logic.js';
 
 // Modal frame: border, padding, title, separator and the PgUp/PgDn line.

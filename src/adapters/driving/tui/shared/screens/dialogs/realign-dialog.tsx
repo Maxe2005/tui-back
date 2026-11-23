@@ -3,21 +3,21 @@
 // selection with live per-service rows, then shows the summary, non-green first. Decisions live
 // in realign-dialog.logic.ts; the state in the store's realign slice.
 import { Box, Text } from 'ink';
-import { useInput } from './hooks/use-input.js';
-import { useFooterContext } from './hooks/use-footer-context.js';
-import { useBounds } from './bounds/bounds-context.js';
-import { BoundedList } from './components/lists/bounded-list.js';
-import { DimAnnotation } from './components/feedback/dim-annotation.js';
-import { ModalDialog } from './components/dialogs/modal-dialog.js';
-import { RestartModeSelector } from './components/pickers/restart-mode-selector.js';
-import { StateLine } from './components/feedback/state-line.js';
-import { ClampedParagraph } from './components/display/truncated-text.js';
-import { colors } from './theme/theme.js';
-import { REALIGN_SCOPES } from '../../../../core/ports/settings.js';
-import { useAppStore, type AppStore } from '../store/app-store.js';
-import { matchingPreset } from '../store/slices/realign-slice.js';
-import { BranchPlanTable } from '../zones/edts/dialogs/branch-plan-table.js';
-import { SwitchRestartReport } from '../zones/edts/dialogs/switch-restart-report.js';
+import { useInput } from '../../hooks/use-input.js';
+import { useFooterContext } from '../../hooks/use-footer-context.js';
+import { useBounds } from '../../bounds/bounds-context.js';
+import { BoundedList } from '../../components/lists/bounded-list.js';
+import { DimAnnotation } from '../../components/feedback/dim-annotation.js';
+import { ModalDialog } from '../../components/dialogs/modal-dialog.js';
+import { RestartModeSelector } from '../../components/pickers/restart-mode-selector.js';
+import { StateLine } from '../../components/feedback/state-line.js';
+import { ClampedParagraph } from '../../components/display/truncated-text.js';
+import { colors } from '../../theme/theme.js';
+import { REALIGN_SCOPES } from '../../../../../../core/ports/settings.js';
+import { useAppStore, type AppStore } from '../../../store/app-store.js';
+import { matchingPreset } from '../../../store/slices/realign-slice.js';
+import { BranchPlanTable } from '../../../zones/edts/dialogs/branch-plan-table.js';
+import { SwitchRestartReport } from '../../../zones/edts/dialogs/switch-restart-report.js';
 import {
   REALIGN_ALIGNED_MESSAGE,
   REALIGN_NO_SELECTION_MESSAGE,

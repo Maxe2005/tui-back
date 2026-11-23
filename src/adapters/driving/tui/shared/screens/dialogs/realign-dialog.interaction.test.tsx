@@ -3,9 +3,9 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
-import type { DriftCandidate } from '../../../../core/dashboard/drift.js';
-import { createAppStore } from '../store/app-store.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './test-support/fake-tty.js';
+import type { DriftCandidate } from '../../../../../../core/dashboard/drift.js';
+import { createAppStore } from '../../../store/app-store.js';
+import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../test-support/fake-tty.js';
 import { RealignDialog } from './realign-dialog.js';
 
 const ROWS: DriftCandidate[] = [
