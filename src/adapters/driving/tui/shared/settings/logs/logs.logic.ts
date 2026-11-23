@@ -1,5 +1,5 @@
 // tui/shared/settings/logs.logic: the Logs tab's buffer-size helpers, group list and clear/rules row models. Pure; no Ink/React.
-import { MAX_LOG_BUFFER_SIZE, MIN_LOG_BUFFER_SIZE } from '../../../../../core/ports/settings.js';
+import { MAX_LOG_BUFFER_SIZE, MIN_LOG_BUFFER_SIZE } from '../../../../../../core/ports/settings.js';
 
 // Logs tab: settings.logs.bufferSize, with the Command Palette tab's clamp/adjust/parse-digit
 // idiom rescaled to its wider range (50-5000 vs. 1-99): Up/Down steps by LOG_BUFFER_SIZE_STEP,
