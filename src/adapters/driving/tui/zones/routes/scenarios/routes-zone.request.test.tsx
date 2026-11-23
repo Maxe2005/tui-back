@@ -1,11 +1,11 @@
 // tui/zones/routes: request step and sub-tabs (real keypresses).
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import { createAppStore } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { RoutesZone } from './routes-zone.js';
-import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
-import { mount, press, lastFrame } from './routes-zone.test-support.js';
+import { createAppStore } from '../../../store/app-store.js';
+import { KEYS } from '../../../shared/test-support/fake-tty.js';
+import { RoutesZone } from '../routes-zone.js';
+import { footerIdOf } from '../../../shared/test-support/mount-for-test.js';
+import { mount, press, lastFrame } from '../routes-zone.test-support.js';
 
 describe('RoutesZone request step & sub-tabs', () => {
   function seedWorkbench(fireRoute: (...args: unknown[]) => Promise<void> = async () => {}) {

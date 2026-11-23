@@ -1,8 +1,8 @@
 // tui/zones/routes: bounded list and route filter (real keypresses).
 import { describe, it, expect } from 'vitest';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { RoutesZone } from './routes-zone.js';
-import { ROWS, seed, mount, press, lastFrame } from './routes-zone.test-support.js';
+import { KEYS } from '../../../shared/test-support/fake-tty.js';
+import { RoutesZone } from '../routes-zone.js';
+import { ROWS, seed, mount, press, lastFrame } from '../routes-zone.test-support.js';
 
 describe('RoutesZone bounded list', () => {
   it('keeps the list inside its area: sibling rows stay visible, indicators never overlap rows, no summary in the list', async () => {

@@ -1,13 +1,13 @@
 // tui/zones/routes: saved requests and saved-prompt guards (real keypresses).
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import { createAppStore } from '../../store/app-store.js';
-import type { AppStoreDeps } from '../../store/app-store.js';
-import { err, ok } from '../../../../../core/result.js';
-import type { SavedRequest, SavedRequestPort } from '../../../../../core/ports/saved-request.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { RoutesZone } from './routes-zone.js';
-import { seed, mount, press, lastFrame } from './routes-zone.test-support.js';
+import { createAppStore } from '../../../store/app-store.js';
+import type { AppStoreDeps } from '../../../store/app-store.js';
+import { err, ok } from '../../../../../../core/result.js';
+import type { SavedRequest, SavedRequestPort } from '../../../../../../core/ports/saved-request.js';
+import { KEYS } from '../../../shared/test-support/fake-tty.js';
+import { RoutesZone } from '../routes-zone.js';
+import { seed, mount, press, lastFrame } from '../routes-zone.test-support.js';
 
 describe('RoutesZone saved requests', () => {
   // Ctrl+O travels as its control byte, the same codepoint-1..26 encoding KEYS documents.
