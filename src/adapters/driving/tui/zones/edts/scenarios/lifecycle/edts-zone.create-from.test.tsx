@@ -1,13 +1,13 @@
 // EdtsZone real-keypress tests: create from.
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
-import type { Result } from '../../../../../core/result.js';
-import type { CreateEdtData } from '../../../../../core/edt/create.js';
-import type { SwitchActiveEdtData } from '../../../../../core/edt/switch.js';
-import { FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from './dialogs/create-wizard/create-wizard.js';
-import { edt, press, pressEscape, type, settle, lastWizardFrame, step3Store, mount } from './edts-zone.test-support.js';
+import type { Result } from '../../../../../../../core/result.js';
+import type { CreateEdtData } from '../../../../../../../core/edt/create.js';
+import type { SwitchActiveEdtData } from '../../../../../../../core/edt/switch.js';
+import { FakeTtyStdout, KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from '../../dialogs/create-wizard/create-wizard.js';
+import { edt, press, pressEscape, type, settle, lastWizardFrame, step3Store, mount } from '../../edts-zone.test-support.js';
 
 describe('EdtsZone edt-create-from', () => {
   const ROOT = edt({

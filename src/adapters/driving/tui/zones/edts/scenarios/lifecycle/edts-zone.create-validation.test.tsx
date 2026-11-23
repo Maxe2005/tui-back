@@ -1,11 +1,11 @@
 // EdtsZone real-keypress tests: create validation.
 import { describe, it, expect, vi } from 'vitest';
-import type { Result } from '../../../../../core/result.js';
-import type { CreateEdtData } from '../../../../../core/edt/create.js';
-import { createAppStore } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { edt, press, pressEscape, type, ListsResult, readyBranches, settle, lastWizardFrame, step3Store, reachStep3, mount } from './edts-zone.test-support.js';
+import type { Result } from '../../../../../../../core/result.js';
+import type { CreateEdtData } from '../../../../../../../core/edt/create.js';
+import { createAppStore } from '../../../../store/app-store.js';
+import { KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { edt, press, pressEscape, type, ListsResult, readyBranches, settle, lastWizardFrame, step3Store, reachStep3, mount } from '../../edts-zone.test-support.js';
 
 describe('EdtsZone real-keypress interactions — create-validation', () => {
   it('a list landing clears a stale "branches are loading" message', async () => {

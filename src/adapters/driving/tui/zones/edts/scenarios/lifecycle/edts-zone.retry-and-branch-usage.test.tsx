@@ -1,11 +1,11 @@
 // EdtsZone real-keypress tests: retry and branch usage.
 import { describe, it, expect, vi } from 'vitest';
-import type { Result } from '../../../../../core/result.js';
-import type { ModifyEdtData } from '../../../../../core/edt/modify.js';
-import { createAppStore, type ModifyEdtParams } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { edt, press, type, mount } from './edts-zone.test-support.js';
+import type { Result } from '../../../../../../../core/result.js';
+import type { ModifyEdtData } from '../../../../../../../core/edt/modify.js';
+import { createAppStore, type ModifyEdtParams } from '../../../../store/app-store.js';
+import { KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { edt, press, type, mount } from '../../edts-zone.test-support.js';
 
 describe('EdtsZone R retry (real keypress)', () => {
   function errorStore(overrides: Record<string, unknown>) {

@@ -1,15 +1,15 @@
 // EdtsZone real-keypress tests: branch conflicts.
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
-import type { Result } from '../../../../../core/result.js';
-import type { CreateEdtData } from '../../../../../core/edt/create.js';
-import type { SwitchActiveEdtData } from '../../../../../core/edt/switch.js';
-import type { ModifyEdtData } from '../../../../../core/edt/modify.js';
-import { createAppStore, type ModifyEdtParams } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
-import { edt, press, pressEscape, type, readyBranches, settle, settleBranches, mount } from './edts-zone.test-support.js';
+import type { Result } from '../../../../../../../core/result.js';
+import type { CreateEdtData } from '../../../../../../../core/edt/create.js';
+import type { SwitchActiveEdtData } from '../../../../../../../core/edt/switch.js';
+import type { ModifyEdtData } from '../../../../../../../core/edt/modify.js';
+import { createAppStore, type ModifyEdtParams } from '../../../../store/app-store.js';
+import { KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { footerIdOf } from '../../../../shared/test-support/mount-for-test.js';
+import { edt, press, pressEscape, type, readyBranches, settle, settleBranches, mount } from '../../edts-zone.test-support.js';
 
 describe('EdtsZone real-keypress interactions — branch-conflicts', () => {
   it('branch-owned-by-other-edt in Modify shows "try a different branch"; retry reopens pre-filled and re-submits', async () => {

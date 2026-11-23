@@ -1,14 +1,14 @@
 // EdtsZone real-keypress tests: create wizard.
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import type { Result } from '../../../../../core/result.js';
-import type { CreateEdtData } from '../../../../../core/edt/create.js';
-import { createAppStore, type CreateEdtParams } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from './dialogs/create-wizard/create-wizard.js';
-import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
-import { edt, press, pressEscape, type, readyBranches, settle, lastWizardFrame, step3Store, reachStep3, mount } from './edts-zone.test-support.js';
+import type { Result } from '../../../../../../../core/result.js';
+import type { CreateEdtData } from '../../../../../../../core/edt/create.js';
+import { createAppStore, type CreateEdtParams } from '../../../../store/app-store.js';
+import { KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from '../../dialogs/create-wizard/create-wizard.js';
+import { footerIdOf } from '../../../../shared/test-support/mount-for-test.js';
+import { edt, press, pressEscape, type, readyBranches, settle, lastWizardFrame, step3Store, reachStep3, mount } from '../../edts-zone.test-support.js';
 
 describe('EdtsZone real-keypress interactions — create-wizard', () => {
   it('guards the create form submit against re-entrancy — a second Enter before the first resolves never double-calls createEdt', async () => {

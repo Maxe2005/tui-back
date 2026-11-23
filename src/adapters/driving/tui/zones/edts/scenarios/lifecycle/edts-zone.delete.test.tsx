@@ -1,9 +1,9 @@
 // EdtsZone real-keypress tests: delete.
 import { describe, it, expect } from 'vitest';
-import { createAppStore } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { edt, press, pressEscape, mount } from './edts-zone.test-support.js';
+import { createAppStore } from '../../../../store/app-store.js';
+import { KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { edt, press, pressEscape, mount } from '../../edts-zone.test-support.js';
 
 // ==========================================================================================
 // Delete an EDT (real-keypress coverage: toggling a member's disposition and confirming/

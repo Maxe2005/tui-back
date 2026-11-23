@@ -1,11 +1,11 @@
 // EdtsZone real-keypress tests: modify.
 import { describe, it, expect } from 'vitest';
-import type { Result } from '../../../../../core/result.js';
-import type { ModifyEdtData } from '../../../../../core/edt/modify.js';
-import { createAppStore, type ModifyEdtParams } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { edt, press, pressEscape, type, settle, settleBranches, mount } from './edts-zone.test-support.js';
+import type { Result } from '../../../../../../../core/result.js';
+import type { ModifyEdtData } from '../../../../../../../core/edt/modify.js';
+import { createAppStore, type ModifyEdtParams } from '../../../../store/app-store.js';
+import { KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { edt, press, pressEscape, type, settle, settleBranches, mount } from '../../edts-zone.test-support.js';
 
 describe('EdtsZone real-keypress interactions — modify', () => {
   it('drops a staged branch-edit for a member unchecked before submit — never sent to modifyEdt', async () => {
