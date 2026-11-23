@@ -14,7 +14,15 @@
  // switchActiveEdt's exact comparisons (`status === 'interrupted'`).
  export type EdtStatus = 'active' | 'inactive' | 'interrupted';
  
- export interface EdtRegistryEntry {
+ // A route the developer starred for one EDT: identity is (repoPath, method, path) with the method
+// upper-cased and the path in its discovered template form.
+export interface FavoriteRoute {
+  repoPath: string;
+  method: string;
+  path: string;
+}
+
+export interface EdtRegistryEntry {
    ulid: string;
    topic: string;
    createdAt: string;
@@ -24,6 +32,8 @@
    // EDT the registry adapter synthesizes while edts.sharedBranchesEdtEnabled is on; it is never
    // persisted to edts.yaml (core/workspace/edt/shared-edt/shared-edt.ts).
    kind?: 'system-shared';
+  // Absent when the EDT has no favorite routes (legacy files and an emptied list alike).
+  favoriteRoutes?: FavoriteRoute[];
  }
  
  export interface EdtActionLogEntry {
@@ -39,7 +49,7 @@
    list(): Promise<Result<EdtRegistryEntry[]>>;
    // Read/find/replace/write one entry in place, under the caller's per-resource lock (AD-9).
    // Fails with edt-not-found if ulid isn't registered.
-   update(ulid: string, patch: { topic?: string; members?: EdtMember[] }): Promise<Result<void>>;
+   update(ulid: string, patch: { topic?: string; members?: EdtMember[]; favoriteRoutes?: FavoriteRoute[] }): Promise<Result<void>>;
    // Updates one entry's status field in place. Used by switchActiveEdt to flip the outgoing
    // EDT to 'inactive' (or 'interrupted' under --force past a held lock) and the target EDT to
    // 'active'. Fails with edt-not-found if ulid isn't registered.

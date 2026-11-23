@@ -164,6 +164,7 @@ describe('subcommand registry guards — core', () => {
       'request-list',
       'request-fire',
       'request-delete',
+      'routes',
       'install',
       'completion',
     ]);

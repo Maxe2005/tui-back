@@ -689,3 +689,42 @@ describe('edt-registry shared-branches system EDT', () => {
     expect(listed.ok && listed.data[0].members.map((m) => m.repoPath)).toEqual(['/r/a']);
   });
 });
+
+describe('edt-registry favoriteRoutes', () => {
+  const base = {
+    ulid: '01JXXXXX1AAAAAAAAAAAAAAAAA',
+    topic: 'demo',
+    createdAt: '2026-08-18T00:00:00.000Z',
+    status: 'active',
+    members: [],
+  };
+
+  it('validates a legacy file without the field and lists no favorites', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    await writeFile(file, stringify({ edts: [base] }));
+    const listed = await createEdtRegistryPort(file, edtsBaseDir).list();
+    expect(listed).toEqual({ ok: true, data: [base] });
+  });
+
+  it('round-trips favorites via update(), and an empty list drops the key', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    await writeFile(file, stringify({ edts: [base] }));
+    const port = createEdtRegistryPort(file, edtsBaseDir);
+    const favoriteRoutes = [{ repoPath: '/r', method: 'GET', path: '/x/{id}' }];
+
+    expect((await port.update(base.ulid, { favoriteRoutes })).ok).toBe(true);
+    expect(await port.list()).toEqual({ ok: true, data: [{ ...base, favoriteRoutes }] });
+
+    expect((await port.update(base.ulid, { favoriteRoutes: [] })).ok).toBe(true);
+    expect(await readFile(file, 'utf8')).not.toContain('favoriteRoutes');
+  });
+
+  it('removes favorites together with their entry', async () => {
+    const { file, edtsBaseDir } = await makeRegistryFile();
+    const favoriteRoutes = [{ repoPath: '/r', method: 'GET', path: '/x' }];
+    await writeFile(file, stringify({ edts: [{ ...base, favoriteRoutes }] }));
+    const port = createEdtRegistryPort(file, edtsBaseDir);
+    await port.remove(base.ulid);
+    expect(await readFile(file, 'utf8')).not.toContain('/x');
+  });
+});

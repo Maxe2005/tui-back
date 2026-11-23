@@ -64,7 +64,7 @@ function matchTemplate(template: string, concrete: string): number | null {
   return params;
 }
 
-function isRoutePresent(routes: readonly Route[], method: string, path: string): boolean {
+export function isRoutePresent(routes: readonly Route[], method: string, path: string): boolean {
   const normalizedMethod = method.trim().toUpperCase();
   const normalizedPath = stripSingleTrailingSlash(path.trim());
   const sameMethod = routes.filter((route) => route.method.toUpperCase() === normalizedMethod);
