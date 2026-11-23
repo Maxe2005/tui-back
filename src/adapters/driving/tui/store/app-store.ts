@@ -15,7 +15,7 @@ import type { LockPort } from '../../../../core/ports/lock.js';
 import type { ManifestPort } from '../../../../core/ports/manifest.js';
 import type { ManifestCarryPort } from '../../../../core/ports/manifest-carry.js';
 import type { MigrationPort } from '../../../../core/ports/migration.js';
-import type { ConsumerConfigParser, SourceConfigParser } from '../../../../core/shared-types/list-consumers.js';
+import type { ConsumerConfigParser, SourceConfigParser } from '../../../../core/shared-types/consumers/list-consumers.js';
 import type { SharedTypesPort } from '../../../../core/ports/shared-types.js';
 import type { RestartPort } from '../../../../core/ports/restart.js';
 import type { RegistryPort } from '../../../../core/ports/registry.js';

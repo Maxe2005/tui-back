@@ -5,7 +5,7 @@
 // zero selected is rejected inline. Every keystroke behavior is a pure, unit-tested function.
 import { DEFAULT_SETTINGS, type Settings } from '../../../../../../core/ports/settings.js';
 import type { GroupUpdateScope, GroupUpdateSelectionItem } from '../../../../../../core/scripts/group-update.js';
-import type { SharedTypesMode } from '../../../../../../core/shared-types/smart-update.js';
+import type { SharedTypesMode } from '../../../../../../core/shared-types/consumers/smart-update.js';
 import type { MergeSourceError, MergeSourceOrigin, MergeSourceRow } from '../../../../../../core/scripts/resolve-merge-sources.js';
 import type { TextEditKey, TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import type { BranchAutocompleteState } from '../../../shared/components/inputs/branch-autocomplete-input.js';

@@ -8,7 +8,7 @@ import { useBounds } from '../../../shared/bounds/bounds-context.js';
 import { capOlder, OlderHiddenLine } from '../../../shared/components/lists/bounded-list.js';
 import { Spinner } from '../../../shared/components/index.js';
 import { colors } from '../../../shared/theme/theme.js';
-import type { SharedTypesStage } from '../../../../../../core/shared-types/smart-update.js';
+import type { SharedTypesStage } from '../../../../../../core/shared-types/consumers/smart-update.js';
 import type { GroupUpdateRepoResult } from '../../../../../../core/scripts/group-update.js';
 import {
   buildServiceStepViews,

@@ -3,16 +3,16 @@
 // it to every consumer of the EDT with a commit (propagateVersion) — install and clean restart
 // off, nothing ever pushed. It has no I/O of its own: every port is injected, and a failure is
 // returned as a Result (never thrown) so the driving side can route it to its pause seam.
-import type { ContainerPort } from '../ports/container.js';
-import type { GitPort } from '../ports/git.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { RestartPort } from '../ports/restart.js';
-import type { SharedTypesPort } from '../ports/shared-types.js';
-import { err, ok, type Result } from '../result.js';
-import type { GroupUpdateRepoResult } from '../scripts/group-update.js';
+import type { ContainerPort } from '../../ports/container.js';
+import type { GitPort } from '../../ports/git.js';
+import type { ManifestPort } from '../../ports/manifest.js';
+import type { RestartPort } from '../../ports/restart.js';
+import type { SharedTypesPort } from '../../ports/shared-types.js';
+import { err, ok, type Result } from '../../result.js';
+import type { GroupUpdateRepoResult } from '../../scripts/group-update.js';
 import type { DependencyConsumer, SourceEntry } from './list-consumers.js';
-import { propagateVersion, type PropagateServiceResult } from './propagate-version.js';
-import { runPublish } from './publish-version.js';
+import { propagateVersion, type PropagateServiceResult } from '../propagate-version.js';
+import { runPublish } from '../publish-version.js';
 
 // The run-wide setting: never, only when the source's merge changed something, or every time.
 export type SharedTypesMode = 'off' | 'if-changed' | 'always';

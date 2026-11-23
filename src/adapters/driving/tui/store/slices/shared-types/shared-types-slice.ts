@@ -12,7 +12,7 @@ import {
   type PropagateStep,
   type ResumeFrom,
 } from '../../../../../../core/shared-types/propagate-version.js';
-import { listConsumers, listSources, type ConsumerIssue, type DependencyConsumer, type SourceEntry, type SourceIssue } from '../../../../../../core/shared-types/list-consumers.js';
+import { listConsumers, listSources, type ConsumerIssue, type DependencyConsumer, type SourceEntry, type SourceIssue } from '../../../../../../core/shared-types/consumers/list-consumers.js';
 import { runPublish } from '../../../../../../core/shared-types/publish-version.js';
 import {
   searchByBranch,

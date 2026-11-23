@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { GroupUpdateRepoResult, GroupUpdateScope, GroupUpdateSelectionItem, UpdateBlockerKind, UpdatePhase } from '../../../../../../core/scripts/group-update.js';
-import type { SharedTypesStage } from '../../../../../../core/shared-types/smart-update.js';
+import type { SharedTypesStage } from '../../../../../../core/shared-types/consumers/smart-update.js';
 import type { ServiceStatusState } from '../../../../../../core/service-status/index.js';
 import { partitionServicesByEdtMembership } from '../../edts/logic/edts-zone.logic.js';
 
