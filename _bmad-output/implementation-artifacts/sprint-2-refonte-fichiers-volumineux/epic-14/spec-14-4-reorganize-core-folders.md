@@ -64,3 +64,34 @@ Baseline: 301 test files, 5536 passed + 1 skipped. `npm test` fails at config lo
 **Commands:**
 - `npx vitest run --configLoader runner && npm run typecheck && npm run depcheck` -- expected: all green, test count equal to baseline
 - `git diff --stat -M e32bc0ec7291251361220b56ffd20faa65bd8f4f..HEAD -- src | grep -v '=>'` -- expected: only import-line/path-string edits outside renames
+
+## Suggested Review Order
+
+**Group-update step nesting (only non-trivial specifier shape)**
+
+- Orchestrator now imports its steps from `./steps/`.
+  [`group-update.ts`](../../../../src/core/scripts/group-update/group-update.ts)
+
+- Steps gain one `../` to reach core modules.
+  [`steps`](../../../../src/core/scripts/group-update/steps)
+
+**Ports regrouped by concern (widest importer fan-out)**
+
+- Port files keep their names under modules, runtime, storage, vcs.
+  [`ports`](../../../../src/core/ports)
+
+**Use-case folders**
+
+- EDT helpers, lifecycle and switch grouped.
+  [`edt`](../../../../src/core/edt)
+
+- Registry, reset and update-support scripts.
+  [`scripts`](../../../../src/core/scripts)
+
+- Shared-types use cases split into consumers and versioning.
+  [`shared-types`](../../../../src/core/shared-types)
+
+**Docs**
+
+- Manifest doc path references follow the moved ports and scripts.
+  [`tui-back-manifest.md`](../../../../docs/tui-back-manifest.md)
