@@ -10,7 +10,7 @@ import { frameLines } from '../../shared/test-support/matrix.js';
 import { createAppStore } from '../../store/app-store.js';
 import { FullscreenReport } from './fullscreen-report.js';
 import { activeFooterContext, footerContextHints } from '../../keybindings/index.js';
-import { buildServiceReport } from './update-zone.logic.js';
+import { buildServiceReport } from './logic/update-zone.logic.js';
 import { UpdateZone } from './update-zone.js';
 
 const HUGE_ERROR = Array.from({ length: 5000 }, (_, i) => `error line ${i} ${'x'.repeat(120)}`).join('\n');

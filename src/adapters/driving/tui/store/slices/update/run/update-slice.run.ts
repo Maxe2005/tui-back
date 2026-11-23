@@ -20,7 +20,7 @@ import {
 import { serviceRestart as serviceRestartUseCase } from '../../../../../../../core/scripts/service-restart.js';
 import { openInIde } from '../../../../../../../core/service-actions/index.js';
 import { err, ok, type Result } from '../../../../../../../core/result.js';
-import { advanceServiceSteps, mergeLastServiceOutcomes } from '../../../../zones/update/update-zone.logic.js';
+import { advanceServiceSteps, mergeLastServiceOutcomes } from '../../../../zones/update/logic/update-zone.logic.js';
 import { autoResolveSharedTypesConflict } from '../../../../../../../core/shared-types/resolve-conflict.js';
 import { listConsumers, type DependencyConsumer } from '../../../../../../../core/shared-types/list-consumers.js';
 import {

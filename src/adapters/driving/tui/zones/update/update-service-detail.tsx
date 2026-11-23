@@ -16,7 +16,7 @@ import {
   type ServiceIssue,
   type ServiceStepStates,
   type UpdateStepState,
-} from './update-zone.logic.js';
+} from './logic/update-zone.logic.js';
 
 export const UPDATE_DETAIL_NEVER_RAN = 'No update has run for this service yet.';
 

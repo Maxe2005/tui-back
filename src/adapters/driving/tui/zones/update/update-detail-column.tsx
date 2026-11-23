@@ -6,7 +6,7 @@ import { BoundedList, DetailPane, Spinner } from '../../shared/components/index.
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatServiceUpdateContext } from './update-zone.logic.js';
+import { formatServiceUpdateContext } from './logic/update-zone.logic.js';
 import { UpdateServiceDetail } from './update-service-detail.js';
 import {
   UPDATE_ALL_REPOS_PROMPT,
@@ -15,7 +15,7 @@ import {
   UPDATE_NO_RECAP,
   formatUpdateSummary,
   resolveUpdateTone,
-} from './update-zone.resolvers.logic.js';
+} from './logic/update-zone.resolvers.logic.js';
 import { RECAP_CHROME_ROWS, RECAP_CONTEXT_MAX_LINES, RUNNING_LIST_CHROME_ROWS, type UpdateZoneCtx } from './update-zone.ctx.js';
 
 export function UpdateDetailColumn({ c }: { c: UpdateZoneCtx }) {

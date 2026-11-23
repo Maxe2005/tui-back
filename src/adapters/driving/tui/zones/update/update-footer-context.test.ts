@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { updateFooterContext, type UpdateFooterInput } from './update-zone.logic.js';
+import { updateFooterContext, type UpdateFooterInput } from './logic/update-zone.logic.js';
 
 const IDLE: UpdateFooterInput = { blocker: false, config: null, servicePick: false, quitConfirm: false, serviceMenu: false, selectRequest: false, report: false };
 

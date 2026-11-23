@@ -12,7 +12,7 @@ import {
   resolveReportKey,
   splitReportText,
   type ServiceReportInput,
-} from './update-zone.logic.js';
+} from './logic/update-zone.logic.js';
 
 const LONG_ERROR = `merge failed\n${'conflict in file\n'.repeat(40)}end`;
 const FAILED: GroupUpdateRepoResult = {

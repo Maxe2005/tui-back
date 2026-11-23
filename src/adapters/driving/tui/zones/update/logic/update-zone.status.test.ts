@@ -1,8 +1,8 @@
 // tui/zones/update: per-service status, outcome and live-detail helpers.
 import { describe, expect, it } from 'vitest';
-import { formatBlockerBody } from './update-zone.js';
+import { formatBlockerBody } from '../update-zone.js';
 import { deriveUpdateServiceStatus, updateStatusText, formatLiveServiceDetail, formatServiceOutcomeDetail, isServiceTargetedByRun, mergeLastServiceOutcomes, partitionUpdateServiceRows } from './update-zone.logic.js';
-import { ACTIVE_EDT, SERVICE_A, SERVICE_B } from './update-zone.test-support.js';
+import { ACTIVE_EDT, SERVICE_A, SERVICE_B } from '../update-zone.test-support.js';
 
 describe('deriveUpdateServiceStatus', () => {
   it('passes the health-first states through, with their own text', () => {

@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatReportPosition, reportWindow, type ReportLine, type ReportLineKind } from './update-zone.logic.js';
+import { formatReportPosition, reportWindow, type ReportLine, type ReportLineKind } from './logic/update-zone.logic.js';
 
 const LINE_COLORS: Record<ReportLineKind, string> = {
   title: colors.text,

@@ -20,8 +20,8 @@ import { useUpdateInput } from './hooks/use-update-input.js';
 import { useUpdateState } from './hooks/use-update-state.js';
 
 // Public surface unchanged: everything the pure modules export is still importable from here.
-export * from './update-zone.resolvers.logic.js';
-export * from './update-zone.blockers.logic.js';
+export * from './logic/update-zone.resolvers.logic.js';
+export * from './logic/update-zone.blockers.logic.js';
 
 // The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
 // key focuses a service. Tests pass `initialRecap={false}` to start on a service.

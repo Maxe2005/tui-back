@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react';
 import { useFooterContext } from '../../../shared/hooks/use-footer-context.js';
 import { updateConfigFooterContext } from '../config/update-config-panels.logic.js';
-import { updateFooterContext } from '../update-zone.logic.js';
+import { updateFooterContext } from '../logic/update-zone.logic.js';
 import { createFilterablePickListState } from '../../../shared/components/index.js';
 import type { UpdateZoneCtx } from '../update-zone.ctx.js';
 

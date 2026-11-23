@@ -1,10 +1,10 @@
 // tui/zones/update: pure keystroke, trigger, quit/confirm and blocker-menu helpers.
 import { describe, expect, it } from 'vitest';
-import { resolveMenuKey } from '../../shared/components/lists/menu-list.js';
-import { UPDATE_BLOCKER_MENU_ITEMS, formatBlockerBody, formatBlockerRetry, formatUpdateRow, formatUpdateSummary, resolveAllConfirm, UPDATE_BLOCKER_MENU_ESCAPE, blockerMenuItems, resolveQuitConfirm, resolveUpdateTrigger, resolveUpdateTone, shouldConfirmQuit, shouldOfferRerun, shouldOpenAllConfirm, shouldOpenEdtConfig, shouldOpenSingleConfig } from './update-zone.js';
-import { toServicePickItems } from './update-service-pick-dialog.js';
-import { matchPickItemsBySubstring } from '../../shared/components/pickers/filterable-pick-list.js';
-import { INTERRUPTED_EDTS } from './update-zone.test-support.js';
+import { resolveMenuKey } from '../../../shared/components/lists/menu-list.js';
+import { UPDATE_BLOCKER_MENU_ITEMS, formatBlockerBody, formatBlockerRetry, formatUpdateRow, formatUpdateSummary, resolveAllConfirm, UPDATE_BLOCKER_MENU_ESCAPE, blockerMenuItems, resolveQuitConfirm, resolveUpdateTrigger, resolveUpdateTone, shouldConfirmQuit, shouldOfferRerun, shouldOpenAllConfirm, shouldOpenEdtConfig, shouldOpenSingleConfig } from '../update-zone.js';
+import { toServicePickItems } from '../update-service-pick-dialog.js';
+import { matchPickItemsBySubstring } from '../../../shared/components/pickers/filterable-pick-list.js';
+import { INTERRUPTED_EDTS } from '../update-zone.test-support.js';
 
 describe('formatUpdateRow', () => {
   it('renders each outcome with a glyph paired to the outcome word, code, and message', () => {

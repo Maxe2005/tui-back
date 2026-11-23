@@ -1,6 +1,6 @@
 // tui/zones/update: the update-blocker menu items and blocker body/retry formatters.
-import type { IncidentBlocker } from '../../store/slices/update/update-slice.js';
-import type { MenuItem } from '../../shared/components/lists/menu-list.js';
+import type { IncidentBlocker } from '../../../store/slices/update/update-slice.js';
+import type { MenuItem } from '../../../shared/components/lists/menu-list.js';
 
 // The assisted-resolution menu — the seam's fixed choices rendered as `ListRow`s navigated like
 // the EDT zone's `SERVICE_ACTION_MENU_ITEMS` (arrows/Home/End + Enter). `Escape` answers
