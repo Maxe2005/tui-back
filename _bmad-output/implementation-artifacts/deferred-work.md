@@ -1023,3 +1023,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-11-favorite-routes-per-edt-persistence-use-cases-and-cli.md`
   summary: Expose `routes favorites list|add|remove` as MCP tools (currently in EXCLUDED_SUBCOMMANDS).
   evidence: Agents cannot manage favorites; the CLI/MCP parity guard only passes because `routes` is on the exclusion list.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-13-recent-routes-and-quick-re-fire.md`
+  summary: Ctrl+R re-fires a mutating route (POST/PUT/PATCH/DELETE) from the list, Favorites or Recent with no confirmation.
+  evidence: Same behaviour as Ctrl+R in the right pane since 6.9, but from the list one keystroke now re-sends a mutating request; 6.14/6.15 introduce a confirm for mutating favorites, so a consistent rule is worth deciding.

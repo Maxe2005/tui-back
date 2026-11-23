@@ -3,7 +3,8 @@
 import type { Key } from 'ink';
 import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
-import { moveFavoriteCursor, resolveFavoriteSelection } from '../logic/routes-favorites.logic.js';
+import { moveFavoriteCursor, resolveFavoriteSelection, resolveFavoritesPaneRows } from '../logic/routes-favorites.logic.js';
+import { nextListFocus } from '../logic/routes-recent.logic.js';
 import { resolveRoutesDirection } from '../logic/routes-zone.logic.js';
 
 // Toggles one route's favorite flag; the pane updates at once (the store refreshes its cache),
@@ -16,14 +17,48 @@ export function toggleRouteFavorite(c: RoutesZoneCtx, method: string, path: stri
   );
 }
 
+// Where the next/previous Tab stop lands from a list-side focus; rendered panes only.
+export function stepListFocus(c: RoutesZoneCtx, current: 'list' | 'favorites' | 'recent', direction: 'next' | 'back') {
+  const rows = resolveFavoritesPaneRows(c.windowSize.rows, c.favorites.length, c.recents.length);
+  return nextListFocus(current, direction, { favorites: rows.total > 0, recent: rows.recent.total > 0 });
+}
+
 export function handleFavoritesKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const {
     favorites, clampedFavCursor, setFavCursor, setFavNotice, setPaneFocus, routes, visibleRoutes, setSelected, setFilter,
-    openPaneForRoute,
+    openPaneForRoute, reFireRoute,
   } = c;
-  if (key.escape === true || resolveFocusStep(input, key, 'tab') !== null) {
+  if (key.escape === true) {
     setFavNotice(null);
     setPaneFocus('list');
+    return;
+  }
+  const step = resolveFocusStep(input, key, 'tab');
+  if (step !== null) {
+    setFavNotice(null);
+    setPaneFocus(stepListFocus(c, 'favorites', step));
+    return;
+  }
+  if (key.ctrl === true && (input === 'r' || input === 'R')) {
+    const row = favorites[clampedFavCursor];
+    if (row === undefined) {
+      return;
+    }
+    if (row.stale) {
+      setFavNotice('stale: no longer discovered, * removes it');
+      return;
+    }
+    const target = resolveFavoriteSelection(routes, visibleRoutes, row);
+    if (target === undefined) {
+      setFavNotice('not in the route list');
+      return;
+    }
+    setFavNotice(null);
+    if (target.clearFilter) {
+      setFilter({ value: '', cursor: 0 });
+    }
+    setSelected(target.index);
+    reFireRoute(target.route);
     return;
   }
   if (key.ctrl === true || key.meta === true) {

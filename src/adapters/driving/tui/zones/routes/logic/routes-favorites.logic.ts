@@ -68,13 +68,26 @@ export function moveFavoriteCursor(current: number, direction: RoutesSelectionDi
 // The pane's row budget on a terminal of `windowRows` rows: `total` rows (header included) and the
 // `body` rows of its BoundedList / teaching line. The list below keeps at least
 // ROUTES_MIN_LIST_ROWS rows; with no spare room the pane shrinks to its header line, then to nothing.
-export function resolveFavoritesPaneRows(windowRows: number, favoriteCount: number): { total: number; body: number } {
+// The Recent section below it (`recent`, 0 rows when `recentCount` is 0) only gets what the
+// favorites leave: it shrinks first, then disappears; favorites keep priority.
+export function resolveFavoritesPaneRows(
+  windowRows: number,
+  favoriteCount: number,
+  recentCount = 0,
+): { total: number; body: number; recent: { total: number; body: number } } {
+  const none = { total: 0, body: 0 };
   const spare = Math.floor(windowRows) - ROUTES_LIST_CHROME_ROWS - ROUTES_MIN_LIST_ROWS;
   if (!(spare >= 1)) {
-    return { total: 0, body: 0 };
+    return { ...none, recent: none };
   }
   const body = Math.min(ROUTES_FAVORITES_MAX_BODY_ROWS, Math.max(favoriteCount, 1), spare - 1);
-  return { total: body + 1, body };
+  const total = body + 1;
+  const remaining = spare - total;
+  if (recentCount <= 0 || remaining < 2) {
+    return { total, body, recent: none };
+  }
+  const recentBody = Math.min(ROUTES_FAVORITES_MAX_BODY_ROWS, recentCount, remaining - 1);
+  return { total, body, recent: { total: recentBody + 1, body: recentBody } };
 }
 
 export type FavoriteSelection = {
@@ -90,7 +103,7 @@ export type FavoriteSelection = {
 export function resolveFavoriteSelection(
   routes: readonly Route[] | null | undefined,
   visibleRoutes: readonly Route[],
-  favorite: FavoriteWithStale,
+  favorite: Pick<FavoriteWithStale, 'method' | 'path'>,
 ): FavoriteSelection | undefined {
   const matches = (route: Route) => route.method === favorite.method && samePath(route.path, favorite.path);
   const visibleIndex = visibleRoutes.findIndex(matches);

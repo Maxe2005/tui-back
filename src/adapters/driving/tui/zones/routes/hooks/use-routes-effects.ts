@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react';
 import type { RoutesBaseCtx } from './use-routes-derived.js';
 import type { RoutesPaneActions } from './use-routes-pane-actions.js';
+import { resolveFavoritesPaneRows } from '../logic/routes-favorites.logic.js';
 import { createFilterablePickListState } from '../../../shared/components/pickers/filterable-pick-list.js';
 
 export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
@@ -11,31 +12,43 @@ export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
     setRowEdit, setRowAddPrompt, setFireBlock, savePrompt, setSavePrompt, overwriteConfirm,
     setOverwriteConfirm, setSaveNotice, pickerOpen, pickerDeleteConfirm, setSavedTabState, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, setScalarEdit, setAddPrompt, setRawEditor, paneFocused,
-    paneRoute, paneRouteKey, firedRouteKey, closePane, favoritesFocused, refreshFavoriteRoutes,
+    paneRoute, paneRouteKey, firedRouteKey, closePane, favoritesFocused, recentFocused, refreshFavoriteRoutes,
+    favorites, recents, windowSize, setPaneFocus,
   } = c;
   useEffect(() => {
     setZoneInputCaptured(
       filterEditing ||
         paneFocused ||
         favoritesFocused ||
+        recentFocused ||
         savePrompt !== null ||
         pickerOpen ||
         overwriteConfirm !== null ||
         pickerDeleteConfirm !== null ||
         savedTabDeleteConfirm !== null,
     );
-  }, [filterEditing, paneFocused, favoritesFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
+  }, [filterEditing, paneFocused, favoritesFocused, recentFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
   // Leaving the zone must not leave the keyboard parked on the Favorites pane (AppShell treats a
   // non-list Routes focus as captured, so zone keys would stay dead).
   useEffect(
     () => () => {
       setZoneInputCaptured(false);
-      if (c.useStore.getState().routesPaneFocus === 'favorites') {
+      const focus = c.useStore.getState().routesPaneFocus;
+      if (focus === 'favorites' || focus === 'recent') {
         c.useStore.getState().setRoutesPaneFocus('list');
       }
     },
     [setZoneInputCaptured],
   );
+
+  // Focus must never sit on a pane that is not rendered (recents emptied by a repo switch,
+  // terminal shrunk): hand it back to the list.
+  const paneRows = resolveFavoritesPaneRows(windowSize.rows, favorites.length, recents.length);
+  useEffect(() => {
+    if ((recentFocused && paneRows.recent.total === 0) || (favoritesFocused && paneRows.total === 0)) {
+      setPaneFocus('list');
+    }
+  }, [recentFocused, favoritesFocused, paneRows.recent.total, paneRows.total, setPaneFocus]);
 
   useEffect(() => {
     // The favorites follow the active EDT: reloaded on every mount, after the routes (the stale
@@ -73,7 +86,11 @@ export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
       setSavedTabState(createFilterablePickListState());
       setSavedTabError(null);
       setSavedTabDeleteConfirm(null);
+      if (c.pendingFireBlockRef.current !== null) {
+        setFireBlock(c.pendingFireBlockRef.current);
+      }
     }
+    c.pendingFireBlockRef.current = null;
     previousPaneRouteKey.current = paneRouteKey;
   }, [paneRouteKey]);
 

@@ -280,6 +280,74 @@ describe('routes slice fireRoute', () => {
     expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'missing-argument' } });
   });
 
+  it('records each fired route as a recent (status + duration), MRU and deduplicated', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    const store = await loadedStore();
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+    await store.getState().fireRoute('PATCH /users/{id}', 'PATCH', '/users/7');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    const recents = store.getState().recentRoutes;
+    expect(recents.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /users', 'PATCH /users/{id}']);
+    expect(recents[0]).toMatchObject({ outcome: { kind: 'status', status: 200 } });
+  });
+
+  it('caps the recents at 10 and records the error code of a fire that failed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status: 403 })));
+    const store = await loadedStore();
+
+    for (let i = 0; i < 12; i += 1) {
+      await store.getState().fireRoute(`GET /r${i}`, 'GET', `/r${i}`);
+    }
+
+    expect(store.getState().recentRoutes).toHaveLength(10);
+    expect(store.getState().recentRoutes[0]).toMatchObject({ path: '/r11', outcome: { kind: 'error', code: 'unknown-route' } });
+  });
+
+  it('records an HTTP 4xx/5xx response as a status outcome, not an error code', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })));
+    const scanner: RouteScannerPort = { scan: vi.fn(async () => ok([{ method: 'GET', path: '/users' }] as Route[])) };
+    const store = await loadedStore({ scanner });
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    expect(store.getState().recentRoutes[0]).toMatchObject({ path: '/users', outcome: { kind: 'status', status: 500 } });
+  });
+
+  it('keeps the recents across a same-repo reload and empties them on another repo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    const scanner: RouteScannerPort = { scan: vi.fn(async () => ok([{ method: 'GET', path: '/users' }] as Route[])) };
+    const repos = ['/repos/gateway'];
+    const registry: RegistryPort = {
+      list: vi.fn(async () => ok([...repos])),
+      add: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+      exists: vi.fn(async () => ok(true)),
+      scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+      reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    };
+    const store = await loadedStore({ scanner, registry });
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+    expect(store.getState().recentRoutes).toHaveLength(1);
+
+    await store.getState().loadRoutes();
+    expect(store.getState().recentRoutes).toHaveLength(1);
+
+    repos.splice(0, 1, '/repos/other');
+    await store.getState().loadRoutes();
+    expect(store.getState().routesRepoPath).toBe('/repos/other');
+    expect(store.getState().recentRoutes).toEqual([]);
+  });
+
+  it('does not record a recent for a pre-flight wiring failure', async () => {
+    const store = createAppStore();
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    expect(store.getState().recentRoutes).toEqual([]);
+  });
+
   it('surfaces an auth-endpoint failure as the route error', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
     const auth: DevAuthPort = {

@@ -4,52 +4,99 @@
 
 ## Goal
 
-A developer can browse any managed repo's API routes, fire requests with dev-mode auth handled automatically, build a reusable library of saved requests, and see each response together with the relevant service logs — replacing the cluttered generated Swagger UI and keeping the mid-coding trace → fix → resume loop fast enough not to break flow.
+A developer can discover a repo's routes, fire a request with automatic dev-mode auth, save/customize/re-fire requests in a global library, keep the active EDT's favorite routes at hand, and re-fire or smoke-run them quickly. This replaces the cluttered generated Swagger UI and keeps the edit-code, fire, read loop fast. Logs are read in the Logs zone (Epic 5), not in Routes. The epic was amended on 2026-11-16: the response-plus-logs and library-management stories were removed, and the favorites, recent, smoke-run, raw-editor and method-color stories were added.
 
 ## Stories
 
 - Story 6.1: Route Discovery via a Pluggable Scanner Module
 - Story 6.2: Fire a Request with Automatic Dev-Mode Auth
 - Story 6.3: Save, Customize, and Re-Fire a Request
-- Story 6.4: See Response and Relevant Logs Together
-- Story 6.5: Manage the Saved-Request Library Across EDTs
 - Story 6.6: Scanner Extension — Parameters & Request-Body Skeletons
 - Story 6.7: JsonTree Component — Read-Only Navigation, Collapse & Session Filters
 - Story 6.8: JsonTree Edit Mode — Request Body Editing
 - Story 6.9: Routes Right Pane — Mandatory Request Step & Request/Response Sub-Tabs
+- Story 6.10: Routes Keys Free of Zone Mnemonics & No `d` on Request Editors
+- Story 6.11: Favorite Routes per EDT — Persistence, Use-Cases & CLI
+- Story 6.12: Favorites Pane Above the Routes List & Add-to-Favorites Key
+- Story 6.13: Recent Routes & Quick Re-Fire
+- Story 6.14: Smoke Run of the EDT's Favorite Routes — Core & CLI
+- Story 6.15: Smoke Run in the Routes Zone
+- Story 6.16: Raw Body Mode as a Full Multi-Line Text Editor
+- Story 6.17: HTTP Method Colors
+
+(Stories 6.4 and 6.5 were removed; the numbers are not reused.)
 
 ## Requirements & Constraints
 
-- Route exploration is available only on repos whose manifest activates it; everywhere else no route list is offered. Adding it to a new repo is manifest-only, never a core change.
-- A failed scan and a genuinely empty route list are visibly distinct states; a failure is never rendered as an empty list.
-- Firing a request never requires manual token handling: protected-route auth is automatic per session across repos, expired dev tokens refresh silently, and a permission mismatch surfaces as a distinct auth error rather than a generic failure.
-- Ad-hoc customize-then-fire always works without saving first. Saving captures method, path, body, and headers; re-firing a saved request allows further edits, then a per-fire choice of overwriting the original or saving as new.
-- Save-as-new with a colliding name is rejected with a prompt for a different name. A saved request whose route is no longer discovered is flagged stale and deletable, never fired silently.
-- Every fire shows the response together with the relevant aggregated logs in the same view, immediately, with no separate correlation step.
-- The affected-service set per route is learned, not pre-configured: first fire proposes active-EDT members with logs windowed around the fire; the developer can adjust before or after firing; the adjusted set is saved against the route, reused automatically, and editable/resettable later.
-- Saved requests form one global library visible and fireable from any EDT. Each EDT can independently hide requests and mark per-EDT favorites; a request can also be a global favorite shown in every EDT by default. Hiding never deletes. No folders or tagging in v1.
-- The request workbench (stories 6.6–6.9) is built before saving/logs: an extended scanner feeds a pre-filled request editor (JSON tree, session-only per-route filters; hidden lines are still sent), firing requires passing through a request step, and the right pane uses Request/Response sub-tabs (Logs added later) switched with Ctrl+→/← (fallback Ctrl+N/P). Execution order: 6.6 → 6.9, then 6.3, 6.4, 6.5.
-- Every action is identically invocable from the TUI and as a standalone CLI subcommand with the shared ok/data-or-error envelope and exit code 0/1 only. The fire → logs → resume loop must stay fast enough not to break coding flow.
+- Route exploration is available only on repos whose manifest activates it. Adding it to a new repo is manifest-only, never a core change.
+- A failed scan and a genuinely empty route list are visibly distinct states.
+- Firing never requires manual token handling. Auth is automatic per session, expired dev tokens refresh silently, and a permission mismatch surfaces as a distinct auth error, not a generic failure.
+- Ad-hoc customize-then-fire works without saving. Saving captures method, path, body and headers. Re-firing a saved request allows edits, then a per-fire choice of overwrite or save-as-new. A name collision is rejected with a prompt for another name.
+- A saved or favorite route that a rescan no longer discovers is flagged stale. It is never dropped or fired silently, and the developer can remove it.
+- Saved requests form one global library, usable from any EDT.
+- Favorites are per EDT, stored on the EDT entry as `favoriteRoutes: [{ repoPath, method, path }]`. Method is upper-cased, path stays in discovered template form, toggling is idempotent with no duplicates, and the field is optional so older `edts.yaml` files stay valid. Deleting an EDT deletes its favorites.
+- Recent routes are session-only: the last 10 distinct fired routes of the displayed repo, with last status and duration.
+- Smoke run:
+  - It fires non-stale favorites sequentially through the existing `fireRequest` path. Concurrency is bounded by `update.concurrency`, and never two requests at once on the same repo.
+  - Mutating methods (POST/PUT/PATCH/DELETE) are skipped unless explicitly included (`--include-mutating`, or a TUI confirm listing the exact routes).
+  - Unfilled required params or stale routes are `skipped` with a reason, never `failed`.
+  - The closed outcome set is ok / client-error / server-error / auth-error / network-error / skipped.
+  - The run never rejects, and one failure never stops the others.
+  - The CLI exit code is non-zero if any fired row is not ok.
+- Every action is available from both the TUI and the CLI, with the shared AD-3 envelope and exit code 0/1 (FR-1 parity). The CLI commands are `tui-back routes favorites list|add|remove` and `tui-back routes smoke`. An unknown EDT or invalid method is rejected before anything is written.
+- The request workbench: the scanner feeds a pre-filled request editor (JSON tree with session-only per-route filters; hidden lines are still sent). Firing always passes through a Request step. The right pane has Request/Response sub-tabs switched with Ctrl+→/←.
+- Body editing:
+  - The body tree editor and the Query/Headers rows have no delete: `d`/`D` is a no-op there (add, edit, change type and raw mode remain). Path params cannot be removed.
+  - Raw mode (`r`) is a full multi-line editor:
+    - navigation and Shift-selection, indent-aware Enter, undo/redo, bracketed paste, a format key, and a visible line/column.
+    - leaving it with invalid JSON keeps the user in the editor at the error position and preserves the previous valid body.
+- Method colors:
+  - Every method (GET, POST, PUT, PATCH, DELETE, plus a neutral fallback) has a color via a single `methodColor(method)` helper in `shared/theme`.
+  - The method is always printed as text, so it works under `NO_COLOR`.
+  - No per-zone color literals.
+  - Stale rows are dimmed whole.
 
 ## Technical Decisions
 
-- Hexagonal split: generic browse/fire/save mechanics live in core routes logic; only route scanning and dev-auth are pluggable per-repo modules behind scanner and auth ports.
-- This backend's module pair is OpenAPI-based scanning plus dev-JWT auth; a differently-stacked repo plugs in its own scanner/auth implementation with no core change. Only the gateway repo activates the module today.
-- Module implementations are statically compiled into a registry keyed by manifest module id; manifests only select keys, never load external code. The manifest is a single root YAML file, schema-validated on load.
-- Saved requests, per-EDT hide/favorite flags, and global favorites live in a narrowly-scoped global store separate from per-EDT state, so a bug on either side cannot corrupt the other; schema evolves via hand-rolled numbered SQL files with a version table, no migration framework.
-- The Routes TUI zone maps 1:1 to the core routes capability (dashboard excepted, read-only aggregate). Stack pins: OpenAPI tooling and JWT library versions fixed by architecture.
-- Deferred/open: proving the generic-core split against a second, structurally different stack is out of v1; the canonical route-identity key across scanner implementations is left to the scanner port contract.
+- Hexagonal split: generic browse/fire/save/favorites/smoke mechanics live in core routes logic. Only route scanning and dev-auth are pluggable per-repo modules behind ports. This backend's pair is OpenAPI scanning plus dev-JWT auth (`jose`).
+- Modules are statically compiled into a registry keyed by manifest module id. Manifests only select keys.
+- Saved requests live in `global.db` (AD-7), a narrow store separate from per-EDT state. Schema evolves via numbered SQL files with a version table. Favorites live in `edts.yaml` (the EDT registry).
+- `EdtRegistryPort.update` patch gains `favoriteRoutes`. Favorite use-cases are in `core/routes/favorites.ts` (`toggleFavoriteRoute`, `listFavoriteRoutes` with a stale flag from the cached scan). Writes use the registry's per-resource lock (AD-9).
+- Scanner port optional fields (parameters, `bodyExample`, path-param `example`) are neutral data. Scanners that omit them keep working.
+- Pane and list rendering is bounded and scrollable (AD-19). There is no dead code (AD-17): remove `delete-entry`, `removeEntry`/`removeEntryAtPath` and `removeRequestRow` when unreferenced.
+- `routes-zone.tsx` is a large file on Epic 12's refactor list. Touch it minimally and put new logic in separate modules:
+  - `zones/routes/routes-favorites-pane.tsx` and `routes-favorites.logic.ts` (pure focus/cursor logic)
+  - a pure multi-line buffer model in `shared/text-edit` (the single-line `TextInputState` and `TextInputLine` stay untouched)
+  - `JsonRawEditor` rendering the buffer model
+- Footer and `?` help keys are declared in `footer-contexts.ts` (UX-DR7).
 
 ## UX & Interaction Patterns
 
-- Routes zone follows the standard resizable list/detail split: route/saved-request list on the left, fired response plus correlated logs together in the detail pane — the clearest single-source-of-truth instance, illustrated by the key-screen mock.
-- Named zone states: scan-in-progress spinner, scan-failure vs. empty, fired/response view, distinct auth error, first-fire unlearned-service proposal with checkbox-list adjust-and-save, stale-request flag, save-as-new collision rejection, per-EDT vs. global hide/favorite.
-- Purpose-built minimal route list, never a generic Swagger-style schema browser; affected-service editing reuses the checkbox multi-select pattern.
-- Zone tab is manifest-gated at two levels: fully omitted when no registered repo activates the module, disabled-with-explanation when the module exists in the registry but not on an active-EDT member. Direct zone mnemonic plus standard list keys, footer hints, and modal confirmations apply uniformly.
+- The Routes zone is a resizable list/detail split with a purpose-built minimal route list, not a Swagger-style browser.
+- Named states: scan-in-progress, scan-failure vs. empty, auth error, stale flag, name-collision rejection.
+- Key map:
+  - Zone mnemonics must not shadow Routes keys: `p` opens the saved-request picker from the list, `w` saves from the Request tab, and `s` keeps switching zone.
+  - `*` toggles favorite on the list or on an open route, and types normally inside inline editors.
+  - Tab/Shift+Tab moves focus between the list and the Favorites pane.
+  - Enter on a favorite or Recent row opens Request and never fires. A stale favorite refuses Enter with a message.
+  - `d`/`*` removes a favorite, and Esc returns to the list.
+  - `Ctrl+R` re-fires the selected draft and switches to Response. With missing required params, it opens Request listing them instead.
+  - `t` starts the smoke run, or the next free letter, recorded in the spec.
+- The Favorites pane sits above the list, shows `METHOD path` plus summary, and has a teaching line when empty. The Recent section sits below it, hidden when empty. The list always keeps a minimum height on small terminals.
+- Smoke table:
+  - Rows update live (`pending → firing → outcome`) with a glyph and a color.
+  - The summary line counts each outcome.
+  - A confirm dialog lists mutating routes.
+  - Enter on a row opens Response with that fire's response kept.
+  - A second concurrent run is rejected, and Esc cancels the rows not yet fired.
+- Raw editor:
+  - Ctrl+←/→ means word movement only inside the raw editor, and tab keys are restored on leaving.
+  - Other raw keys: Tab inserts two spaces, Ctrl+K deletes to end of line, Ctrl+A selects all, Ctrl+Z/Y undo/redo.
 
 ## Cross-Story Dependencies
 
-- The scanner port's optional route fields (parameters, request-body example) are neutral data; scanner-specific vocabulary never crosses the port, and scanners that omit them keep working.
-- Route discovery is the prerequisite for firing, saving, and log correlation; saving precedes library management.
-- Response-plus-logs reuses the aggregated log stream capability — this epic consumes it, not rebuilds it.
-- Builds on the foundation epic's manifest/module registry, storage layout, and script-envelope contract; no new cross-epic runtime dependency beyond the log stream.
+- 6.1 (discovery) precedes 6.2 (fire) and 6.3 (save). 6.6 (scanner params and body skeletons) feeds 6.7 and 6.8 (JsonTree read-only, then edit), and 6.9 builds the Request/Response pane on them.
+- 6.10 changes the keys of 6.3, 6.8 and 6.9. 6.16 amends 6.8's raw mode.
+- 6.11 (persistence and CLI) precedes 6.12 (pane), 6.13 (recent and Ctrl+R) and 6.14 (smoke core). 6.14 precedes 6.15 (smoke UI), which reuses the 6.12 pane.
+- 6.17 colors surfaces from 6.12, 6.13 and 6.15, and the list, Saved tab, picker and Request header.
+- Builds on Epic 1's manifest/module registry, storage layout and envelope contract. Logs are read in Epic 5's Logs zone, with no runtime dependency from Routes.

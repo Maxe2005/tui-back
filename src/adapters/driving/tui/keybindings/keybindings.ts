@@ -289,7 +289,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   },
   {
     keys: 'Ctrl+R (Routes)',
-    description: 'Routes: fire the request of the open pane',
+    description: 'Routes: fire the request of the open pane; from the list, Favorites or Recent, re-fire the selected route (never fired or incomplete: opens Request)',
   },
   {
     keys: 'Ctrl+T (branch picker)',
