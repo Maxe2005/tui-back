@@ -1,4 +1,4 @@
-// tui/shared/heal-dialog: real keypresses on the mounted overlay — the mode toggle, Enter running
+// tui/shared/screens/dialogs/heal-dialog: real keypresses on the mounted overlay — the mode toggle, Enter running
 // the heal, and the confirm-close prompt while it runs.
 import { createElement } from 'react';
 import { render } from 'ink';

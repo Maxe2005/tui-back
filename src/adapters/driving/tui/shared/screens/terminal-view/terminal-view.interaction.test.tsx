@@ -1,4 +1,4 @@
-// tui/shared/terminal-view: real keypresses on the mounted Terminal overlay over the real
+// tui/shared/screens/terminal-view/terminal-view: real keypresses on the mounted Terminal overlay over the real
 // terminal slice and core shell session (fake ShellSessionPort) — run, stream, history, cancel,
 // confirm-close, focus, help and fullscreen — plus the shell-level key ownership (nothing global
 // fires behind it).

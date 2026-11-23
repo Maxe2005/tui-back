@@ -5,7 +5,7 @@
 // pure reducer the host's useInput calls; the first Enter on a non-empty list inserts the
 // highlighted suggestion, so the host keeps its own commit semantics.
 import { Box, Text } from 'ink';
-// Text editing goes through shared/components/text-edit.ts directly, never edts-zone.logic:
+// Text editing goes through shared/components/inputs/text-edit.ts directly, never edts-zone.logic:
 // that path would close an import cycle (autocomplete -> edts-zone.logic -> branch-picker ->
 // autocomplete).
 import { nextTextInputValue, type TextEditKey } from './text-edit.js';

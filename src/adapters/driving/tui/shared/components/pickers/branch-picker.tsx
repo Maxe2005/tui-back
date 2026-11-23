@@ -1,4 +1,4 @@
-// shared/components/branch-picker: the EDT zone's branch-entry picker with an explicit 3-way
+// shared/components/pickers/branch-picker: the EDT zone's branch-entry picker with an explicit 3-way
 // mode switch — Pick existing (shared branch autocomplete) / Create new (default; base branch +
 // name, prefix-filtered) / Rename current (only when the entry point has a member branch).
 // `handleBranchPickerKey` is the pure reducer edts-zone.tsx's useInput calls; `BranchPicker`

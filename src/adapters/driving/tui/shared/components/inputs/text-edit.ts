@@ -1,4 +1,4 @@
-// shared/components/text-edit: the hand-rolled controlled text-input interpreter (topic field,
+// shared/components/inputs/text-edit: the hand-rolled controlled text-input interpreter (topic field,
 // branch-edit field, autocomplete filter), no npm dependency. It filters every non-character
 // key itself, so it's safe to unit-test against any Ink `Key`-shaped object. It lives here, not
 // in edts-zone.logic, because importing it from there would close an import cycle

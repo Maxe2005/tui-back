@@ -1,4 +1,4 @@
-// tui/shared/reset-screen.logic: the pure state machine — Services forcing EDTs, nothing
+// tui/shared/screens/reset-screen.logic: the pure state machine — Services forcing EDTs, nothing
 // checked, a wrong confirmation word, and Esc.
 import { describe, expect, it } from 'vitest';
 import {

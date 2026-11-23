@@ -1,4 +1,4 @@
-// tui/shared/command-bar: real-keypress coverage of the command history recall — every row of
+// tui/shared/screens/command-bar/command-bar: real-keypress coverage of the command history recall — every row of
 // the recall I/O matrix, driven through the mounted bar's useInput (the shared input-history
 // primitive's own logic is unit-tested in input-history/).
 import { createElement } from 'react';
