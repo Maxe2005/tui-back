@@ -1,6 +1,6 @@
 // tui/zones/logs: filter history encoding and filter-editor / rule-set dialog state builders.
-import type { FooterContextId } from '../../keybindings/index.js';
-import type { HistoryBrowseState } from '../../shared/input-history/index.js';
+import type { FooterContextId } from '../../../keybindings/index.js';
+import type { HistoryBrowseState } from '../../../shared/input-history/index.js';
 import type { LogFilterMode, LogFilterAction, LogFilterTarget, LogFilterRule } from './logs-zone.filter.logic.js';
 import { compileLogFilter, ruleDraftOf, isDefaultActionTarget, formatFilterActionTarget } from './logs-zone.filter.logic.js';
 
@@ -44,13 +44,13 @@ export function decodeFilterHistoryEntry(encoded: string): FilterHistoryEntry {
 
 // Push/dedup/trim and the arrow-browse state machine are the shared input-history primitive
 // (tui/shared/input-history) — re-exported under the Logs-facing names so callers read as before.
-export { pushHistoryEntry as pushFilterHistoryEntry } from '../../shared/input-history/index.js';
+export { pushHistoryEntry as pushFilterHistoryEntry } from '../../../shared/input-history/index.js';
 export {
   resolveHistoryBrowseDown,
   resolveHistoryBrowseUp,
   type HistoryBrowseResult as FilterHistoryBrowseResult,
   type HistoryBrowseState as FilterHistoryBrowseState,
-} from '../../shared/input-history/index.js';
+} from '../../../shared/input-history/index.js';
 
 // The filter editor — `/` opens one with scope 'global', `f` with scope 'pane' (repoPath set to
 // the owning pane). It has two views: the scope's rule `list` (every change there is applied to

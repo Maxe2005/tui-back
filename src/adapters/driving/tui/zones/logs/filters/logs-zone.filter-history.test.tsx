@@ -1,8 +1,8 @@
 // tui/zones/logs: real-keypress filter history recall.
 import { describe, it, expect, vi } from 'vitest';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { LogsZone } from './logs-zone.js';
-import { service, press, pressEscape, openRuleEditor, mount, seedStore } from './logs-zone.test-support.js';
+import { KEYS } from '../../../shared/test-support/fake-tty.js';
+import { LogsZone } from '../logs-zone.js';
+import { service, press, pressEscape, openRuleEditor, mount, seedStore } from '../logs-zone.test-support.js';
 
 describe('LogsZone real-keypress interactions — filter history', () => {
   describe('filter history recall', () => {

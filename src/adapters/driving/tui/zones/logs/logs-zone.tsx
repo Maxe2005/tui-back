@@ -10,7 +10,7 @@ import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { FullscreenPane } from './fullscreen-pane.js';
-import { LogFilterEditor } from './log-filter-editor.js';
+import { LogFilterEditor } from './filters/log-filter-editor.js';
 import { LogsActionsMenu } from './logs-actions-menu.js';
 import { LogsGrid } from './logs-grid.js';
 import { LogsServiceLists } from './logs-service-lists.js';

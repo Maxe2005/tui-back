@@ -1,9 +1,9 @@
 // tui/zones/logs: log-filter model — rules, scopes, level detection, ANSI-safe compile/apply, formatting.
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { LogLine } from '../../../../../core/ports/docker.js';
-import { MAX_RULES_PER_LIST } from '../../../../../core/logs/rule-sets.js';
-import type { VisibilityFlags } from './logs-zone.keys.logic.js';
-import { filterVisibleLines } from './logs-zone.keys.logic.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import type { LogLine } from '../../../../../../core/ports/docker.js';
+import { MAX_RULES_PER_LIST } from '../../../../../../core/logs/rule-sets.js';
+import type { VisibilityFlags } from '../logs-zone.keys.logic.js';
+import { filterVisibleLines } from '../logs-zone.keys.logic.js';
 
 // The two-tier text/regex/level filter over already-buffered lines — a pure, render-time
 // transform layered on top of filterVisibleLines above (never touches the subscription).

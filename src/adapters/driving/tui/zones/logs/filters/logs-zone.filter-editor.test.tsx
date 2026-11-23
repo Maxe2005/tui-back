@@ -1,9 +1,9 @@
 // tui/zones/logs: real-keypress global and pane filter editor interactions.
-import { encodeFilterHistoryEntry } from './logs-zone.logic.js';
+import { encodeFilterHistoryEntry } from '../logs-zone.logic.js';
 import { describe, it, expect, vi } from 'vitest';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { LogsZone } from './logs-zone.js';
-import { service, press, pressEscape, openRuleEditor, mount, seedStore } from './logs-zone.test-support.js';
+import { KEYS } from '../../../shared/test-support/fake-tty.js';
+import { LogsZone } from '../logs-zone.js';
+import { service, press, pressEscape, openRuleEditor, mount, seedStore } from '../logs-zone.test-support.js';
 
 describe('LogsZone real-keypress interactions — filter editor', () => {
   // `/` opens the global-filter editor from any Logs-zone focus.

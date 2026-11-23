@@ -1,10 +1,10 @@
 // tui/zones/logs: real-keypress stackable filter rules.
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import { createAppStore } from '../../store/app-store.js';
-import { FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
-import { LogsZone } from './logs-zone.js';
-import { service, press, pressEscape, openRuleEditor, mount, seedStore } from './logs-zone.test-support.js';
+import { createAppStore } from '../../../store/app-store.js';
+import { FakeTtyStdout, KEYS } from '../../../shared/test-support/fake-tty.js';
+import { LogsZone } from '../logs-zone.js';
+import { service, press, pressEscape, openRuleEditor, mount, seedStore } from '../logs-zone.test-support.js';
 
 describe('LogsZone real-keypress interactions — filter rules', () => {
   describe('stackable filter rules', () => {

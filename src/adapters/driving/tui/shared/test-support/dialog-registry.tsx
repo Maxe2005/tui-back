@@ -31,7 +31,7 @@ import { initialSwitchResolution } from '../../zones/edts/dialogs/switch-resolut
 import { UpdateServicePickDialog } from '../../zones/update/services/update-service-pick-dialog.js';
 import { UpdateServiceMenuDialog } from '../../zones/update/services/update-service-menu-dialog.js';
 import { UpdateIncidentsDialog } from '../../zones/update/incidents/update-incidents-dialog.js';
-import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
+import { LogFilterEditor } from '../../zones/logs/filters/log-filter-editor.js';
 import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
 import { CommandBar } from '../screens/command-bar/command-bar.js';
 import { RepoRegistryScreen } from '../screens/repo-registry-screen.js';
@@ -279,7 +279,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-editor',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'global', repoPath: null, view: 'rule', mode: 'text', query: '', cursor: 0, action: 'show', target: 'line', error: MULTILINE_ERROR } as never,
@@ -297,7 +297,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rules',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'pane', repoPath: '/repo', view: 'list', listCursor: 6, ruleIndex: null, error: null, notice: LONG_TEXT, confirmClear: true } as never,
@@ -318,7 +318,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rule-sets',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'global', repoPath: null, view: 'library', libraryCursor: 6, error: MULTILINE_ERROR, notice: LONG_TEXT, setConfirm: { kind: 'delete', index: 6 } } as never,
@@ -336,7 +336,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rule-set-name',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: {
