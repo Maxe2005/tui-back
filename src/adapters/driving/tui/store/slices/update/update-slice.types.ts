@@ -9,7 +9,7 @@ import type {
   UpdateBlocker,
   UpdateBlockerChoice,
   UpdatePhase,
-} from '../../../../../../core/scripts/group-update.js';
+} from '../../../../../../core/scripts/group-update/group-update.js';
 import type { Result } from '../../../../../../core/result.js';
 import type { ServiceStatusState } from '../../../../../../core/service-status/index.js';
 import type { InFlightGuard } from '../../../shared/hooks/in-flight-guard.js';

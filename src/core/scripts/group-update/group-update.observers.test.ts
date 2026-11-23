@@ -1,11 +1,11 @@
 // core/scripts/group-update: unit tests against fake ports — result observer, live phase tracking, run detail and the parallel pool.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import type { GitPort } from '../ports/git.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { MigrationPort } from '../ports/migration.js';
+import { err, ok } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
+import type { ManifestPort } from '../../ports/manifest.js';
+import type { MigrationPort } from '../../ports/migration.js';
 import { groupUpdate, type OnUpdateBlocker, type UpdateBlockerChoice, type UpdatePhase } from './group-update.js';
-import { calls, fakeLock, fakeManifest, fakeMigration, fakeRestart, manifestFor } from '../shared/core-ports.test-support.js';
+import { calls, fakeLock, fakeManifest, fakeMigration, fakeRestart, manifestFor } from '../../shared/core-ports.test-support.js';
 import { fakeGit, makeParams } from './group-update.test-support.js';
 
 describe('groupUpdate — per-service result observer', () => {

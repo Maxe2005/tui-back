@@ -1,9 +1,9 @@
 // core/scripts/group-update: unit tests against fake ports — the migrate phase.
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import { err, ok } from '../result.js';
+import { err, ok } from '../../result.js';
 import { groupUpdate } from './group-update.js';
-import type { GitPort } from '../ports/git.js';
-import { calls, edtEntry, fakeContainer, fakeEdtRegistry, fakeManifest, fakeMigration, fakeState, manifestFor, member } from '../shared/core-ports.test-support.js';
+import type { GitPort } from '../../ports/git.js';
+import { calls, edtEntry, fakeContainer, fakeEdtRegistry, fakeManifest, fakeMigration, fakeState, manifestFor, member } from '../../shared/core-ports.test-support.js';
 import { fakeGit, makeParams } from './group-update.test-support.js';
 
 describe('groupUpdate — migrate phase', () => {

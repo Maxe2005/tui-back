@@ -9,7 +9,7 @@
 // shared types in switch/types.ts; the public API is re-exported from here.
 import { resolve } from 'node:path';
 import { withActionLock } from '../../locking.js';
-import { edtUpdateLockKey } from '../../scripts/group-update.js';
+import { edtUpdateLockKey } from '../../scripts/group-update/group-update.js';
 import type { EdtRegistryEntry, EdtStatus } from '../../ports/edt-registry.js';
 import type { Manifest } from '../../ports/manifest.js';
 import { err, ok, type Result } from '../../result.js';

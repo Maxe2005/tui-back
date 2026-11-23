@@ -17,7 +17,7 @@ import type { RegistryPort } from '../ports/registry.js';
 import { REALIGN_SCOPES, type RealignScope } from '../ports/settings.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result } from '../result.js';
-import { edtUpdateLockKey, GROUP_UPDATE_LOCK_KEY } from '../scripts/group-update.js';
+import { edtUpdateLockKey, GROUP_UPDATE_LOCK_KEY } from '../scripts/group-update/group-update.js';
 import type { RestartMode, ServiceActions } from '../service-actions/index.js';
 
 export { REALIGN_SCOPES, type RealignScope };

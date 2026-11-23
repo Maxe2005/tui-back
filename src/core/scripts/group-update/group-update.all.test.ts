@@ -1,10 +1,10 @@
 // core/scripts/group-update: unit tests against fake ports — all-repos scope and services without a declared container.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
+import { err, ok } from '../../result.js';
+import type { Manifest, ManifestPort } from '../../ports/manifest.js';
+import type { RegistryPort } from '../../ports/registry.js';
 import { GROUP_UPDATE_LOCK_KEY, groupUpdate, type GroupUpdateParams } from './group-update.js';
-import { calls, fakeContainer, fakeLock, fakeManifest, fakeRegistry, fakeRestart, manifestFor } from '../shared/core-ports.test-support.js';
+import { calls, fakeContainer, fakeLock, fakeManifest, fakeRegistry, fakeRestart, manifestFor } from '../../shared/core-ports.test-support.js';
 import { fakeGit, makeParams } from './group-update.test-support.js';
 
 describe('groupUpdate — all-repos scope', () => {

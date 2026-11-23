@@ -1,9 +1,9 @@
 // core/scripts/group-update: unit tests against fake ports — the conflict auto-resolution seam.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import type { GitPort } from '../ports/git.js';
+import { err, ok } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
 import { type AutoResolveConflict, groupUpdate, type OnUpdateBlocker, type UpdateBlocker, type UpdateBlockerChoice } from './group-update.js';
-import { calls, edtEntry, fakeEdtRegistry, fakeState, member } from '../shared/core-ports.test-support.js';
+import { calls, edtEntry, fakeEdtRegistry, fakeState, member } from '../../shared/core-ports.test-support.js';
 import { fakeGit, makeParams } from './group-update.test-support.js';
 
 describe('groupUpdate — conflict auto-resolution seam', () => {

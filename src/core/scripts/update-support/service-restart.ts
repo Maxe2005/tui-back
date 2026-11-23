@@ -5,7 +5,7 @@ import type { LockPort } from '../../ports/lock.js';
 import type { ManifestPort } from '../../ports/manifest.js';
 import type { RestartPort } from '../../ports/restart.js';
 import { err, ok, type Result } from '../../result.js';
-import { runRestartStep, type GroupUpdateRepoResult, type OnUpdatePhase } from '../group-update.js';
+import { runRestartStep, type GroupUpdateRepoResult, type OnUpdatePhase } from '../group-update/group-update.js';
 
 // core/scripts/service-restart: the standalone single-service clean restart — the same
 // recipe-or-fallback as group update, for exactly one service, returning its row. Locks a

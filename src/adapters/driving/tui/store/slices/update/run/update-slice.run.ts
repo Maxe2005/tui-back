@@ -16,7 +16,7 @@ import {
   type StageControl,
   type OnUpdatePhase,
   type UpdatePhase,
-} from '../../../../../../../core/scripts/group-update.js';
+} from '../../../../../../../core/scripts/group-update/group-update.js';
 import { serviceRestart as serviceRestartUseCase } from '../../../../../../../core/scripts/update-support/service-restart.js';
 import { openInIde } from '../../../../../../../core/service-actions/index.js';
 import { err, ok, type Result } from '../../../../../../../core/result.js';

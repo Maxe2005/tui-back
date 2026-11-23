@@ -1,8 +1,8 @@
 // core/scripts/group-update/restart: the shared restart step and the interrupted-EDT marker.
-import type { ContainerPort } from "../../ports/container.js";
-import type { EdtRegistryPort } from "../../ports/edt-registry.js";
-import type { RestartPort } from "../../ports/restart.js";
-import { err, ok, type Result } from "../../result.js";
+import type { ContainerPort } from "../../../ports/container.js";
+import type { EdtRegistryPort } from "../../../ports/edt-registry.js";
+import type { RestartPort } from "../../../ports/restart.js";
+import { err, ok, type Result } from "../../../result.js";
 import type { OnUpdatePhase } from "./types.js";
 import { emitPhase } from "./observers.js";
 import { failed } from "./outcome.js";

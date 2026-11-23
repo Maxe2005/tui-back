@@ -1,6 +1,6 @@
 // core/scripts/group-update/outcome: per-repo outcome rows and the small helpers building them (skipped/failed/cancelled).
-import { ok, type ResultError } from "../../result.js";
-import { type PoolControl } from "../update-support/run-pool.js";
+import { ok, type ResultError } from "../../../result.js";
+import { type PoolControl } from "../../update-support/run-pool.js";
 import type { GroupUpdateRepoResult, OnUpdateBlocker } from "./types.js";
 
 // The row of a service the run was cancelled for: `skipped`, never `failed`, so the summary

@@ -13,7 +13,7 @@ import type { ManifestPort } from '../../ports/manifest.js';
 import type { RestartPort } from '../../ports/restart.js';
 import type { SharedTypesPort } from '../../ports/shared-types.js';
 import { err, ok, type Result } from '../../result.js';
-import { runRestartStep } from '../../scripts/group-update.js';
+import { runRestartStep } from '../../scripts/group-update/group-update.js';
 import type { DependencyConsumer } from '../consumers/list-consumers.js';
 
 export type PropagateStep = 'gate' | 'dirty-check' | 'write' | 'install' | 'restart' | 'commit';

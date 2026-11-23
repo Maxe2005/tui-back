@@ -9,7 +9,7 @@ import type { ManifestPort } from '../../ports/manifest.js';
 import type { RestartPort } from '../../ports/restart.js';
 import type { SharedTypesPort } from '../../ports/shared-types.js';
 import { err, ok, type Result } from '../../result.js';
-import type { GroupUpdateRepoResult } from '../../scripts/group-update.js';
+import type { GroupUpdateRepoResult } from '../../scripts/group-update/group-update.js';
 import type { DependencyConsumer, SourceEntry } from './list-consumers.js';
 import { propagateVersion, type PropagateServiceResult } from '../versioning/propagate-version.js';
 import { runPublish } from '../versioning/publish-version.js';

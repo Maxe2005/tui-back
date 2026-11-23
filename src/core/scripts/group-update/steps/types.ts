@@ -1,14 +1,14 @@
 // core/scripts/group-update/types: public types of the group update: params, rows, selection, blocker seam and phase observers.
-import type { ContainerPort } from "../../ports/container.js";
-import type { EdtRegistryPort } from "../../ports/edt-registry.js";
-import type { GitPort } from "../../ports/git.js";
-import type { LockPort } from "../../ports/lock.js";
-import type { ManifestPort } from "../../ports/manifest.js";
-import type { MigrationPort } from "../../ports/migration.js";
-import type { RegistryPort } from "../../ports/registry.js";
-import type { RestartPort } from "../../ports/restart.js";
-import type { StatePort } from "../../ports/state.js";
-import { type StageControl } from "../update-support/run-pool.js";
+import type { ContainerPort } from "../../../ports/container.js";
+import type { EdtRegistryPort } from "../../../ports/edt-registry.js";
+import type { GitPort } from "../../../ports/git.js";
+import type { LockPort } from "../../../ports/lock.js";
+import type { ManifestPort } from "../../../ports/manifest.js";
+import type { MigrationPort } from "../../../ports/migration.js";
+import type { RegistryPort } from "../../../ports/registry.js";
+import type { RestartPort } from "../../../ports/restart.js";
+import type { StatePort } from "../../../ports/state.js";
+import { type StageControl } from "../../update-support/run-pool.js";
 import { failed, skipped } from "./outcome.js";
 import { outputExcerpt } from "./member.js";
 

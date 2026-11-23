@@ -1,9 +1,9 @@
 // core/scripts/group-update: unit tests against fake ports — assisted resolution of update blockers.
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import type { GitPort } from '../ports/git.js';
+import { err, ok } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
 import { groupUpdate, type GroupUpdateParams, type OnUpdateBlocker, type UpdateBlocker, type UpdateBlockerChoice } from './group-update.js';
-import { calls, edtEntry, fakeContainer, fakeEdtRegistry, fakeMigration, fakeRegistry, fakeState, member } from '../shared/core-ports.test-support.js';
+import { calls, edtEntry, fakeContainer, fakeEdtRegistry, fakeMigration, fakeRegistry, fakeState, member } from '../../shared/core-ports.test-support.js';
 import { fakeGit, makeParams } from './group-update.test-support.js';
 
 describe('groupUpdate — assisted resolution', () => {

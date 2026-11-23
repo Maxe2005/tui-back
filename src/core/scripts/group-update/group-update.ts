@@ -4,25 +4,25 @@
 // aborting the others. Merge means `git merge`, never rebase; a rerun with no change is a
 // no-op. Lock order: global `group-update` key, then `edt:<ulid>` (which switch peeks).
 // This file is the public entry point: the flows live in `group-update/*.ts`.
-import type { Result } from "../result.js";
-import { groupUpdateAll } from "./group-update/all.js";
-import { groupUpdateEdt } from "./group-update/edt.js";
+import type { Result } from "../../result.js";
+import { groupUpdateAll } from "./steps/all.js";
+import { groupUpdateEdt } from "./steps/edt.js";
 import type {
   GroupUpdateData,
   GroupUpdateParams,
-} from "./group-update/types.js";
-import type { StageControl } from "./update-support/run-pool.js";
+} from "./steps/types.js";
+import type { StageControl } from "../update-support/run-pool.js";
 export type { StageControl };
 export {
   edtUpdateLockKey,
   GROUP_UPDATE_LOCK_KEY,
-} from "./group-update/selection.js";
-export { MIGRATION_FAILED_CODE } from "./group-update/observers.js";
+} from "./steps/selection.js";
+export { MIGRATION_FAILED_CODE } from "./steps/observers.js";
 export {
   markGroupUpdateInterrupted,
   runRestartStep,
-} from "./group-update/restart.js";
-export type { RestartStepInput } from "./group-update/restart.js";
+} from "./steps/restart.js";
+export type { RestartStepInput } from "./steps/restart.js";
 export type {
   AutoResolveConflict,
   AutoResolveResult,
@@ -39,7 +39,7 @@ export type {
   UpdateBlockerChoice,
   UpdateBlockerKind,
   UpdatePhase,
-} from "./group-update/types.js";
+} from "./steps/types.js";
 
 export async function groupUpdate(
   params: GroupUpdateParams,

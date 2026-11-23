@@ -1,10 +1,10 @@
 // core/scripts/group-update/member: the per-service pipeline: pull/merge, migrate, restart.
-import type { ContainerPort } from "../../ports/container.js";
-import type { GitPort } from "../../ports/git.js";
-import type { Manifest, ManifestPort } from "../../ports/manifest.js";
-import type { MigrationPort } from "../../ports/migration.js";
-import type { RestartPort } from "../../ports/restart.js";
-import { ok } from "../../result.js";
+import type { ContainerPort } from "../../../ports/container.js";
+import type { GitPort } from "../../../ports/git.js";
+import type { Manifest, ManifestPort } from "../../../ports/manifest.js";
+import type { MigrationPort } from "../../../ports/migration.js";
+import type { RestartPort } from "../../../ports/restart.js";
+import { ok } from "../../../result.js";
 import type {
   GroupUpdateRunDetail,
   AutoResolveConflict,
@@ -23,7 +23,7 @@ import {
   resolveUnpushedCommits,
 } from "./blockers.js";
 import { resolveMidRunConflict } from "./conflict.js";
-import { isSystemEdt } from "../../edt/shared-edt/shared-edt.js";
+import { isSystemEdt } from "../../../edt/shared-edt/shared-edt.js";
 
 const OUTPUT_EXCERPT_LINES = 3;
 

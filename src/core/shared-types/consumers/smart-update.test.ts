@@ -5,7 +5,7 @@ import type { ManifestPort } from '../../ports/manifest.js';
 import type { RestartPort } from '../../ports/restart.js';
 import type { SharedTypesPort } from '../../ports/shared-types.js';
 import { err, ok } from '../../result.js';
-import type { GroupUpdateRepoResult } from '../../scripts/group-update.js';
+import type { GroupUpdateRepoResult } from '../../scripts/group-update/group-update.js';
 import type { DependencyConsumer, SourceEntry } from './list-consumers.js';
 import { runSharedTypesPhase, shouldRunSharedTypesPhase, type SharedTypesPhaseParams } from './smart-update.js';
 

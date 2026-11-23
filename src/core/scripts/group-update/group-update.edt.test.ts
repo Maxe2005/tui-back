@@ -1,8 +1,8 @@
 // core/scripts/group-update: unit tests against fake ports — active-EDT resolution, pull-or-merge flow, interrupted status, duplicate members and locks.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
+import { err, ok } from '../../result.js';
 import { edtUpdateLockKey, GROUP_UPDATE_LOCK_KEY, groupUpdate, markGroupUpdateInterrupted } from './group-update.js';
-import { calls, edtEntry, fakeContainer, fakeEdtRegistry, fakeLock, fakeManifest, fakeState, manifestFor, member } from '../shared/core-ports.test-support.js';
+import { calls, edtEntry, fakeContainer, fakeEdtRegistry, fakeLock, fakeManifest, fakeState, manifestFor, member } from '../../shared/core-ports.test-support.js';
 import { ACTIVE, fakeGit, makeParams } from './group-update.test-support.js';
 
 describe('groupUpdate — active-EDT resolution', () => {

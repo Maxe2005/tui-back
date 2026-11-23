@@ -1,7 +1,7 @@
 // core/scripts/group-update/blockers: blocker resolution before/while updating: pre-existing mid-state, dirty worktree, unpushed commits.
 import { basename } from "node:path";
-import type { GitPort } from "../../ports/git.js";
-import { ok, type Result, type ResultError } from "../../result.js";
+import type { GitPort } from "../../../ports/git.js";
+import { ok, type Result, type ResultError } from "../../../result.js";
 import type {
   GroupUpdateRepoResult,
   UpdateBlockerKind,

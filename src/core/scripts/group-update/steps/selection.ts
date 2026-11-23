@@ -1,7 +1,7 @@
 // core/scripts/group-update/selection: lock keys, selection matching and source-branch resolution/validation.
 import { resolve } from "node:path";
-import type { GitPort } from "../../ports/git.js";
-import { err, ok, type Result } from "../../result.js";
+import type { GitPort } from "../../../ports/git.js";
+import { err, ok, type Result } from "../../../result.js";
 import type { GroupUpdateSelectionItem } from "./types.js";
 
 // The global run-in-flight key: every group-update trigger (EDT-scoped or all-repos)

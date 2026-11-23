@@ -1,8 +1,8 @@
 // core/scripts/group-update/edt: the EDT flow: every member service of the active EDT.
 import { resolve } from "node:path";
-import { withActionLock } from "../../locking.js";
-import { err, ok, type Result } from "../../result.js";
-import { runPool, type StageControl } from "../update-support/run-pool.js";
+import { withActionLock } from "../../../locking.js";
+import { err, ok, type Result } from "../../../result.js";
+import { runPool, type StageControl } from "../../update-support/run-pool.js";
 import type {
   GroupUpdateRepoResult,
   GroupUpdateData,

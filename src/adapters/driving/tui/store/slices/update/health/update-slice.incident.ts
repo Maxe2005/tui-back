@@ -1,7 +1,7 @@
 // tui/store/slices: the Update slice's incident queue — raising a blocker or a `shared-types`
 // phase failure as an incident, and the popup/toast/resolve actions that answer it.
 import { SHARED_TYPES_PHASE_FAILED } from '../../../../../../../core/shared-types/consumers/smart-update.js';
-import type { UpdateBlockerChoice } from '../../../../../../../core/scripts/group-update.js';
+import type { UpdateBlockerChoice } from '../../../../../../../core/scripts/group-update/group-update.js';
 import {
   appendLiveIssue,
   type IncidentBlocker,

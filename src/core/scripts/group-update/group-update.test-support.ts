@@ -1,8 +1,8 @@
 // Shared builders for the group-update tests: the active EDT fixture, the per-module git fake
 // and the params factory.
 import { vi } from 'vitest';
-import { ok } from '../result.js';
-import type { GitPort } from '../ports/git.js';
+import { ok } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
 import {
   edtEntry,
   fakeContainer,
@@ -14,7 +14,7 @@ import {
   fakeRestart,
   fakeState,
   member,
-} from '../shared/core-ports.test-support.js';
+} from '../../shared/core-ports.test-support.js';
 import type { GroupUpdateParams } from './group-update.js';
 
 export function fakeGit(overrides: Partial<GitPort> = {}): GitPort {
