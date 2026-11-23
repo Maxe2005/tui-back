@@ -5,8 +5,8 @@
 // wedge every future action.
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { err, ok, type Result } from '../../../core/result.js';
-import type { LockHandle, LockPort } from '../../../core/ports/runtime/lock.js';
+import { err, ok, type Result } from '../../../../core/result.js';
+import type { LockHandle, LockPort } from '../../../../core/ports/runtime/lock.js';
 
 import { isPidAlive, lockPathFor, sleep } from './helpers.js';
 

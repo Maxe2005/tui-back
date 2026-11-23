@@ -1,13 +1,13 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { InstallerPort, NpmOutcome } from '../../driving/cli/install.js';
-import { runProcess } from '../process.js';
+import type { InstallerPort, NpmOutcome } from '../../../driving/cli/install.js';
+import { runProcess } from '../../process.js';
 
 // adapters/driven/installer: real InstallerPort: global npm install/uninstall through a spawned
 // `npm` (EACCES detected from its stderr) plus the small file reads/writes the installer needs.
 
-const PACKAGE_JSON = fileURLToPath(new URL('../../../../package.json', import.meta.url));
+const PACKAGE_JSON = fileURLToPath(new URL('../../../../../package.json', import.meta.url));
 
 export function createInstallerPort(): InstallerPort {
   return {

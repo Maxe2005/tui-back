@@ -3,9 +3,9 @@
 // the member repo — non-interactive, output captured, no TTY or stdin.
 // `GIT_TERMINAL_PROMPT=0` keeps a credential-requiring remote from hanging on a prompt. The
 // shell is injectable so integration tests can stub it.
-import { runProcess } from '../process.js';
-import { err, ok, type Result } from '../../../core/result.js';
-import type { RestartPort } from '../../../core/ports/runtime/restart.js';
+import { runProcess } from '../../process.js';
+import { err, ok, type Result } from '../../../../core/result.js';
+import type { RestartPort } from '../../../../core/ports/runtime/restart.js';
 
 export function createRestartPort(shell = 'sh'): RestartPort {
   return {

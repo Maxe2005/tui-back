@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { lockPathFor } from '../../adapters/driven/lock/helpers.js';
+import { lockPathFor } from '../../adapters/driven/runtime/lock/helpers.js';
 import { runCli, makeTempDir, makeGitRepo, commitManifest, runGit, branchExists, cleanupTmpDirs } from './e2e.test-support.js';
 
 afterEach(cleanupTmpDirs);

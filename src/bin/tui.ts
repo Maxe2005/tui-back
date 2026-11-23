@@ -9,12 +9,12 @@ import {
 } from "../adapters/driving/tui/single-instance.js";
 import { createManifestCarryPort } from "../adapters/driven/vcs/manifest/carry.js";
 import { loadManifest } from "../adapters/driven/vcs/manifest/index.js";
-import { createContainerPort } from "../adapters/driven/container/index.js";
+import { createContainerPort } from "../adapters/driven/runtime/container/index.js";
 import { createMigrationPort } from "../adapters/driven/vcs/migration/index.js";
-import { createEditorPort } from "../adapters/driven/editor/index.js";
-import { createRestartPort } from "../adapters/driven/restart/index.js";
+import { createEditorPort } from "../adapters/driven/runtime/editor/index.js";
+import { createRestartPort } from "../adapters/driven/runtime/restart/index.js";
 import { createGitPort } from "../adapters/driven/vcs/git/index.js";
-import { createLockPort } from "../adapters/driven/lock/index.js";
+import { createLockPort } from "../adapters/driven/runtime/lock/index.js";
 import {
   createRegistryPort,
   resolveRegistryFile,
@@ -32,9 +32,9 @@ import {
   resolveSettingsFile,
 } from "../adapters/driven/storage/settings/index.js";
 import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/storage/saved-requests/index.js";
-import { createDockerPort } from "../adapters/driven/docker/index.js";
-import { createShellSessionPort } from "../adapters/driven/shell-session/index.js";
-import { createHttpHealthProbe } from "../adapters/driven/health/http-probe.js";
+import { createDockerPort } from "../adapters/driven/runtime/docker/index.js";
+import { createShellSessionPort } from "../adapters/driven/runtime/shell-session/index.js";
+import { createHttpHealthProbe } from "../adapters/driven/runtime/health/http-probe.js";
 import { resolveXdgPaths } from "../adapters/driven/storage/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
 import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/workspace/edt/shared-edt/resolve-tab-visibility.js";

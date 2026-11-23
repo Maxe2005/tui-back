@@ -5,9 +5,9 @@
 // health and restart.
 // Pure line parsing lives in ./index.logic.ts.
 import { spawn, spawnSync } from 'node:child_process';
-import { err, ok, type Result } from '../../../core/result.js';
-import type { DockerErrorLike, DockerPort, HealthState, LogLine } from '../../../core/ports/runtime/docker.js';
-import { runProcess, type ProcessResult } from '../process.js';
+import { err, ok, type Result } from '../../../../core/result.js';
+import type { DockerErrorLike, DockerPort, HealthState, LogLine } from '../../../../core/ports/runtime/docker.js';
+import { runProcess, type ProcessResult } from '../../process.js';
 import { createLineSplitter, mergeSortAndTrimLogs, parseHealthInspectOutput, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
 
 // A hung/unresponsive docker daemon must never freeze the whole TUI process — `spawnSync`

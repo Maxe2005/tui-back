@@ -231,7 +231,7 @@ describe('createLockPort / acquireLock (mkdir advisory lock)', () => {
       const lockDir = await makeLockDir();
       const key = '/abs/registry.yaml';
       const adapterFile = pathToFileURL(fileURLToPath(new URL('./index.ts', import.meta.url))).href;
-      const projectRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+      const projectRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
       const childScript = join(
         await mkdtemp(join(tmpdir(), 'tui-back-lock-child-')),
         'child.mjs',

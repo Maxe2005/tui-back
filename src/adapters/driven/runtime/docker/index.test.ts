@@ -6,7 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { LogLine } from '../../../core/ports/runtime/docker.js';
+import type { LogLine } from '../../../../core/ports/runtime/docker.js';
 import { createDockerPort } from './index.js';
 
 const dockerAvailable = spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0;

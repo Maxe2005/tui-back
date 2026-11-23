@@ -2,7 +2,7 @@
 // need no docker daemon, unlike index.test.ts's real-docker suite, which skips without one.
 import { describe, expect, it } from 'vitest';
 import { createLineSplitter, mapInspectToHealthState, mergeSortAndTrimLogs, parseHealthInspectOutput, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';
-import type { LogLine } from '../../../core/ports/runtime/docker.js';
+import type { LogLine } from '../../../../core/ports/runtime/docker.js';
 
 describe('createLineSplitter', () => {
   it('reassembles a line split across two chunk boundaries', () => {

@@ -29,7 +29,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { constants } from 'node:os';
 import { createLineSplitter, createSentinelFilter, wrapCommand } from './index.logic.js';
-import type { ShellLine, ShellRunHandle, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../../../core/ports/runtime/shell-session.js';
+import type { ShellLine, ShellRunHandle, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../../../../core/ports/runtime/shell-session.js';
 
 export interface ShellSessionPortOptions {
   shell?: string;
