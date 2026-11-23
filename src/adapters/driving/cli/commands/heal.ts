@@ -2,8 +2,8 @@
 import { err, ok, type Result } from '../../../../core/result.js';
 import { createServiceActions, type RestartMode } from '../../../../core/service-actions/index.js';
 import { ContainerPort } from '../../../../core/ports/runtime/container.js';
-import { planHeal, runHeal } from '../../../../core/heal/index.js';
-import { restartNeedsAttention } from '../../../../core/edt/switch/restart/switch-restart.js';
+import { planHeal, runHeal } from '../../../../core/workspace/heal/index.js';
+import { restartNeedsAttention } from '../../../../core/workspace/edt/switch/restart/switch-restart.js';
 import { DockerPort } from '../../../../core/ports/runtime/docker.js';
 import { EditorPort } from '../../../../core/ports/runtime/editor.js';
 import { HealthProbePort } from '../../../../core/ports/runtime/health-probe.js';

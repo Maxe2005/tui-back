@@ -2,8 +2,8 @@
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
 import type { Result } from '../../../../../../../core/result.js';
-import type { CreateEdtData } from '../../../../../../../core/edt/lifecycle/create.js';
-import type { SwitchActiveEdtData } from '../../../../../../../core/edt/switch/switch.js';
+import type { CreateEdtData } from '../../../../../../../core/workspace/edt/lifecycle/create.js';
+import type { SwitchActiveEdtData } from '../../../../../../../core/workspace/edt/switch/switch.js';
 import { FakeTtyStdout, KEYS } from '../../../../shared/test-support/fake-tty.js';
 import { EdtsZone } from '../../edts-zone.js';
 import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from '../../dialogs/create-wizard/create-wizard.js';

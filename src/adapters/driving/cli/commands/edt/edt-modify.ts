@@ -1,7 +1,7 @@
 // cli/commands/edt-modify: `edt modify` usage, flag parsing and runner.
 import { resolve } from 'node:path';
 import { err, type Result } from '../../../../../core/result.js';
-import { modifyEdt } from '../../../../../core/edt/lifecycle/modify.js';
+import { modifyEdt } from '../../../../../core/workspace/edt/lifecycle/modify.js';
 import { GitPort } from '../../../../../core/ports/vcs/git.js';
 import { ManifestPort } from '../../../../../core/ports/vcs/manifest.js';
 import { RegistryPort } from '../../../../../core/ports/storage/registry.js';

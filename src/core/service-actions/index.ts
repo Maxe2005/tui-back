@@ -12,8 +12,8 @@ import type { LockPort } from '../ports/runtime/lock.js';
 import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
 import type { RestartPort } from '../ports/runtime/restart.js';
 import { err, ok, type Result } from '../result.js';
-import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update/group-update.js';
-import { serviceRestartLockKey } from '../scripts/update-support/service-restart.js';
+import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../workspace/scripts/group-update/group-update.js';
+import { serviceRestartLockKey } from '../workspace/scripts/update-support/service-restart.js';
 import { DEFAULT_PROBE_REASON, combineStatus, hasContainer, isProbeEnabled, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
 
 export type RestartMode = 'simple' | 'clean';

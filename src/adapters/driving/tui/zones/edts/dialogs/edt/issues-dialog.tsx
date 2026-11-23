@@ -5,7 +5,7 @@
 import { Box } from 'ink';
 import { useInput } from '../../../../shared/hooks/use-input.js';
 import { useState, type ReactNode } from 'react';
-import type { BranchDivergenceEntryError } from '../../../../../../../core/edt/lifecycle/list.js';
+import type { BranchDivergenceEntryError } from '../../../../../../../core/workspace/edt/lifecycle/list.js';
 import { BoundedBlocks } from '../../../../shared/components/lists/bounded-list.js';
 import { TruncatedText } from '../../../../shared/components/display/truncated-text.js';
 import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';

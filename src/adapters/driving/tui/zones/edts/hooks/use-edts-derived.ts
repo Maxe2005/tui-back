@@ -2,8 +2,8 @@
 // issue summary, clamped cursors, the EDT-membership partition, the terminal-rows budgets for the
 // lists / wizard / switch resolution tables, and the loading flags.
 import { useWindowSize } from 'ink';
-import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
-import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
+import { isSystemEdt } from '../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/workspace/edt/lifecycle/list.js';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { autoStashedRepos } from '../dialogs/switch-resolution/switch-resolution.logic.js';
 import {

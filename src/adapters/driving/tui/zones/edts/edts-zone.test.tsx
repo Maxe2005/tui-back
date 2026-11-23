@@ -2,7 +2,7 @@
 // offline, member vs. non-member, long-branch-name truncation, the dialogs' rendered states —
 // plus the pure helpers behind its keystrokes (renderToString never emits keys).
 import { describe, it, expect } from 'vitest';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/lifecycle/list.js';
+import type { ServiceBranchDivergence } from '../../../../../core/workspace/edt/lifecycle/list.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
@@ -48,7 +48,7 @@ import {
   SYSTEM_EDT_NOTICE,
   resolveOutgoingTopic,
 } from './logic/edts-zone.logic.js';
-import { SHARED_EDT_TOPIC, SHARED_EDT_ULID, EDT_SYSTEM_READONLY_MESSAGE } from '../../../../../core/edt/shared-edt/shared-edt.js';
+import { SHARED_EDT_TOPIC, SHARED_EDT_ULID, EDT_SYSTEM_READONLY_MESSAGE } from '../../../../../core/workspace/edt/shared-edt/shared-edt.js';
 import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import { initialSwitchResolution } from './dialogs/switch-resolution/switch-resolution.logic.js';
 import { edtsFooterContext } from './logic/edts-footer-context.js';

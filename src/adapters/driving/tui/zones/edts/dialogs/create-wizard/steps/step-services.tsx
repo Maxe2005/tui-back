@@ -2,7 +2,7 @@
 // checkbox-list-item (Space toggles, ↑/↓/Home/End move), with the loading/error/empty candidate
 // states.
 import { Box, Text, type Key } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../../../../core/edt/lifecycle/list.js';
+import type { ServiceBranchDivergence } from '../../../../../../../../core/workspace/edt/lifecycle/list.js';
 import { CheckboxListItem } from '../../../../../shared/components/pickers/checkbox-list-item.js';
 import { colors } from '../../../../../shared/theme/theme.js';
 import {

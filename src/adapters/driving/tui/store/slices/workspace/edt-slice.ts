@@ -10,7 +10,7 @@ import {
   type CreateCandidateBranches,
   type CreateEdtData,
   type MemberBranchPlan,
-} from '../../../../../../core/edt/lifecycle/create.js';
+} from '../../../../../../core/workspace/edt/lifecycle/create.js';
 import {
   listSwitchRestartRepos,
   isChangedSwitchOutcome,
@@ -18,33 +18,33 @@ import {
   type RestartReport,
   type RestartRow,
   type SwitchRestartRunMode,
-} from '../../../../../../core/edt/switch/restart/switch-restart.js';
+} from '../../../../../../core/workspace/edt/switch/restart/switch-restart.js';
 import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
-import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../../core/edt/lifecycle/activate.js';
+import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../../core/workspace/edt/lifecycle/activate.js';
 import {
   switchActiveEdt as switchActiveEdtUseCase,
   type SwitchActiveEdtData,
   type SwitchDirtyRepo,
   type SwitchDirtyReposChoice,
-} from '../../../../../../core/edt/switch/switch.js';
+} from '../../../../../../core/workspace/edt/switch/switch.js';
 import {
   modifyEdt as modifyEdtUseCase,
   createMemberBranch as createMemberBranchUseCase,
   renameMemberBranch as renameMemberBranchUseCase,
   listMemberBranches as listMemberBranchesUseCase,
   type ModifyEdtData,
-} from '../../../../../../core/edt/lifecycle/modify.js';
-import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
-import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../../core/edt/shared-edt/shared-edt.js';
+} from '../../../../../../core/workspace/edt/lifecycle/modify.js';
+import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../../core/workspace/edt/lifecycle/list.js';
+import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
 import {
   deleteEdt as deleteEdtUseCase,
   resolveMemberDeleteStatuses as resolveMemberDeleteStatusesUseCase,
   type DeleteEdtData,
   type MemberDeleteStatus,
   type MemberDisposition,
-} from '../../../../../../core/edt/lifecycle/delete.js';
+} from '../../../../../../core/workspace/edt/lifecycle/delete.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/storage/edt-registry.js';
-import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
+import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../../core/workspace/edt/branches/fast-forward-shared.js';
 import type { Result } from '../../../../../../core/result.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 

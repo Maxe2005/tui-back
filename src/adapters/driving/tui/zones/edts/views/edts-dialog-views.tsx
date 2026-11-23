@@ -3,7 +3,7 @@ import { CreateWizardView } from '../dialogs/create-wizard/create-wizard.js';
 import { AddToEdtDialogView } from '../dialogs/edt/add-to-edt-dialog.js';
 import { DeleteDialogView } from '../dialogs/edt/delete-dialog.js';
 import { FastForwardDialogView } from '../dialogs/actions/fast-forward-dialog.js';
-import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
+import { isSystemEdt } from '../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
 import { IssuesDialogView } from '../dialogs/edt/issues-dialog.js';
 import { ModifyDialogView } from '../dialogs/edt/modify-dialog.js';
 import { QuickPickDialogView, resolveQuickPickCandidates } from '../dialogs/actions/quick-pick-dialog.js';

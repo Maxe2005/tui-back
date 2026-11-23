@@ -2,7 +2,7 @@
 // is the manifest's own `modules` map, never a hardcoded repo name. A repo without the module
 // is `route-exploration-not-activated`, never an empty list; a scanner failure is
 // `route-scan-failed`; a successful scan — even a zero-route one — is `ok`.
-import { ROUTES_MODULE_ID } from '../edt/shared-edt/resolve-tab-visibility.js';
+import { ROUTES_MODULE_ID } from '../workspace/edt/shared-edt/resolve-tab-visibility.js';
 import type { ManifestPort } from '../ports/vcs/manifest.js';
 import type { Route, RouteScannerPort } from '../ports/modules/route-scanner.js';
 import { err, ok, type Result } from '../result.js';

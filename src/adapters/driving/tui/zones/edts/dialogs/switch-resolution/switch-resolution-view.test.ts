@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SwitchDirtyRepo } from '../../../../../../../core/edt/switch/switch.js';
+import type { SwitchDirtyRepo } from '../../../../../../../core/workspace/edt/switch/switch.js';
 import { buildRows, globalOf, initialSwitchResolution } from './switch-resolution.logic.js';
 import { discardConfirmLines } from './switch-resolution-view.js';
 

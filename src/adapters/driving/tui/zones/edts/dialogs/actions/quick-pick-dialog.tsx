@@ -3,7 +3,7 @@
 // shared/components/filterable-pick-list.tsx; this file owns only the per-mode candidate pool
 // and which pre-targeted dialog a selection opens.
 import { Box, Text, type Key } from 'ink';
-import { isSystemEdt } from '../../../../../../../core/edt/shared-edt/shared-edt.js';
+import { isSystemEdt } from '../../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/storage/edt-registry.js';
 import type { AppState } from '../../../../store/app-store.js';
 import {

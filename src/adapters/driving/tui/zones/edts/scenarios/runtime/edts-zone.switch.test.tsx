@@ -2,7 +2,7 @@
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
 import type { Result } from '../../../../../../../core/result.js';
-import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../../../core/edt/switch/switch.js';
+import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../../../core/workspace/edt/switch/switch.js';
 import { createAppStore } from '../../../../store/app-store.js';
 import { KEYS } from '../../../../shared/test-support/fake-tty.js';
 import { EdtsZone } from '../../edts-zone.js';

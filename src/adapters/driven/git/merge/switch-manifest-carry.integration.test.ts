@@ -13,7 +13,7 @@ import type { LockPort } from '../../../../core/ports/runtime/lock.js';
 import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
 import type { StatePort } from '../../../../core/ports/storage/state.js';
 import { ok } from '../../../../core/result.js';
-import { switchActiveEdt } from '../../../../core/edt/switch/switch.js';
+import { switchActiveEdt } from '../../../../core/workspace/edt/switch/switch.js';
 
 const dirs: string[] = [];
 afterEach(async () => {

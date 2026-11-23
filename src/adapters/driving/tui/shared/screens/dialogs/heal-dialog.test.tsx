@@ -1,7 +1,7 @@
 // tui/shared/heal-dialog: pure key/footer decisions (renderToString never delivers a keypress)
 // plus render coverage of every view of the overlay.
 import { describe, expect, it } from 'vitest';
-import type { RestartRow } from '../../../../../../core/edt/switch/restart/switch-restart.js';
+import type { RestartRow } from '../../../../../../core/workspace/edt/switch/restart/switch-restart.js';
 import { createAppStore, type HealRun } from '../../../store/app-store.js';
 import { renderToString } from '../../components/render-to-string.js';
 import { footerContextOf } from '../../test-support/mount-for-test.js';

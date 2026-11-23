@@ -4,7 +4,7 @@
 import { err, ok, type Result } from '../../../../../core/result.js';
 import type { StatePort } from '../../../../../core/ports/storage/state.js';
 import type { EdtRegistryPort } from '../../../../../core/ports/storage/edt-registry.js';
-import { isSystemEdt } from '../../../../../core/edt/shared-edt/shared-edt.js';
+import { isSystemEdt } from '../../../../../core/workspace/edt/shared-edt/shared-edt.js';
 
 export const EDT_LIST_USAGE = 'tui-back edt list';
 

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
 import { createEdtRegistryPort } from './index.js';
-import { modifyEdt } from '../../../core/edt/lifecycle/modify.js';
+import { modifyEdt } from '../../../core/workspace/edt/lifecycle/modify.js';
 import { ok, type Result } from '../../../core/result.js';
 import type { GitPort } from '../../../core/ports/vcs/git.js';
 import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';

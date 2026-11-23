@@ -3,7 +3,7 @@
 // rehydrates every store field it could have invalidated (loadEdts, loadTabVisibility,
 // checkRegistryEmpty, loadFilterHistory, loadCommandHistory, loadLogsRules) so the TUI reflects the reset without a restart.
 import type { StateCreator } from 'zustand';
-import { resetTool, resolveResetCategories, type ResetCategory, type ResetToolData } from '../../../../../../core/scripts/reset/reset-tool.js';
+import { resetTool, resolveResetCategories, type ResetCategory, type ResetToolData } from '../../../../../../core/workspace/scripts/reset/reset-tool.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';

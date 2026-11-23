@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RestartRow } from '../../../../../../../core/edt/switch/restart/switch-restart.js';
+import type { RestartRow } from '../../../../../../../core/workspace/edt/switch/restart/switch-restart.js';
 import { renderToString } from '../../../../shared/components/render-to-string.js';
 import { describeRestartRow, describeRestartSummary, RESTART_PHASE_BADGES, SwitchRestartReport } from './switch-restart-report.js';
 

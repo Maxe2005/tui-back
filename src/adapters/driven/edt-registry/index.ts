@@ -11,7 +11,7 @@
  import type { RegistryPort } from '../../../core/ports/storage/registry.js';
  import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
  import type { SettingsPort } from '../../../core/ports/storage/settings.js';
- import { buildSharedBranchesEdt, isSharedEdtTopic, isSystemEdt, systemEdtReadonly as systemReadonly, type SharedEdtRepo } from '../../../core/edt/shared-edt/shared-edt.js';
+ import { buildSharedBranchesEdt, isSharedEdtTopic, isSystemEdt, systemEdtReadonly as systemReadonly, type SharedEdtRepo } from '../../../core/workspace/edt/shared-edt/shared-edt.js';
  import type { XdgPaths } from '../xdg/index.js';
  import { ensureXdgDir } from '../xdg/index.js';
  import { edtRegistrySchema } from './schema.js';

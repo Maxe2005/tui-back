@@ -2,8 +2,8 @@
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { err, ok, type Result } from '../../../../core/result.js';
-import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../../core/scripts/registry/clean-registry.js';
-import { validateRegistry } from '../../../../core/scripts/registry/validate-registry.js';
+import { classifyStaleRegistry, removeStaleRegistryEntries } from '../../../../core/workspace/scripts/registry/clean-registry.js';
+import { validateRegistry } from '../../../../core/workspace/scripts/registry/validate-registry.js';
 import { GitPort } from '../../../../core/ports/vcs/git.js';
 import { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
 import { RegistryPort } from '../../../../core/ports/storage/registry.js';

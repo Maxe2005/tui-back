@@ -23,7 +23,7 @@ import { createSettingsPort, resolveSettingsFile } from '../adapters/driven/sett
 import { createInstallerPort } from '../adapters/driven/installer/index.js';
 import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
 import { moduleRegistry, resolveModule } from '../adapters/driven/modules/module-registry.js';
-import { ROUTES_MODULE_ID } from '../core/edt/shared-edt/resolve-tab-visibility.js';
+import { ROUTES_MODULE_ID } from '../core/workspace/edt/shared-edt/resolve-tab-visibility.js';
 
 export interface ComposeOptions {
   /** Whether a y/N prompt can be read back (stdin AND stdout are TTYs). The MCP path passes false: it never reads stdin. */

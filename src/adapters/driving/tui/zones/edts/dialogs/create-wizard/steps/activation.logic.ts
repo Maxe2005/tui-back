@@ -2,7 +2,7 @@
 // from its Ink view (step-activation.tsx). It runs inside the setDialog updater (so keys arriving
 // in one input chunk each see the previous key's result) and only RAISES a `decision`; the zone's
 // effect hands it to the wizard's effectful handler exactly once.
-import type { ActivationBlockedRepo } from '../../../../../../../../core/edt/lifecycle/activate.js';
+import type { ActivationBlockedRepo } from '../../../../../../../../core/workspace/edt/lifecycle/activate.js';
 import type { TextEditKey } from '../../../../../shared/components/inputs/text-edit.js';
 import type { ActivationState } from '../../../logic/edts-zone.logic.js';
 

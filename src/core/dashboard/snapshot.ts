@@ -12,9 +12,9 @@ import type { RegistryPort } from '../ports/storage/registry.js';
 import type { StatePort } from '../ports/storage/state.js';
 import { ok, type Result } from '../result.js';
 import { resolveManifestStatus, type ServiceStatus } from '../service-status/index.js';
-import { isProtectedBranch } from '../edt/branches/shared-branches.js';
-import { isSystemEdt } from '../edt/shared-edt/shared-edt.js';
-import { readServiceDivergence, type BranchDivergenceStatus } from '../edt/lifecycle/list.js';
+import { isProtectedBranch } from '../workspace/edt/branches/shared-branches.js';
+import { isSystemEdt } from '../workspace/edt/shared-edt/shared-edt.js';
+import { readServiceDivergence, type BranchDivergenceStatus } from '../workspace/edt/lifecycle/list.js';
 import { driftOf, readOthers, type DashboardOtherService, type DriftState } from './drift.js';
 
 export type { DashboardOtherService, DriftState } from './drift.js';
