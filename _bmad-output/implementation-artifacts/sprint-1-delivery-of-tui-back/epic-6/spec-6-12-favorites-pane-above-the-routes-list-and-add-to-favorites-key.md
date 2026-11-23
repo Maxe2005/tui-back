@@ -2,7 +2,7 @@
 title: 'Favorites Pane Above the Routes List & Add-to-Favorites Key'
 type: 'feature'
 created: '2026-11-23'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'c1cab3ff91b9c3abaa5bfaf99fef4407d3532ff6'
 review_loop_iteration: 0
 context:
@@ -80,3 +80,51 @@ context:
 - `npx tsc --noEmit` -- expected: no errors
 - `npx vitest run` -- expected: all green
 - `npm run lint` -- expected: clean (if defined)
+
+## Suggested Review Order
+
+**Store and persistence bridge**
+
+- Toggle serialized and cache refreshed; failures surface as an error, never silently.
+  [`routes-slice.ts:681`](../../../../../src/adapters/driving/tui/store/slices/workspace/routes-slice.ts#L681)
+
+- Refresh guarded by a sequence token so older scans cannot overwrite newer ones.
+  [`routes-slice.ts:656`](../../../../../src/adapters/driving/tui/store/slices/workspace/routes-slice.ts#L656)
+
+**Pure favorites logic**
+
+- Height budget: pane shrinks, then hides, so the list keeps its minimum rows.
+  [`routes-favorites.logic.ts:71`](../../../../../src/adapters/driving/tui/zones/routes/logic/routes-favorites.logic.ts#L71)
+
+- Favorite-to-route resolution decides Enter behavior (stale refusal, filter clearing).
+  [`routes-favorites.logic.ts:90`](../../../../../src/adapters/driving/tui/zones/routes/logic/routes-favorites.logic.ts#L90)
+
+**Keys and focus**
+
+- Pane keys: move, remove, Enter opens Request without firing.
+  [`routes-zone.favorites-keys.ts:19`](../../../../../src/adapters/driving/tui/zones/routes/keys/routes-zone.favorites-keys.ts#L19)
+
+- `*` on the list cursor route; Tab focuses the pane.
+  [`routes-zone.list-keys.ts:69`](../../../../../src/adapters/driving/tui/zones/routes/keys/routes-zone.list-keys.ts#L69)
+
+- `*` on the open route, after every inline editor has had its chance.
+  [`routes-zone.pane-keys.ts:111`](../../../../../src/adapters/driving/tui/zones/routes/keys/routes-zone.pane-keys.ts#L111)
+
+- Global shortcuts stay blocked whenever pane focus is not the list.
+  [`app-shell.tsx:359`](../../../../../src/adapters/driving/tui/app-shell.tsx#L359)
+
+**Rendering and hints**
+
+- Pane rendered above the list inside the existing list pane.
+  [`routes-list-pane.tsx:40`](../../../../../src/adapters/driving/tui/zones/routes/panes/routes-list-pane.tsx#L40)
+
+- Bounded pane with teaching line, stale dimming and load error.
+  [`routes-favorites-pane.tsx:11`](../../../../../src/adapters/driving/tui/zones/routes/panes/routes-favorites-pane.tsx#L11)
+
+- Footer context for the pane's own keys.
+  [`footer-contexts.ts:251`](../../../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L251)
+
+**Tests**
+
+- End-to-end scenarios for the I/O matrix.
+  [`routes-zone.favorites.test.tsx`](../../../../../src/adapters/driving/tui/zones/routes/scenarios/routes-zone.favorites.test.tsx)
