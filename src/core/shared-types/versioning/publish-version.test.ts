@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { GitPort } from '../ports/git.js';
-import type { RestartPort } from '../ports/restart.js';
-import type { SharedTypesPort } from '../ports/shared-types.js';
-import { err, ok } from '../result.js';
+import type { GitPort } from '../../ports/git.js';
+import type { RestartPort } from '../../ports/restart.js';
+import type { SharedTypesPort } from '../../ports/shared-types.js';
+import { err, ok } from '../../result.js';
 import { runPublish } from './publish-version.js';
 
 function fakes(overrides: { git?: Partial<GitPort>; restart?: Partial<RestartPort>; shared?: Partial<SharedTypesPort> } = {}) {

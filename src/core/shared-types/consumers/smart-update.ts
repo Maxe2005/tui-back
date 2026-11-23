@@ -11,8 +11,8 @@ import type { SharedTypesPort } from '../../ports/shared-types.js';
 import { err, ok, type Result } from '../../result.js';
 import type { GroupUpdateRepoResult } from '../../scripts/group-update.js';
 import type { DependencyConsumer, SourceEntry } from './list-consumers.js';
-import { propagateVersion, type PropagateServiceResult } from '../propagate-version.js';
-import { runPublish } from '../publish-version.js';
+import { propagateVersion, type PropagateServiceResult } from '../versioning/propagate-version.js';
+import { runPublish } from '../versioning/publish-version.js';
 
 // The run-wide setting: never, only when the source's merge changed something, or every time.
 export type SharedTypesMode = 'off' | 'if-changed' | 'always';

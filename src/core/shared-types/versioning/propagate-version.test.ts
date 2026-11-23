@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ContainerPort } from '../ports/container.js';
-import type { GitPort } from '../ports/git.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RestartPort } from '../ports/restart.js';
-import type { SharedTypesPort } from '../ports/shared-types.js';
-import { err, ok } from '../result.js';
-import type { DependencyConsumer } from './consumers/list-consumers.js';
+import type { ContainerPort } from '../../ports/container.js';
+import type { GitPort } from '../../ports/git.js';
+import type { Manifest, ManifestPort } from '../../ports/manifest.js';
+import type { RestartPort } from '../../ports/restart.js';
+import type { SharedTypesPort } from '../../ports/shared-types.js';
+import { err, ok } from '../../result.js';
+import type { DependencyConsumer } from '../consumers/list-consumers.js';
 import { commitMessage, propagateVersion, type PropagateOptions, type PropagateParams } from './propagate-version.js';
 
 const DEP = '@ianord/shared-types';

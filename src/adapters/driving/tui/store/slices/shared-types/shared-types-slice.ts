@@ -11,16 +11,16 @@ import {
   type PropagateServiceResult,
   type PropagateStep,
   type ResumeFrom,
-} from '../../../../../../core/shared-types/propagate-version.js';
+} from '../../../../../../core/shared-types/versioning/propagate-version.js';
 import { listConsumers, listSources, type ConsumerIssue, type DependencyConsumer, type SourceEntry, type SourceIssue } from '../../../../../../core/shared-types/consumers/list-consumers.js';
-import { runPublish } from '../../../../../../core/shared-types/publish-version.js';
+import { runPublish } from '../../../../../../core/shared-types/versioning/publish-version.js';
 import {
   searchByBranch,
   searchByVersion,
   type BranchSearchEnd,
   type VersionHistoryEntry,
   type VersionHit,
-} from '../../../../../../core/shared-types/version-history.js';
+} from '../../../../../../core/shared-types/versioning/version-history.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 export type SharedTypesConsumersStatus = 'idle' | 'loading' | 'ready' | 'error';
