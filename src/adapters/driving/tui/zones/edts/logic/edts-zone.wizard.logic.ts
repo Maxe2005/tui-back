@@ -3,7 +3,7 @@ import type { MemberBranchPlan } from '../../../../../../core/edt/lifecycle/crea
 import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { type FailedResultRow } from '../../../shared/components/lists/failed-result-list.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
-import type { OverrideBoxState } from '../dialogs/create-wizard/override-box.logic.js';
+import type { OverrideBoxState } from '../dialogs/create-wizard/override-box/override-box.logic.js';
 import type { CreateFormFocus } from './edts-zone.focus.logic.js';
 import { summarizeFailedResults } from './edts-zone.modify.logic.js';
 import type { WizardStep, ActivationState } from './edts-zone.dialogs.logic.js';

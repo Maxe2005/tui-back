@@ -21,11 +21,11 @@ import {
   summarizeFailedResults,
   type WizardStep,
 } from '../../logic/edts-zone.logic.js';
-import { overwriteFrom, reduceActivationKey } from './activation.logic.js';
-import { ActivationStepView } from './step-activation.js';
-import { BranchStepView, createBranchStepHandlers } from './step-branches.js';
-import { handleNameStepInput, NameStepView } from './step-name.js';
-import { handleServicesStepInput, ServicesStepView } from './step-services.js';
+import { overwriteFrom, reduceActivationKey } from './steps/activation.logic.js';
+import { ActivationStepView } from './steps/step-activation.js';
+import { BranchStepView, createBranchStepHandlers } from './steps/step-branches.js';
+import { handleNameStepInput, NameStepView } from './steps/step-name.js';
+import { handleServicesStepInput, ServicesStepView } from './steps/step-services.js';
 import {
   buildBreadcrumb,
   buildMemberPlans,

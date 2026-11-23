@@ -4,14 +4,14 @@
 // created, the pause panel, the overwrite confirmation, or the "created but not active" message.
 // Key handling lives in activation.logic.ts.
 import { Box, Text } from 'ink';
-import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
-import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
-import { colors } from '../../../../shared/theme/theme.js';
-import type { CreateDialogState } from '../../logic/edts-zone.logic.js';
+import { ClampedParagraph } from '../../../../../shared/components/display/truncated-text.js';
+import { BoundedList } from '../../../../../shared/components/lists/bounded-list.js';
+import { colors } from '../../../../../shared/theme/theme.js';
+import type { CreateDialogState } from '../../../logic/edts-zone.logic.js';
 import {
   overwriteConfirmLines,
 } from './activation.logic.js';
-import { ACTIVATION_LABELS, activateLaterHint, buildStep3Rows, nonMemberReturns, type BranchCandidate, type RowView } from './wizard.logic.js';
+import { ACTIVATION_LABELS, activateLaterHint, buildStep3Rows, nonMemberReturns, type BranchCandidate, type RowView } from '../wizard.logic.js';
 // The branch part of a recap line: `base → target`, except a rename (its target already reads
 // `-> new`) and an [Existante] row attached under its own name, printed once.
 export function recapBranches(row: RowView): string {

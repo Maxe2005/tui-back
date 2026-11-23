@@ -4,16 +4,16 @@
 // "Configure <service>" box). Tab switches panels; Enter never advances the wizard here. Esc
 // closes the innermost element first. A pure reducer (reduceBranchStepKey) handles the keys.
 import { Box, Text, type Key } from 'ink';
-import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/inputs/text-edit.js';
-import { TextInputLine } from '../../../../shared/components/inputs/text-input-line.js';
-import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
-import { colors } from '../../../../shared/theme/theme.js';
-import type { BranchStepState, CreateDialogState, EdtDialogState } from '../../logic/edts-zone.logic.js';
-import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../edt/branch-plan-table.js';
-import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from './override-box.logic.js';
-import { OverrideBoxView } from './override-box.js';
-import { buildStep3Rows, refreshSeededNames, type BranchCandidate, type RowView } from './wizard.logic.js';
-import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
+import { nextTextInputValue, type TextEditKey } from '../../../../../shared/components/inputs/text-edit.js';
+import { TextInputLine } from '../../../../../shared/components/inputs/text-input-line.js';
+import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../../shared/keys/focus-navigation.js';
+import { colors } from '../../../../../shared/theme/theme.js';
+import type { BranchStepState, CreateDialogState, EdtDialogState } from '../../../logic/edts-zone.logic.js';
+import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../../edt/branch-plan-table.js';
+import { openOverrideBox, reduceOverrideBoxKey, type OverrideBoxContext } from '../override-box/override-box.logic.js';
+import { OverrideBoxView } from '../override-box/override-box.js';
+import { buildStep3Rows, refreshSeededNames, type BranchCandidate, type RowView } from '../wizard.logic.js';
+import { ClampedParagraph } from '../../../../../shared/components/display/truncated-text.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 export function overrideBoxContextFor(state: CreateDialogState, path: string, candidates: readonly BranchCandidate[]): OverrideBoxContext {

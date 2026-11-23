@@ -2,17 +2,17 @@
 // reducer and Apply validation, kept apart from its Ink view (override-box.tsx) so
 // edts-zone.logic.ts can type its state without importing a view file. Two modes: Create new
 // (base branch + new name) and Choose existing (existing branch, optionally renamed).
-import type { MemberBranchPlan } from '../../../../../../../core/edt/lifecycle/create.js';
+import type { MemberBranchPlan } from '../../../../../../../../core/edt/lifecycle/create.js';
 import {
   createBranchAutocompleteState,
   handleBranchAutocompleteKey,
   isBranchAutocompleteExactMatch,
   type BranchAutocompleteState,
-} from '../../../../shared/components/inputs/branch-autocomplete-input.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/inputs/text-edit.js';
-import { ownerRefusalForBranch } from '../../../../shared/components/pickers/branch-owners-text.js';
-import { checkPlan, type PlanIssue } from './wizard.logic.js';
-import { nextBoxLine } from '../../../../shared/keys/box-line-nav.js';
+} from '../../../../../shared/components/inputs/branch-autocomplete-input.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../../shared/components/inputs/text-edit.js';
+import { ownerRefusalForBranch } from '../../../../../shared/components/pickers/branch-owners-text.js';
+import { checkPlan, type PlanIssue } from '../wizard.logic.js';
+import { nextBoxLine } from '../../../../../shared/keys/box-line-nav.js';
 
 export type OverrideBoxMode = 'create' | 'existing';
 

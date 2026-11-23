@@ -1,7 +1,7 @@
 // tui/zones/edts/dialogs/create-wizard: Step 4's pure key reducer (radio, pause panel, overwrite
 // confirmation) and its helpers.
 import { describe, expect, it } from 'vitest';
-import { initialActivationState, type ActivationState } from '../../logic/edts-zone.logic.js';
+import { initialActivationState, type ActivationState } from '../../../logic/edts-zone.logic.js';
 import { overwriteConfirmLines, overwriteFrom, reduceActivationKey } from './activation.logic.js';
 
 const BLOCKED = [

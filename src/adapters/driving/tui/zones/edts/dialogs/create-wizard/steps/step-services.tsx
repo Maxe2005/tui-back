@@ -2,19 +2,19 @@
 // checkbox-list-item (Space toggles, ↑/↓/Home/End move), with the loading/error/empty candidate
 // states.
 import { Box, Text, type Key } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../../../core/edt/lifecycle/list.js';
-import { CheckboxListItem } from '../../../../shared/components/pickers/checkbox-list-item.js';
-import { colors } from '../../../../shared/theme/theme.js';
+import type { ServiceBranchDivergence } from '../../../../../../../../core/edt/lifecycle/list.js';
+import { CheckboxListItem } from '../../../../../shared/components/pickers/checkbox-list-item.js';
+import { colors } from '../../../../../shared/theme/theme.js';
 import {
   type CandidateListState,
   type CreateDialogState,
   type EdtDialogState,
   toggleMemberSelection,
-} from '../../logic/edts-zone.logic.js';
-import { missingSeedMembers } from './wizard.logic.js';
-import { StateLine } from '../../../../shared/components/feedback/state-line.js';
-import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../../shared/keys/list-cursor.js';
-import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
+} from '../../../logic/edts-zone.logic.js';
+import { missingSeedMembers } from '../wizard.logic.js';
+import { StateLine } from '../../../../../shared/components/feedback/state-line.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../../../shared/keys/list-cursor.js';
+import { BoundedList } from '../../../../../shared/components/lists/bounded-list.js';
 
 export function handleServicesStepInput(
   setDialog: (updater: (prev: EdtDialogState) => EdtDialogState) => void,

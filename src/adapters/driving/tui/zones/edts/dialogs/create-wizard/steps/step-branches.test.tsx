@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { renderToString } from '../../../../shared/components/render-to-string.js';
-import { BRANCH_MAX_WIDTH, initialCreateDialog, type BranchStepState, type CreateDialogState } from '../../logic/edts-zone.logic.js';
-import type { EdtDialogState } from '../../logic/edts-zone.logic.js';
+import { renderToString } from '../../../../../shared/components/render-to-string.js';
+import { BRANCH_MAX_WIDTH, initialCreateDialog, type BranchStepState, type CreateDialogState } from '../../../logic/edts-zone.logic.js';
+import type { EdtDialogState } from '../../../logic/edts-zone.logic.js';
 import { BranchStepView, createBranchStepHandlers, reduceBranchStepKey } from './step-branches.js';
 
 const LONG_SERVICE = 'a-very-long-service-name-that-never-ends';

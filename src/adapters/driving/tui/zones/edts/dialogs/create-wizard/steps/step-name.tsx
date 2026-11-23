@@ -2,11 +2,11 @@
 // name, with its availability re-checked on every keystroke (checkNameAvailability: trimmed,
 // case-sensitive, against the loaded EDT list).
 import { Box, Text, type Key } from 'ink';
-import { TextInputLine } from '../../../../shared/components/inputs/text-input-line.js';
-import { colors } from '../../../../shared/theme/theme.js';
-import { nextTextInputValue } from '../../../../shared/components/inputs/text-edit.js';
-import type { CreateDialogState, EdtDialogState } from '../../logic/edts-zone.logic.js';
-import type { NameAvailability } from './wizard.logic.js';
+import { TextInputLine } from '../../../../../shared/components/inputs/text-input-line.js';
+import { colors } from '../../../../../shared/theme/theme.js';
+import { nextTextInputValue } from '../../../../../shared/components/inputs/text-edit.js';
+import type { CreateDialogState, EdtDialogState } from '../../../logic/edts-zone.logic.js';
+import type { NameAvailability } from '../wizard.logic.js';
 
 export function handleNameStepInput(
   setDialog: (updater: (prev: EdtDialogState) => EdtDialogState) => void,
