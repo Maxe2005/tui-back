@@ -2,24 +2,24 @@
 // that is open owns the keystroke: incident list, incident guided menu, config screen, service
 // quick-pick, quit confirm, row-local menu, full-screen report, then the base view (recap, list
 // cursor, triggers). Every decision is a pure function; the branch order is the Ink input priority.
-import { useInput } from '../../shared/hooks/use-input.js';
-import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
-import { handleFilterablePickListKey } from '../../shared/components/index.js';
-import { resolveMenuKey } from '../../shared/components/lists/menu-list.js';
-import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
+import { useInput } from '../../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
+import { handleFilterablePickListKey } from '../../../shared/components/index.js';
+import { resolveMenuKey } from '../../../shared/components/lists/menu-list.js';
+import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 import {
   applyReportScroll,
   jumpToFailedStep,
   reportMaxOffset,
   resolveRecapToggle,
   resolveReportKey,
-} from './update-zone.logic.js';
-import { UPDATE_SERVICE_MENU_ESCAPE, resolveServiceMenuChoice, visibleServiceMenuItems } from './update-service-menu-dialog.js';
-import { toServicePickItems } from './update-service-pick-dialog.js';
-import { reduceIncidentListKey } from './update-incidents.logic.js';
-import { resolveQuitConfirm, resolveUpdateTrigger, shouldConfirmQuit } from './update-zone.resolvers.logic.js';
-import { UPDATE_BLOCKER_MENU_ESCAPE, blockerMenuItems } from './update-zone.blockers.logic.js';
-import { RECAP_CHROME_ROWS, type UpdateZoneCtx } from './update-zone.ctx.js';
+} from '../update-zone.logic.js';
+import { UPDATE_SERVICE_MENU_ESCAPE, resolveServiceMenuChoice, visibleServiceMenuItems } from '../update-service-menu-dialog.js';
+import { toServicePickItems } from '../update-service-pick-dialog.js';
+import { reduceIncidentListKey } from '../update-incidents.logic.js';
+import { resolveQuitConfirm, resolveUpdateTrigger, shouldConfirmQuit } from '../update-zone.resolvers.logic.js';
+import { UPDATE_BLOCKER_MENU_ESCAPE, blockerMenuItems } from '../update-zone.blockers.logic.js';
+import { RECAP_CHROME_ROWS, type UpdateZoneCtx } from '../update-zone.ctx.js';
 
 export function useUpdateInput(c: UpdateZoneCtx): void {
   const {

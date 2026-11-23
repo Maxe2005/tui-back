@@ -3,9 +3,9 @@
 // topics once on open, a repo's branches once per box session) and turns each key step from
 // the pure reducers into draft/store changes. The zone's `useInput` only forwards keys here.
 import { useEffect, useRef, useState } from 'react';
-import type { Result } from '../../../../../core/result.js';
-import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/inputs/suggest-field.logic.js';
-import { applyMergeStrategy, type UpdateConfigDraft } from './config/update-config-dialog.logic.js';
+import type { Result } from '../../../../../../core/result.js';
+import { createSuggestFieldState, type SuggestFieldState } from '../../../shared/components/inputs/suggest-field.logic.js';
+import { applyMergeStrategy, type UpdateConfigDraft } from '../config/update-config-dialog.logic.js';
 import {
   checkEdtChoice,
   clampPanelCursor,
@@ -20,14 +20,14 @@ import {
   type ConfigBudget,
   type PanelsKey,
   type PanelsViewState,
-} from './config/update-config-panels.logic.js';
+} from '../config/update-config-panels.logic.js';
 import {
   applyServiceBox,
   openServiceBox,
   reduceServiceBoxKey,
   type ServiceBoxContext,
   type ServiceBoxState,
-} from './update-service-box.logic.js';
+} from '../update-service-box.logic.js';
 
 export interface UseUpdateConfigPanelsInput {
   draft: UpdateConfigDraft | null;

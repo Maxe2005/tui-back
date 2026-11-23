@@ -14,10 +14,10 @@ import { UpdateDetailColumn } from './update-detail-column.js';
 import { UpdateServiceListColumn } from './update-service-list-column.js';
 import { UpdateZoneDialogs } from './update-zone-dialogs.js';
 import type { UpdateZoneCtx } from './update-zone.ctx.js';
-import { useUpdateDerived } from './use-update-derived.js';
-import { useUpdateEffects } from './use-update-effects.js';
-import { useUpdateInput } from './use-update-input.js';
-import { useUpdateState } from './use-update-state.js';
+import { useUpdateDerived } from './hooks/use-update-derived.js';
+import { useUpdateEffects } from './hooks/use-update-effects.js';
+import { useUpdateInput } from './hooks/use-update-input.js';
+import { useUpdateState } from './hooks/use-update-state.js';
 
 // Public surface unchanged: everything the pure modules export is still importable from here.
 export * from './update-zone.resolvers.logic.js';

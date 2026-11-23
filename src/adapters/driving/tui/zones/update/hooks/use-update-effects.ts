@@ -3,11 +3,11 @@
 // incident-popup / quick-pick resets, the no-arg `:update-service` request and the report
 // auto-close.
 import { useEffect, useRef } from 'react';
-import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
-import { updateConfigFooterContext } from './config/update-config-panels.logic.js';
-import { updateFooterContext } from './update-zone.logic.js';
-import { createFilterablePickListState } from '../../shared/components/index.js';
-import type { UpdateZoneCtx } from './update-zone.ctx.js';
+import { useFooterContext } from '../../../shared/hooks/use-footer-context.js';
+import { updateConfigFooterContext } from '../config/update-config-panels.logic.js';
+import { updateFooterContext } from '../update-zone.logic.js';
+import { createFilterablePickListState } from '../../../shared/components/index.js';
+import type { UpdateZoneCtx } from '../update-zone.ctx.js';
 
 export function useUpdateEffects(c: UpdateZoneCtx): void {
   const {
