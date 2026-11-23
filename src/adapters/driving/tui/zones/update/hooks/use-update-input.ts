@@ -16,7 +16,7 @@ import {
 } from '../update-zone.logic.js';
 import { UPDATE_SERVICE_MENU_ESCAPE, resolveServiceMenuChoice, visibleServiceMenuItems } from '../update-service-menu-dialog.js';
 import { toServicePickItems } from '../update-service-pick-dialog.js';
-import { reduceIncidentListKey } from '../update-incidents.logic.js';
+import { reduceIncidentListKey } from '../incidents/update-incidents.logic.js';
 import { resolveQuitConfirm, resolveUpdateTrigger, shouldConfirmQuit } from '../update-zone.resolvers.logic.js';
 import { UPDATE_BLOCKER_MENU_ESCAPE, blockerMenuItems } from '../update-zone.blockers.logic.js';
 import { RECAP_CHROME_ROWS, type UpdateZoneCtx } from '../update-zone.ctx.js';

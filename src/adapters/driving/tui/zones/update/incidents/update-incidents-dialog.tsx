@@ -2,15 +2,15 @@
 // kind, age) through a BoundedList next to the guided menu of the selected one. Purely
 // presentational — the zone owns the keys, the cursor and the mode.
 import { Box, Text } from 'ink';
-import { BoundedList } from '../../shared/components/lists/bounded-list.js';
-import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
-import { ListRow } from '../../shared/components/lists/list-row.js';
-import { MenuList } from '../../shared/components/lists/menu-list.js';
-import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
-import { colors } from '../../shared/theme/theme.js';
-import type { UpdateIncident } from '../../store/slices/update/update-slice.js';
+import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
+import { ListRow } from '../../../shared/components/lists/list-row.js';
+import { MenuList } from '../../../shared/components/lists/menu-list.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
+import { colors } from '../../../shared/theme/theme.js';
+import type { UpdateIncident } from '../../../store/slices/update/update-slice.js';
 import { formatIncidentRow, UPDATE_INCIDENTS_TITLE } from './update-incidents.logic.js';
-import { blockerMenuItems, formatBlockerBody, formatBlockerRetry } from './update-zone.js';
+import { blockerMenuItems, formatBlockerBody, formatBlockerRetry } from '../update-zone.js';
 
 // Rows the dialog keeps for its frame, body and menu around the incident list.
 const INCIDENT_LIST_MAX_ROWS = 6;

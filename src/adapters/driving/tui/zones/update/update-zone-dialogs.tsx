@@ -5,7 +5,7 @@ import { ModalDialog } from '../../shared/components/index.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { colors } from '../../shared/theme/theme.js';
 import { UpdateConfigPanels } from './config/update-config-panels.js';
-import { UpdateIncidentsDialog } from './update-incidents-dialog.js';
+import { UpdateIncidentsDialog } from './incidents/update-incidents-dialog.js';
 import { UpdateServiceMenuDialog } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog } from './update-service-pick-dialog.js';
 import { UPDATE_QUIT_CONFIRM_BODY, UPDATE_QUIT_CONFIRM_BODY_ALL, UPDATE_QUIT_CONFIRM_TITLE } from './update-zone.resolvers.logic.js';

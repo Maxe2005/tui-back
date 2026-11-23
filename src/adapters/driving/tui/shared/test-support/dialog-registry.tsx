@@ -30,7 +30,7 @@ import {
 import { initialSwitchResolution } from '../../zones/edts/dialogs/switch-resolution/switch-resolution.logic.js';
 import { UpdateServicePickDialog } from '../../zones/update/update-service-pick-dialog.js';
 import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-dialog.js';
-import { UpdateIncidentsDialog } from '../../zones/update/update-incidents-dialog.js';
+import { UpdateIncidentsDialog } from '../../zones/update/incidents/update-incidents-dialog.js';
 import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
 import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
 import { CommandBar } from '../screens/command-bar/command-bar.js';
@@ -261,7 +261,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'update/incidents',
-    file: 'zones/update/update-incidents-dialog.tsx',
+    file: 'zones/update/incidents/update-incidents-dialog.tsx',
     render: () =>
       createElement(UpdateIncidentsDialog, {
         incidents: Array.from({ length: 200 }, (_, i) => ({
