@@ -3,7 +3,7 @@ import {
   DEFAULT_TAB_VISIBILITY,
   type GatedTabStatus,
   type ResolveTabVisibilityData,
-} from '../../../../../../core/edt/resolve-tab-visibility.js';
+} from '../../../../../../core/edt/shared-edt/resolve-tab-visibility.js';
 import { ZONES, zoneGatedStatus, type Zone, type ZoneId } from '../../../zones/zones.js';
 import { useBounds } from '../../bounds/bounds-context.js';
 import { colors, spacing, typography } from '../../theme/theme.js';

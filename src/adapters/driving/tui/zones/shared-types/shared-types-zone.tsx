@@ -5,7 +5,7 @@
 // for confirmation. The use-cases live in core; this file renders and dispatches keys.
 import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import { SHARED_TYPES_MODULE_IDS } from '../../../../../core/edt/resolve-tab-visibility.js';
+import { SHARED_TYPES_MODULE_IDS } from '../../../../../core/edt/shared-edt/resolve-tab-visibility.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { CheckboxListItem, ModalDialog, Spinner, StateLine, TextInputLine } from '../../shared/components/index.js';
 import { BoundedList } from '../../shared/components/lists/bounded-list.js';

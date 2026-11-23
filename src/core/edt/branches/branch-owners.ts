@@ -4,7 +4,7 @@
 // resolve() so a registry-stored shape (trailing slash, relative segments) still matches.
 import { resolve } from 'node:path';
 import type { EdtRegistryEntry } from '../../ports/edt-registry.js';
-import { isSystemEdt } from '../shared-edt.js';
+import { isSystemEdt } from '../shared-edt/shared-edt.js';
 
 export function branchOwners(
   edts: readonly Pick<EdtRegistryEntry, 'ulid' | 'topic' | 'members' | 'kind'>[],

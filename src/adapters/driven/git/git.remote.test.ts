@@ -6,7 +6,7 @@ import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ok } from '../../../core/result.js';
 import { fastForwardShared } from '../../../core/edt/branches/fast-forward-shared.js';
-import { buildSharedBranchesEdt } from '../../../core/edt/shared-edt.js';
+import { buildSharedBranchesEdt } from '../../../core/edt/shared-edt/shared-edt.js';
 import { aheadBehind, createTrackingBranch, fetchBranch, fetchRemoteBranch, listUnpushedCommits, listRemoteBranches, pullBranch, createGitPort } from './index.js';
 import { tmpDirs, runGit, makeGitRepo, makePlainDir, branchExists, manifest, fakeEdtRegistry, makeOriginAndClone, commit, makeGitRepoOriginAndClone, makeManagedClone, remoteRefExists, upstreamOf, cleanupTmpDirs } from './git.test-support.js';
 

@@ -2,7 +2,7 @@
 // wizard (Nom -> Services -> Branches -> Activation) — name availability, step gating and
 // breadcrumb, Step 3's branch resolution, row views and memberPlans, edt-create-from seeding, and
 // Step 4's helpers. Step 4's key reducer lives in activation.logic.ts.
-import { isSharedEdtTopic } from '../../../../../../../core/edt/shared-edt.js';
+import { isSharedEdtTopic } from '../../../../../../../core/edt/shared-edt/shared-edt.js';
 import type { MemberBranchPlan } from '../../../../../../../core/edt/lifecycle/create.js';
 import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/lifecycle/list.js';

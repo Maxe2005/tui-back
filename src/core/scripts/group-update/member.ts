@@ -23,7 +23,7 @@ import {
   resolveUnpushedCommits,
 } from "./blockers.js";
 import { resolveMidRunConflict } from "./conflict.js";
-import { isSystemEdt } from "../../edt/shared-edt.js";
+import { isSystemEdt } from "../../edt/shared-edt/shared-edt.js";
 
 const OUTPUT_EXCERPT_LINES = 3;
 

@@ -5,7 +5,7 @@
 import { resolve } from 'node:path';
 import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../dashboard/drift.js';
 import { checkoutExpectedBranch, memberTargetSpec, type TargetBranchSpec } from '../edt/branches/checkout-expected.js';
-import { MANIFEST_FILE, withCarriedManifest } from '../edt/manifest-carry.js';
+import { MANIFEST_FILE, withCarriedManifest } from '../edt/shared-edt/manifest-carry.js';
 import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention, type RestartReport, type RestartRow } from '../edt/switch-restart.js';
 import { withActionLock } from '../locking.js';
 import type { EdtRegistryPort } from '../ports/edt-registry.js';

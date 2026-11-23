@@ -35,7 +35,7 @@ import {
   type ModifyEdtData,
 } from '../../../../../../core/edt/lifecycle/modify.js';
 import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
-import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../../core/edt/shared-edt.js';
+import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../../core/edt/shared-edt/shared-edt.js';
 import {
   deleteEdt as deleteEdtUseCase,
   resolveMemberDeleteStatuses as resolveMemberDeleteStatusesUseCase,

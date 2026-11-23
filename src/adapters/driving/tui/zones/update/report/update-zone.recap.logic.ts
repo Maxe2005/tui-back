@@ -1,5 +1,5 @@
 // tui/zones/update: last-update recap formatting and the zone's footer-context resolution.
-import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../../core/edt/shared-edt.js';
+import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../../core/edt/shared-edt/shared-edt.js';
 import type { GroupUpdateRepoResult, GroupUpdateSelectionItem } from '../../../../../../core/scripts/group-update.js';
 import type { FooterContextId } from '../../../keybindings/index.js';
 

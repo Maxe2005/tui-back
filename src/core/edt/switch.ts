@@ -13,8 +13,8 @@ import { edtUpdateLockKey } from '../scripts/group-update.js';
 import type { EdtRegistryEntry, EdtStatus } from '../ports/edt-registry.js';
 import type { Manifest } from '../ports/manifest.js';
 import { err, ok, type Result } from '../result.js';
-import { withCarriedManifest } from './manifest-carry.js';
-import { isSystemEdt } from './shared-edt.js';
+import { withCarriedManifest } from './shared-edt/manifest-carry.js';
+import { isSystemEdt } from './shared-edt/shared-edt.js';
 import { resolveDirtyRepos } from './switch/dirty.js';
 import { switchMemberRepo, switchNonMemberRepo } from './switch/member.js';
 import {

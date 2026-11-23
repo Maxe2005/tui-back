@@ -1,10 +1,10 @@
 // core/edt/manifest-carry: the capture → clear → run → restore ordering and its failure paths.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import type { GitPort } from '../ports/git.js';
-import type { ManifestCarryPort } from '../ports/manifest-carry.js';
+import { err, ok } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
+import type { ManifestCarryPort } from '../../ports/manifest-carry.js';
 import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
-import type { SwitchEdtRepoResult } from './switch.js';
+import type { SwitchEdtRepoResult } from '../switch.js';
 
 const SNAPSHOT = { kind: 'present', content: new Uint8Array([1, 2]) } as const;
 

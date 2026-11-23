@@ -37,7 +37,7 @@ import { createShellSessionPort } from "../adapters/driven/shell-session/index.j
 import { createHttpHealthProbe } from "../adapters/driven/health/http-probe.js";
 import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
-import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/edt/resolve-tab-visibility.js";
+import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/edt/shared-edt/resolve-tab-visibility.js";
 import { err, ok } from "../core/result.js";
 import type { DependencyConsumerConfig, SourceConfig } from "../core/shared-types/consumers/list-consumers.js";
 

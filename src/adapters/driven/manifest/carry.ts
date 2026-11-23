@@ -3,7 +3,7 @@
 import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
-import { MANIFEST_FILE } from '../../../core/edt/manifest-carry.js';
+import { MANIFEST_FILE } from '../../../core/edt/shared-edt/manifest-carry.js';
 import type { ManifestCarryPort, ManifestSnapshot } from '../../../core/ports/manifest-carry.js';
 
 const SAFETY_COPY = 'tui-back-manifest-carry';

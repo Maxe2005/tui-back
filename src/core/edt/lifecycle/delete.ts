@@ -12,7 +12,7 @@ import type { LockPort } from '../../ports/lock.js';
 import type { ManifestPort } from '../../ports/manifest.js';
 import type { StatePort } from '../../ports/state.js';
 import { err, ok, type Result } from '../../result.js';
-import { isSystemEdt, systemEdtReadonly } from '../shared-edt.js';
+import { isSystemEdt, systemEdtReadonly } from '../shared-edt/shared-edt.js';
 
 export type MemberDisposition = 'leave' | 'delete';
 

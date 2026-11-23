@@ -5,7 +5,7 @@
 // array length, drive the zone so failure and genuinely-empty stay distinct.
 import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
-import { ROUTES_MODULE_ID } from '../../../../../../core/edt/resolve-tab-visibility.js';
+import { ROUTES_MODULE_ID } from '../../../../../../core/edt/shared-edt/resolve-tab-visibility.js';
 import type { Route } from '../../../../../../core/ports/route-scanner.js';
 import type { SavedRequest } from '../../../../../../core/ports/saved-request.js';
 import { err, ok, type Result } from '../../../../../../core/result.js';

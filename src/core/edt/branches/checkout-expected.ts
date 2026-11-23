@@ -3,7 +3,7 @@
 // the working tree, check out, and let the caller undo its preparation when the checkout fails.
 import type { GitPort } from '../../ports/git.js';
 import { err, ok, type Result, type ResultError } from '../../result.js';
-import { isSystemEdt } from '../shared-edt.js';
+import { isSystemEdt } from '../shared-edt/shared-edt.js';
 
 // Where a repo goes when an EDT becomes active (FR-8): a member of that EDT goes to its own
 // registered branch, any other repo to its manifest `sharedBranch`.

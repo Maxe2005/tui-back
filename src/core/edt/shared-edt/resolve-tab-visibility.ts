@@ -4,12 +4,12 @@
 // `shared-types-source` alone (consumers depend on the source, they never drive the tab). Module ids are matched as declared, never
 // validated against the compiled-in module registry.
 import { resolve } from 'node:path';
-import type { EdtRegistryPort } from '../ports/edt-registry.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
-import { ok, type Result } from '../result.js';
-import { listRepos, type ManagedRepo } from '../scripts/list-repos.js';
+import type { EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { ManifestPort } from '../../ports/manifest.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import type { StatePort } from '../../ports/state.js';
+import { ok, type Result } from '../../result.js';
+import { listRepos, type ManagedRepo } from '../../scripts/list-repos.js';
 
 export const ROUTES_MODULE_ID = 'route-explorer';
 export const SHARED_TYPES_MODULE_IDS = ['shared-types-source', 'shared-types-consumer'] as const;

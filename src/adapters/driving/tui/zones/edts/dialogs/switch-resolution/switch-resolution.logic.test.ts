@@ -1,4 +1,4 @@
-import { SHARED_EDT_ULID } from '../../../../../../../core/edt/shared-edt.js';
+import { SHARED_EDT_ULID } from '../../../../../../../core/edt/shared-edt/shared-edt.js';
 import { describe, expect, it } from 'vitest';
 import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { TextEditKey } from '../../../../shared/components/inputs/text-edit.js';

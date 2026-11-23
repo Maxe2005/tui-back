@@ -3,7 +3,7 @@
 // session cookie from the DevAuthPort → fetch with an 8s timeout, re-authing on 401 (at most 2
 // re-auths, then `auth-unauthorized`); 403 is `auth-forbidden`; any other status is data. The
 // session cookie never appears in any message or details, and wins over a caller `cookie`.
-import { ROUTES_MODULE_ID } from '../edt/resolve-tab-visibility.js';
+import { ROUTES_MODULE_ID } from '../edt/shared-edt/resolve-tab-visibility.js';
 import type { DevAuthPort } from '../ports/dev-auth.js';
 import type { ManifestPort } from '../ports/manifest.js';
 import type { RouteScannerPort } from '../ports/route-scanner.js';

@@ -2,11 +2,11 @@
 // creation with its topic all fail `edt-system-readonly` before any write. Every port is a
 // throwing proxy except the EDT list, so a single stray call fails the test.
 import { describe, expect, it } from 'vitest';
-import { ok } from '../result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import { createEdt } from './lifecycle/create.js';
-import { deleteEdt } from './lifecycle/delete.js';
-import { addMemberUnderLock, modifyEdt } from './lifecycle/modify.js';
+import { ok } from '../../result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
+import { createEdt } from '../lifecycle/create.js';
+import { deleteEdt } from '../lifecycle/delete.js';
+import { addMemberUnderLock, modifyEdt } from '../lifecycle/modify.js';
 import { buildSharedBranchesEdt } from './shared-edt.js';
 
 const untouched = <T>(): T =>

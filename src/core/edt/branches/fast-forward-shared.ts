@@ -7,7 +7,7 @@
 import { err, ok, type Result } from '../../result.js';
 import type { GitPort } from '../../ports/git.js';
 import type { EdtRegistryPort } from '../../ports/edt-registry.js';
-import { isSystemEdt } from '../shared-edt.js';
+import { isSystemEdt } from '../shared-edt/shared-edt.js';
 
 export type FastForwardOutcome = 'fast-forwarded' | 'up-to-date' | 'skipped' | 'failed';
 export type FastForwardSkipReason = 'dirty' | 'diverged';

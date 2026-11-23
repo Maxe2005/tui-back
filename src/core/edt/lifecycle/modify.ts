@@ -10,7 +10,7 @@ import type { LockPort } from '../../ports/lock.js';
 import type { ManifestPort } from '../../ports/manifest.js';
 import type { RegistryPort } from '../../ports/registry.js';
 import { err, ok, type Result } from '../../result.js';
-import { isSharedEdtTopic, isSystemEdt, systemEdtReadonly } from '../shared-edt.js';
+import { isSharedEdtTopic, isSystemEdt, systemEdtReadonly } from '../shared-edt/shared-edt.js';
 
 export interface ModifyEdtResult {
   service: string;

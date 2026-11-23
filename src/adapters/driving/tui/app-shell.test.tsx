@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { ResolveTabVisibilityData } from '../../../core/edt/resolve-tab-visibility.js';
+import type { ResolveTabVisibilityData } from '../../../core/edt/shared-edt/resolve-tab-visibility.js';
 import {
   AppShell,
   resolveHelpDispatch,
