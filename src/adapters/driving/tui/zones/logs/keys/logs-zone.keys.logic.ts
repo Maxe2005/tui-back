@@ -1,8 +1,8 @@
 // tui/zones/logs: key predicates, stream-visibility toggles, footer context and legend hints.
-import type { LogLine } from '../../../../../core/ports/docker.js';
-import type { RestartMode } from '../../../../../core/service-actions/index.js';
-import type { Hint } from '../../shared/components/dialogs/hints.js';
-import type { FooterContextId } from '../../keybindings/index.js';
+import type { LogLine } from '../../../../../../core/ports/docker.js';
+import type { RestartMode } from '../../../../../../core/service-actions/index.js';
+import type { Hint } from '../../../shared/components/dialogs/hints.js';
+import type { FooterContextId } from '../../../keybindings/index.js';
 
 // Ctrl+A toggles select-all/deselect-all for the EDT list. A `Ctrl+letter` combo arrives as a
 // single control byte (0x01-0x1A) with no shift information — Ink's parse-keypress.js sets

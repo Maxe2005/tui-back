@@ -1,11 +1,11 @@
 // tui/zones/logs: logs-zone.rule-draft-keys — the filter editor's rule-draft view: history grid
 // browser keys, mode/action/target toggles, caret moves, arrow-recall and text editing.
-import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
-import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
-import { resolveHistoryBrowseDown, resolveHistoryBrowseUp } from '../../shared/input-history/index.js';
-import { commandAtGridCursor, groupCommandsByColumn, layoutCommandGrid, moveGridCursorHorizontal, moveGridCursorVertical, resolveGridHorizontalDirection, resolveGridVerticalDirection } from '../../shared/screens/command-bar/command-bar.js';
-import { decodeFilterHistoryEntry, encodeFilterHistoryEntry, historyEntryLabel, toggleFilterAction, toggleFilterMode, toggleFilterTarget, type FilterEditorState } from './logs-zone.logic.js';
-import type { LogsKey, LogsZoneCtx } from './logs-zone.ctx.js';
+import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
+import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
+import { resolveHistoryBrowseDown, resolveHistoryBrowseUp } from '../../../shared/input-history/index.js';
+import { commandAtGridCursor, groupCommandsByColumn, layoutCommandGrid, moveGridCursorHorizontal, moveGridCursorVertical, resolveGridHorizontalDirection, resolveGridVerticalDirection } from '../../../shared/screens/command-bar/command-bar.js';
+import { decodeFilterHistoryEntry, encodeFilterHistoryEntry, historyEntryLabel, toggleFilterAction, toggleFilterMode, toggleFilterTarget, type FilterEditorState } from '../logs-zone.logic.js';
+import type { LogsKey, LogsZoneCtx } from '../logs-zone.ctx.js';
 
 export function handleRuleDraftKey(c: LogsZoneCtx, filterEditor: FilterEditorState, input: string, key: LogsKey): void {
   const { applyFilterEditorDraft, backToRuleList, commitRuleDraft, filterHistoryGridMaxRows, historyForEditor, historyGridAvailableWidth, historyGridCursor, historyGridScroll, setFilterEditor, setHistoryGridCursor, setHistoryGridScroll, snapBackDraft, withBrowseResult } = c;

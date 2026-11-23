@@ -2,16 +2,16 @@
 // the oldest-line history fetch), the `a` actions menu, registry shortcuts and the service name
 // of a pane. Plain functions rebuilt each render over the zone's state, like the original closures.
 import { basename } from 'node:path';
-import { LOGS_ACTIONS_MENU_LIST_ERROR } from './logs-actions-menu.js';
+import { LOGS_ACTIONS_MENU_LIST_ERROR } from '../logs-actions-menu.js';
 import {
   adjustScrollOffset,
   applyLogRules,
   filterVisibleLines,
   isAtOldestLine,
   isPaneEngagedInGlobalFilter,
-} from './logs-zone.logic.js';
-import type { LogsState } from './hooks/use-logs-state.js';
-import type { LogsDerived } from './hooks/use-logs-derived.js';
+} from '../logs-zone.logic.js';
+import type { LogsState } from '../hooks/use-logs-state.js';
+import type { LogsDerived } from '../hooks/use-logs-derived.js';
 
 export function createPaneActions(s: LogsState & LogsDerived) {
   const {

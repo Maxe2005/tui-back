@@ -1,10 +1,10 @@
 // tui/zones/logs: logs-zone.rule-list-keys — the filter editor's rule-list, named-set library and
 // set-name views: one handler per view, each called while that view owns the keyboard.
-import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
-import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
-import { cycleFilterLevel, openRuleEditorState, openRuleSetNameState, backToRuleListState, toggleLogRule, deleteLogRule, moveLogRule, MAX_LOG_FILTER_RULES, type FilterEditorState } from './logs-zone.logic.js';
-import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
-import type { LogsKey, LogsZoneCtx } from './logs-zone.ctx.js';
+import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
+import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
+import { cycleFilterLevel, openRuleEditorState, openRuleSetNameState, backToRuleListState, toggleLogRule, deleteLogRule, moveLogRule, MAX_LOG_FILTER_RULES, type FilterEditorState } from '../logs-zone.logic.js';
+import { nextCursorForKey } from '../../../shared/keys/list-cursor.js';
+import type { LogsKey, LogsZoneCtx } from '../logs-zone.ctx.js';
 
 // Keys of the rule list view: the scope's changes apply to the store immediately.
 export function handleRuleListKey(c: LogsZoneCtx, editor: FilterEditorState, input: string, key: LogsKey): void {

@@ -18,11 +18,11 @@ import {
   toggleVisibilityFlag,
 } from '../logs-zone.logic.js';
 import type { LogsZoneCtx } from '../logs-zone.ctx.js';
-import { handleActionsMenuKey, handleFullscreenKey } from '../logs-zone.overlay-keys.js';
-import { handleLibraryKey, handleRuleListKey, handleSetNameKey } from '../logs-zone.rule-list-keys.js';
-import { handleRuleDraftKey } from '../logs-zone.rule-draft-keys.js';
-import { handleEdtListKey, handleOtherListKey } from '../logs-zone.list-keys.js';
-import { handlePaneKey } from '../logs-zone.pane-keys.js';
+import { handleActionsMenuKey, handleFullscreenKey } from '../keys/logs-zone.overlay-keys.js';
+import { handleLibraryKey, handleRuleListKey, handleSetNameKey } from '../keys/logs-zone.rule-list-keys.js';
+import { handleRuleDraftKey } from '../keys/logs-zone.rule-draft-keys.js';
+import { handleEdtListKey, handleOtherListKey } from '../keys/logs-zone.list-keys.js';
+import { handlePaneKey } from '../keys/logs-zone.pane-keys.js';
 
 export function useLogsInput(c: LogsZoneCtx): void {
   const {

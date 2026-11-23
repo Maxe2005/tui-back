@@ -4,8 +4,8 @@ import type { useInput } from '../../shared/hooks/use-input.js';
 import type { AppStore } from '../../store/app-store.js';
 import type { LogsState } from './hooks/use-logs-state.js';
 import type { LogsDerived } from './hooks/use-logs-derived.js';
-import type { LogsPaneActions } from './logs-zone.pane-actions.js';
-import type { LogsEditorActions } from './logs-zone.editor-actions.js';
+import type { LogsPaneActions } from './keys/logs-zone.pane-actions.js';
+import type { LogsEditorActions } from './keys/logs-zone.editor-actions.js';
 
 export type LogsKey = Parameters<Parameters<typeof useInput>[0]>[1];
 

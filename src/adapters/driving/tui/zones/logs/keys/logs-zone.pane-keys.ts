@@ -1,7 +1,7 @@
 // tui/zones/logs: logs-zone.pane-keys — keys while the pane grid owns focus: scroll, sub-focus
 // moves and the bare-key actions on the sub-focused pane (clear, wrap, filter, shortcuts, menu).
-import { movePaneSubFocus, resolvePaneScrollDirection, toggleGlobalFilterEngagement, togglePaneWrapFlag } from './logs-zone.logic.js';
-import type { LogsKey, LogsZoneCtx } from './logs-zone.ctx.js';
+import { movePaneSubFocus, resolvePaneScrollDirection, toggleGlobalFilterEngagement, togglePaneWrapFlag } from '../logs-zone.logic.js';
+import type { LogsKey, LogsZoneCtx } from '../logs-zone.ctx.js';
 
 export function handlePaneKey(c: LogsZoneCtx, input: string, key: LogsKey): void {
   const { activePanes, clearLogsPane, handlePaneScroll, layout, openActionsMenu, openLogsFullscreen, openPaneFilterEditor, runPaneShortcut, setPaneFilterEngaged, setPaneWrap, setSubFocus, subFocus } = c;
