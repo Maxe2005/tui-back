@@ -3,9 +3,9 @@
 // never emits data, so useInput itself is never exercised here). Real-keypress coverage of the
 // bar mounted inside AppShell lives in app-shell.interaction.test.tsx.
 import { describe, it, expect } from 'vitest';
-import { createAppStore } from '../store/app-store.js';
-import { footerContextOf, mountForTest } from './test-support/mount-for-test.js';
-import type { Command } from '../commands/commands.js';
+import { createAppStore } from '../../../store/app-store.js';
+import { footerContextOf, mountForTest } from '../../test-support/mount-for-test.js';
+import type { Command } from '../../../commands/commands.js';
 import {
   CommandBar,
   backspaceCommandQuery,

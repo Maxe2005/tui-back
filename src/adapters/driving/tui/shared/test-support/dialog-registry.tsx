@@ -33,7 +33,7 @@ import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-
 import { UpdateIncidentsDialog } from '../../zones/update/update-incidents-dialog.js';
 import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
 import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
-import { CommandBar } from '../command-bar.js';
+import { CommandBar } from '../screens/command-bar/command-bar.js';
 import { RepoRegistryScreen } from '../repo-registry-screen.js';
 import { SettingsScreen } from '../settings-screen.js';
 import { RealignDialog } from '../realign-dialog.js';
@@ -389,7 +389,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
     render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }), restartMode: 'simple' }),
   },
   { id: 'shared/keybinding-help', file: 'shared/components/dialogs/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
-  { id: 'shared/command-bar', file: 'shared/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
+  { id: 'shared/command-bar', file: 'shared/screens/command-bar/command-bar.tsx', render: () => createElement(CommandBar, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/repo-registry', file: 'shared/repo-registry-screen.tsx', render: () => createElement(RepoRegistryScreen, { useStore: registryStore() }) },
   { id: 'shared/settings', file: 'shared/settings-screen.tsx', render: () => createElement(SettingsScreen, { useStore: store(), onClose: () => {} }) },
   { id: 'shared/realign-select', file: 'shared/realign-dialog.tsx', render: () => createElement(RealignDialog, { useStore: realignSelectStore() }) },

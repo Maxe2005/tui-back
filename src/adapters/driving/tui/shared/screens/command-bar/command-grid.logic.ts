@@ -3,8 +3,8 @@
 // width/scroll windowing, cursor movement). Split out of command-bar.tsx so the component only
 // wires input and rendering.
 import { type Key } from 'ink';
-import { type Command } from '../commands/commands.js';
-import { resolveBoundedVisibility } from './components/lists/bounded-list.js';
+import { type Command } from '../../../commands/commands.js';
+import { resolveBoundedVisibility } from '../../components/lists/bounded-list.js';
 
 
 // A second `Tab` at the maximal common prefix must land within this window, on the same

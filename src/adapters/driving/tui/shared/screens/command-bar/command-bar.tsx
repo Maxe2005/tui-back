@@ -5,26 +5,26 @@
 // is a pure, unit-tested function because renderToString's fake stdin never emits keys.
 import { useState } from 'react';
 import { Box, Text, type Key } from 'ink';
-import { useInput } from './hooks/use-input.js';
+import { useInput } from '../../hooks/use-input.js';
 import {
   resolveHistoryBrowseDown,
   resolveHistoryBrowseUp,
   resolveSnapBackBase,
   type HistoryBrowseState,
-} from './input-history/index.js';
-import { useBounds } from './bounds/bounds-context.js';
-import { ModalDialog } from './components/dialogs/modal-dialog.js';
-import { colors } from './theme/theme.js';
-import { useAppStore, type AppStore } from '../store/app-store.js';
-import { useFooterContext } from './hooks/use-footer-context.js';
+} from '../../input-history/index.js';
+import { useBounds } from '../../bounds/bounds-context.js';
+import { ModalDialog } from '../../components/dialogs/modal-dialog.js';
+import { colors } from '../../theme/theme.js';
+import { useAppStore, type AppStore } from '../../../store/app-store.js';
+import { useFooterContext } from '../../hooks/use-footer-context.js';
 import {
   COMMANDS,
   matchCommands,
   findExactCommand,
   runCommand as runCommandInZone,
   type Command,
-} from '../commands/commands.js';
-import { StateLine } from './components/feedback/state-line.js';
+} from '../../../commands/commands.js';
+import { StateLine } from '../../components/feedback/state-line.js';
 import {
   GridCursor,
   TabPressState,

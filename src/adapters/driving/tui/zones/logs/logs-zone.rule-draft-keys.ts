@@ -3,7 +3,7 @@
 import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import { resolveHistoryBrowseDown, resolveHistoryBrowseUp } from '../../shared/input-history/index.js';
-import { commandAtGridCursor, groupCommandsByColumn, layoutCommandGrid, moveGridCursorHorizontal, moveGridCursorVertical, resolveGridHorizontalDirection, resolveGridVerticalDirection } from '../../shared/command-bar.js';
+import { commandAtGridCursor, groupCommandsByColumn, layoutCommandGrid, moveGridCursorHorizontal, moveGridCursorVertical, resolveGridHorizontalDirection, resolveGridVerticalDirection } from '../../shared/screens/command-bar/command-bar.js';
 import { decodeFilterHistoryEntry, encodeFilterHistoryEntry, historyEntryLabel, toggleFilterAction, toggleFilterMode, toggleFilterTarget, type FilterEditorState } from './logs-zone.logic.js';
 import type { LogsKey, LogsZoneCtx } from './logs-zone.ctx.js';
 

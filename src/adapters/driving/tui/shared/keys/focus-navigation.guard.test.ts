@@ -9,7 +9,7 @@ const SRC = fileURLToPath(new URL('../../../../../', import.meta.url));
 // value-toggle exceptions, where Tab is not a focus-navigation key.
 const ALLOWED = new Set([
   'adapters/driving/tui/shared/keys/focus-navigation.ts',
-  'adapters/driving/tui/shared/command-bar.tsx',
+  'adapters/driving/tui/shared/screens/command-bar/command-bar.tsx',
   'adapters/driving/tui/shared/components/inputs/text-edit.ts',
   'adapters/driving/tui/shared/components/pickers/branch-picker.tsx',
   'adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx',

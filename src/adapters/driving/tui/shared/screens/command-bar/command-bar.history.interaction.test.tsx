@@ -5,8 +5,8 @@ import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import { CommandBar } from './command-bar.js';
-import { createAppStore } from '../store/app-store.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './test-support/fake-tty.js';
+import { createAppStore } from '../../../store/app-store.js';
+import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../test-support/fake-tty.js';
 
 function mount(store: ReturnType<typeof createAppStore>) {
   const stdout = new FakeTtyStdout();

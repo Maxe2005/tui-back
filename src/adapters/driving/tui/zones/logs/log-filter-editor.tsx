@@ -7,7 +7,7 @@ import {
   groupCommandsByColumn,
   layoutCommandGrid,
   type GridCursor,
-} from '../../shared/command-bar.js';
+} from '../../shared/screens/command-bar/command-bar.js';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
