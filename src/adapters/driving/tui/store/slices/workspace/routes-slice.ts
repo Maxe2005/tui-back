@@ -36,6 +36,7 @@ import {
   type BodyEditError,
   type JsonTreeState,
 } from '../../../shared/components/json-tree/model.js';
+import { upsertRecentRoute } from '../../../zones/routes/logic/routes-recent.logic.js';
 import {
   MAX_REQUEST_DRAFTS,
   MAX_ROUTE_RESPONSES,
@@ -60,8 +61,17 @@ export type RouteResponse =
   | { status: 'fired'; result: FireResult }
   | { status: 'error'; error: { code: string; message: string } };
 
-// 'favorites' = the Favorites pane above the route list owns the keyboard.
-export type RoutesPaneFocus = 'list' | 'favorites' | 'detail';
+// 'favorites' / 'recent' = the Favorites pane or its Recent section above the route list owns the keyboard.
+export type RoutesPaneFocus = 'list' | 'favorites' | 'recent' | 'detail';
+
+// One fired route of this session: identity `(repoPath, METHOD, path template)` and its last
+// outcome — a status + duration, or the error code of a fire that never produced a response.
+export type RecentRoute = {
+  repoPath: string;
+  method: string;
+  path: string;
+  outcome: { kind: 'status'; status: number; durationMs: number } | { kind: 'error'; code: string };
+};
 
 // The right pane's sub-tabs, in display order.
 export type RoutesPaneTab = 'saved' | 'request' | 'response';
@@ -87,6 +97,9 @@ export type RoutesSlice = {
   // another repo.
   requestDrafts: Record<string, RequestDraft>;
   responses: Record<string, RouteResponse>;
+  // The routes fired this session, most recent first, at most MAX_RECENT_ROUTES (routes-recent.logic), no duplicate
+  // identity. Session-only (never persisted); dropped on a reload onto another repo.
+  recentRoutes: RecentRoute[];
   ensureRequestDraft: (routeKey: string, seed: RequestDraft) => void;
   updateRequestDraft: (routeKey: string, updater: (previous: RequestDraft) => RequestDraft) => void;
   // Which side owns the keyboard, and the right pane's active sub-tab.
@@ -254,6 +267,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     setRoutesSelected: (index) => set({ routesSelected: index }),
     requestDrafts: {},
     responses: {},
+    recentRoutes: [],
     draftOrigins: {},
     savedRequests: null,
     savedRequestsError: null,
@@ -386,6 +400,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
             ? {
                 requestDrafts: {},
                 responses: {},
+                recentRoutes: [],
                 draftOrigins: {},
                 bodyDrafts: {},
                 bodyEditErrors: {},
@@ -457,6 +472,18 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       if (repoGeneration !== generation) {
         return;
       }
+      // Remember the fire (any real outcome, not the pre-flight wiring failures above).
+      const recordRecent = (outcome: RecentRoute['outcome']) => {
+        const space = routeKey.indexOf(' ');
+        const templatePath = space === -1 ? path : routeKey.slice(space + 1);
+        const entry: RecentRoute = { repoPath, method: method.toUpperCase(), path: templatePath, outcome };
+        set((state) => ({ recentRoutes: upsertRecentRoute(state.recentRoutes, entry) }));
+      };
+      recordRecent(
+        result.ok
+          ? { kind: 'status', status: result.data.status, durationMs: result.data.durationMs }
+          : { kind: 'error', code: result.error.code },
+      );
       if (result.ok) {
         // Touch (never reset) the route's response tree state, so a re-fire re-applies its key
         // rules and normalized folds.
