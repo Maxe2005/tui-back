@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import type { DashboardOtherService } from '../../../../../core/dashboard/snapshot.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { colors, spacing } from '../../shared/theme/theme.js';

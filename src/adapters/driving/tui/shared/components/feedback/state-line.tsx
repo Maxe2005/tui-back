@@ -4,9 +4,9 @@
 // `verb` swaps "Loading" / "Failed to load" when a different operation is in flight or failed
 // (Scanning, Failed to scan).
 import { Text } from 'ink';
-import { RETRY_HINT } from '../../keybindings/index.js';
-import { colors } from '../theme/theme.js';
-import { formatHint } from './dialogs/hints.js';
+import { RETRY_HINT } from '../../../keybindings/index.js';
+import { colors } from '../../theme/theme.js';
+import { formatHint } from '../dialogs/hints.js';
 import { Spinner } from './spinner.js';
 
 export type StateLineProps =

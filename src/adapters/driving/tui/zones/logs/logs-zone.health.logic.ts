@@ -1,7 +1,7 @@
 // tui/zones/logs: pure health-badge, health-label and no-container row helpers for the LogsZone.
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
-import type { StatusBadgeState } from '../../shared/components/status-badge.js';
+import type { StatusBadgeState } from '../../shared/components/feedback/status-badge.js';
 
 // ServiceStatusState → StatusBadgeState — `up` → `●`/success, `down` → `○`/error, `restarting` →
 // `⣾`/info (StatusBadge's `in-progress`), `unhealthy` → `◐`/warning, `inconsistent` → `⚠`/warning.

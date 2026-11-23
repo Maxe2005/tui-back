@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { theme } from '../theme/index.js';
-import { STATUS_BADGES, StatusBadge } from './index.js';
-import { renderToString } from './render-to-string.js';
+import { theme } from '../../theme/index.js';
+import { STATUS_BADGES, StatusBadge } from '../index.js';
+import { renderToString } from '../render-to-string.js';
 
 const ALL_STATES = [
   'up',

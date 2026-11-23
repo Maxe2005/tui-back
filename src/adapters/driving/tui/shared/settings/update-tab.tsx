@@ -1,7 +1,7 @@
 // tui/shared/settings/update-tab: props-only view of the Update tab's rows. State and key handling stay in settings-screen; this file only renders.
 import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../components/checkbox-list-item.js';
-import { DimAnnotation } from '../components/dim-annotation.js';
+import { DimAnnotation } from '../components/feedback/dim-annotation.js';
 import { colors } from '../theme/theme.js';
 import { UPDATE_SETTINGS_ROWS, UPDATE_SETTINGS_ROW_HINTS } from './update.logic.js';
 import type { Settings } from '../../../../../core/ports/settings.js';

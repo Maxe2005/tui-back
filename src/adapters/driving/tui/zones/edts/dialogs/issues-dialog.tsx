@@ -11,7 +11,7 @@ import { TruncatedText } from '../../../shared/components/display/truncated-text
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import { explainIssueErrorCode, explainUnreachable } from '../edts-zone.logic.js';
-import { StateLine } from '../../../shared/components/state-line.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
 
 export type IssuesDialogViewProps = {
   unreachable: readonly string[];

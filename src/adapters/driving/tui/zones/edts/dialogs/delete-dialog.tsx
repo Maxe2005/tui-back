@@ -5,7 +5,7 @@
 import { Box, Text, type Key } from 'ink';
 import type { AppState } from '../../../store/app-store.js';
 import { CheckboxListItem } from '../../../shared/components/checkbox-list-item.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
@@ -18,7 +18,7 @@ import {
   type DeleteDialogState,
   type EdtDialogState,
 } from '../edts-zone.logic.js';
-import { StateLine } from '../../../shared/components/state-line.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 import { BoundedList } from '../../../shared/components/bounded-list.js';
 import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';

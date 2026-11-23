@@ -7,14 +7,14 @@ import type { DashboardService } from '../../../../../core/dashboard/snapshot.js
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { ServiceActionsRow } from '../../shared/components/service-actions-row.js';
-import { StateLine } from '../../shared/components/state-line.js';
-import { StatusBadge } from '../../shared/components/status-badge.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
+import { StatusBadge } from '../../shared/components/feedback/status-badge.js';
 import { ClampedParagraph, TruncatedText } from '../../shared/components/display/truncated-text.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { STATUS_BADGES } from '../../shared/components/status-badge.js';
+import { STATUS_BADGES } from '../../shared/components/feedback/status-badge.js';
 import {
   aheadBehindLabel,
   branchLabel,

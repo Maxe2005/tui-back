@@ -7,7 +7,7 @@ import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { createAppStore } from '../../store/app-store.js';
 import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
-import { STATUS_BADGES } from '../../shared/components/status-badge.js';
+import { STATUS_BADGES } from '../../shared/components/feedback/status-badge.js';
 import { LogsZone } from './logs-zone.js';
 
 function service(overrides: Partial<ServiceBranchDivergence> = {}): ServiceBranchDivergence {

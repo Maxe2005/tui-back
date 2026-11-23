@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
-import { DimAnnotation } from './components/dim-annotation.js';
+import { DimAnnotation } from './components/feedback/dim-annotation.js';
 import { ModalDialog } from './components/dialogs/modal-dialog.js';
 import type { TextInputState } from './components/text-edit.js';
 import { useFooterContext } from './hooks/use-footer-context.js';

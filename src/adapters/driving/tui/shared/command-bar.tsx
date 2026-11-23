@@ -24,7 +24,7 @@ import {
   runCommand as runCommandInZone,
   type Command,
 } from '../commands/commands.js';
-import { StateLine } from './components/state-line.js';
+import { StateLine } from './components/feedback/state-line.js';
 import {
   GridCursor,
   TabPressState,

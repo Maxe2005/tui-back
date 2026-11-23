@@ -6,7 +6,7 @@ import { REALIGN_SCOPES, cycleRealignScope, type RealignScope } from '../../../.
 import type { FooterContextId } from '../keybindings/index.js';
 import type { RealignCandidates, RealignLiveRow, RealignLiveStatus, RealignRun } from '../store/app-store.js';
 import { nextCursorForKey } from './keys/list-cursor.js';
-import { STATUS_BADGES } from './components/status-badge.js';
+import { STATUS_BADGES } from './components/feedback/status-badge.js';
 import { colors } from './theme/theme.js';
 
 export const REALIGN_PRESET_LABELS: Record<RealignScope, string> = {

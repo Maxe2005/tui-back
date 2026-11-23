@@ -6,13 +6,13 @@
 import { Box } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { FooterContext } from '../../shared/components/chrome/footer-context.js';
 import { ROUTES_LIST_CHROME_ROWS } from './routes-zone.constants.js';
 import { RoutesDetailPane } from './routes-detail-pane.js';
 import { RoutesListPane } from './routes-list-pane.js';
 import { RoutesModals } from './routes-modals.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { canEditRouteBody, resolveAddParentPath } from '../../shared/components/json-tree/model.js';
 import { colors } from '../../shared/theme/theme.js';

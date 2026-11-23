@@ -8,7 +8,7 @@ import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry
 import type { AppState } from '../../../store/app-store.js';
 import { CheckboxListItem } from '../../../shared/components/checkbox-list-item.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { TextInputLine } from '../../../shared/components/text-input-line.js';
@@ -31,7 +31,7 @@ import {
   type EdtDialogState,
   type ModifyDialogState,
 } from '../edts-zone.logic.js';
-import { StateLine } from '../../../shared/components/state-line.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 import { BoundedList } from '../../../shared/components/bounded-list.js';
 

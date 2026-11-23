@@ -8,10 +8,10 @@ import type { FooterContextId } from '../../keybindings/index.js';
 import { resolveFocusStep, stepFocus, type FocusNavDirection } from '../keys/focus-navigation.js';
 import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
-import { DimAnnotation } from './dim-annotation.js';
+import { DimAnnotation } from './feedback/dim-annotation.js';
 import { ownerAnnotations, ownerRefusalForBranch, type BranchOwners } from '../branch-owners-text.js';
 import { BranchAutocompleteInput, clampAutocompletePickCursor, handleBranchAutocompleteKey, isBranchAutocompleteExactMatch, matchBranchesBySubstring } from './branch-autocomplete-input.js';
-import { StateLine } from './state-line.js';
+import { StateLine } from './feedback/state-line.js';
 
 export type BranchPickerMode = 'pick-existing' | 'create-new' | 'rename-current';
 

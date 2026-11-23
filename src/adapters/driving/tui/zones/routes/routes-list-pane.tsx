@@ -2,9 +2,9 @@
 import { Box, Text } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { ListRow } from '../../shared/components/list-row.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatRouteRow } from './routes-zone.logic.js';

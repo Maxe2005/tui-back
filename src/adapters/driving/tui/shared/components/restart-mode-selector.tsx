@@ -4,7 +4,7 @@
 import { Box, Text } from 'ink';
 import type { SwitchRestartMode } from '../../../../../core/ports/settings.js';
 import { colors } from '../theme/theme.js';
-import { DimAnnotation } from './dim-annotation.js';
+import { DimAnnotation } from './feedback/dim-annotation.js';
 
 export const RESTART_MODE_ORDER: readonly SwitchRestartMode[] = ['none', 'simple', 'clean'];
 

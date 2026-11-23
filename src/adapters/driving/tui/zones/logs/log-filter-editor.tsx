@@ -8,7 +8,7 @@ import {
   layoutCommandGrid,
   type GridCursor,
 } from '../../shared/command-bar.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 import { TextInputLine } from '../../shared/components/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
@@ -25,7 +25,7 @@ import {
   type FilterEditorState,
   type LogFilterScope,
 } from './logs-zone.logic.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
 
 // The filter-history grid browser's column gap — mirrors command-bar.tsx's grid spacing since
 // this grid renders inside the same kind of ModalDialog.

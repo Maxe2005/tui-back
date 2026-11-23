@@ -2,7 +2,7 @@
 // pane route's saved requests with a `/` filter. Stateless; the zone owns the pick state,
 // the load/delete calls and the route-scoped filtering.
 import { Box, Text } from 'ink';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import {
   FilterablePickList,
   type FilterablePickItem,

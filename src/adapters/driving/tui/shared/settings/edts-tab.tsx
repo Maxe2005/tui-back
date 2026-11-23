@@ -1,7 +1,7 @@
 // tui/shared/settings/edts-tab: props-only view of the EDTs tab (group list and every drilled-in group). State and key handling stay in settings-screen; this file only renders.
 import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../components/checkbox-list-item.js';
-import { DimAnnotation } from '../components/dim-annotation.js';
+import { DimAnnotation } from '../components/feedback/dim-annotation.js';
 import { colors } from '../theme/theme.js';
 import { SHARED_EDT_TOGGLE_LABEL, SHARED_EDT_TOGGLE_NOTE, HIDEABLE_ACTION_HINTS, HIDEABLE_ACTION_TYPES, REALIGN_SCOPE_LABELS, SETTINGS_GROUPS, SWITCH_RESTART_LABELS, type SettingsGroupId } from './edts.logic.js';
 import type { Settings } from '../../../../../core/ports/settings.js';

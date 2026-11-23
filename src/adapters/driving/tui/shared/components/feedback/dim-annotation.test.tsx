@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { DimAnnotation } from './index.js';
-import { renderToString } from './render-to-string.js';
+import { DimAnnotation } from '../index.js';
+import { renderToString } from '../render-to-string.js';
 
 describe('DimAnnotation', () => {
   it('renders italic dim text', async () => {

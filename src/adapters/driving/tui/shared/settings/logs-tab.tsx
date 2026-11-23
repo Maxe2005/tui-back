@@ -1,8 +1,8 @@
 // tui/shared/settings/logs-tab: props-only view of the Logs tab (group list and every drilled-in group, clear lists and the rules confirmation). State and key handling stay in settings-screen; this file only renders.
 import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../components/checkbox-list-item.js';
-import { DimAnnotation } from '../components/dim-annotation.js';
-import { StateLine } from '../components/state-line.js';
+import { DimAnnotation } from '../components/feedback/dim-annotation.js';
+import { StateLine } from '../components/feedback/state-line.js';
 import { BoundedList } from '../components/bounded-list.js';
 import { colors } from '../theme/theme.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';

@@ -1,5 +1,5 @@
 import { Text } from 'ink';
-import { colors } from '../theme/theme.js';
+import { colors } from '../../theme/theme.js';
 
 export type SpinnerProps = {
   /** Current progress state; cycles through glyphs while true, stops when false */

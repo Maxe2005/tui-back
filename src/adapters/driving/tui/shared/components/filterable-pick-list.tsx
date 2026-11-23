@@ -5,7 +5,7 @@
 // chrome, the candidates and what `select`/`cancel` do.
 import { Box } from 'ink';
 import { BoundedList } from './bounded-list.js';
-import { DimAnnotation } from './dim-annotation.js';
+import { DimAnnotation } from './feedback/dim-annotation.js';
 import { ListRow } from './list-row.js';
 import { nextTextInputValue, type TextEditKey } from './text-edit.js';
 import { TextInputLine } from './text-input-line.js';

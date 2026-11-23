@@ -12,7 +12,7 @@ import {
   toggleMemberSelection,
 } from '../../edts-zone.logic.js';
 import { missingSeedMembers } from './wizard.logic.js';
-import { StateLine } from '../../../../shared/components/state-line.js';
+import { StateLine } from '../../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../../shared/keys/list-cursor.js';
 import { BoundedList } from '../../../../shared/components/bounded-list.js';
 

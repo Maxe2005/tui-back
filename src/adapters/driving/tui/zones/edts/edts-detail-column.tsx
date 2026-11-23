@@ -3,9 +3,9 @@
 // sibling).
 import { Box } from 'ink';
 import { DetailPane } from '../../shared/components/detail-pane.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import {
   appendHint,

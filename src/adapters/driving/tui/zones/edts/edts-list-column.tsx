@@ -2,10 +2,10 @@
 // EDT SERVICES / OTHER SERVICES lists, as nested ZoneLayouts (boundary 1 / boundary 2).
 import { Box, Text } from 'ink';
 import { BoundedList } from '../../shared/components/bounded-list.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { formatHint, formatHints } from '../../shared/components/dialogs/hints.js';
 import { ListRow } from '../../shared/components/list-row.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { ZoneLayout } from '../../shared/components/zone-layout.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatEdtRowMeta, formatServiceMeta } from './edts-zone.logic.js';

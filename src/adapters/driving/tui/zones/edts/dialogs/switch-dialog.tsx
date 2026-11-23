@@ -7,7 +7,7 @@ import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../cor
 import { isChangedSwitchOutcome, restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../core/edt/switch-restart.js';
 import { cycleSwitchRestartMode } from '../../../../../../core/ports/settings.js';
 import type { AppState } from '../../../store/app-store.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
 import { SwitchRestartReport } from './switch-restart-report.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';

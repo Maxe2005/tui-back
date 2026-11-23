@@ -3,7 +3,7 @@
 import type { DashboardOtherService, DashboardRegistrySummary, DashboardService } from '../../../../../core/dashboard/snapshot.js';
 import type { ServiceAction } from '../../../../../core/service-actions/index.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';
-import type { StatusBadgeState } from '../../shared/components/status-badge.js';
+import type { StatusBadgeState } from '../../shared/components/feedback/status-badge.js';
 
 export type DashboardBody = 'registry-error' | 'empty-registry' | 'sections';
 

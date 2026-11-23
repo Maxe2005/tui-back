@@ -11,7 +11,7 @@ import { Box, Text } from 'ink';
 import { nextTextInputValue, type TextEditKey } from './text-edit.js';
 import { colors } from '../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
-import { StateLine } from './state-line.js';
+import { StateLine } from './feedback/state-line.js';
 
 export type BranchAutocompleteStatus = 'loading' | 'ready' | 'error';
 

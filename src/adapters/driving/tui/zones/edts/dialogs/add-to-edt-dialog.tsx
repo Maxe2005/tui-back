@@ -2,7 +2,7 @@
 import { Box, Text, type Key } from 'ink';
 import type { AppState } from '../../../store/app-store.js';
 import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
 import { FailedResultList, type FailedResultRow } from '../../../shared/components/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
