@@ -1160,4 +1160,71 @@ describe('routes slice favorites', () => {
     expect(store.getState().favoriteRoutes).toBeNull();
     expect(store.getState().favoriteRoutesError).toMatchObject({ code: 'edt-not-found' });
   });
+
+  it('keeps a stale favorite stale after toggling a different route', async () => {
+    const store = createAppStore(
+      favoriteDeps([
+        { repoPath: '/repos/gateway', method: 'GET', path: '/users' },
+        { repoPath: '/repos/gateway', method: 'GET', path: '/gone' },
+      ]),
+    );
+    await store.getState().loadRoutes();
+    await store.getState().refreshFavoriteRoutes();
+    await store.getState().toggleFavoriteRoute('POST', '/users');
+    const gone = store.getState().favoriteRoutes?.find((item) => item.path === '/gone');
+    expect(gone?.stale).toBe(true);
+    expect(store.getState().favoriteRoutes?.find((item) => item.method === 'POST')?.stale).toBe(false);
+  });
+
+  it('runs a full refresh (right stale flags) when the cache was never loaded', async () => {
+    const store = createAppStore(favoriteDeps([{ repoPath: '/repos/gateway', method: 'GET', path: '/gone' }]));
+    await store.getState().loadRoutes();
+    await store.getState().toggleFavoriteRoute('GET', '/users');
+    expect(store.getState().favoriteRoutes?.find((item) => item.path === '/gone')?.stale).toBe(true);
+  });
+
+  it('surfaces a failed follow-up listing as favoriteRoutesError', async () => {
+    const deps = favoriteDeps([]);
+    const store = createAppStore(deps);
+    await store.getState().refreshFavoriteRoutes();
+    // First list call after the toggle (inside the toggle use-case) succeeds; the follow-up listing fails.
+    const list = deps.edtRegistry.list as ReturnType<typeof vi.fn>;
+    const original = list.getMockImplementation() as () => Promise<unknown>;
+    let calls = 0;
+    list.mockImplementation(async () => (++calls <= 1 ? original() : err('io-error', 'cannot read')));
+    const result = await store.getState().toggleFavoriteRoute('GET', '/users', '/repos/gateway');
+    expect(result.ok).toBe(true);
+    expect(store.getState().favoriteRoutesError).toMatchObject({ code: 'io-error' });
+  });
+
+  it('serializes rapid toggles so each sees the previous one', async () => {
+    const store = createAppStore(favoriteDeps([]));
+    await store.getState().refreshFavoriteRoutes();
+    const results = await Promise.all([
+      store.getState().toggleFavoriteRoute('GET', '/a', '/repos/gateway'),
+      store.getState().toggleFavoriteRoute('GET', '/b', '/repos/gateway'),
+      store.getState().toggleFavoriteRoute('GET', '/a', '/repos/gateway'),
+    ]);
+    expect(results.map((result) => result.ok && result.data.favorite)).toEqual([true, true, false]);
+    expect(store.getState().favoriteRoutes?.map((item) => item.path)).toEqual(['/b']);
+  });
+
+  it('ignores the result of a superseded refresh', async () => {
+    const deps = favoriteDeps([{ repoPath: '/repos/gateway', method: 'GET', path: '/users' }]);
+    const store = createAppStore(deps);
+    const list = deps.edtRegistry.list as ReturnType<typeof vi.fn>;
+    const original = list.getMockImplementation() as () => Promise<unknown>;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolveGate) => { release = resolveGate; });
+    list.mockImplementationOnce(async () => {
+      await gate;
+      return ok([]);
+    });
+    const slow = store.getState().refreshFavoriteRoutes();
+    list.mockImplementation(original);
+    await store.getState().refreshFavoriteRoutes();
+    release();
+    await slow;
+    expect(store.getState().favoriteRoutes).toHaveLength(1);
+  });
 });
