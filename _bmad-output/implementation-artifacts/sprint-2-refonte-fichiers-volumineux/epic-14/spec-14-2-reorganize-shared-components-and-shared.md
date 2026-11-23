@@ -2,7 +2,7 @@
 title: 'Reorganize shared/components and shared'
 type: 'refactor'
 created: '2026-11-19'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '08d7905627196ded865d5f6b82c67b1754f039da'
 review_loop_iteration: 0
 context:
@@ -63,3 +63,34 @@ Baseline at `08d79056`: 301 test files, 5536 passed + 1 skipped; typecheck and d
 **Commands:**
 - `npx vitest run --configLoader runner && npm run typecheck && npm run depcheck` (`npm test` stand-in, see Design Notes) -- expected: all green, test count equal to baseline
 - `git diff --stat -M baseline_commit..HEAD -- src | grep -v '=>'` -- expected: only import-line edits outside renames
+
+## Suggested Review Order
+
+**Role-based component folders**
+
+- Barrel keeps every export name; only the role folder is added to each path.
+  [`index.ts:1`](../../../src/adapters/driving/tui/shared/components/index.ts#L1)
+
+**Hard-coded paths (non-pure edits)**
+
+- Guard allow-list entries follow the moved files.
+  [`focus-navigation.guard.test.ts:10`](../../../src/adapters/driving/tui/shared/keys/focus-navigation.guard.test.ts#L10)
+
+- TUI root URL gains one level after the move to `dialogs/`.
+  [`hints.guard.test.ts:6`](../../../src/adapters/driving/tui/shared/components/dialogs/hints.guard.test.ts#L6)
+
+- Modal-dialog filter points at the new path.
+  [`bounds-dialogs.test.tsx:32`](../../../src/adapters/driving/tui/shared/bounds/bounds-dialogs.test.tsx#L32)
+
+- Registry `file:` entries updated with each dialog move.
+  [`dialog-registry.tsx:76`](../../../src/adapters/driving/tui/shared/test-support/dialog-registry.tsx#L76)
+
+**Settings per-tab folders**
+
+- Screen now imports tabs from `../settings/<tab>/`.
+  [`settings-screen.tsx:19`](../../../src/adapters/driving/tui/shared/screens/settings-screen.tsx#L19)
+
+**Review outcome**
+
+- Review found only stale path comments (fixed in `b2a3194e`); other findings rejected as approved-mapping choices.
+  [`settings.ts:178`](../../../src/core/ports/settings.ts#L178)

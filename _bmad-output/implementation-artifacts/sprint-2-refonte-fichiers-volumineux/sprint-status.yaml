@@ -61,7 +61,7 @@ development_status:
 
   epic-14: in-progress
   14-1-directory-audit-and-target-tree: done
-  14-2-reorganize-shared-components-and-shared: in-progress
+  14-2-reorganize-shared-components-and-shared: review
   14-3-reorganize-store-slices-and-zone-folders: backlog
   14-4-reorganize-core-folders: backlog
   14-5-reorganize-wizard-dialogs-and-top-level-layout: backlog
