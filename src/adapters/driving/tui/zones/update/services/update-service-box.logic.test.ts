@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createUpdateConfigDraft } from './config/update-config-dialog.logic.js';
-import { toggleMergeSource } from './config/update-config-panels.logic.js';
+import { createUpdateConfigDraft } from '../config/update-config-dialog.logic.js';
+import { toggleMergeSource } from '../config/update-config-panels.logic.js';
 import {
   applyServiceBox,
   cycleToggle,

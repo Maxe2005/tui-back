@@ -4,19 +4,19 @@
 // then the settled result of each step, spaced and glyph-prefixed. Pure view over
 // buildServiceStepViews; the zone decides which mode applies.
 import { Box, Text } from 'ink';
-import { useBounds } from '../../shared/bounds/bounds-context.js';
-import { capOlder, OlderHiddenLine } from '../../shared/components/lists/bounded-list.js';
-import { Spinner } from '../../shared/components/index.js';
-import { colors } from '../../shared/theme/theme.js';
-import type { SharedTypesStage } from '../../../../../core/shared-types/smart-update.js';
-import type { GroupUpdateRepoResult } from '../../../../../core/scripts/group-update.js';
+import { useBounds } from '../../../shared/bounds/bounds-context.js';
+import { capOlder, OlderHiddenLine } from '../../../shared/components/lists/bounded-list.js';
+import { Spinner } from '../../../shared/components/index.js';
+import { colors } from '../../../shared/theme/theme.js';
+import type { SharedTypesStage } from '../../../../../../core/shared-types/smart-update.js';
+import type { GroupUpdateRepoResult } from '../../../../../../core/scripts/group-update.js';
 import {
   buildServiceStepViews,
   PENDING_STEPS,
   type ServiceIssue,
   type ServiceStepStates,
   type UpdateStepState,
-} from './logic/update-zone.logic.js';
+} from '../logic/update-zone.logic.js';
 
 export const UPDATE_DETAIL_NEVER_RAN = 'No update has run for this service yet.';
 

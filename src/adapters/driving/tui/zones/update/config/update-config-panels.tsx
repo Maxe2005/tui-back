@@ -22,8 +22,8 @@ import {
   type GlobalLine,
   type PanelsViewState,
 } from './update-config-panels.logic.js';
-import { UpdateServiceBox } from '../update-service-box.js';
-import type { ServiceBoxContext, ServiceBoxState } from '../update-service-box.logic.js';
+import { UpdateServiceBox } from '../services/update-service-box.js';
+import type { ServiceBoxContext, ServiceBoxState } from '../services/update-service-box.logic.js';
 import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 export const PANELS_TITLE_EDT = 'CONFIGURE UPDATE';

@@ -7,12 +7,12 @@ import {
   stepSuggestField,
   validateSuggestValue,
   type SuggestFieldState,
-} from '../../shared/components/inputs/suggest-field.logic.js';
-import type { TextEditKey } from '../../shared/components/inputs/text-edit.js';
-import type { BranchAutocompleteStatus } from '../../shared/components/inputs/branch-autocomplete-input.js';
-import type { ToggleOverride, UpdateConfigDraft } from './config/update-config-dialog.logic.js';
-import { nextBoxLine } from '../../shared/keys/box-line-nav.js';
-import { commitEmptyBranch, setRow } from './config/update-config-panels.logic.js';
+} from '../../../shared/components/inputs/suggest-field.logic.js';
+import type { TextEditKey } from '../../../shared/components/inputs/text-edit.js';
+import type { BranchAutocompleteStatus } from '../../../shared/components/inputs/branch-autocomplete-input.js';
+import type { ToggleOverride, UpdateConfigDraft } from '../config/update-config-dialog.logic.js';
+import { nextBoxLine } from '../../../shared/keys/box-line-nav.js';
+import { commitEmptyBranch, setRow } from '../config/update-config-panels.logic.js';
 
 export type ServiceBoxLine = 'branch' | 'migrations' | 'restart' | 'apply';
 

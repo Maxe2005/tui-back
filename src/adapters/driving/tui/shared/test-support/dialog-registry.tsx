@@ -28,8 +28,8 @@ import {
   initialSwitchDialog,
 } from '../../zones/edts/edts-zone.logic.js';
 import { initialSwitchResolution } from '../../zones/edts/dialogs/switch-resolution/switch-resolution.logic.js';
-import { UpdateServicePickDialog } from '../../zones/update/update-service-pick-dialog.js';
-import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-dialog.js';
+import { UpdateServicePickDialog } from '../../zones/update/services/update-service-pick-dialog.js';
+import { UpdateServiceMenuDialog } from '../../zones/update/services/update-service-menu-dialog.js';
 import { UpdateIncidentsDialog } from '../../zones/update/incidents/update-incidents-dialog.js';
 import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
 import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
@@ -247,7 +247,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'update/service-pick',
-    file: 'zones/update/update-service-pick-dialog.tsx',
+    file: 'zones/update/services/update-service-pick-dialog.tsx',
     render: () =>
       createElement(UpdateServicePickDialog, {
         state: createFilterablePickListState(),
@@ -256,7 +256,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'update/service-menu',
-    file: 'zones/update/update-service-menu-dialog.tsx',
+    file: 'zones/update/services/update-service-menu-dialog.tsx',
     render: () => createElement(UpdateServiceMenuDialog, { service: 's'.repeat(500), cursor: 0 }),
   },
   {

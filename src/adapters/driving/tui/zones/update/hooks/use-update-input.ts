@@ -14,8 +14,8 @@ import {
   resolveRecapToggle,
   resolveReportKey,
 } from '../logic/update-zone.logic.js';
-import { UPDATE_SERVICE_MENU_ESCAPE, resolveServiceMenuChoice, visibleServiceMenuItems } from '../update-service-menu-dialog.js';
-import { toServicePickItems } from '../update-service-pick-dialog.js';
+import { UPDATE_SERVICE_MENU_ESCAPE, resolveServiceMenuChoice, visibleServiceMenuItems } from '../services/update-service-menu-dialog.js';
+import { toServicePickItems } from '../services/update-service-pick-dialog.js';
 import { reduceIncidentListKey } from '../incidents/update-incidents.logic.js';
 import { resolveQuitConfirm, resolveUpdateTrigger, shouldConfirmQuit } from '../logic/update-zone.resolvers.logic.js';
 import { UPDATE_BLOCKER_MENU_ESCAPE, blockerMenuItems } from '../logic/update-zone.blockers.logic.js';

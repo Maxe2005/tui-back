@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
-import { MenuList, type MenuItem } from '../../shared/components/lists/menu-list.js';
-import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
-import { colors } from '../../shared/theme/theme.js';
+import { MenuList, type MenuItem } from '../../../shared/components/lists/menu-list.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
+import { colors } from '../../../shared/theme/theme.js';
 
 export const UPDATE_SERVICE_MENU_TITLE = 'SERVICE ACTIONS';
 

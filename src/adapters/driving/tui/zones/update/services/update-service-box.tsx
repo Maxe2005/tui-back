@@ -2,11 +2,11 @@
 // update-service-box.logic.ts). Height: SERVICE_BOX_ROWS (update-config-panels.logic.ts)
 // + the branch field's list (`dropdownLines`); every line is truncated, none can wrap.
 import { Box, Text } from 'ink';
-import { BranchAutocompleteInput } from '../../shared/components/inputs/branch-autocomplete-input.js';
-import { colors } from '../../shared/theme/theme.js';
-import type { ToggleOverride } from './config/update-config-dialog.logic.js';
+import { BranchAutocompleteInput } from '../../../shared/components/inputs/branch-autocomplete-input.js';
+import { colors } from '../../../shared/theme/theme.js';
+import type { ToggleOverride } from '../config/update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
-import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 export const SHARED_BRANCH_PLACEHOLDER = '<shared-branch>';
 

@@ -27,7 +27,7 @@ import {
   reduceServiceBoxKey,
   type ServiceBoxContext,
   type ServiceBoxState,
-} from '../update-service-box.logic.js';
+} from '../services/update-service-box.logic.js';
 
 export interface UseUpdateConfigPanelsInput {
   draft: UpdateConfigDraft | null;

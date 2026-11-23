@@ -3,12 +3,12 @@
 // through boundary 1), each row carrying exactly one status glyph.
 import { resolve as resolvePath } from 'node:path';
 import { Box, Text } from 'ink';
-import { BoundedList, ListRow, StatusBadge, ZoneLayout } from '../../shared/components/index.js';
-import { StateLine } from '../../shared/components/feedback/state-line.js';
-import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatServiceMeta } from '../edts/edts-zone.logic.js';
-import { UPDATE_MEMBERS_HEADER, UPDATE_OTHERS_HEADER, deriveUpdateServiceStatus, updateStatusText } from './logic/update-zone.logic.js';
-import type { UpdateZoneCtx } from './update-zone.ctx.js';
+import { BoundedList, ListRow, StatusBadge, ZoneLayout } from '../../../shared/components/index.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
+import { colors, spacing } from '../../../shared/theme/theme.js';
+import { formatServiceMeta } from '../../edts/edts-zone.logic.js';
+import { UPDATE_MEMBERS_HEADER, UPDATE_OTHERS_HEADER, deriveUpdateServiceStatus, updateStatusText } from '../logic/update-zone.logic.js';
+import type { UpdateZoneCtx } from '../update-zone.ctx.js';
 
 export function UpdateServiceListColumn({ c }: { c: UpdateZoneCtx }) {
   const {

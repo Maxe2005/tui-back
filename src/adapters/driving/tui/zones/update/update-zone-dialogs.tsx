@@ -6,8 +6,8 @@ import { ClampedParagraph } from '../../shared/components/display/truncated-text
 import { colors } from '../../shared/theme/theme.js';
 import { UpdateConfigPanels } from './config/update-config-panels.js';
 import { UpdateIncidentsDialog } from './incidents/update-incidents-dialog.js';
-import { UpdateServiceMenuDialog } from './update-service-menu-dialog.js';
-import { UpdateServicePickDialog } from './update-service-pick-dialog.js';
+import { UpdateServiceMenuDialog } from './services/update-service-menu-dialog.js';
+import { UpdateServicePickDialog } from './services/update-service-pick-dialog.js';
 import { UPDATE_QUIT_CONFIRM_BODY, UPDATE_QUIT_CONFIRM_BODY_ALL, UPDATE_QUIT_CONFIRM_TITLE } from './logic/update-zone.resolvers.logic.js';
 import type { UpdateZoneCtx } from './update-zone.ctx.js';
 

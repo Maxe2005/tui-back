@@ -18,7 +18,7 @@ import {
   resolveUpdatePaneRows,
   splitUpdateServiceRows,
 } from '../logic/update-zone.logic.js';
-import { visibleServiceMenuItems } from '../update-service-menu-dialog.js';
+import { visibleServiceMenuItems } from '../services/update-service-menu-dialog.js';
 import { formatQuitRunCounts } from '../incidents/update-incidents.logic.js';
 import { UPDATE_ALL_RUNNING_LABEL, UPDATE_RUNNING_LABEL, UPDATE_SELECTION_RUNNING_LABEL, shouldOfferRerun } from '../logic/update-zone.resolvers.logic.js';
 import { UPDATE_SERVICE_LIST_CHROME_ROWS } from '../update-zone.ctx.js';
