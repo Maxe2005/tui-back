@@ -73,3 +73,43 @@ Baseline: 301 test files, 5536 passed + 1 skipped (`npm test` fails at config lo
 - `npx vitest run --configLoader runner && npm run typecheck && npm run depcheck` -- expected: all green, test count equal to baseline
 - `git diff --stat -M 54623dc53d139787a71f2b5c0eca41a0aca9d5ea..HEAD -- src | grep -v '=>'` -- expected: only import-line/path-string edits outside renames
 - `npm pack --dry-run` -- expected: no test files, `schema-001.sql` present
+
+## Suggested Review Order
+
+**Hard-coded depth edits (only non-import changes)**
+
+- Project-root URL gains one level after the move under `driven/runtime/`.
+  [`index.test.ts`](../../../../../src/adapters/driven/runtime/lock/index.test.ts)
+
+- `package.json` URL gains one level under `driven/runtime/installer/`.
+  [`index.ts`](../../../../../src/adapters/driven/runtime/installer/index.ts)
+
+- e2e helpers resolve `tui-back.mjs` one level up.
+  [`e2e.test-support.ts`](../../../../../src/bin/e2e/e2e.test-support.ts)
+
+- Dialog registry paths follow the new dialog folders.
+  [`dialog-registry.tsx`](../../../../../src/adapters/driving/tui/shared/test-support/dialog-registry.tsx)
+
+**Top-level families (widest import fan-out)**
+
+- Core grouped into workspace, runtime and insight.
+  [`core`](../../../../../src/core)
+
+- Driven adapters grouped into runtime, vcs, storage and modules.
+  [`driven`](../../../../../src/adapters/driven)
+
+**Local splits**
+
+- Wizard steps and override box.
+  [`create-wizard`](../../../../../src/adapters/driving/tui/zones/edts/dialogs/create-wizard)
+
+- App-shell tests in their own folder.
+  [`app-shell-tests`](../../../../../src/adapters/driving/tui/app-shell-tests)
+
+- Git adapter split by concern; CLI dispatch; e2e tests.
+  [`git`](../../../../../src/adapters/driven/vcs/git)
+
+**Docs**
+
+- Path references and grouping sentence.
+  [`AGENTS.md`](../../../../../AGENTS.md)
