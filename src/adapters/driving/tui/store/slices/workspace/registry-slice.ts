@@ -3,19 +3,19 @@
 // onboarding prompt, and classifying/removing stale registry entries.
 import type { StateCreator } from 'zustand';
 import type { ScanResult } from '../../../../../../core/ports/registry.js';
-import { registerRepo } from '../../../../../../core/scripts/register.js';
-import { scanRepos } from '../../../../../../core/scripts/scan.js';
+import { registerRepo } from '../../../../../../core/scripts/registry/register.js';
+import { scanRepos } from '../../../../../../core/scripts/registry/scan.js';
 import {
   classifyStaleRegistry,
   removeStaleRegistryEntries,
   type StaleRegistryEntry,
   type RemoveStaleRegistryEntryResult,
   type RegistryEntryError,
-} from '../../../../../../core/scripts/clean-registry.js';
+} from '../../../../../../core/scripts/registry/clean-registry.js';
 import {
   validateRegistry,
   type ValidateRegistryEntryResult,
-} from '../../../../../../core/scripts/validate-registry.js';
+} from '../../../../../../core/scripts/registry/validate-registry.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 // A per-path register outcome, classified by snapshotting registry.list() before registering

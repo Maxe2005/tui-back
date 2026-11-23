@@ -2,9 +2,9 @@
 // Real-filesystem behavior (missing file, corrupt YAML, stat probe) is covered in
 // adapters/driven/registry/index.test.ts.
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err } from '../result.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
+import { ok, err } from '../../result.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import type { Manifest, ManifestPort } from '../../ports/manifest.js';
 import { listRepos } from './list-repos.js';
 
 function fakeRegistry(overrides: Partial<RegistryPort> = {}): RegistryPort {

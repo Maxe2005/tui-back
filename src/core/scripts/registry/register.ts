@@ -3,10 +3,10 @@
 // exists — list-repos reports it unreachable). Relative paths are rejected; the path is
 // canonicalized so `/a/b/` and `/a/b` dedupe to one entry (FR-1).
 import { isAbsolute, resolve } from 'node:path';
-import { err, ok, type Result } from '../result.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { LockPort } from '../ports/lock.js';
-import { withActionLock } from '../locking.js';
+import { err, ok, type Result } from '../../result.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import type { LockPort } from '../../ports/lock.js';
+import { withActionLock } from '../../locking.js';
 
 export async function registerRepo(
   registry: RegistryPort,

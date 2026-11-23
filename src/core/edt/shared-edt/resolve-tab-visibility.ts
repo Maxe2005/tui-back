@@ -9,7 +9,7 @@ import type { ManifestPort } from '../../ports/manifest.js';
 import type { RegistryPort } from '../../ports/registry.js';
 import type { StatePort } from '../../ports/state.js';
 import { ok, type Result } from '../../result.js';
-import { listRepos, type ManagedRepo } from '../../scripts/list-repos.js';
+import { listRepos, type ManagedRepo } from '../../scripts/registry/list-repos.js';
 
 export const ROUTES_MODULE_ID = 'route-explorer';
 export const SHARED_TYPES_MODULE_IDS = ['shared-types-source', 'shared-types-consumer'] as const;

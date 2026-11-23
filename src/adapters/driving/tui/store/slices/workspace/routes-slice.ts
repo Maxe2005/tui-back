@@ -18,7 +18,7 @@ import {
   saveRequest,
   type SavedWithStale,
 } from '../../../../../../core/routes/saved-requests.js';
-import { listRepos } from '../../../../../../core/scripts/list-repos.js';
+import { listRepos } from '../../../../../../core/scripts/registry/list-repos.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 import {

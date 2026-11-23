@@ -43,8 +43,8 @@ export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/workspace/navi
 export type { ActivateEdtRequest, CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/workspace/edt-slice.js';
 export { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION } from './slices/workspace/edt-slice.js';
 export type { RegistryOutcome, RegistryRegisterResult } from './slices/workspace/registry-slice.js';
-export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryResult, RemoveStaleRegistryOutcome, RegistryEntryError } from '../../../../core/scripts/clean-registry.js';
-export type { ValidateRegistryEntryResult, ValidateRegistryOutcome } from '../../../../core/scripts/validate-registry.js';
+export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryResult, RemoveStaleRegistryOutcome, RegistryEntryError } from '../../../../core/scripts/registry/clean-registry.js';
+export type { ValidateRegistryEntryResult, ValidateRegistryOutcome } from '../../../../core/scripts/registry/validate-registry.js';
 export type { SettingsUpdate } from './slices/app/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update/update-slice.js';
 export type { LogsPaneData } from './slices/logs/logs-slice.js';

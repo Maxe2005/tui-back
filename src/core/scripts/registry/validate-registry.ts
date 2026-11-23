@@ -3,10 +3,10 @@
 // sharedBranch surfaces here, not later as a confusing create/switch/update failure).
 // Read-only throughout: exists() -> load() -> branchExistsLocally() ->
 // listRemoteBranches() (remote only on local miss), never fetch/pull/write, no LockPort.
-import { ok, type Result } from '../result.js';
-import type { GitPort } from '../ports/git.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
+import { ok, type Result } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
+import type { Manifest, ManifestPort } from '../../ports/manifest.js';
+import type { RegistryPort } from '../../ports/registry.js';
 
 export type ValidateRegistryOutcome = 'valid' | 'invalid' | 'unreachable' | 'inconclusive';
 

@@ -2,9 +2,9 @@
 // The registry adapter's real temp-dir behavior is covered in adapters/driven/registry/index
 // .test.ts; the real mkdir lock's cross-process behavior in adapters/driven/lock/index.test.ts.
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err, type Result } from '../result.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { LockPort, LockHandle } from '../ports/lock.js';
+import { ok, err, type Result } from '../../result.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import type { LockPort, LockHandle } from '../../ports/lock.js';
 import { registerRepo } from './register.js';
 
 const RESOURCE_KEY = '/cfg/registry.yaml';

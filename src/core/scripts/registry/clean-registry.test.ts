@@ -2,11 +2,11 @@
 // other-manifest-error-left-alone, EDT-member note, zero-candidates, per-path removal
 // isolation, and no-op removal of an unregistered path.
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err, type Result } from '../result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { LockHandle, LockPort } from '../ports/lock.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
+import { ok, err, type Result } from '../../result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { LockHandle, LockPort } from '../../ports/lock.js';
+import type { Manifest, ManifestPort } from '../../ports/manifest.js';
+import type { RegistryPort } from '../../ports/registry.js';
 import { classifyStaleRegistry, removeStaleRegistryEntries } from './clean-registry.js';
 
 function manifestFor(path: string): Manifest {

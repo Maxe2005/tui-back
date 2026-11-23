@@ -2,10 +2,10 @@
 // row: local hit, remote-only hit, missing branch, unreachable, all five
 // loader codes, all three inconclusive codes, empty registry, per-path isolation.
 import { describe, expect, it, vi } from 'vitest';
-import { ok, err, type Result } from '../result.js';
-import type { GitPort } from '../ports/git.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
+import { ok, err, type Result } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
+import type { Manifest, ManifestPort } from '../../ports/manifest.js';
+import type { RegistryPort } from '../../ports/registry.js';
 import { validateRegistry } from './validate-registry.js';
 
 function manifestFor(sharedBranch = 'development'): Manifest {

@@ -3,12 +3,12 @@
 // removeStaleRegistryEntries only touches the exact paths it's given, so the caller owns what
 // is removed. Other manifest errors and inconclusive exists() checks are never pruned.
 // memberOfEdts is a display-only note — edts.yaml is never written here.
-import { withActionLock } from '../locking.js';
-import type { EdtRegistryPort } from '../ports/edt-registry.js';
-import type { LockPort } from '../ports/lock.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import { ok, type Result } from '../result.js';
+import { withActionLock } from '../../locking.js';
+import type { EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { LockPort } from '../../ports/lock.js';
+import type { ManifestPort } from '../../ports/manifest.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import { ok, type Result } from '../../result.js';
 import type { RegistryEntryError } from './list-repos.js';
 
 export type { RegistryEntryError } from './list-repos.js';
