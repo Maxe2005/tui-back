@@ -1,19 +1,19 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { vi } from 'vitest';
-import { ok } from '../../../core/result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
-import type { GitPort } from '../../../core/ports/vcs/git.js';
-import type { LockPort } from '../../../core/ports/runtime/lock.js';
-import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import type { RegistryPort } from '../../../core/ports/storage/registry.js';
-import type { StatePort } from '../../../core/ports/storage/state.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/storage/settings.js';
-import type { DockerPort } from '../../../core/ports/runtime/docker.js';
-import { AppShell } from './app-shell.js';
-import { createAppStore, type AppStoreDeps } from './store/app-store.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
-import { manifestFor } from './store/store.test-support.js';
+import { ok } from '../../../../core/result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../../core/ports/vcs/git.js';
+import type { LockPort } from '../../../../core/ports/runtime/lock.js';
+import type { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
+import type { StatePort } from '../../../../core/ports/storage/state.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../core/ports/storage/settings.js';
+import type { DockerPort } from '../../../../core/ports/runtime/docker.js';
+import { AppShell } from '../app-shell.js';
+import { createAppStore, type AppStoreDeps } from '../store/app-store.js';
+import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../shared/test-support/fake-tty.js';
+import { manifestFor } from '../store/store.test-support.js';
 
 // The mount-time/registry-close `loadTabVisibility()` effect is AppShell's only production
 // activation path, and a deps-less `createAppStore()` only ever takes its `!deps` early

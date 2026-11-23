@@ -4,13 +4,13 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { ok } from '../../../core/result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
-import type { StatePort } from '../../../core/ports/storage/state.js';
-import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
-import { fakeDeps, flushAsyncLoad, mount, press, pressEscape } from './app-shell.test-support.js';
+import { ok } from '../../../../../core/result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../../core/ports/storage/edt-registry.js';
+import type { StatePort } from '../../../../../core/ports/storage/state.js';
+import { AppShell } from '../../app-shell.js';
+import { createAppStore } from '../../store/app-store.js';
+import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
+import { fakeDeps, flushAsyncLoad, mount, press, pressEscape } from '../app-shell.test-support.js';
 
 describe('AppShell reset screen (:reset)', () => {
   function statefulDeps() {

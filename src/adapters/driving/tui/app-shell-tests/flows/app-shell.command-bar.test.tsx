@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
-import { KEYS } from './shared/test-support/fake-tty.js';
-import { mount, press, pressEscape } from './app-shell.test-support.js';
+import { AppShell } from '../../app-shell.js';
+import { createAppStore } from '../../store/app-store.js';
+import { KEYS } from '../../shared/test-support/fake-tty.js';
+import { mount, press, pressEscape } from '../app-shell.test-support.js';
 
 describe('AppShell command-entry bar (:)', () => {
   it('opens on : with an empty focused input and no list/grid until Tab is pressed', async () => {

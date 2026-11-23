@@ -3,12 +3,12 @@
 // shared/test-support/fake-tty.ts) observe whether a keystroke reaches, or is blocked from,
 // AppShell's global dispatch — e.g. the zoneInputCaptured gate.
 import { describe, it, expect, vi } from 'vitest';
-import { ok } from '../../../core/result.js';
-import type { DockerPort } from '../../../core/ports/runtime/docker.js';
-import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
-import { KEYS } from './shared/test-support/fake-tty.js';
-import { fakeDeps, flushAsyncLoad, mount, press, pressEscape } from './app-shell.test-support.js';
+import { ok } from '../../../../../core/result.js';
+import type { DockerPort } from '../../../../../core/ports/runtime/docker.js';
+import { AppShell } from '../../app-shell.js';
+import { createAppStore } from '../../store/app-store.js';
+import { KEYS } from '../../shared/test-support/fake-tty.js';
+import { fakeDeps, flushAsyncLoad, mount, press, pressEscape } from '../app-shell.test-support.js';
 
 describe('AppShell real-keypress interactions', () => {
   it('a typed "?" never opens the global help modal while zoneInputCaptured is set', async () => {

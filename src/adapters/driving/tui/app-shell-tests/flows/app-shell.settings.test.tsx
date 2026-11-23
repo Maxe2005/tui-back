@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ok } from '../../../core/result.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/storage/settings.js';
-import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
-import { KEYS } from './shared/test-support/fake-tty.js';
-import { SETTINGS_GROUPS } from './shared/screens/settings-screen.js';
-import { fakeDeps, mount, press, pressEscape } from './app-shell.test-support.js';
+import { ok } from '../../../../../core/result.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../../../core/ports/storage/settings.js';
+import { AppShell } from '../../app-shell.js';
+import { createAppStore } from '../../store/app-store.js';
+import { KEYS } from '../../shared/test-support/fake-tty.js';
+import { SETTINGS_GROUPS } from '../../shared/screens/settings-screen.js';
+import { fakeDeps, mount, press, pressEscape } from '../app-shell.test-support.js';
 
 describe('AppShell settings screen (:settings)', () => {
   it('opens on the General tab via the registered `settings` command — never a raw keypress', async () => {

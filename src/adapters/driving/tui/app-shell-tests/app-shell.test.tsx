@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { ResolveTabVisibilityData } from '../../../core/edt/shared-edt/resolve-tab-visibility.js';
+import type { ResolveTabVisibilityData } from '../../../../core/edt/shared-edt/resolve-tab-visibility.js';
 import {
   AppShell,
   resolveHelpDispatch,
@@ -15,11 +15,11 @@ import {
   resolveResizeStep,
   shouldExitResizeMode,
   RESIZE_STEP,
-} from './app-shell.js';
-import { createAppStore, type AppState, type ZoneEvents, type ZoneRatios } from './store/app-store.js';
-import { ZONES, type ZoneId } from './zones/zones.js';
-import { BANNER_LINES } from './zones/dashboard/launch-banner.js';
-import { renderToString } from './shared/components/render-to-string.js';
+} from '../app-shell.js';
+import { createAppStore, type AppState, type ZoneEvents, type ZoneRatios } from '../store/app-store.js';
+import { ZONES, type ZoneId } from '../zones/zones.js';
+import { BANNER_LINES } from '../zones/dashboard/launch-banner.js';
+import { renderToString } from '../shared/components/render-to-string.js';
 
 describe('help-open decision helpers', () => {
   it('opens help on ? only', () => {

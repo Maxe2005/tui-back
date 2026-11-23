@@ -3,10 +3,10 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
-import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
-import { FakeTtyStdout, fakeInteractiveTtyStdin, fakeTtyStdin } from './shared/test-support/fake-tty.js';
-import { MIN_TERMINAL_COLUMNS, MIN_TERMINAL_ROWS } from './shared/bounds/bounds.js';
+import { AppShell } from '../app-shell.js';
+import { createAppStore } from '../store/app-store.js';
+import { FakeTtyStdout, fakeInteractiveTtyStdin, fakeTtyStdin } from '../shared/test-support/fake-tty.js';
+import { MIN_TERMINAL_COLUMNS, MIN_TERMINAL_ROWS } from '../shared/bounds/bounds.js';
 
 describe('AppShell bounds', () => {
   it('shows the too-small screen below the minimum and returns live on grow', async () => {

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ok } from '../../../core/result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
-import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import type { StatePort } from '../../../core/ports/storage/state.js';
-import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
-import { fakeDeps, flushAsyncLoad, mount } from './app-shell.test-support.js';
-import { manifestFor } from './store/store.test-support.js';
+import { ok } from '../../../../../core/result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../../core/ports/storage/edt-registry.js';
+import type { ManifestPort } from '../../../../../core/ports/vcs/manifest.js';
+import type { StatePort } from '../../../../../core/ports/storage/state.js';
+import { AppShell } from '../../app-shell.js';
+import { createAppStore } from '../../store/app-store.js';
+import { fakeDeps, flushAsyncLoad, mount } from '../app-shell.test-support.js';
+import { manifestFor } from '../../store/store.test-support.js';
 
 describe('AppShell tabVisibility load activation', () => {
   it('loads real tabVisibility from wired deps on mount — reflected in store state and the rendered tab bar', async () => {

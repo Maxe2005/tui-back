@@ -4,9 +4,9 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
-import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
-import { FakeTtyStdout, fakeTtyStdin } from './shared/test-support/fake-tty.js';
+import { AppShell } from '../app-shell.js';
+import { createAppStore } from '../store/app-store.js';
+import { FakeTtyStdout, fakeTtyStdin } from '../shared/test-support/fake-tty.js';
 
 describe('AppShell alternate-screen rendering', () => {
   it('enters the alternate screen on mount and exits it on unmount', async () => {

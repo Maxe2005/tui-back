@@ -1,10 +1,10 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import { AppShell } from './app-shell.js';
-import { createAppStore } from './store/app-store.js';
-import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
-import { flushAsyncLoad, mount, press, pressEscape } from './app-shell.test-support.js';
+import { AppShell } from '../../app-shell.js';
+import { createAppStore } from '../../store/app-store.js';
+import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
+import { flushAsyncLoad, mount, press, pressEscape } from '../app-shell.test-support.js';
 
 describe('AppShell realign overlay', () => {
   it('opens through `:realign`, owns every key while open, and Esc closes it', async () => {
