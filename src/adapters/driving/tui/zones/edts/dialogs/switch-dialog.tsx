@@ -7,11 +7,11 @@ import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../cor
 import { isChangedSwitchOutcome, restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../core/edt/switch-restart.js';
 import { cycleSwitchRestartMode } from '../../../../../../core/ports/settings.js';
 import type { AppState } from '../../../store/app-store.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
-import { FailedResultList } from '../../../shared/components/failed-result-list.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
+import { FailedResultList } from '../../../shared/components/lists/failed-result-list.js';
 import { SwitchRestartReport } from './switch-restart-report.js';
-import { ModalDialog } from '../../../shared/components/modal-dialog.js';
-import { RestartModeSelector } from '../../../shared/components/restart-mode-selector.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
+import { RestartModeSelector } from '../../../shared/components/pickers/restart-mode-selector.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   initialSwitchDialog,
@@ -23,8 +23,8 @@ import {
 } from '../edts-zone.logic.js';
 import { SwitchResolutionView } from './switch-resolution/switch-resolution-view.js';
 import { describeSwitchForLog, needsResultsView, reduceSwitchResolutionKey } from './switch-resolution/switch-resolution.logic.js';
-import { BoundedList } from '../../../shared/components/bounded-list.js';
-import { ClampedParagraph } from '../../../shared/components/truncated-text.js';
+import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 export type SwitchDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

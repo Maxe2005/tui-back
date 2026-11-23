@@ -1,6 +1,6 @@
 // tui/zones/routes: use-routes-derived — the pane route/draft, saved-picker rows and the response/body-editor tree memos derived from the state layer.
 import { useMemo } from 'react';
-import type { FilterablePickItem } from '../../shared/components/filterable-pick-list.js';
+import type { FilterablePickItem } from '../../shared/components/pickers/filterable-pick-list.js';
 import type { RoutesState } from './use-routes-state.js';
 import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
 import {

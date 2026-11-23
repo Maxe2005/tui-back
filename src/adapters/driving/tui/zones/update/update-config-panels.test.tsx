@@ -5,7 +5,7 @@ import { UpdateConfigPanels, PANELS_TOO_SMALL } from './update-config-panels.js'
 import { FOOTER_CONTEXTS } from '../../keybindings/index.js';
 import { applyMergeStrategy, createUpdateConfigDraft, type UpdateConfigDraft } from './update-config-dialog.logic.js';
 import { CONFIG_CHROME_ROWS, CONFIG_MIN_ROWS, SERVICE_BOX_ROWS, computeConfigBudget, setRow, toggleMergeSource, type PanelsViewState } from './update-config-panels.logic.js';
-import { createSuggestFieldState } from '../../shared/components/suggest-field.logic.js';
+import { createSuggestFieldState } from '../../shared/components/inputs/suggest-field.logic.js';
 import { openServiceBox } from './update-service-box.logic.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 

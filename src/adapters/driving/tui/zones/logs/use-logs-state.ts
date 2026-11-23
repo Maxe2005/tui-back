@@ -2,7 +2,7 @@
 // actions-menu sequence ref. No derivation, no effects: those live in the layers built on top.
 import { useRef, useState } from 'react';
 import type { AppStore } from '../../store/app-store.js';
-import type { GridCursor } from '../../shared/command-bar.js';
+import type { GridCursor } from '../../shared/screens/command-bar/command-bar.js';
 import type { LogsActionsMenuState } from './logs-actions-menu.js';
 import type { FilterEditorState, LogsPaneFocus } from './logs-zone.logic.js';
 

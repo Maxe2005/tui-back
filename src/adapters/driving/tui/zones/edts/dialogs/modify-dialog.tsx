@@ -6,13 +6,13 @@ import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import type { AppState } from '../../../store/app-store.js';
-import { CheckboxListItem } from '../../../shared/components/checkbox-list-item.js';
-import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
-import { FailedResultList } from '../../../shared/components/failed-result-list.js';
-import { ModalDialog } from '../../../shared/components/modal-dialog.js';
-import { TextInputLine } from '../../../shared/components/text-input-line.js';
-import { nextTextInputValue } from '../../../shared/components/text-edit.js';
+import { CheckboxListItem } from '../../../shared/components/pickers/checkbox-list-item.js';
+import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/pickers/branch-picker.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
+import { FailedResultList } from '../../../shared/components/lists/failed-result-list.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
+import { TextInputLine } from '../../../shared/components/inputs/text-input-line.js';
+import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
@@ -31,9 +31,9 @@ import {
   type EdtDialogState,
   type ModifyDialogState,
 } from '../edts-zone.logic.js';
-import { StateLine } from '../../../shared/components/state-line.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
-import { BoundedList } from '../../../shared/components/bounded-list.js';
+import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
 
 export type ModifyDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

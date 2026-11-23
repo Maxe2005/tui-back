@@ -7,8 +7,8 @@ import {
   handleBranchAutocompleteKey,
   isBranchAutocompleteExactMatch,
   type BranchAutocompleteState,
-} from '../../shared/components/branch-autocomplete-input.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/text-edit.js';
+} from '../../shared/components/inputs/branch-autocomplete-input.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/inputs/text-edit.js';
 
 export type HistoryMode = SharedTypesHistory['mode'];
 

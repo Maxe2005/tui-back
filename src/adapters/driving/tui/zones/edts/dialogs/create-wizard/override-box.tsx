@@ -4,11 +4,11 @@ import { Box, Text } from 'ink';
 import {
   BranchAutocompleteInput,
   type BranchAutocompleteState,
-} from '../../../../shared/components/branch-autocomplete-input.js';
-import type { TextInputState } from '../../../../shared/components/text-edit.js';
-import { TextInputLine } from '../../../../shared/components/text-input-line.js';
+} from '../../../../shared/components/inputs/branch-autocomplete-input.js';
+import type { TextInputState } from '../../../../shared/components/inputs/text-edit.js';
+import { TextInputLine } from '../../../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import { ownerAnnotations } from '../../../../shared/branch-owners-text.js';
+import { ownerAnnotations } from '../../../../shared/components/pickers/branch-owners-text.js';
 import { isProtectedTarget } from './wizard.logic.js';
 import {
   overrideBoxBranches,
@@ -17,7 +17,7 @@ import {
   type OverrideBoxLine,
   type OverrideBoxState,
 } from './override-box.logic.js';
-import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 
 function LineMarker({ focused }: { focused: boolean }) {
   return <Text color={colors.accent} wrap="truncate-end">{focused ? '› ' : '  '}</Text>;

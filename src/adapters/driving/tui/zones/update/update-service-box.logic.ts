@@ -7,9 +7,9 @@ import {
   stepSuggestField,
   validateSuggestValue,
   type SuggestFieldState,
-} from '../../shared/components/suggest-field.logic.js';
-import type { TextEditKey } from '../../shared/components/text-edit.js';
-import type { BranchAutocompleteStatus } from '../../shared/components/branch-autocomplete-input.js';
+} from '../../shared/components/inputs/suggest-field.logic.js';
+import type { TextEditKey } from '../../shared/components/inputs/text-edit.js';
+import type { BranchAutocompleteStatus } from '../../shared/components/inputs/branch-autocomplete-input.js';
 import type { ToggleOverride, UpdateConfigDraft } from './update-config-dialog.logic.js';
 import { nextBoxLine } from '../../shared/keys/box-line-nav.js';
 import { commitEmptyBranch, setRow } from './update-config-panels.logic.js';

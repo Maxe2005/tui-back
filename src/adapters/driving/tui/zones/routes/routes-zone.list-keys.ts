@@ -4,7 +4,7 @@ import type { RoutesZoneCtx } from './routes-zone.ctx.js';
 import { canEditRouteBody } from '../../shared/components/json-tree/model.js';
 import { jumpSelection, resolveSelectionJump } from '../../shared/keys/list-cursor.js';
 import { moveRoutesSelection, resolveEnterFireTarget, resolveRoutesDirection } from './routes-zone.logic.js';
-import { nextTextInputValue } from '../../shared/components/text-edit.js';
+import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
 
 export function handleFilterEditingKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const { setSelected, filter, setFilter, setFilterEditing, visibleRoutes } = c;

@@ -5,11 +5,11 @@ import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
 import type { FastForwardSharedRow } from '../../../../../core/edt/fast-forward-shared.js';
 import type { SwitchEdtRepoResult } from '../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/branch-picker.js';
-import { type FailedResultRow } from '../../shared/components/failed-result-list.js';
-import type { MenuItem } from '../../shared/components/menu-list.js';
-import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
-import type { TextInputState } from '../../shared/components/text-edit.js';
+import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../shared/components/pickers/branch-picker.js';
+import { type FailedResultRow } from '../../shared/components/lists/failed-result-list.js';
+import type { MenuItem } from '../../shared/components/lists/menu-list.js';
+import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/pickers/filterable-pick-list.js';
+import type { TextInputState } from '../../shared/components/inputs/text-edit.js';
 import type { SwitchRestartRunMode } from '../../../../../core/edt/switch-restart.js';
 import type { SwitchResolutionState } from './dialogs/switch-resolution/switch-resolution.logic.js';
 import type { FormFocus } from './edts-zone.focus.logic.js';
@@ -93,7 +93,7 @@ export type ModifyDialogState = {
   target: EdtRegistryEntry;
   topic: string;
   // topic's own caret position — see TextInputState/nextTextInputValue in
-  // shared/components/text-edit.ts.
+  // shared/components/inputs/text-edit.ts.
   topicCursor: number;
   formFocus: FormFocus;
   selectedMembers: readonly string[];

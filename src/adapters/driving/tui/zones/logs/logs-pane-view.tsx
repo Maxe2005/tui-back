@@ -2,10 +2,10 @@
 // stays in LogsZone's useInput.
 import { Box, Text } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { formatHint } from '../../shared/components/hints.js';
-import { StatusBadge } from '../../shared/components/status-badge.js';
-import { ScrollableOutput } from '../../shared/components/scrollable-output.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
+import { formatHint } from '../../shared/components/dialogs/hints.js';
+import { StatusBadge } from '../../shared/components/feedback/status-badge.js';
+import { ScrollableOutput } from '../../shared/components/display/scrollable-output.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
 import type { LogsPaneData } from '../../store/app-store.js';
@@ -21,7 +21,7 @@ import {
   type LogFilterScope,
   type VisibilityFlags,
 } from './logs-zone.logic.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
 
 export function LogsPaneView({
   service,

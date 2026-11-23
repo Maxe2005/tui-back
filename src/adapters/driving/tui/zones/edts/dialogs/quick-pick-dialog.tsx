@@ -10,8 +10,8 @@ import {
   FilterablePickList,
   handleFilterablePickListKey,
   type FilterablePickItem,
-} from '../../../shared/components/filterable-pick-list.js';
-import { ModalDialog } from '../../../shared/components/modal-dialog.js';
+} from '../../../shared/components/pickers/filterable-pick-list.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   initialCreateDialog,
@@ -23,7 +23,7 @@ import {
   type QuickPickDialogState,
   type QuickPickMode,
 } from '../edts-zone.logic.js';
-import { ClampedParagraph } from '../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 // The candidate pool for a given mode: switch mode filters out the active EDT (the system "Shared
 // branches" EDT stays, being switchable); modify, delete and create-from modes offer every user EDT,

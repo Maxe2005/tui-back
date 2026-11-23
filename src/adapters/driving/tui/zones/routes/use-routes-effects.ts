@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import type { RoutesBaseCtx } from './use-routes-derived.js';
 import type { RoutesPaneActions } from './use-routes-pane-actions.js';
-import { createFilterablePickListState } from '../../shared/components/filterable-pick-list.js';
+import { createFilterablePickListState } from '../../shared/components/pickers/filterable-pick-list.js';
 
 export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
   const {

@@ -5,9 +5,9 @@
 import { Box, Text } from 'ink';
 import type { RestartMode, ServiceAction } from '../../../../../core/service-actions/index.js';
 import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS } from '../../store/slices/service-action-ids.js';
-import { MenuList, type MenuItem } from '../../shared/components/menu-list.js';
-import { ModalDialog } from '../../shared/components/modal-dialog.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { MenuList, type MenuItem } from '../../shared/components/lists/menu-list.js';
+import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { colors } from '../../shared/theme/theme.js';
 
 export const LOGS_ACTIONS_MENU_TITLE = 'SERVICE ACTIONS';

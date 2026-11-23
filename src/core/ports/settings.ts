@@ -175,7 +175,7 @@ export function healthCheckEnabledFrom(getSettings: () => Settings | null): (man
 
 // commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/
 // schema.ts, which rejects out-of-range values from a hand-edited settings.yaml) and the
-// settings screen's own clamp (adapters/driving/tui/shared/settings-screen.tsx, which keeps
+// settings screen's own clamp (adapters/driving/tui/shared/screens/settings-screen.tsx, which keeps
 // Up/Down/typed-digit input in range live) so the two can never drift apart.
 export const MIN_GRID_MAX_ROWS = 1;
 export const MAX_GRID_MAX_ROWS = 99;
@@ -192,7 +192,7 @@ export const MIN_MAX_COMMITS_SCANNED = 100;
 export const MAX_MAX_COMMITS_SCANNED = 20000;
 
 // logs.bufferSize's valid range — shared by the zod schema (adapters/driven/settings/schema.ts)
-// and the settings screen's own clamp (adapters/driving/tui/shared/settings-screen.tsx), same
+// and the settings screen's own clamp (adapters/driving/tui/shared/screens/settings-screen.tsx), same
 // "single source of truth for both" convention as MIN/MAX_GRID_MAX_ROWS above. 50 is small
 // enough to be a deliberate, memory-conscious choice; 5000 is generous enough for a genuinely
 // chatty service without letting a hand-edited settings.yaml balloon every pane's ring buffer
@@ -216,7 +216,7 @@ export const MAX_FILTER_HISTORY_GRID_MAX_ROWS = 99;
 // edts.branchDropdownMaxRows' valid range (branch autocomplete shared component) — same
 // single-source-of-truth convention as MIN/MAX_GRID_MAX_ROWS above, shared by the zod schema
 // (adapters/driven/settings/schema.ts) and the settings screen's own clamp
-// (adapters/driving/tui/shared/settings-screen.tsx). 1 keeps the dropdown meaningful (0 rows
+// (adapters/driving/tui/shared/screens/settings-screen.tsx). 1 keeps the dropdown meaningful (0 rows
 // would hide every proposal); 20 keeps the dropdown bounded inside a modal dialog.
 export const MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS = 1;
 export const MAX_EDTS_BRANCH_DROPDOWN_MAX_ROWS = 20;

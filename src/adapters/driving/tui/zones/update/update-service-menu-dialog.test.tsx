@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
-import { resolveMenuKey } from '../../shared/components/menu-list.js';
+import { resolveMenuKey } from '../../shared/components/lists/menu-list.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { createAppStore } from '../../store/app-store.js';
 import { UpdateZone } from './update-zone.js';

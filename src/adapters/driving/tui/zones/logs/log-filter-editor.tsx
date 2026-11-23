@@ -7,12 +7,12 @@ import {
   groupCommandsByColumn,
   layoutCommandGrid,
   type GridCursor,
-} from '../../shared/command-bar.js';
-import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { ModalDialog } from '../../shared/components/modal-dialog.js';
-import { TextInputLine } from '../../shared/components/text-input-line.js';
+} from '../../shared/screens/command-bar/command-bar.js';
+import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
+import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
+import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
-import { BoundedList } from '../../shared/components/bounded-list.js';
+import { BoundedList } from '../../shared/components/lists/bounded-list.js';
 import { MAX_RULE_SETS } from '../../../../../core/logs/rule-sets.js';
 import type { StoredRuleSet } from '../../../../../core/logs/rule-sets.js';
 import {
@@ -25,7 +25,7 @@ import {
   type FilterEditorState,
   type LogFilterScope,
 } from './logs-zone.logic.js';
-import { StateLine } from '../../shared/components/state-line.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
 
 // The filter-history grid browser's column gap — mirrors command-bar.tsx's grid spacing since
 // this grid renders inside the same kind of ModalDialog.

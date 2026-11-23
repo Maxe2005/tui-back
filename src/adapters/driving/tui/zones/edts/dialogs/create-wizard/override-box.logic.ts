@@ -8,9 +8,9 @@ import {
   handleBranchAutocompleteKey,
   isBranchAutocompleteExactMatch,
   type BranchAutocompleteState,
-} from '../../../../shared/components/branch-autocomplete-input.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
-import { ownerRefusalForBranch } from '../../../../shared/branch-owners-text.js';
+} from '../../../../shared/components/inputs/branch-autocomplete-input.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/inputs/text-edit.js';
+import { ownerRefusalForBranch } from '../../../../shared/components/pickers/branch-owners-text.js';
 import { checkPlan, type PlanIssue } from './wizard.logic.js';
 import { nextBoxLine } from '../../../../shared/keys/box-line-nav.js';
 

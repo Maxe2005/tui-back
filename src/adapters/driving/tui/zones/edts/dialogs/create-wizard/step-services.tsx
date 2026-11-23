@@ -3,7 +3,7 @@
 // states.
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
-import { CheckboxListItem } from '../../../../shared/components/checkbox-list-item.js';
+import { CheckboxListItem } from '../../../../shared/components/pickers/checkbox-list-item.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import {
   type CandidateListState,
@@ -12,9 +12,9 @@ import {
   toggleMemberSelection,
 } from '../../edts-zone.logic.js';
 import { missingSeedMembers } from './wizard.logic.js';
-import { StateLine } from '../../../../shared/components/state-line.js';
+import { StateLine } from '../../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../../shared/keys/list-cursor.js';
-import { BoundedList } from '../../../../shared/components/bounded-list.js';
+import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
 
 export function handleServicesStepInput(
   setDialog: (updater: (prev: EdtDialogState) => EdtDialogState) => void,

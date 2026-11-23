@@ -2,7 +2,7 @@
 // configuration screen, the row-local service menu, the no-arg service quick-pick and the
 // incident queue popup. Each is rendered only while its state is open.
 import { ModalDialog } from '../../shared/components/index.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { colors } from '../../shared/theme/theme.js';
 import { UpdateConfigPanels } from './update-config-panels.js';
 import { UpdateIncidentsDialog } from './update-incidents-dialog.js';

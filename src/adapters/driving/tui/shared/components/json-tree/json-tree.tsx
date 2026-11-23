@@ -3,11 +3,11 @@
 // filter panel when open, then the always-present status line. All key handling lives in the
 // routes zone's useInput over the model's pure dispatchers; this file owns layout and colors.
 import { Box, Text } from 'ink';
-import { BoundedList } from '../bounded-list.js';
+import { BoundedList } from '../lists/bounded-list.js';
 import { colors, jsonTreeColors, spacing } from '../../theme/theme.js';
-import { formatHint } from '../hints.js';
-import { TextInputLine } from '../text-input-line.js';
-import type { TextInputState } from '../text-edit.js';
+import { formatHint } from '../dialogs/hints.js';
+import { TextInputLine } from '../inputs/text-input-line.js';
+import type { TextInputState } from '../inputs/text-edit.js';
 import {
   formatBodyEditStatus,
   formatTreeStatusLine,

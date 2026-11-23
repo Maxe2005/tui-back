@@ -8,9 +8,9 @@ import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list
 import { branchOwnersMap } from '../../../../../../../core/edt/branch-owners.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import type { AppState } from '../../../../store/app-store.js';
-import { DimAnnotation } from '../../../../shared/components/dim-annotation.js';
-import { FailedResultList } from '../../../../shared/components/failed-result-list.js';
-import { ModalDialog } from '../../../../shared/components/modal-dialog.js';
+import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';
+import { FailedResultList } from '../../../../shared/components/lists/failed-result-list.js';
+import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import {
   type CandidateListState,
@@ -43,7 +43,7 @@ import {
   summarizeActivationResults,
   type BreadcrumbTone,
 } from './wizard.logic.js';
-import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 
 export const CREATE_WIZARD_TITLE = 'CREATE EDT';
 

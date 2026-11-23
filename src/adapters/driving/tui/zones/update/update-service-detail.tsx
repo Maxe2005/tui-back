@@ -5,7 +5,7 @@
 // buildServiceStepViews; the zone decides which mode applies.
 import { Box, Text } from 'ink';
 import { useBounds } from '../../shared/bounds/bounds-context.js';
-import { capOlder, OlderHiddenLine } from '../../shared/components/bounded-list.js';
+import { capOlder, OlderHiddenLine } from '../../shared/components/lists/bounded-list.js';
 import { Spinner } from '../../shared/components/index.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { SharedTypesStage } from '../../../../../core/shared-types/smart-update.js';

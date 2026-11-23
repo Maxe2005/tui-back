@@ -3,8 +3,8 @@
 // last-update recap states (running, done, idle) shown while service focus is dropped.
 import { Box, Text } from 'ink';
 import { BoundedList, DetailPane, Spinner } from '../../shared/components/index.js';
-import { StateLine } from '../../shared/components/state-line.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
+import { StateLine } from '../../shared/components/feedback/state-line.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatServiceUpdateContext } from './update-zone.logic.js';
 import { UpdateServiceDetail } from './update-service-detail.js';

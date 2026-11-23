@@ -1,6 +1,6 @@
 // tui/zones/edts: base-view and form focus cycling, member selection and branch-name suggestions.
 import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
-import type { TextInputState } from '../../shared/components/text-edit.js';
+import type { TextInputState } from '../../shared/components/inputs/text-edit.js';
 import type { BranchStepState } from './edts-zone.wizard.logic.js';
 import { partitionServicesByEdtMembership } from './edts-zone.format.logic.js';
 
@@ -30,7 +30,7 @@ export function cycleFormFocus(current: FormFocus, direction: FocusNavDirection 
 }
 
 // The hand-rolled controlled text-input interpreter (`TextEditKey`/`TextInputState`/
-// `nextTextInputValue`) lives in shared/components/text-edit.ts — a leaf module, so the shared
+// `nextTextInputValue`) lives in shared/components/inputs/text-edit.ts — a leaf module, so the shared
 // branch-autocomplete input can reuse it without closing an import cycle back through
 // branch-picker.
 

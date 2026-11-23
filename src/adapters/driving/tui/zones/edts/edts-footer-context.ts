@@ -1,7 +1,7 @@
 // tui/zones/edts: which footer context the open EDTs dialog (and the layer of it that currently
 // owns the keyboard) registers. Pure, so every dialog state maps to its keys in one place.
 import type { FooterContextId } from '../../keybindings/index.js';
-import { branchPickerFooterContext } from '../../shared/components/branch-picker.js';
+import { branchPickerFooterContext } from '../../shared/components/pickers/branch-picker.js';
 import type { CreateDialogState, EdtDialogState, SwitchDialogState } from './edts-zone.logic.js';
 import { isActivationAcknowledge } from './dialogs/create-wizard/wizard.logic.js';
 import type { SwitchResolutionState } from './dialogs/switch-resolution/switch-resolution.logic.js';

@@ -2,8 +2,8 @@
 import type { ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import type { AppStore } from '../../store/app-store.js';
-import { ClampedParagraph } from '../../shared/components/truncated-text.js';
-import { FooterContext } from '../../shared/components/footer-context.js';
+import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
+import { FooterContext } from '../../shared/components/chrome/footer-context.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { routesFooterContext, UNAVAILABLE_FOOTER_INPUT } from './routes-zone.logic.js';
 

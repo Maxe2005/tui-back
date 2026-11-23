@@ -4,10 +4,10 @@
 // fetched; a loading line stands in, Esc still cancels).
 import { Box, Text, type Key } from 'ink';
 import type { AppState } from '../../../store/app-store.js';
-import { CheckboxListItem } from '../../../shared/components/checkbox-list-item.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
-import { FailedResultList } from '../../../shared/components/failed-result-list.js';
-import { ModalDialog } from '../../../shared/components/modal-dialog.js';
+import { CheckboxListItem } from '../../../shared/components/pickers/checkbox-list-item.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
+import { FailedResultList } from '../../../shared/components/lists/failed-result-list.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   buildDeleteMemberRows,
@@ -18,10 +18,10 @@ import {
   type DeleteDialogState,
   type EdtDialogState,
 } from '../edts-zone.logic.js';
-import { StateLine } from '../../../shared/components/state-line.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
-import { BoundedList } from '../../../shared/components/bounded-list.js';
-import { ClampedParagraph } from '../../../shared/components/truncated-text.js';
+import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 export type DeleteDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

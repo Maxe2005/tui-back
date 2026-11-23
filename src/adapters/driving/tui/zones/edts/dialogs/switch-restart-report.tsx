@@ -5,9 +5,9 @@
 import { Box, Text } from 'ink';
 import { orderRestartRows, summarizeRestartRows, type RestartRow, type RestartRowPhase } from '../../../../../../core/edt/switch-restart.js';
 import type { AppState } from '../../../store/app-store.js';
-import { BoundedList } from '../../../shared/components/bounded-list.js';
-import { DimAnnotation } from '../../../shared/components/dim-annotation.js';
-import { STATUS_BADGES } from '../../../shared/components/status-badge.js';
+import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
+import { STATUS_BADGES } from '../../../shared/components/feedback/status-badge.js';
 import { colors } from '../../../shared/theme/theme.js';
 
 type Badge = { glyph: string; color: string; label: string };

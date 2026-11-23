@@ -1,7 +1,7 @@
 // tui/zones/logs: key predicates, stream-visibility toggles, footer context and legend hints.
 import type { LogLine } from '../../../../../core/ports/docker.js';
 import type { RestartMode } from '../../../../../core/service-actions/index.js';
-import type { Hint } from '../../shared/components/hints.js';
+import type { Hint } from '../../shared/components/dialogs/hints.js';
 import type { FooterContextId } from '../../keybindings/index.js';
 
 // Ctrl+A toggles select-all/deselect-all for the EDT list. A `Ctrl+letter` combo arrives as a

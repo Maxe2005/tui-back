@@ -5,7 +5,7 @@ import { AppShell } from './app-shell.js';
 import { createAppStore } from './store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from './shared/test-support/fake-tty.js';
 import { footerIdOf } from './shared/test-support/mount-for-test.js';
-import { filterKeybindings } from './shared/components/keybinding-help.js';
+import { filterKeybindings } from './shared/components/dialogs/keybinding-help.js';
 import { KEYBINDINGS } from './keybindings/index.js';
 import { mount, press, pressEscape } from './app-shell.test-support.js';
 
