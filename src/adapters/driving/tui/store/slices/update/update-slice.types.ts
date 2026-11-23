@@ -15,7 +15,7 @@ import type { ServiceStatusState } from '../../../../../../core/service-status/i
 import type { InFlightGuard } from '../../../shared/hooks/in-flight-guard.js';
 import { finalizeServiceSteps, type ServiceIssue, type ServiceStepStates } from '../../../zones/update/update-zone.logic.js';
 import type { SHARED_TYPES_PHASE_FAILED, SharedTypesMode, SharedTypesStage } from '../../../../../../core/shared-types/smart-update.js';
-import type { UpdateConfigDraft } from '../../../zones/update/update-config-dialog.logic.js';
+import type { UpdateConfigDraft } from '../../../zones/update/config/update-config-dialog.logic.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 // Parses the optional service argument off `:update-service <name>` (like

@@ -17,7 +17,7 @@ import {
   type ConfigLayout,
   type UpdateConfigRowInput,
   type UpdateConfigDraft,
-} from '../../../../zones/update/update-config-dialog.logic.js';
+} from '../../../../zones/update/config/update-config-dialog.logic.js';
 import {
   parseUpdateServiceArg,
   type OpenUpdateConfigTarget,

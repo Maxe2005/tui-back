@@ -4,7 +4,7 @@
 import { Box, Text } from 'ink';
 import { BranchAutocompleteInput } from '../../shared/components/inputs/branch-autocomplete-input.js';
 import { colors } from '../../shared/theme/theme.js';
-import type { ToggleOverride } from './update-config-dialog.logic.js';
+import type { ToggleOverride } from './config/update-config-dialog.logic.js';
 import { toggleOptions, type ServiceBoxContext, type ServiceBoxLine, type ServiceBoxState } from './update-service-box.logic.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 

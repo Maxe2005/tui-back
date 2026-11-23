@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Result } from '../../../../../core/result.js';
 import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/inputs/suggest-field.logic.js';
-import { applyMergeStrategy, type UpdateConfigDraft } from './update-config-dialog.logic.js';
+import { applyMergeStrategy, type UpdateConfigDraft } from './config/update-config-dialog.logic.js';
 import {
   checkEdtChoice,
   clampPanelCursor,
@@ -20,7 +20,7 @@ import {
   type ConfigBudget,
   type PanelsKey,
   type PanelsViewState,
-} from './update-config-panels.logic.js';
+} from './config/update-config-panels.logic.js';
 import {
   applyServiceBox,
   openServiceBox,

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err, type Result } from '../../../../../../core/result.js';
-import { toggleMergeSource } from '../../../zones/update/update-config-panels.logic.js';
+import { toggleMergeSource } from '../../../zones/update/config/update-config-panels.logic.js';
 import type { RegistryPort } from '../../../../../../core/ports/registry.js';
 import { createAppStore } from '../../app-store.js';
 import { parseUpdateServiceArg } from './update-slice.js';

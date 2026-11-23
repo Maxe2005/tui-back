@@ -16,7 +16,7 @@ import type { RegistryPort } from '../../../../../core/ports/registry.js';
 import type { StatePort } from '../../../../../core/ports/state.js';
 import { createAppStore, type AppStoreDeps } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
-import { createUpdateConfigDraft } from './update-config-dialog.logic.js';
+import { createUpdateConfigDraft } from './config/update-config-dialog.logic.js';
 import { UpdateZone } from './update-zone.js';
 
 async function press(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, sequence: string): Promise<void> {

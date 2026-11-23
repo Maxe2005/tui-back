@@ -4,7 +4,7 @@
 import { ModalDialog } from '../../shared/components/index.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { colors } from '../../shared/theme/theme.js';
-import { UpdateConfigPanels } from './update-config-panels.js';
+import { UpdateConfigPanels } from './config/update-config-panels.js';
 import { UpdateIncidentsDialog } from './update-incidents-dialog.js';
 import { UpdateServiceMenuDialog } from './update-service-menu-dialog.js';
 import { UpdateServicePickDialog } from './update-service-pick-dialog.js';
