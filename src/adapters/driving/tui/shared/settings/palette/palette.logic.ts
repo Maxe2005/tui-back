@@ -6,7 +6,7 @@ import {
   MIN_FILTER_HISTORY_GRID_MAX_ROWS,
   MIN_GRID_MAX_ROWS,
   MIN_INPUT_HISTORY_SIZE,
-} from '../../../../../core/ports/settings.js';
+} from '../../../../../../core/ports/settings.js';
 
 // Command Palette tab: the grid rows per column. Clamped to a sane, always-positive range —
 // 0/negative would break groupCommandsByColumn's `Math.max(1, maxRows)` floor, and the zod

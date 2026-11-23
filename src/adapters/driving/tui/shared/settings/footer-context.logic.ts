@@ -3,7 +3,7 @@ import type { FooterContextId } from '../../keybindings/index.js';
 import type { SettingsTab } from './settings-tabs.logic.js';
 import type { SettingsGroupId } from './edts/edts.logic.js';
 import type { LogsSettingsGroupId } from './logs/logs.logic.js';
-import type { PaletteSettingsGroupId } from './palette.logic.js';
+import type { PaletteSettingsGroupId } from './palette/palette.logic.js';
 
 const GROUP_FOOTER_CONTEXTS: Record<SettingsGroupId | LogsSettingsGroupId | PaletteSettingsGroupId, FooterContextId> = {
   'grid-max-rows': 'settings-adjust',
