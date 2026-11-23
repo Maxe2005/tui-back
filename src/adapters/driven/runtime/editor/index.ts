@@ -1,4 +1,4 @@
-// adapters/driven/editor: the driven implementation of core's EditorPort. The editor runs
+// adapters/driven/runtime/editor: the driven implementation of core's EditorPort. The editor runs
 // synchronously with stdio inherited so it owns the terminal until it exits.
 import { spawnSync } from 'node:child_process';
 import { err, ok } from '../../../../core/result.js';

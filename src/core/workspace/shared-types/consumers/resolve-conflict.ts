@@ -1,4 +1,4 @@
-// core/shared-types/resolve-conflict: settles the dependency version of a consumer whose update
+// core/workspace/shared-types/resolve-conflict: settles the dependency version of a consumer whose update
 // merge (or pull) conflicted. Only conflict blocks of `package.json` whose two sides differ
 // solely by the dependency line are rewritten — to the version published earlier in the run, else
 // the consumer's own (current-branch) value; every other block, file and marker stays byte for

@@ -1,4 +1,4 @@
-// core/edt/shared-edt: the pure model of the preconfigured "Shared branches" EDT (FR-53, AD-27).
+// core/workspace/edt/shared-edt: the pure model of the preconfigured "Shared branches" EDT (FR-53, AD-27).
 // It is a system entry synthesized in memory from the managed repos and their manifests — never
 // persisted to edts.yaml — whose members are every managed repo on its manifest `sharedBranch`.
 // It is recognized by `kind` (and, defensively, its constant ulid), never by topic alone.

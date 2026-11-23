@@ -1,4 +1,4 @@
-// adapters/driven/manifest/carry: filesystem implementation of ManifestCarryPort. The safety
+// adapters/driven/vcs/manifest/carry: filesystem implementation of ManifestCarryPort. The safety
 // copy lives in the repo's git directory (resolved through the `gitdir:` pointer in a worktree).
 import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';

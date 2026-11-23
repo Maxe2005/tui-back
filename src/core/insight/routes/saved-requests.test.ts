@@ -1,4 +1,4 @@
-// core/routes/saved-requests: unit tests against a fake port + stub fetch — no real sqlite,
+// core/insight/routes/saved-requests: unit tests against a fake port + stub fetch — no real sqlite,
 // no live servers. Covers the save/overwrite/save-as matrix, stale advisory flags, the
 // fire-time hard gate, unknown names and cookie hygiene.
 import { describe, expect, it, vi } from 'vitest';

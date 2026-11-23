@@ -1,4 +1,4 @@
-// core/shared-types/smart-update: the `shared-types` phase of a smart group update. Once the
+// core/workspace/shared-types/smart-update: the `shared-types` phase of a smart group update. Once the
 // source repo has been updated alone, this publishes its version (runPublish), then propagates
 // it to every consumer of the EDT with a commit (propagateVersion) — install and clean restart
 // off, nothing ever pushed. It has no I/O of its own: every port is injected, and a failure is

@@ -1,4 +1,4 @@
-// adapters/driven/docker: the driven implementation of core's DockerPort. Shells the `docker`
+// adapters/driven/runtime/docker: the driven implementation of core's DockerPort. Shells the `docker`
 // binary (no dockerode): `spawn` for the long-lived `-f` tail, one per active pane, and
 // bounded one-shot calls: the reachability probe (the only `spawnSync`, since streamLogs must
 // report an unavailable container synchronously) and the asynchronous older-lines fetch,

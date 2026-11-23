@@ -1,4 +1,4 @@
-// core/scripts/group-update: unit tests against fake ports — pre-run configuration.
+// core/workspace/scripts/group-update: unit tests against fake ports — pre-run configuration.
 import { describe, expect, it, vi } from 'vitest';
 import { ok } from '../../../result.js';
 import { groupUpdate, type GroupUpdateParams } from './group-update.js';

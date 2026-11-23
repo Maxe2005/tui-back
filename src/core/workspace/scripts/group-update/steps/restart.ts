@@ -1,4 +1,4 @@
-// core/scripts/group-update/restart: the shared restart step and the interrupted-EDT marker.
+// core/workspace/scripts/group-update/restart: the shared restart step and the interrupted-EDT marker.
 import type { ContainerPort } from "../../../../ports/runtime/container.js";
 import type { EdtRegistryPort } from "../../../../ports/storage/edt-registry.js";
 import type { RestartPort } from "../../../../ports/runtime/restart.js";

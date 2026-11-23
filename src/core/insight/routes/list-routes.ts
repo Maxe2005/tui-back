@@ -1,4 +1,4 @@
-// core/routes/list-routes: lists the routes a repo's route-explorer module discovers. The gate
+// core/insight/routes/list-routes: lists the routes a repo's route-explorer module discovers. The gate
 // is the manifest's own `modules` map, never a hardcoded repo name. A repo without the module
 // is `route-exploration-not-activated`, never an empty list; a scanner failure is
 // `route-scan-failed`; a successful scan — even a zero-route one — is `ok`.

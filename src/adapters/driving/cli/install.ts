@@ -4,7 +4,7 @@ import type { Subcommand } from './dispatch/dispatch.js';
 
 // adapters/driving/cli/install: the `install` subcommand and its pure helpers (Node check, git
 // spec derivation, marked ~/.bashrc block). All process spawning and file I/O sits behind
-// InstallerPort, implemented by adapters/driven/installer.
+// InstallerPort, implemented by adapters/driven/runtime/installer.
 
 export const INSTALL_USAGE = 'tui-back install [--uninstall]';
 export const PACKAGE_NAME = 'tui-back';

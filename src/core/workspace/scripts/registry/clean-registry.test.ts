@@ -1,4 +1,4 @@
-// core/scripts/clean-registry: unit tests against fake ports — unreachable, manifest-not-found,
+// core/workspace/scripts/clean-registry: unit tests against fake ports — unreachable, manifest-not-found,
 // other-manifest-error-left-alone, EDT-member note, zero-candidates, per-path removal
 // isolation, and no-op removal of an unregistered path.
 import { describe, expect, it, vi } from 'vitest';

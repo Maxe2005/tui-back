@@ -1,4 +1,4 @@
-// adapters/driven/restart: the driven implementation of core's RestartPort. One manifest
+// adapters/driven/runtime/restart: the driven implementation of core's RestartPort. One manifest
 // `restartCommands` entry is an arbitrary shell string, so it runs via `sh -c <command>` in
 // the member repo — non-interactive, output captured, no TTY or stdin.
 // `GIT_TERMINAL_PROMPT=0` keeps a credential-requiring remote from hanging on a prompt. The

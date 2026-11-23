@@ -7,7 +7,7 @@ import type { RestartPort } from '../../../ports/runtime/restart.js';
 import { err, ok, type Result } from '../../../result.js';
 import { runRestartStep, type GroupUpdateRepoResult, type OnUpdatePhase } from '../group-update/group-update.js';
 
-// core/scripts/service-restart: the standalone single-service clean restart — the same
+// core/workspace/scripts/service-restart: the standalone single-service clean restart — the same
 // recipe-or-fallback as group update, for exactly one service, returning its row. Locks a
 // per-service `service:<resolved-repoPath>` key so a second trigger on the same service is
 // `update-already-running`; cross-scope exclusion (group run vs standalone) lives in the TUI

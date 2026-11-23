@@ -96,10 +96,10 @@ export type AppStoreDeps = {
   // The post-switch verification's HTTP touchpoint (manifest `healthUrl`). Optional like the
   // rest; without it a service declaring a healthUrl cannot be verified (explicit failed row).
   healthProbe?: HealthProbePort;
-  // The Routes zone's scanner touchpoint — the routes slice calls core/routes/list-routes.ts
+  // The Routes zone's scanner touchpoint — the routes slice calls core/insight/routes/list-routes.ts
   // in-process through it; loadRoutes degrades to an explicit error state when it is missing.
   scanner?: RouteScannerPort;
-  // The Routes zone's dev-auth touchpoint, used with the scanner by core/routes/fire-request.ts;
+  // The Routes zone's dev-auth touchpoint, used with the scanner by core/insight/routes/fire-request.ts;
   // fireRoute degrades to an explicit error state when it is missing.
   auth?: DevAuthPort;
   // The saved-request library touchpoint — the same global.db store the CLI's request-*

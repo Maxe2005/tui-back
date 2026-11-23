@@ -1,4 +1,4 @@
-// core/edt/create: creates an EDT — validates topic and members, writes the EDT dir, manifest
+// core/workspace/edt/create: creates an EDT — validates topic and members, writes the EDT dir, manifest
 // and SQLite db, resolves one branch per member (branchOptions, or authoritative memberPlans),
 // then registers the EDT under the registry lock. Every rejection happens before any write;
 // a member's failure never aborts the others and a failed member is never registered.

@@ -1,4 +1,4 @@
-// adapters/driven/container: integration tests against a stubbed executable (AD-13 driven
+// adapters/driven/runtime/container: integration tests against a stubbed executable (AD-13 driven
 // layer). The real `docker` binary is never invoked — the adapter's whole contract is how
 // the runtime's exit codes/stderr surface as Result errors, exercised here through a stub
 // `docker` script on a temp PATH dir that records its argv and exits as instructed.

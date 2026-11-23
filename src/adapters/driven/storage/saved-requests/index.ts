@@ -1,4 +1,4 @@
-// adapters/driven/saved-requests: the driven SavedRequestPort over the global sqlite store
+// adapters/driven/storage/saved-requests: the driven SavedRequestPort over the global sqlite store
 // at `<dataDir>/global.db`. The schema ships as hand-rolled numbered SQL (`schema-001.sql`,
 // applied with `CREATE TABLE IF NOT EXISTS` on every open plus a `schema_version` row); the
 // file carries only `saved_requests` — later columns arrive with their own numbered file.

@@ -1,4 +1,4 @@
-// adapters/driven/settings: integration tests against real temp dirs + real files (AD-13).
+// adapters/driven/storage/settings: integration tests against real temp dirs + real files (AD-13).
 // node:fs is deliberately not mocked — this adapter's whole contract is how the real
 // filesystem manifests as Result errors/warnings (missing file -> silent defaults, corrupt
 // YAML/wrong-shaped settings -> defaults + a non-blocking warning, never an `err` Result) and

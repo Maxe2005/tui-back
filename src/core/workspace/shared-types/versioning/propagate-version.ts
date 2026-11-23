@@ -1,4 +1,4 @@
-// core/shared-types/propagate-version: rewrites one dependency's declared version across the
+// core/workspace/shared-types/propagate-version: rewrites one dependency's declared version across the
 // chosen consumer services. The version is verified on the registry before anything is written;
 // then, per service and in this order: branch-scope gate, dirty check, rewrite of the dependency
 // line only, optional `npm i`, optional clean restart, optional commit of package.json (+

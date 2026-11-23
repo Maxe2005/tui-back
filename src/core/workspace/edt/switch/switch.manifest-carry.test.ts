@@ -1,4 +1,4 @@
-// core/edt/switch: unit tests against fake ports — the dirty .tui-back.yaml carry-over.
+// core/workspace/edt/switch: unit tests against fake ports — the dirty .tui-back.yaml carry-over.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import type { GitPort } from '../../../ports/vcs/git.js';

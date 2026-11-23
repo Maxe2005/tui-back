@@ -1,6 +1,6 @@
-// core/edt/list: unit tests against fake ports (FR-9) — upstream configured, no upstream,
+// core/workspace/edt/list: unit tests against fake ports (FR-9) — upstream configured, no upstream,
 // offline/unresolvable, member vs. non-member uniformity, and the reachability/manifest-error
-// passthrough mirroring core/scripts/registry/list-repos.ts.
+// passthrough mirroring core/workspace/scripts/registry/list-repos.ts.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../../../ports/storage/edt-registry.js';

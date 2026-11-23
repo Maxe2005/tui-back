@@ -1,4 +1,4 @@
-// adapters/driven/lock/helpers: small shared helpers for the mkdir-based lock adapter.
+// adapters/driven/runtime/lock/helpers: small shared helpers for the mkdir-based lock adapter.
 // sanitizeResourceKey derives a safe, readable filesystem name from an opaque resource key
 // (e.g. an absolute registry path) so the lock dir path cannot escape the lockDir; isPidAlive
 // probes a recorded holder's liveness for stale-lock reclaim; sleep is a bare promise delay.

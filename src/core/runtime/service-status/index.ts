@@ -1,4 +1,4 @@
-// core/service-status: the single owner of AD-23 — the health-first rule every displayed service
+// core/runtime/service-status: the single owner of AD-23 — the health-first rule every displayed service
 // state comes from (Dashboard, Logs, Update, CLI `dashboard`). The manifest `healthUrl` is probed
 // first, then its outcome is combined with the container state. The combination table lives only
 // in `combineStatus`; a new probe kind is added here, never in a consumer. Ports are injected and

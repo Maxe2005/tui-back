@@ -1,4 +1,4 @@
-// adapters/driven/xdg: resolves the tool's config/data/state/cache directories per the
+// adapters/driven/storage/xdg: resolves the tool's config/data/state/cache directories per the
 // XDG Base Directory Specification v0.8. Lives in adapters/driven/, not core/ — AD-1
 // forbids core/ from importing fs, and os.homedir()/process.env plus the directory
 // creation in ensureXdgDir() are adapter-layer infrastructure, not a core concern.

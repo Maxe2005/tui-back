@@ -1,4 +1,4 @@
-// adapters/driven/registry: integration tests against real temp dirs + real files
+// adapters/driven/storage/registry: integration tests against real temp dirs + real files
 // (AD-13). node:fs is deliberately not mocked — this adapter's whole contract is how the
 // real filesystem manifests as Result errors (registry-invalid-yaml/-format, missing file
 // → empty list, scan-root-not-found) and how registry.yaml is persisted/deduped.

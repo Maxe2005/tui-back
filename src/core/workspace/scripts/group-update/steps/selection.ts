@@ -1,4 +1,4 @@
-// core/scripts/group-update/selection: lock keys, selection matching and source-branch resolution/validation.
+// core/workspace/scripts/group-update/selection: lock keys, selection matching and source-branch resolution/validation.
 import { resolve } from "node:path";
 import type { GitPort } from "../../../../ports/vcs/git.js";
 import { err, ok, type Result } from "../../../../result.js";

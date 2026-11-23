@@ -1,4 +1,4 @@
-// adapters/driven/git/refs: shared low-level ref helpers (spawn-failure detail, show-ref taxonomy, current branch) used by every other family module.
+// adapters/driven/vcs/git/refs: shared low-level ref helpers (spawn-failure detail, show-ref taxonomy, current branch) used by every other family module.
 import { GIT_DETACHED_HEAD } from '../../../../../core/ports/vcs/git.js';
 import { type Result, err, ok } from '../../../../../core/result.js';
 import { runProcess } from '../../../process.js';

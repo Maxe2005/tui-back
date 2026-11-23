@@ -1,4 +1,4 @@
-// adapters/driven/git/branches: branch lifecycle and queries (create, delete, rename, track, checkout, list, merged/ahead-behind checks); every ref write goes through the gate.
+// adapters/driven/vcs/git/branches: branch lifecycle and queries (create, delete, rename, track, checkout, list, merged/ahead-behind checks); every ref write goes through the gate.
 import { branchOwners } from '../../../../../core/workspace/edt/branches/branch-owners.js';
 import { type EdtRegistryPort } from '../../../../../core/ports/storage/edt-registry.js';
 import { type ManifestPort } from '../../../../../core/ports/vcs/manifest.js';

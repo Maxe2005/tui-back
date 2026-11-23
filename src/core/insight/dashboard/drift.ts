@@ -1,4 +1,4 @@
-// core/dashboard/drift: branch drift — whether a repo sits on the branch it should be on (an
+// core/insight/dashboard/drift: branch drift — whether a repo sits on the branch it should be on (an
 // active-EDT member: its EDT branch; any other managed repo: its sharedBranch). Shared by the
 // dashboard snapshot and realign; read-only, a failed probe is `unknown`, never a verdict.
 import { resolve } from 'node:path';

@@ -1,7 +1,7 @@
 // tui/zones/shared-types: the read-only History view over the shared-types source repo. By
 // branch (version bumps newest first, streamed) or by version (bumping commit, containing
 // branches, date). Rendering and key dispatch only: the searches live in core
-// (`core/shared-types/versioning/version-history.ts`) and run through the store slice, which owns the
+// (`core/workspace/shared-types/versioning/version-history.ts`) and run through the store slice, which owns the
 // cancellable walk. Enter on a row hands that version to the form.
 import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';

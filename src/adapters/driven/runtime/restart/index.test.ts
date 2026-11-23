@@ -1,4 +1,4 @@
-// adapters/driven/restart: integration tests against the real `sh` plus a stubbed shell
+// adapters/driven/runtime/restart: integration tests against the real `sh` plus a stubbed shell
 // script on a temp dir that records its argv and cwd and exits as instructed — the adapter's
 // contract is how the shell's exit codes/streams surface as Result errors.
 import { describe, expect, it, afterEach } from 'vitest';

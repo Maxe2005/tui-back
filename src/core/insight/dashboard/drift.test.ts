@@ -1,4 +1,4 @@
-// core/dashboard/drift: unit tests against fake ports — the realign candidate list.
+// core/insight/dashboard/drift: unit tests against fake ports — the realign candidate list.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/storage/edt-registry.js';

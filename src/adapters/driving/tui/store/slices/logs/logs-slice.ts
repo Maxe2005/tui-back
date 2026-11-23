@@ -1,6 +1,6 @@
 // tui/store/slices: Logs zone state — the selected services in both left-panel lists, the ad
 // hoc fullscreen preview target, and the per-pane buffer/error/scroll/health state. The ring
-// buffer itself lives in core/logs' LogsManager (one per store, in memory only); `logsPanes`
+// buffer itself lives in core/insight/logs' LogsManager (one per store, in memory only); `logsPanes`
 // is a mirror kept in sync via `onUpdate` so React re-renders, never a second source of truth.
 // Also owns the persisted filter-history lists, the persisted rule lists and the rule-set library.
 //

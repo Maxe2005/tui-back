@@ -1,4 +1,4 @@
-// adapters/driven/shell-session: integration tests against the real `sh` in a temp dir, and a
+// adapters/driven/runtime/shell-session: integration tests against the real `sh` in a temp dir, and a
 // stub `docker` script (same seam as the container adapter's tests) recording its argv.
 import { describe, expect, it, afterEach } from 'vitest';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';

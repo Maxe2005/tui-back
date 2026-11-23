@@ -1,4 +1,4 @@
-// core/edt/shared-branches: the single FR-7 definition of a protected branch — exactly the
+// core/workspace/edt/shared-branches: the single FR-7 definition of a protected branch — exactly the
 // manifest's `protectedBranches` plus its `sharedBranch`, nothing implicit. The git adapter's
 // authoritative gate and every TUI advisory check import this one rule so they cannot drift.
 import type { Manifest } from '../../../ports/vcs/manifest.js';

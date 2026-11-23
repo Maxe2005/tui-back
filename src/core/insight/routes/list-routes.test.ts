@@ -1,4 +1,4 @@
-// core/routes/list-routes: unit tests against fake ports — no real manifests, no real OpenAPI
+// core/insight/routes/list-routes: unit tests against fake ports — no real manifests, no real OpenAPI
 // specs.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '../../result.js';

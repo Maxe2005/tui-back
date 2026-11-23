@@ -60,7 +60,7 @@ export type CreateWizardDeps = {
   candidates: readonly ServiceBranchDivergence[];
   // Step 3's per-service branch lists (local + remote-tracking, never fetched).
   listCreateBranches: AppState['listCreateBranches'];
-  // The first EDT's explicit activation (core/edt/lifecycle/activate.ts, via the store).
+  // The first EDT's explicit activation (core/workspace/edt/lifecycle/activate.ts, via the store).
   activateEdtAction: AppState['activateEdt'];
   // "Switch now" — replaces the wizard with the switch dialog on the new EDT and runs the
   // protected switch at once (the zone resolves the entry from the reloaded store).

@@ -1,4 +1,4 @@
-// core/edt/modify: unit tests against fake ports — adding/removing members, setting and
+// core/workspace/edt/modify: unit tests against fake ports — adding/removing members, setting and
 // renaming member branches, the lock-held edts.yaml write, and the branch-picker helpers.
 import { describe, expect, it, vi, type Mock, afterEach } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';

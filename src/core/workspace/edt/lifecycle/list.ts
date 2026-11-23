@@ -1,4 +1,4 @@
-// core/edt/list: listEdtBranchesDivergence (FR-9) — every managed repo's current branch and
+// core/workspace/edt/list: listEdtBranchesDivergence (FR-9) — every managed repo's current branch and
 // ahead/behind divergence from its upstream, uniformly for EDT members and non-members.
 // Branch and divergence are read live from git on every call, never cached in the EDT
 // registry; the registry only tells which repos belong to the active EDT (isMember).

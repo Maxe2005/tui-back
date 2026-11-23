@@ -1,4 +1,4 @@
-// core/edt/switch: switches the active EDT (FR-6/FR-8). Every registered repo is classified
+// core/workspace/edt/switch: switches the active EDT (FR-6/FR-8). Every registered repo is classified
 // against the OUTGOING EDT, its uncommitted work is stashed, adopted or discarded per its
 // state, then it is checked out to its target-driven destination. Per-repo failures never
 // abort the others; state.json and edts.yaml are updated once the target is resolved and no

@@ -1,4 +1,4 @@
-// adapters/driven/git/remote: operations that talk to origin (fetch, pull, unpushed-commit listing).
+// adapters/driven/vcs/git/remote: operations that talk to origin (fetch, pull, unpushed-commit listing).
 import { type Result, err, ok } from '../../../../../core/result.js';
 import { runProcess } from '../../../process.js';
 import { spawnFailureDetail } from './refs.js';

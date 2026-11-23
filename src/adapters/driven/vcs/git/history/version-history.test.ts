@@ -1,4 +1,4 @@
-// adapters/driven/git: the read-only version-history primitives against a real temp repo —
+// adapters/driven/vcs/git: the read-only version-history primitives against a real temp repo —
 // bumps newest first, depth/scan bounds, abort, unknown ref, branches containing a commit.
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';

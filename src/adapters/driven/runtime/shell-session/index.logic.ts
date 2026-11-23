@@ -1,4 +1,4 @@
-// adapters/driven/shell-session (pure parts): command wrapping, line splitting and the cwd
+// adapters/driven/runtime/shell-session (pure parts): command wrapping, line splitting and the cwd
 // sentinel filter. No I/O here, so every edge case is unit-testable without spawning.
 
 // Wraps the user's command so the shell reports its final working directory on stdout when it

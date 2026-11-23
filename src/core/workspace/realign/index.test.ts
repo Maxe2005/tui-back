@@ -1,4 +1,4 @@
-// core/realign: unit tests against fake ports — selection, per-service outcomes, lock, log, restart.
+// core/workspace/realign: unit tests against fake ports — selection, per-service outcomes, lock, log, restart.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '../../result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/storage/edt-registry.js';

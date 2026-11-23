@@ -1,6 +1,6 @@
-// core/scripts/scan: unit tests against a fake RegistryPort (AD-13). The real directory
+// core/workspace/scripts/scan: unit tests against a fake RegistryPort (AD-13). The real directory
 // walk (sorting, skipping dot-dirs/node_modules, symlinks, unreadable-subtree reporting)
-// is covered in adapters/driven/registry/index.test.ts.
+// is covered in adapters/driven/storage/registry/index.test.ts.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../result.js';
 import type { RegistryPort } from '../../../ports/storage/registry.js';

@@ -1,4 +1,4 @@
-// core/scripts/group-update: unit tests against fake ports — all-repos scope and services without a declared container.
+// core/workspace/scripts/group-update: unit tests against fake ports — all-repos scope and services without a declared container.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import type { Manifest, ManifestPort } from '../../../ports/vcs/manifest.js';

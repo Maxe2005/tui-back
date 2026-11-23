@@ -1,4 +1,4 @@
-// core/edt/switch/dirty: the dirty-work half of the EDT switch. Pre-flight resolution of every
+// core/workspace/edt/switch/dirty: the dirty-work half of the EDT switch. Pre-flight resolution of every
 // dirty repo (resolveDirtyRepos), then per repo the plan (reads only), its execution (stash /
 // discard / adopt) and the stash-restore failure path. No checkout happens here.
 import { resolve } from 'node:path';

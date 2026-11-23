@@ -116,7 +116,7 @@ export type ModifyEdtParams = {
   removeMembers: string[];
   setBranches: Array<{ repoPath: string; branch: string }>;
   renameTo?: string;
-  // Mirrors setBranches's shape — see core/edt/lifecycle/modify.ts's ModifyEdtParams for the full
+  // Mirrors setBranches's shape — see core/workspace/edt/lifecycle/modify.ts's ModifyEdtParams for the full
   // semantics (always renames a member's own currently-registered branch).
   renameBranches?: Array<{ repoPath: string; newName: string }>;
 };
@@ -181,7 +181,7 @@ export type EdtSlice = {
   activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
   // Quick action on the system "Shared branches" EDT: fast-forwards each service's local shared
-  // branch from origin with no switch, migration or restart (core/edt/branches/fast-forward-shared.ts).
+  // branch from origin with no switch, migration or restart (core/workspace/edt/branches/fast-forward-shared.ts).
   // Rejected while an update, a restart run or another fast-forward is in flight; `edt-not-found`
   // when the setting is off. Never touches the active-EDT pointer.
   fastForwardSharedRunning: boolean;
@@ -204,18 +204,18 @@ export type EdtSlice = {
   switchDirtyRepos: SwitchDirtyRepo[] | null;
   resolveSwitchDirtyRepos: (choice: SwitchDirtyReposChoice) => void;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
-  // Delete dialog's confirm calls core/edt/lifecycle/delete.ts's deleteEdt in-process (AD-2).
+  // Delete dialog's confirm calls core/workspace/edt/lifecycle/delete.ts's deleteEdt in-process (AD-2).
   deleteEdt: (params: DeleteEdtParams) => Promise<Result<DeleteEdtData>>;
   // Delete-confirm dialog's per-member merge/clean status via core export.
   // Never fails outright: per-member read failure folds into statusError.
   // edtUlid needed for `tui-back:<edtUlid>` tagged-stash check.
   resolveMemberDeleteStatuses: (edtUlid: string, members: readonly EdtMember[]) => Promise<MemberDeleteStatus[]>;
-  // Branch-picker capabilities wrapping core/edt/lifecycle/modify.ts's exports.
+  // Branch-picker capabilities wrapping core/workspace/edt/lifecycle/modify.ts's exports.
   // renameBranch backs picker's row rename when adding member (where modifyEdt's
   // renameBranches cannot apply due to no existing membership).
   listBranches: (repoPath: string) => Promise<Result<string[]>>;
   // Create wizard's Step 3 per-service lists (local + remote-tracking refs).
-  // Wraps core/edt/lifecycle/create.ts's listCreateCandidateBranches — never fetches.
+  // Wraps core/workspace/edt/lifecycle/create.ts's listCreateCandidateBranches — never fetches.
   listCreateBranches: (repoPath: string) => Promise<Result<CreateCandidateBranches>>;
   createMemberBranch: (repoPath: string, branchName: string, baseBranch: string) => Promise<Result<void>>;
   renameBranch: (repoPath: string, oldName: string, newName: string, edtId?: string) => Promise<Result<void>>;

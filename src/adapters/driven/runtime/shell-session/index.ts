@@ -1,4 +1,4 @@
-// adapters/driven/shell-session: the driven implementation of core's ShellSessionPort (AD-22).
+// adapters/driven/runtime/shell-session: the driven implementation of core's ShellSessionPort (AD-22).
 // Each run spawns one child: `sh -c <wrapped>` in the service's repo dir, or
 // `docker exec -e … [-w <cwd>] <container> sh -c <wrapped>` — never `-t`/`-i`, stdin ignored,
 // so no program ever gets a TTY (line-oriented by design; a PTY adapter is separate backlog).

@@ -1,4 +1,4 @@
-// core/scripts/resolve-merge-sources: pure resolution of each update target's merge source
+// core/workspace/scripts/resolve-merge-sources: pure resolution of each update target's merge source
 // when merging from another EDT. Shared by the TUI configuration screen and the CLI so both
 // resolve identically. A branch counts as present only with a local ref — the update's own
 // source check is local-only, so an origin-only branch would be rejected later anyway.

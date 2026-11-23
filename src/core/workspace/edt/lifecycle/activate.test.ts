@@ -1,4 +1,4 @@
-// core/edt/activate: unit tests against fake ports — clean first activation, harmless dirt,
+// core/workspace/edt/activate: unit tests against fake ports — clean first activation, harmless dirt,
 // at-risk pause with zero checkouts, retry, confirmed overwrite (and a new at-risk path
 // re-blocking), per-repo failure isolation, and the refusal when an active EDT already exists.
 import { describe, expect, it, vi, type Mock } from 'vitest';

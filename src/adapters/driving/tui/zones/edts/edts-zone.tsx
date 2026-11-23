@@ -1,6 +1,6 @@
 // tui/zones/edts: the EDTs zone — an EDT selector with its dialogs (create wizard, switch,
 // modify, delete, quick-pick, service actions) above the EDT SERVICES / OTHER SERVICES lists,
-// all Tab-cycled panes, driving core/edt use-cases in-process (AD-2). This file only composes the
+// all Tab-cycled panes, driving core/workspace/edt use-cases in-process (AD-2). This file only composes the
 // layers: state → derived → handlers → effects → one `useInput` dispatcher (use-edts-input.ts);
 // the render lives in edts-list-column / edts-detail-column / edts-dialog-views. Every keystroke
 // decision is a pure function in edts-zone.logic.ts; DetailPane takes only Text-safe content

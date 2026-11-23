@@ -1,4 +1,4 @@
-// core/logs/use-cases: the Result<T> entry points the TUI's logs slice calls — one per action,
+// core/insight/logs/use-cases: the Result<T> entry points the TUI's logs slice calls — one per action,
 // so the slice never calls LogsManager or DockerPort methods directly. Deliberately thin.
 import { ok, type Result } from '../../result.js';
 import type { DockerPort, HealthState } from '../../ports/runtime/docker.js';

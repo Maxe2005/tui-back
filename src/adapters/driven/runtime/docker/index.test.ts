@@ -1,4 +1,4 @@
-// adapters/driven/docker: integration tests against a real, disposable `busybox` container —
+// adapters/driven/runtime/docker: integration tests against a real, disposable `busybox` container —
 // the binary is not mocked. Skipped entirely when no docker daemon is reachable (e.g. a
 // sandboxed CI runner): there is nothing to assert about the real `docker` CLI without one.
 import { afterEach, describe, expect, it } from 'vitest';

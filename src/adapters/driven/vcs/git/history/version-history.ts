@@ -1,4 +1,4 @@
-// adapters/driven/git/version-history: read-only package.json version-bump walk and branches-containing lookup.
+// adapters/driven/vcs/git/version-history: read-only package.json version-bump walk and branches-containing lookup.
 import { type VersionBumpWalkOptions, type VersionBumpWalkSummary, type VersionWalkEnd } from '../../../../../core/ports/vcs/git.js';
 import { type Result, err, ok } from '../../../../../core/result.js';
 import { streamProcess } from '../../../process.js';

@@ -1,4 +1,4 @@
-// core/routes/fire-request: unit tests against fake ports + a stub fetchFn — no real
+// core/insight/routes/fire-request: unit tests against fake ports + a stub fetchFn — no real
 // manifests, no live servers. The stub fetchFn is the only network seam: it serves the fire
 // itself (the auth module is faked here; its own coverage lives in cookie-session-auth.test.ts).
 import { describe, expect, it, vi } from 'vitest';

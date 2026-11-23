@@ -1,4 +1,4 @@
-// core/scripts/group-update/member: the per-service pipeline: pull/merge, migrate, restart.
+// core/workspace/scripts/group-update/member: the per-service pipeline: pull/merge, migrate, restart.
 import type { ContainerPort } from "../../../../ports/runtime/container.js";
 import type { GitPort } from "../../../../ports/vcs/git.js";
 import type { Manifest, ManifestPort } from "../../../../ports/vcs/manifest.js";

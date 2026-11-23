@@ -1,4 +1,4 @@
-// core/scripts/group-update/all: the all-repos flow: every registered repo, narrowed by the confirmed selection.
+// core/workspace/scripts/group-update/all: the all-repos flow: every registered repo, narrowed by the confirmed selection.
 import { basename, resolve } from "node:path";
 import { withActionLock } from "../../../../locking.js";
 import type { ManifestPort } from "../../../../ports/vcs/manifest.js";

@@ -1,4 +1,4 @@
-// core/scripts/reset: the register --reset recovery use-case — repairs a corrupt registry.yaml.
+// core/workspace/scripts/reset: the register --reset recovery use-case — repairs a corrupt registry.yaml.
 // The driven adapter backs up the corrupt file (registry.yaml.bak-<ts>) and re-initializes the
 // registry with the given path; a healthy registry is never touched (registry-not-corrupt).
 // Validations mirror register so the recovery path is unambiguous and idempotent (FR-1).

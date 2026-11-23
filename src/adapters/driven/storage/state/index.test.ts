@@ -1,4 +1,4 @@
-// adapters/driven/state: integration tests against real temp files — like the edt-registry
+// adapters/driven/storage/state: integration tests against real temp files — like the edt-registry
 // tests, but JSON rather than YAML.
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';

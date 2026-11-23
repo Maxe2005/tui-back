@@ -1,4 +1,4 @@
-// tui/store/slices: the Terminal overlay — one `core/shell` session on a service's
+// tui/store/slices: the Terminal overlay — one `core/runtime/shell` session on a service's
 // repo dir or its container, owned here and nowhere else. The slice holds what the view shows:
 // the target, the bounded display lines (output plus the echoed command and status lines), the
 // cwd, the running flag, fullscreen and a one-line notice. Streamed lines are batched so a noisy

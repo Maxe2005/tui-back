@@ -1,4 +1,4 @@
-// core/shared-types/resolve-conflict: the block rewrite and the resolution flow against fake
+// core/workspace/shared-types/resolve-conflict: the block rewrite and the resolution flow against fake
 // ports (an in-memory worktree standing in for git).
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../result.js';

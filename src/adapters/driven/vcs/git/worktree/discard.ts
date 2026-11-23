@@ -1,4 +1,4 @@
-// adapters/driven/git/discard: consent-gated destructive primitives (path discard, discard to HEAD, discard all).
+// adapters/driven/vcs/git/discard: consent-gated destructive primitives (path discard, discard to HEAD, discard all).
 import { type Result, err, ok } from '../../../../../core/result.js';
 import { runProcess } from '../../../process.js';
 import { LARGE_OUTPUT_BUFFER } from './diff.js';

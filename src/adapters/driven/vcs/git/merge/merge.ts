@@ -1,4 +1,4 @@
-// adapters/driven/git/merge: merge lifecycle and conflict resolution (merge, abort, state detectors, conflicted-file read/write, side checkout); resolution writes are gated.
+// adapters/driven/vcs/git/merge: merge lifecycle and conflict resolution (merge, abort, state detectors, conflicted-file read/write, side checkout); resolution writes are gated.
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';

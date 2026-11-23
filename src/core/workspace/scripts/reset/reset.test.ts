@@ -1,6 +1,6 @@
-// core/scripts/reset: unit tests against a fake RegistryPort and fake LockPort (AD-13).
-// The adapter's real backup/re-init behavior is covered in adapters/driven/registry/index
-// .test.ts; the real mkdir lock's cross-process behavior in adapters/driven/lock/index.test.ts.
+// core/workspace/scripts/reset: unit tests against a fake RegistryPort and fake LockPort (AD-13).
+// The adapter's real backup/re-init behavior is covered in adapters/driven/storage/registry/index
+// .test.ts; the real mkdir lock's cross-process behavior in adapters/driven/runtime/lock/index.test.ts.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err, type Result } from '../../../result.js';
 import type { ResetResult, RegistryPort } from '../../../ports/storage/registry.js';

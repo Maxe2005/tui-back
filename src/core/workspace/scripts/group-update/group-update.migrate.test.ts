@@ -1,4 +1,4 @@
-// core/scripts/group-update: unit tests against fake ports — the migrate phase.
+// core/workspace/scripts/group-update: unit tests against fake ports — the migrate phase.
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import { groupUpdate } from './group-update.js';

@@ -1,4 +1,4 @@
-// adapters/driven/lock: the driven implementation of core's LockPort (AD-9) — a cross-process
+// adapters/driven/runtime/lock: the driven implementation of core's LockPort (AD-9) — a cross-process
 // advisory lock via atomic mkdir (exactly one process wins, EEXIST for the rest; no runtime
 // dependency). A waiter retries until a deadline, then returns `action-in-progress` (never a
 // throw). A holder whose recorded pid is dead is stale and reclaimed, so a crashed CLI cannot

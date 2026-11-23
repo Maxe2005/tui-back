@@ -22,7 +22,7 @@ export type LogsPaneData = {
   lines: LogLine[];
   streamError: LogsPaneErrorState;
   noMoreHistory: boolean;
-  // Health-first status for this pane's service (AD-23, through core/service-status — never
+  // Health-first status for this pane's service (AD-23, through core/runtime/service-status — never
   // persisted, read on poll only) plus
   // whether a developer-triggered `docker restart` is in flight for this pane (gates the R
   // control + the no-op guard). Defaults: `down` (not yet proven up) and `false`.
@@ -177,7 +177,7 @@ export type LogsSlice = {
   closeLogsFullscreen: () => void;
   // Resolves repoPath's manifest-declared container and starts (or, if already subscribed,
   // no-ops) a live stream for it — the store action every list-row/pane-becomes-active
-  // transition calls (never core/logs directly from a component).
+  // transition calls (never core/insight/logs directly from a component).
   subscribeLogsPane: (repoPath: string, service: string) => Promise<void>;
   unsubscribeLogsPane: (repoPath: string) => void;
   // Restarts one pane's service through the registry, in `mode` (default: the

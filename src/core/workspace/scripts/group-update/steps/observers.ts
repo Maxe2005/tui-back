@@ -1,4 +1,4 @@
-// core/scripts/group-update/observers: never-throwing phase/result observer emitters, the cancel folder and the migration-failed code.
+// core/workspace/scripts/group-update/observers: never-throwing phase/result observer emitters, the cancel folder and the migration-failed code.
 import { resolve } from "node:path";
 import type {
   GroupUpdateRepoResult,

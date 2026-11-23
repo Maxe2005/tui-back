@@ -67,7 +67,7 @@ export interface Settings {
     // Default off; never written to edts.yaml.
     sharedBranchesEdtEnabled: boolean;
   };
-  // The Logs zone's per-service in-memory ring-buffer size (core/logs/index.ts) — how many
+  // The Logs zone's per-service in-memory ring-buffer size (core/insight/logs/index.ts) — how many
   // lines each pane keeps from the live tail before dropping the oldest. Captured once per
   // subscription, so a change here never resizes an already-running stream.
   // The group update's bounded pool: how many services update at once (default 3, min 1; 1 is the strictly
@@ -138,7 +138,7 @@ export interface Settings {
   // Per-service local preferences, keyed by the manifest `service` name.
   services: {
     // Services whose `healthUrl` health check is turned off on this machine: the status
-    // resolver (core/service-status) resolves them as if no `healthUrl` were declared and never
+    // resolver (core/runtime/service-status) resolves them as if no `healthUrl` were declared and never
     // probes them. Unknown names are kept and ignored. Toggled from the :settings Services tab;
     // read at every resolution, so a change applies at the next poll/refresh.
     healthCheckDisabled: string[];
@@ -173,7 +173,7 @@ export function healthCheckEnabledFrom(getSettings: () => Settings | null): (man
   return (manifest) => !(getSettings()?.services.healthCheckDisabled.includes(manifest.service) ?? false);
 }
 
-// commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/settings/
+// commandPalette.gridMaxRows' valid range — shared by the zod schema (adapters/driven/storage/settings/
 // schema.ts, which rejects out-of-range values from a hand-edited settings.yaml) and the
 // settings screen's own clamp (adapters/driving/tui/shared/screens/settings-screen.tsx, which keeps
 // Up/Down/typed-digit input in range live) so the two can never drift apart.
@@ -191,7 +191,7 @@ export const MAX_HISTORY_DEPTH = 200;
 export const MIN_MAX_COMMITS_SCANNED = 100;
 export const MAX_MAX_COMMITS_SCANNED = 20000;
 
-// logs.bufferSize's valid range — shared by the zod schema (adapters/driven/settings/schema.ts)
+// logs.bufferSize's valid range — shared by the zod schema (adapters/driven/storage/settings/schema.ts)
 // and the settings screen's own clamp (adapters/driving/tui/shared/screens/settings-screen.tsx), same
 // "single source of truth for both" convention as MIN/MAX_GRID_MAX_ROWS above. 50 is small
 // enough to be a deliberate, memory-conscious choice; 5000 is generous enough for a genuinely
@@ -215,7 +215,7 @@ export const MAX_FILTER_HISTORY_GRID_MAX_ROWS = 99;
 
 // edts.branchDropdownMaxRows' valid range (branch autocomplete shared component) — same
 // single-source-of-truth convention as MIN/MAX_GRID_MAX_ROWS above, shared by the zod schema
-// (adapters/driven/settings/schema.ts) and the settings screen's own clamp
+// (adapters/driven/storage/settings/schema.ts) and the settings screen's own clamp
 // (adapters/driving/tui/shared/screens/settings-screen.tsx). 1 keeps the dropdown meaningful (0 rows
 // would hide every proposal); 20 keeps the dropdown bounded inside a modal dialog.
 export const MIN_EDTS_BRANCH_DROPDOWN_MAX_ROWS = 1;

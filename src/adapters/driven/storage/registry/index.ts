@@ -1,4 +1,4 @@
-// adapters/driven/registry: the driven implementation of core's RegistryPort (AD-6).
+// adapters/driven/storage/registry: the driven implementation of core's RegistryPort (AD-6).
 // Persists managed local paths to XDG_CONFIG_HOME/tui-back/registry.yaml, owns the existence
 // probe listRepos uses to separate unreachable from unmanaged, and walks a root to propose
 // scan candidates — it never auto-registers.

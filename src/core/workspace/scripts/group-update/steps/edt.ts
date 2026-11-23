@@ -1,4 +1,4 @@
-// core/scripts/group-update/edt: the EDT flow: every member service of the active EDT.
+// core/workspace/scripts/group-update/edt: the EDT flow: every member service of the active EDT.
 import { resolve } from "node:path";
 import { withActionLock } from "../../../../locking.js";
 import { err, ok, type Result } from "../../../../result.js";

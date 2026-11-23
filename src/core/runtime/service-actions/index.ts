@@ -1,4 +1,4 @@
-// core/service-actions: the shared per-service action registry — open in IDE, simple/clean
+// core/runtime/service-actions: the shared per-service action registry — open in IDE, simple/clean
 // restart and the service/container terminals, with availability computed once from the
 // manifest, lock state and container health. It is the one registry: every consumer (Logs,
 // Dashboard, Update) renders whatever it lists, so a new entry needs no consumer change.

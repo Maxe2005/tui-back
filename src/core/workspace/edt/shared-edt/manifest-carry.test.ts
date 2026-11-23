@@ -1,4 +1,4 @@
-// core/edt/manifest-carry: the capture → clear → run → restore ordering and its failure paths.
+// core/workspace/edt/manifest-carry: the capture → clear → run → restore ordering and its failure paths.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import type { GitPort } from '../../../ports/vcs/git.js';

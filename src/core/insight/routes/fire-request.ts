@@ -1,4 +1,4 @@
-// core/routes/fire-request: fires a discovered route with dev-mode auth handled automatically.
+// core/insight/routes/fire-request: fires a discovered route with dev-mode auth handled automatically.
 // Flow: manifest gate → `missing-base-url` → fresh route-exists check (`unknown-route`) →
 // session cookie from the DevAuthPort → fetch with an 8s timeout, re-authing on 401 (at most 2
 // re-auths, then `auth-unauthorized`); 403 is `auth-forbidden`; any other status is data. The

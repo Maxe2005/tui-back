@@ -1,4 +1,4 @@
-// core/routes/saved-requests: save/list/delete/fire over the global saved-request library.
+// core/insight/routes/saved-requests: save/list/delete/fire over the global saved-request library.
 // Saving captures method, path (template form), query, headers and body; firing a saved
 // request delegates to `fireRequest` so auth, template-match and cap semantics cannot drift.
 // Stale is advisory at list time (a fresh scan per repo); the hard gate stays at fire time,

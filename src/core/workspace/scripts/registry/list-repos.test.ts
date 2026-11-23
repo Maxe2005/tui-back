@@ -1,6 +1,6 @@
-// core/scripts/list-repos: unit tests against fake RegistryPort + ManifestPort (AD-13).
+// core/workspace/scripts/list-repos: unit tests against fake RegistryPort + ManifestPort (AD-13).
 // Real-filesystem behavior (missing file, corrupt YAML, stat probe) is covered in
-// adapters/driven/registry/index.test.ts.
+// adapters/driven/storage/registry/index.test.ts.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../result.js';
 import type { RegistryPort } from '../../../ports/storage/registry.js';

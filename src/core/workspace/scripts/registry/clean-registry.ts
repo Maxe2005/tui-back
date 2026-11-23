@@ -1,4 +1,4 @@
-// core/scripts/clean-registry: classifies registered paths into stale candidates (unreachable,
+// core/workspace/scripts/clean-registry: classifies registered paths into stale candidates (unreachable,
 // or no .tui-back.yaml) and removes confirmed ones. classifyStaleRegistry never writes;
 // removeStaleRegistryEntries only touches the exact paths it's given, so the caller owns what
 // is removed. Other manifest errors and inconclusive exists() checks are never pruned.

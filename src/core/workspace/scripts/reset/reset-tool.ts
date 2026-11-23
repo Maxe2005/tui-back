@@ -1,4 +1,4 @@
-// core/scripts/reset-tool: the `:reset` command's use-case — wipes the selected data categories
+// core/workspace/scripts/reset-tool: the `:reset` command's use-case — wipes the selected data categories
 // (edts, histories, services; services always implies edts) without touching git. Each
 // category runs under its action lock and reports its own outcome; nothing is rolled back.
 // Missing files are an empty, successful category. Unrelated to ./reset.ts (register --reset)

@@ -42,7 +42,7 @@ export const NO_SERVICE_ERROR = 'Select at least one service';
 export type NameAvailability = 'empty' | 'available' | 'taken';
 
 // Trimmed, case-sensitive exact match against the loaded EDT topics — the same comparison
-// core/edt/lifecycle/create.ts's own duplicate-topic rejection makes, so the live check never disagrees
+// core/workspace/edt/lifecycle/create.ts's own duplicate-topic rejection makes, so the live check never disagrees
 // with what the core would later accept.
 export function checkNameAvailability(topic: string, edts: readonly Pick<EdtRegistryEntry, 'topic'>[]): NameAvailability {
   const trimmed = topic.trim();
@@ -146,10 +146,10 @@ export { resolveTabNavKey as resolveWizardNavKey, type TabNavKey as WizardNavKey
 
 // ---- Step 3: global branch strategy + per-service exceptions -------------------------------
 
-// The per-service facts Step 3 reads from the candidate pool (core/edt/lifecycle/list.ts).
+// The per-service facts Step 3 reads from the candidate pool (core/workspace/edt/lifecycle/list.ts).
 export type BranchCandidate = Pick<ServiceBranchDivergence, 'path' | 'service' | 'sharedBranch' | 'protectedBranches'>;
 
-// FR-7, advisory: the same rule the git gate enforces (core/edt/branches/shared-branches.ts) — this
+// FR-7, advisory: the same rule the git gate enforces (core/workspace/edt/branches/shared-branches.ts) — this
 // service's own manifest-defined set, `protectedBranches ∪ {sharedBranch}`. The gate stays
 // authoritative.
 export function isProtectedTarget(name: string, protection: BranchProtection): boolean {

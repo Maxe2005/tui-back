@@ -1,4 +1,4 @@
-// core/heal: restart every active-EDT service that is not up. Planning and running are two
+// core/workspace/heal: restart every active-EDT service that is not up. Planning and running are two
 // exports so a consumer can show the plan before running it (the Dashboard's confirm overlay).
 // Statuses come only from `resolveServiceStatus` (AD-23): heal never combines the probe and the
 // container itself. Targets are `down` / `unhealthy` services that declare a container; every

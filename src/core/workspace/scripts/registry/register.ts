@@ -1,4 +1,4 @@
-// core/scripts/register: persists one absolute local path into the managed-repo registry.
+// core/workspace/scripts/register: persists one absolute local path into the managed-repo registry.
 // Deliberately shallow: no manifest/existence check (a path may be registered before its repo
 // exists — list-repos reports it unreachable). Relative paths are rejected; the path is
 // canonicalized so `/a/b/` and `/a/b` dedupe to one entry (FR-1).

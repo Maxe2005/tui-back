@@ -1,4 +1,4 @@
-// core/edt/create: unit tests against fake ports — validation order (topic, membership,
+// core/workspace/edt/create: unit tests against fake ports — validation order (topic, membership,
 // duplicate topic before any write), the per-member branch loop, failure isolation, and the
 // registry write under the per-resource lock. createEdt performs real EDT-dir/db writes, so
 // edtsBaseDir points at a per-test temp dir.
@@ -83,7 +83,7 @@ function fakeLock(): LockPort {
 
 // A manifest fixture — the protected set these fakes emulate, as if every repo's manifest
 // declared `sharedBranch: development` and `protectedBranches: [preprod, prod]`. The real gate
-// resolves it from each repo's own manifest (core/edt/branches/shared-branches.ts).
+// resolves it from each repo's own manifest (core/workspace/edt/branches/shared-branches.ts).
 const MANIFEST_PROTECTED_BRANCHES = ['development', 'preprod', 'prod'];
 
 function fakeGit(overrides: Partial<GitPort> = {}): GitPort {

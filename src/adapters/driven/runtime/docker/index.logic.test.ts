@@ -1,4 +1,4 @@
-// adapters/driven/docker/index.logic: unit tests for the pure line-parsing/merge logic. They
+// adapters/driven/runtime/docker/index.logic: unit tests for the pure line-parsing/merge logic. They
 // need no docker daemon, unlike index.test.ts's real-docker suite, which skips without one.
 import { describe, expect, it } from 'vitest';
 import { createLineSplitter, mapInspectToHealthState, mergeSortAndTrimLogs, parseHealthInspectOutput, parseTimestampedOutput, splitTimestampedLine } from './index.logic.js';

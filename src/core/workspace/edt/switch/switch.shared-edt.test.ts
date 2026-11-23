@@ -1,4 +1,4 @@
-// core/edt: switchActiveEdt — the `unchanged` outcome and the shared-branches system EDT guards.
+// core/workspace/edt: switchActiveEdt — the `unchanged` outcome and the shared-branches system EDT guards.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import { buildSharedBranchesEdt, SHARED_EDT_ULID } from '../shared-edt/shared-edt.js';

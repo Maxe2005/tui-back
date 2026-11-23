@@ -1,4 +1,4 @@
-// adapters/driven/state: the driven implementation of core's StatePort — state.json under
+// adapters/driven/storage/state: the driven implementation of core's StatePort — state.json under
 // XDG_STATE_HOME (JSON, not YAML). ENOENT reads as "nothing yet" (ok(null)). Every write is a
 // read-merge-write serialized per file, so writing one field never clobbers another; a read
 // I/O error inside a write is propagated, never written over. A field failing validation is

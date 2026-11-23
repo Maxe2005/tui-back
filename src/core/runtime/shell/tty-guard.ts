@@ -1,4 +1,4 @@
-// core/shell/tty-guard: fail fast on commands that need an interactive terminal. The shell
+// core/runtime/shell/tty-guard: fail fast on commands that need an interactive terminal. The shell
 // session is line-oriented (no PTY, stdin closed), so a full-screen program or a bare REPL
 // would either hang or misbehave; detecting the obvious cases upfront lets the view show a
 // hint instead. A heuristic, not a parser: it looks at the program word of each `;` / `&&` /

@@ -1,4 +1,4 @@
-// core/scripts/group-update: brings every member service of the active EDT (or every repo, in
+// core/workspace/scripts/group-update: brings every member service of the active EDT (or every repo, in
 // all-repos scope) up to date with its merge source, runs its migration and restarts it — one
 // `updated`/`skipped`/`failed` row per service, none silently absent, one failure never
 // aborting the others. Merge means `git merge`, never rebase; a rerun with no change is a

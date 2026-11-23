@@ -1,4 +1,4 @@
-// adapters/driven/editor/command: pure editor command-line parsing — tokenizing and argv resolution.
+// adapters/driven/runtime/editor/command: pure editor command-line parsing — tokenizing and argv resolution.
 
 // The placeholder a configured editor command carries where the blocked repo's path goes
 // (`code <repo>`, `idea --line 1 <repo>`, `--folder-uri=<repo>`).

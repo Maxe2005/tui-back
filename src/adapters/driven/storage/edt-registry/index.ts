@@ -1,4 +1,4 @@
-// adapters/driven/edt-registry: the driven implementation of core's EdtRegistryPort.
+// adapters/driven/storage/edt-registry: the driven implementation of core's EdtRegistryPort.
  // Persists created-EDT entries to XDG_CONFIG_HOME/tui-back/edts.yaml (a dedicated file, not
  // registry.yaml), and the optional action log to each EDT's SQLite database
  // (edtsBaseDir/<ulid>.db), whose action_log table is created on demand.

@@ -1,4 +1,4 @@
-// core/logs: LogsManager — the per-service in-memory ring buffer every log-stream subscription
+// core/insight/logs: LogsManager — the per-service in-memory ring buffer every log-stream subscription
 // flows through. Stateful, unlike most of core, because log lines live only in memory (AD-11).
 // One instance per TUI store; subscriptions are keyed by a caller-chosen string (the TUI uses
 // the service's repoPath). bufferSize is captured per subscription, so a settings change never

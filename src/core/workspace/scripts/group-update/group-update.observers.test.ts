@@ -1,4 +1,4 @@
-// core/scripts/group-update: unit tests against fake ports — result observer, live phase tracking, run detail and the parallel pool.
+// core/workspace/scripts/group-update: unit tests against fake ports — result observer, live phase tracking, run detail and the parallel pool.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import type { GitPort } from '../../../ports/vcs/git.js';

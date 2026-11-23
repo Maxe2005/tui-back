@@ -1,4 +1,4 @@
-// core/edt/activate: makes the very first EDT active. Once one is active, `switchActiveEdt` is
+// core/workspace/edt/activate: makes the very first EDT active. Once one is active, `switchActiveEdt` is
 // the only path (it owns the outgoing EDT's stash); this refuses with `activate-has-outgoing`.
 // Pre-flight before any checkout: paths a checkout would overwrite (dirty AND differing from the
 // target) block the run unless confirmed in `overwrite`. Confirmed paths are discarded path by

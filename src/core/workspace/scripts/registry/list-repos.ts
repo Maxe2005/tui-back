@@ -1,4 +1,4 @@
-// core/scripts/list-repos: turns the registered paths into managed repo identities. A path is
+// core/workspace/scripts/list-repos: turns the registered paths into managed repo identities. A path is
 // managed (exists + valid manifest), unreachable (gone from disk — reported, never a crash),
 // silently unmanaged (no .tui-back.yaml), or an error entry (manifest fails to load/validate —
 // surfaced, never hidden). Output keeps registry-file order so reruns are identical (FR-1).

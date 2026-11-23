@@ -1,4 +1,4 @@
-// core/dashboard/snapshot: unit tests against fake ports — one per snapshot scenario.
+// core/insight/dashboard/snapshot: unit tests against fake ports — one per snapshot scenario.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../result.js';
 import type { DockerPort } from '../../ports/runtime/docker.js';

@@ -145,7 +145,7 @@ export type ServiceActionsDialogState = {
 // The OTHER SERVICES row's Add-to-EDT dialog opened by Enter — the branch-picker opens
 // immediately (there is no "current branch" step to gate behind, so the picker *is* the dialog's
 // branch step); confirm calls modifyEdt with both `addMembers` and `setBranches` for the same
-// repoPath in one call (core/edt/lifecycle/modify.ts composes them).
+// repoPath in one call (core/workspace/edt/lifecycle/modify.ts composes them).
 export type AddToEdtDialogState = {
   kind: 'add-to-edt';
   edt: EdtRegistryEntry;
@@ -219,7 +219,7 @@ export function initialDeleteDialog(target: EdtRegistryEntry, isActive: boolean)
 
 // Per-member disposition defaults to 'Leave branch as-is', except a branch both merged into its
 // sharedBranch and clean, which defaults to 'Delete branch'; every row stays independently
-// toggleable. Reuses core/edt/lifecycle/delete.ts's defaultDispositionFor as the single source of truth.
+// toggleable. Reuses core/workspace/edt/lifecycle/delete.ts's defaultDispositionFor as the single source of truth.
 export function buildDeleteMemberRows(statuses: readonly MemberDeleteStatus[]): DeleteMemberRow[] {
   return statuses.map((status) => ({
     repoPath: status.repoPath,

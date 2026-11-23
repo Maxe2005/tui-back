@@ -1,4 +1,4 @@
-// adapters/driven/migration: the driven implementation of core's MigrationPort. A manifest
+// adapters/driven/vcs/migration: the driven implementation of core's MigrationPort. A manifest
 // `migrationCommand` is an arbitrary shell string, so it runs via `sh -c <command>` in the
 // member repo — non-interactive, output captured, no TTY or stdin. `GIT_TERMINAL_PROMPT=0`
 // keeps a credential-requiring remote from hanging on a prompt. The shell is injectable so

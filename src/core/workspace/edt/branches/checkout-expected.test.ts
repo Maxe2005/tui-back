@@ -1,4 +1,4 @@
-// core/edt/checkout-expected: unit tests for the shared resolve → prepare → checkout step.
+// core/workspace/edt/checkout-expected: unit tests for the shared resolve → prepare → checkout step.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, type ResultError } from '../../../result.js';
 import type { GitPort } from '../../../ports/vcs/git.js';

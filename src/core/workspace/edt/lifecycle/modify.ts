@@ -1,4 +1,4 @@
-// core/edt/modify: modifies an EDT after creation — add/remove members, change or rename a
+// core/workspace/edt/modify: modifies an EDT after creation — add/remove members, change or rename a
 // member's branch, rename the topic. Git writes (gate, protected switch, rename) run pre-lock,
 // one helper per step; only the final edts.yaml assembly and write is held under the registry
 // lock (AD-9). Only step 1's registry read can fail the whole use-case.

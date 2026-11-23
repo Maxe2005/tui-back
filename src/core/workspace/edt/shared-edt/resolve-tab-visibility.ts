@@ -1,4 +1,4 @@
-// core/edt/resolve-tab-visibility: computes each manifest-gated zone tab's status
+// core/workspace/edt/resolve-tab-visibility: computes each manifest-gated zone tab's status
 // (`omitted`/`disabled`/`enabled`) from every registered repo's manifest module ids against
 // active-EDT membership. `Routes` gates on `route-explorer`; `shared-types` on
 // `shared-types-source` alone (consumers depend on the source, they never drive the tab). Module ids are matched as declared, never
@@ -55,7 +55,7 @@ export async function resolveTabVisibility(
     return listed;
   }
 
-  // Same resolution as core/edt/lifecycle/list.ts: the active EDT's member repo paths, used only to
+  // Same resolution as core/workspace/edt/lifecycle/list.ts: the active EDT's member repo paths, used only to
   // decide disabled-vs-enabled below — never to source a branch/identity value.
   const activeUlid = await state.readActiveEdt();
   if (!activeUlid.ok) {

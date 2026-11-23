@@ -1,4 +1,4 @@
-// adapters/driven/git/diff: read-only working-tree and revision inspection (status, dirty paths, name-only diff, stat, HEAD).
+// adapters/driven/vcs/git/diff: read-only working-tree and revision inspection (status, dirty paths, name-only diff, stat, HEAD).
 import { type Result, err, ok } from '../../../../../core/result.js';
 import { runProcess } from '../../../process.js';
 import { spawnFailureDetail } from '../refs/refs.js';

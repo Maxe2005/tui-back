@@ -1,4 +1,4 @@
-// core/shared-types/publish-version: runs the source repo's configured publish command
+// core/workspace/shared-types/publish-version: runs the source repo's configured publish command
 // exactly once per attempt, then reads the source's own version and requires it to be
 // present on the registry before reporting success. No step loop, no resume.
 import { join } from 'node:path';

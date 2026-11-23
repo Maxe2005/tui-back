@@ -1,4 +1,4 @@
-// core/dashboard/snapshot: buildDashboardSnapshot assembles everything the Dashboard shows —
+// core/insight/dashboard/snapshot: buildDashboardSnapshot assembles everything the Dashboard shows —
 // the active EDT's services (health-first status, branch, divergence, working tree, branch flags, drift),
 // the other managed services' drift and a registry-health summary. Read-only; every probed
 // field fails on its own, never the snapshot.

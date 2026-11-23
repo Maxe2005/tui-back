@@ -1,4 +1,4 @@
-// adapters/driven/git/stash: tagged stash operations (save, find, restore, existence check).
+// adapters/driven/vcs/git/stash: tagged stash operations (save, find, restore, existence check).
 import { type Result, err, ok } from '../../../../../core/result.js';
 import { runProcess } from '../../../process.js';
 import { spawnFailureDetail } from '../refs/refs.js';

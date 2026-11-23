@@ -1,4 +1,4 @@
-// adapters/driven/lock: integration tests against real temp dirs (AD-13). Drive the
+// adapters/driven/runtime/lock: integration tests against real temp dirs (AD-13). Drive the
 // mkdir-based cross-process lock directly (acquireLock with short timeouts) so contention,
 // stale-holder reclaim, and release semantics are deterministic without hitting real
 // 5s waits.

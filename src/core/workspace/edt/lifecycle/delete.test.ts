@@ -1,4 +1,4 @@
-// core/edt/delete: unit tests against fake ports — active-EDT rejection, per-member
+// core/workspace/edt/delete: unit tests against fake ports — active-EDT rejection, per-member
 // disposition (leave/delete, merged+clean -> -d vs. unmerged/dirty -> -D), cross-EDT
 // branch-collision partial failure, and the lock-held registry-entry + SQLite-file removal.
 import { describe, expect, it, vi, afterEach, type Mock } from 'vitest';

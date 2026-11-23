@@ -1,4 +1,4 @@
-// core/scripts/run-pool: the bounded worker pool behind the group update. At most `concurrency`
+// core/workspace/scripts/run-pool: the bounded worker pool behind the group update. At most `concurrency`
 // workers are in flight; results come back in input (configuration) order whatever order the
 // workers finish in. Pure — no ports, no I/O — and it never rejects: a throwing worker is
 // converted to its item's row by the caller-provided `onError`.

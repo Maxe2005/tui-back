@@ -30,7 +30,7 @@ import { BoundedBlocks, BoundedList } from '../components/lists/bounded-list.js'
 
 // Static manifest-creation guidance, always shown alongside the scan/register controls — never
 // gated to first launch only. Field names mirror the manifest zod schema
-// (adapters/driven/manifest/schema.ts): service, container, modules, optional migrationCommand
+// (adapters/driven/vcs/manifest/schema.ts): service, container, modules, optional migrationCommand
 // (absent = no migrations to run), optional sharedBranch (default development), optional
 // protectedBranches.
 export const MANIFEST_GUIDANCE_LINES: readonly string[] = [

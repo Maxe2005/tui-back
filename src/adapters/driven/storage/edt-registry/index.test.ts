@@ -1,4 +1,4 @@
-// adapters/driven/edt-registry: integration tests against real temp files. The schema is
+// adapters/driven/storage/edt-registry: integration tests against real temp files. The schema is
 // strict on purpose: an entry without `topic` + `members` is rejected as
 // edt-registry-invalid-format rather than migrated.
 import { describe, expect, it, afterEach } from 'vitest';

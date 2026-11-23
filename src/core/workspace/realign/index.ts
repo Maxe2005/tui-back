@@ -1,4 +1,4 @@
-// core/realign: puts a selection of drifted services back on the branch they should be on
+// core/workspace/realign: puts a selection of drifted services back on the branch they should be on
 // (active-EDT members: their EDT branch; other managed repos: their sharedBranch), then
 // optionally restarts the realigned ones. Work is never stashed, discarded or moved: a dirty or
 // mid-merge repo is skipped. One closed row per selected service; the run never rejects.

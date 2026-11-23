@@ -1,4 +1,4 @@
-// core/edt/switch/types: public and shared types of the EDT switch (results, dirty-work
+// core/workspace/edt/switch/types: public and shared types of the EDT switch (results, dirty-work
 // resolutions, params, per-repo context) plus the `failed` row builder. Leaf module: imports
 // nothing from the rest of the switch, so dirty.ts / member.ts / switch.ts never form a cycle.
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../ports/storage/edt-registry.js';

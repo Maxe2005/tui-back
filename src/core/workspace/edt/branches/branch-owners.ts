@@ -1,4 +1,4 @@
-// core/edt/branch-owners: pure lookup of which EDTs register a given branch of
+// core/workspace/edt/branch-owners: pure lookup of which EDTs register a given branch of
 // a given repo as one of their own member branches. Single source for the git adapter's
 // rename gate and the TUI's chooser annotations / inline refusals. Paths are compared after
 // resolve() so a registry-stored shape (trailing slash, relative segments) still matches.

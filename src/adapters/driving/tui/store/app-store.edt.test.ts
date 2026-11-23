@@ -530,7 +530,7 @@ describe("app store", () => {
   });
 
   // The create-EDT dialog always builds and supplies its own CreateBranchOptions — the store
-  // must forward exactly what it's given to core/edt/lifecycle/create.ts, never substitute a default.
+  // must forward exactly what it's given to core/workspace/edt/lifecycle/create.ts, never substitute a default.
   describe("createEdt passes branchOptions through unchanged", () => {
     it("a real (non-NO_BRANCH_CREATION) branchOptions reaches git.createBranch with the caller's base/name", async () => {
       const edtsBaseDir = await makeEdtsBaseDir();

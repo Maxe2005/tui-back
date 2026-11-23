@@ -1,4 +1,4 @@
-// adapters/driven/manifest: loads and validates a repo's root .tui-back.yaml, the single
+// adapters/driven/vcs/manifest: loads and validates a repo's root .tui-back.yaml, the single
 // per-repo activation surface (AD-4). A repo is "managed" iff this file exists and validates;
 // its absence is the unmanaged primitive (manifest-not-found) — never a crash and never
 // name-based special-casing.

@@ -1,4 +1,4 @@
-// core/scripts/group-update: unit tests against fake ports — assisted resolution of update blockers.
+// core/workspace/scripts/group-update: unit tests against fake ports — assisted resolution of update blockers.
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import type { GitPort } from '../../../ports/vcs/git.js';

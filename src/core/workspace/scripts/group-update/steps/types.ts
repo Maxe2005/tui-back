@@ -1,4 +1,4 @@
-// core/scripts/group-update/types: public types of the group update: params, rows, selection, blocker seam and phase observers.
+// core/workspace/scripts/group-update/types: public types of the group update: params, rows, selection, blocker seam and phase observers.
 import type { ContainerPort } from "../../../../ports/runtime/container.js";
 import type { EdtRegistryPort } from "../../../../ports/storage/edt-registry.js";
 import type { GitPort } from "../../../../ports/vcs/git.js";

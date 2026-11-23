@@ -1,4 +1,4 @@
-// adapters/driven/git/commit: gated staging and committing of explicit path lists (never pushes).
+// adapters/driven/vcs/git/commit: gated staging and committing of explicit path lists (never pushes).
 import { type ManifestPort } from '../../../../../core/ports/vcs/manifest.js';
 import { type Result, err, ok } from '../../../../../core/result.js';
 import { runProcess } from '../../../process.js';

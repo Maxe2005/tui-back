@@ -6,7 +6,7 @@ import type { Result } from '../../result.js';
 export interface Manifest {
   service: string;
   container?: string;
-  // Optional http(s) URL — the steady-state status probe: core/service-status probes it first
+  // Optional http(s) URL — the steady-state status probe: core/runtime/service-status probes it first
   // and combines the answer with the container state (AD-23), for every displayed status and
   // for each post-restart verification attempt. A container-less service declaring it gets a
   // real up/down. Absent = the raw container state, with `up` unverified.

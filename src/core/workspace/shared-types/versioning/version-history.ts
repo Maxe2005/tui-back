@@ -1,4 +1,4 @@
-// core/shared-types/version-history: the read-only History library over the shared-types source
+// core/workspace/shared-types/version-history: the read-only History library over the shared-types source
 // repo — "which version is on my branch?" (by-branch: version bumps newest first) and "where was
 // 0.1.3770 released?" (by-version: bumping commit, containing branches, date). Pure orchestration
 // over GitPort: results are streamed through callbacks and every walk is cancellable through an

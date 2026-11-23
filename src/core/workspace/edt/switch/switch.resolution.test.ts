@@ -1,4 +1,4 @@
-// core/edt/switch: unit tests against fake ports — adopt and discard resolutions, failure reporting and dirtyPolicy.
+// core/workspace/edt/switch: unit tests against fake ports — adopt and discard resolutions, failure reporting and dirtyPolicy.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import type { EdtRegistryPort } from '../../../ports/storage/edt-registry.js';

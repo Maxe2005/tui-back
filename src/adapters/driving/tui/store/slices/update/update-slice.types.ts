@@ -206,7 +206,7 @@ export type UpdateSlice = {
   markUpdateInterrupted: () => Promise<void>;
   clearUpdate: () => void;
 
-  // Live per-service health-first status (AD-23, through core/service-status) for the Update
+  // Live per-service health-first status (AD-23, through core/runtime/service-status) for the Update
   // zone's always-visible service list — keyed by repoPath, independent of the Logs zone's
   // `logsPanes[*].health`. A repoPath with no entry yet (poll in flight, or never started) reads
   // as `down`, until the first poll resolves. `no-container` is a manifest declaring neither a

@@ -1,4 +1,4 @@
-// adapters/driven/settings/schema: the zod schema for settings.yaml — `.strict()` with
+// adapters/driven/storage/settings/schema: the zod schema for settings.yaml — `.strict()` with
 // field-naming errors, like the manifest schema. Every top-level and nested key is optional
 // and defaults to DEFAULT_SETTINGS' value, so an empty file (`{}` or a missing section) parses
 // to the full default shape rather than failing.

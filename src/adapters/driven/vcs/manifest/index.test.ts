@@ -1,4 +1,4 @@
-// adapters/driven/manifest: integration tests against real temp dirs + real files
+// adapters/driven/vcs/manifest: integration tests against real temp dirs + real files
 // (AD-13). node:fs is deliberately not mocked — this adapter's whole contract is how
 // the real filesystem manifests surface as Result errors (manifest-not-found vs
 // manifest-read-error vs manifest-invalid-yaml vs manifest-validation-failed).

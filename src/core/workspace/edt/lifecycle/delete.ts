@@ -1,4 +1,4 @@
-// core/edt/delete: deletes a non-active EDT, leaving or deleting each member's branch per the
+// core/workspace/edt/delete: deletes a non-active EDT, leaving or deleting each member's branch per the
 // caller's disposition (default 'leave'). Merge/clean status is re-read right before deleting
 // to pick `-d` vs `-D`; a branch owned by another EDT is refused per-branch without blocking
 // the rest. Only the registry-entry and SQLite-file removal is lock-held (AD-9); there is no

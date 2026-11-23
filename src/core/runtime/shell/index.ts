@@ -4,7 +4,7 @@ import type { ShellLine, ShellRunHandle, ShellRunOutcome, ShellSessionPort, Shel
 import { createLineBuffer, DEFAULT_MAX_LINES, type LineBufferSnapshot } from './line-buffer.js';
 import { detectTtyCommand } from './tty-guard.js';
 
-// core/shell: one terminal session on a service (its repo dir) or its container (AD-22). The
+// core/runtime/shell: one terminal session on a service (its repo dir) or its container (AD-22). The
 // session owns what the port does not: the working directory carried across commands, the
 // one-run-at-a-time rule, the TTY fail-fast guard, the container-running precondition and the
 // bounded output retention. Every method returns a Result and never rejects or throws.

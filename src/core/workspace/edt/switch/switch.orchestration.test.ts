@@ -1,4 +1,4 @@
-// core/edt/switch: unit tests against fake ports — target resolution, idempotency, lock gates, per-repo isolation and registry writes.
+// core/workspace/edt/switch: unit tests against fake ports — target resolution, idempotency, lock gates, per-repo isolation and registry writes.
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import { switchActiveEdt } from './switch.js';

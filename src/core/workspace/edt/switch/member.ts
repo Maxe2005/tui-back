@@ -1,4 +1,4 @@
-// core/edt/switch/member: per-repo switching. A target member goes to its own registered branch
+// core/workspace/edt/switch/member: per-repo switching. A target member goes to its own registered branch
 // (then its target-tagged stash is popped back in); any other repo goes to its manifest
 // `sharedBranch`. Dirty work is delegated to dirty.ts; this module owns the checkout and the
 // failure/success result rows that depend on how far the dirty plan got.

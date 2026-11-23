@@ -1,4 +1,4 @@
-// adapters/driven/manifest/schema: the zod schema for a root .tui-back.yaml (AD-4). Every
+// adapters/driven/vcs/manifest/schema: the zod schema for a root .tui-back.yaml (AD-4). Every
 // `modules` entry is a config object, never a bare boolean, and every key must be a known,
 // compiled-in module id (AD-5) — unknown ids are surfaced, never ignored. The explicit
 // `z.ZodType<Manifest>` annotation ties the schema to core's Manifest (zod has no runtime
@@ -18,7 +18,7 @@ export function createManifestSchema(
       service: z.string().trim().min(1),
       container: z.string().trim().min(1).optional(),
       // Optional; a non-blank http:// or https:// URL — the steady-state status probe (AD-23,
-      // core/service-status), also used to verify a post-switch restart.
+      // core/runtime/service-status), also used to verify a post-switch restart.
       healthUrl: z
         .string()
         .trim()

@@ -1,4 +1,4 @@
-// core/edt/switch: unit tests against fake ports — dirty-repo classification, pre-flight, resolution seam and state-1 stash safety.
+// core/workspace/edt/switch: unit tests against fake ports — dirty-repo classification, pre-flight, resolution seam and state-1 stash safety.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import { classifySwitchRepos, switchActiveEdt } from './switch.js';

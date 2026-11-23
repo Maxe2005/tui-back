@@ -1,4 +1,4 @@
-// core/edt/resolve-tab-visibility: unit tests against fake ports — registry-wide omission,
+// core/workspace/edt/resolve-tab-visibility: unit tests against fake ports — registry-wide omission,
 // active-EDT-scoped disable, enablement, the shared-types tab gated by shared-types-source alone, and error
 // propagation from the two reused resolution paths (listRepos, active-EDT-member resolution).
 import { describe, expect, it, vi } from 'vitest';

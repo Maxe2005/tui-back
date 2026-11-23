@@ -1,4 +1,4 @@
-// adapters/driven/saved-requests: integration tests against a real sqlite file in a temp
+// adapters/driven/storage/saved-requests: integration tests against a real sqlite file in a temp
 // dir — never the real user data. Covers the UNIQUE(name) gate, the in-place overwrite, the
 // exact-match get/remove misses and the schema_version row.
 import { describe, expect, it, afterEach } from 'vitest';

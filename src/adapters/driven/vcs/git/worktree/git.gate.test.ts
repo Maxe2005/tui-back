@@ -1,4 +1,4 @@
-// adapters/driven/git gate: integration tests against real temp git repos; child_process is not
+// adapters/driven/vcs/git gate: integration tests against real temp git repos; child_process is not
 // mocked. The gate firing "before any git" is checked two ways: a protected target that does
 // not exist stays absent, and a manifest-only directory that is NOT a git repository still
 // gets the gate error rather than a "not a git repository" failure.

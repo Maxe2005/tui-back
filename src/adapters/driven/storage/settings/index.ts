@@ -1,4 +1,4 @@
-// adapters/driven/settings: the driven implementation of core's SettingsPort — per-user
+// adapters/driven/storage/settings: the driven implementation of core's SettingsPort — per-user
 // preferences in XDG_CONFIG_HOME/tui-back/settings.yaml. Unlike registry/manifest, a missing
 // file, empty file, invalid YAML or a zod failure is always `ok`, falling back to
 // DEFAULT_SETTINGS (the last three with a non-blocking `warning`): a failed load must never

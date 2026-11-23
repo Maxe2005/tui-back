@@ -1,4 +1,4 @@
-// core/scripts/reset-tool: unit tests against fake ports and a real tmp edtsBaseDir — the
+// core/workspace/scripts/reset-tool: unit tests against fake ports and a real tmp edtsBaseDir — the
 // all-categories, history-only, empty-state and lock-held cases, plus the services ⇒ edts rule.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync } from 'node:fs';

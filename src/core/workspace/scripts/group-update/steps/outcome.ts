@@ -1,4 +1,4 @@
-// core/scripts/group-update/outcome: per-repo outcome rows and the small helpers building them (skipped/failed/cancelled).
+// core/workspace/scripts/group-update/outcome: per-repo outcome rows and the small helpers building them (skipped/failed/cancelled).
 import { ok, type ResultError } from "../../../../result.js";
 import { type PoolControl } from "../../update-support/run-pool.js";
 import type { GroupUpdateRepoResult, OnUpdateBlocker } from "./types.js";

@@ -1,4 +1,4 @@
-// core/shared-types/list-consumers: resolves the active EDT's version-consuming services from
+// core/workspace/shared-types/list-consumers: resolves the active EDT's version-consuming services from
 // their manifests. Core never names the module: the caller passes the consuming module's id and
 // a `parseConfig` seam that validates/defaults its manifest parameters (the schema lives in the
 // driven module registry, which core must not import).

@@ -1,4 +1,4 @@
-// core/edt/manifest-carry: the one exception to the switch's stash/adopt/discard rules — a dirty
+// core/workspace/edt/manifest-carry: the one exception to the switch's stash/adopt/discard rules — a dirty
 // .tui-back.yaml is captured, cleared to HEAD so nothing else touches it, and written back last.
 import type { GitPort } from '../../../ports/vcs/git.js';
 import type { ManifestCarryPort } from '../../../ports/vcs/manifest-carry.js';

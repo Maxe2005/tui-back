@@ -1,4 +1,4 @@
-// core/scripts/group-update: unit tests against fake ports — the clean-restart recipe and runRestartStep.
+// core/workspace/scripts/group-update: unit tests against fake ports — the clean-restart recipe and runRestartStep.
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { err, ok } from '../../../result.js';
 import type { ContainerPort } from '../../../ports/runtime/container.js';

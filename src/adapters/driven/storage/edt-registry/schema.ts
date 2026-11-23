@@ -1,4 +1,4 @@
-// adapters/driven/edt-registry/schema: the zod schema for edts.yaml — a strict { edts: [...] }
+// adapters/driven/storage/edt-registry/schema: the zod schema for edts.yaml — a strict { edts: [...] }
 // map (not a bare list) so future fields don't need a format migration. Each entry carries a
 // `topic` and per-member `members: [{ service, repoPath, branch }]`.
 import { z } from 'zod';

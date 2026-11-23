@@ -1,4 +1,4 @@
-// core/logs/rule-sets: the persisted Logs filter rules — the tolerant sanitizers for what
+// core/insight/logs/rule-sets: the persisted Logs filter rules — the tolerant sanitizers for what
 // state.json holds (an uncompilable rule or a corrupt value is dropped with a warning naming the
 // field, never a failure) and the pure operations of the named rule-set library (save, overwrite,
 // apply, rename, delete). Rule shapes are plain JSON: core never imports the TUI's rule types.

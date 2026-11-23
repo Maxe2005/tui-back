@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { InstallerPort, NpmOutcome } from '../../../driving/cli/install.js';
 import { runProcess } from '../../process.js';
 
-// adapters/driven/installer: real InstallerPort: global npm install/uninstall through a spawned
+// adapters/driven/runtime/installer: real InstallerPort: global npm install/uninstall through a spawned
 // `npm` (EACCES detected from its stderr) plus the small file reads/writes the installer needs.
 
 const PACKAGE_JSON = fileURLToPath(new URL('../../../../../package.json', import.meta.url));

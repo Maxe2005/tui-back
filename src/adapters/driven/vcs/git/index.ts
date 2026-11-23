@@ -1,4 +1,4 @@
-// adapters/driven/git: the driven implementation of core's GitPort — every git write flows
+// adapters/driven/vcs/git: the driven implementation of core's GitPort — every git write flows
 // through it (AD-8). `assertAllowedBranch` rejects a protected target (resolved from the
 // repo's own manifest, never the caller) before any `git` invocation, and with an `edtId` a
 // branch owned by another EDT. Shells git via child_process; `--` terminates options for

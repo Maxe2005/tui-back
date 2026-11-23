@@ -1,4 +1,4 @@
-// adapters/driven/git/gate: the branch-scope safety gate (AD-8) every git write passes through — protected-branch and cross-EDT checks, plus the current-branch variant for branch-less writes.
+// adapters/driven/vcs/git/gate: the branch-scope safety gate (AD-8) every git write passes through — protected-branch and cross-EDT checks, plus the current-branch variant for branch-less writes.
 import { resolve } from 'node:path';
 import { isProtectedBranch } from '../../../../../core/workspace/edt/branches/shared-branches.js';
 import { isSystemEdt } from '../../../../../core/workspace/edt/shared-edt/shared-edt.js';

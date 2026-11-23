@@ -107,7 +107,7 @@ export interface GitPort {
   discardPaths(repoPath: string, paths: string[]): Promise<Result<void>>;
   // THE one consent-gated destructive primitive — `git reset --hard` then `git clean -fd`
   // (never `-x`: ignored files are never touched; never `-ff`: nested repos are never
-  // removed). Its only permitted caller is core/edt/switch/switch.ts, and only under an explicit
+  // removed). Its only permitted caller is core/workspace/edt/switch/switch.ts, and only under an explicit
   // per-repo `discard` resolution supplied by the developer. Fails `git-discard-error`.
   discardAll(repoPath: string): Promise<Result<void>>;
   // The paths that differ between two revisions (`git diff --name-only -z from to --`),
@@ -121,7 +121,7 @@ export interface GitPort {
   // Line/file totals between two revisions (`git diff --numstat from to`) — read-only, gated
   // nowhere. A binary file counts as one file with 0 lines. Fails `git-diff-error`.
   diffStat(repoPath: string, from: string, to: string): Promise<Result<{ files: number; insertions: number; deletions: number }>>;
-  // Consent-gated, path-scoped discard back to HEAD — only core/edt/lifecycle/activate.ts
+  // Consent-gated, path-scoped discard back to HEAD — only core/workspace/edt/lifecycle/activate.ts
   // calls it, and only for at-risk paths the developer explicitly confirmed overwriting. Per
   // path, whatever its state: unstaged (`reset -q -- paths`), then restored from HEAD when HEAD
   // has it (`checkout HEAD -- …`), else removed as untracked (`clean -f -- …`). Never touches a

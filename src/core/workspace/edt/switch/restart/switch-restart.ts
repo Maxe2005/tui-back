@@ -1,4 +1,4 @@
-// core/edt/switch-restart: the optional post-switch service restart (FR-37). It is a SECOND call
+// core/workspace/edt/switch-restart: the optional post-switch service restart (FR-37). It is a SECOND call
 // made after a successful `switchActiveEdt` — the switch's atomicity and tests stay untouched.
 // Pure orchestration over `runPool`: every target (a service whose branch changed in the switch
 // and that declares a container) is restarted through `ServiceActions.restart`, then verified
