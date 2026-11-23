@@ -4,7 +4,7 @@
 // from it are advisory hints for clients only.
 import { z } from 'zod';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { Subcommand, SubcommandContext } from '../cli/dispatch.js';
+import type { Subcommand, SubcommandContext } from '../cli/dispatch/dispatch.js';
 
 export type SafetyClass = 'read' | 'write' | 'destructive';
 const SAFETY_CLASSES: readonly string[] = ['read', 'write', 'destructive'];

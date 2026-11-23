@@ -1,14 +1,14 @@
 // tui/zones/shared-types: the History view's pure decisions — key reducer, result rows and the
 // status lines. The component (`shared-types-history.tsx`) is a thin dispatcher over these.
-import { isValidHistoryVersion, type VersionHistoryEntry, type VersionHit } from '../../../../../core/shared-types/version-history.js';
-import type { SharedTypesHistory } from '../../store/slices/shared-types-slice.js';
+import { isValidHistoryVersion, type VersionHistoryEntry, type VersionHit } from '../../../../../core/workspace/shared-types/versioning/version-history.js';
+import type { SharedTypesHistory } from '../../store/slices/shared-types/shared-types-slice.js';
 import {
   createBranchAutocompleteState,
   handleBranchAutocompleteKey,
   isBranchAutocompleteExactMatch,
   type BranchAutocompleteState,
-} from '../../shared/components/branch-autocomplete-input.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/text-edit.js';
+} from '../../shared/components/inputs/branch-autocomplete-input.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/inputs/text-edit.js';
 
 export type HistoryMode = SharedTypesHistory['mode'];
 

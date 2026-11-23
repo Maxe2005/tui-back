@@ -7,16 +7,16 @@ import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import type { Result } from '../../../../../core/result.js';
 import { ok } from '../../../../../core/result.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { DockerPort } from '../../../../../core/ports/docker.js';
-import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../core/ports/registry.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
+import type { ServiceBranchDivergence } from '../../../../../core/workspace/edt/lifecycle/list.js';
+import type { DockerPort } from '../../../../../core/ports/runtime/docker.js';
+import type { EdtRegistryPort } from '../../../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../../../core/ports/vcs/git.js';
+import type { ManifestPort } from '../../../../../core/ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../../../core/ports/storage/registry.js';
+import type { StatePort } from '../../../../../core/ports/storage/state.js';
 import { createAppStore, type AppStoreDeps } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
-import { createUpdateConfigDraft } from './update-config-dialog.logic.js';
+import { createUpdateConfigDraft } from './config/update-config-dialog.logic.js';
 import { UpdateZone } from './update-zone.js';
 
 async function press(instance: ReturnType<typeof render>, stdin: NodeJS.ReadStream, sequence: string): Promise<void> {

@@ -1,0 +1,1266 @@
+import { describe, expect, it } from 'vitest';
+import { FOOTER_CONTEXTS } from '../../../keybindings/index.js';
+import { MAX_RULES_PER_LIST } from '../../../../../../core/insight/logs/rule-sets.js';
+import type { LogLine } from '../../../../../../core/ports/runtime/docker.js';
+import {
+  addLogRule,
+  applyLogRules,
+  deleteLogRule,
+  formatLogRule,
+  MAX_LOG_FILTER_RULES,
+  moveLogRule,
+  toggleLogRule,
+  replaceLogRule,
+  validateRuleDraft,
+  decodeFilterHistoryEntry,
+  encodeFilterHistoryEntry,
+  historyEntryLabel,
+  isDefaultLogFilterScope,
+  compileLogFilter,
+  cycleFilterLevel,
+  DEFAULT_LOG_FILTER,
+  DEFAULT_PANE_GLOBAL_FILTER_ENGAGED,
+  DEFAULT_PANE_WRAP,
+  DEFAULT_VISIBILITY_FLAGS,
+  adjustScrollOffset,
+  computeGridLayout,
+  computeLogsLayout,
+  computeLineRowCount,
+  cycleLogsPaneFocus,
+  detectLogLevel,
+  filterVisibleLines,
+  formatHealthLabel,
+  formatLogFilterScope,
+  formatLogLine,
+  healthBadgeState,
+  isAtOldestLine,
+  isClearAllLogsKey,
+  isPaneEngagedInGlobalFilter,
+  isPaneWrapped,
+  isRestartingDisplay,
+  isSelectAllKey,
+  logsFooterContext,
+  backToRuleListState,
+  formatRuleSetConfirm,
+  formatRuleSetRow,
+  openFilterEditorState,
+  openRuleSetNameState,
+  ruleSetsFooterContext,
+  logsLegendHints,
+  isPaneRestartAdvertised,
+  isWrapAllLogsKey,
+  movePaneSubFocus,
+  reindexPaneSubFocus,
+  resolveFilterClearTarget,
+  resolveFullscreenScrollDirection,
+  resolvePaneScrollDirection,
+  resolvePostLoadScrollOffset,
+  resolveSelectAllToggle,
+  resolveVisibilityToggleKey,
+  setPaneGlobalFilterEngagement,
+  setPaneLogFilter,
+  sliceVisibleWindow,
+  splitNoContainerRows,
+  toggleAllPanesWrapFlag,
+  toggleFilterMode,
+  toggleGlobalFilterEngagement,
+  togglePaneWrapFlag,
+  toggleVisibilityFlag,
+  filterHistoryKeyString,
+  pushFilterHistoryEntry,
+  resolveHistoryBrowseDown,
+  resolveHistoryBrowseUp,
+  type FilterHistoryKey,
+  type LogFilterRule,
+  type LogFilterScope,
+} from './logs-zone.logic.js';
+
+describe('healthBadgeState / formatHealthLabel', () => {
+  it('passes raw health through and reads the container-less service as its own dim state', () => {
+    expect(healthBadgeState('up')).toBe('up');
+    expect(healthBadgeState('down')).toBe('down');
+    expect(healthBadgeState('restarting')).toBe('in-progress');
+    expect(healthBadgeState('no-container')).toBe('no-container');
+  });
+
+  it('labels the container-less service in words, never as a kebab-case code', () => {
+    expect(formatHealthLabel('up')).toBe('up');
+    expect(formatHealthLabel('down')).toBe('down');
+    expect(formatHealthLabel('no-container')).toBe('no container');
+  });
+
+  it('a restarting service names the request and the re-verification, never the bare state', () => {
+    expect(formatHealthLabel('restarting')).toBe('restart requested — re-verifying');
+  });
+
+  it('gives the health-first states their own badge and text (AD-23)', () => {
+    expect(healthBadgeState('unhealthy')).toBe('unhealthy');
+    expect(healthBadgeState('inconsistent')).toBe('inconsistent');
+    expect(formatHealthLabel('unhealthy')).toBe('unhealthy');
+    expect(formatHealthLabel('inconsistent')).toBe('inconsistent');
+  });
+});
+
+describe('isRestartingDisplay', () => {
+  it('is true for the in-flight restart flag even while docker still reports the old health', () => {
+    expect(isRestartingDisplay(true, 'up')).toBe(true);
+    expect(isRestartingDisplay(true, 'down')).toBe(true);
+  });
+
+  it('is true for docker-reported restarting without the flag', () => {
+    expect(isRestartingDisplay(false, 'restarting')).toBe(true);
+  });
+
+  it('is false otherwise, including the container-less state', () => {
+    expect(isRestartingDisplay(false, 'up')).toBe(false);
+    expect(isRestartingDisplay(false, 'down')).toBe(false);
+    expect(isRestartingDisplay(false, 'no-container')).toBe(false);
+  });
+
+  it('is false for a container-less row even with a stale restart flag', () => {
+    expect(isRestartingDisplay(true, 'no-container')).toBe(false);
+  });
+});
+
+describe('splitNoContainerRows', () => {
+  function row(path: string) {
+    return {
+      service: path.split('/').pop() ?? path,
+      path,
+      isMember: false,
+      sharedBranch: 'development',
+      protectedBranches: [],
+      branch: 'main',
+      ahead: 0,
+      behind: 0,
+      status: 'current' as const,
+    };
+  }
+
+  it('moves only positively-resolved container-less rows out of the selectable list', () => {
+    const services = [row('/repos/a'), row('/repos/lib'), row('/repos/c')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, { '/repos/lib': true });
+
+    expect(selectable.map((entry) => entry.path)).toEqual(['/repos/a', '/repos/c']);
+    expect(withoutContainer.map((entry) => entry.path)).toEqual(['/repos/lib']);
+  });
+
+  it('keeps rows with unknown or failed presence (absent) and known-with-container (false) selectable', () => {
+    const services = [row('/repos/a'), row('/repos/b')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, { '/repos/a': false });
+
+    expect(selectable.map((entry) => entry.path)).toEqual(['/repos/a', '/repos/b']);
+    expect(withoutContainer).toEqual([]);
+  });
+
+  it('returns everything selectable against an empty presence map (first render, loads in flight)', () => {
+    const services = [row('/repos/a')];
+    const { selectable, withoutContainer } = splitNoContainerRows(services, {});
+
+    expect(selectable).toEqual(services);
+    expect(withoutContainer).toEqual([]);
+  });
+});
+
+describe('cycleLogsPaneFocus back', () => {
+  it('reverses, wrapping first to last', () => {
+    expect(cycleLogsPaneFocus('edt-list', 'back')).toBe('panes');
+    expect(cycleLogsPaneFocus('panes', 'back')).toBe('other-list');
+  });
+});
+
+describe('cycleLogsPaneFocus', () => {
+  it('cycles edt-list -> other-list -> panes -> edt-list', () => {
+    expect(cycleLogsPaneFocus('edt-list')).toBe('other-list');
+    expect(cycleLogsPaneFocus('other-list')).toBe('panes');
+    expect(cycleLogsPaneFocus('panes')).toBe('edt-list');
+  });
+
+  it('never yields an info-only focus — the without-container section is skipped by construction', () => {
+    const foci = new Set([cycleLogsPaneFocus('edt-list'), cycleLogsPaneFocus('other-list'), cycleLogsPaneFocus('panes')]);
+    expect(foci).toEqual(new Set(['other-list', 'panes', 'edt-list']));
+  });
+});
+
+describe('computeGridLayout', () => {
+  it('returns a 0x0 layout for zero panes', () => {
+    expect(computeGridLayout(0, 100, 40)).toEqual({ rows: 0, cols: 0, cellWidth: 0, cellHeight: 0 });
+  });
+
+  it('picks a 1x1 grid for a single pane', () => {
+    expect(computeGridLayout(1, 100, 40)).toEqual({ rows: 1, cols: 1, cellWidth: 100, cellHeight: 40 });
+  });
+
+  it('picks the squarest grid — ceil(sqrt(n)) columns', () => {
+    // 2 panes -> ceil(sqrt(2)) = 2 cols, ceil(2/2) = 1 row
+    expect(computeGridLayout(2, 100, 40)).toMatchObject({ cols: 2, rows: 1 });
+    // 3 panes -> ceil(sqrt(3)) = 2 cols, ceil(3/2) = 2 rows
+    expect(computeGridLayout(3, 100, 40)).toMatchObject({ cols: 2, rows: 2 });
+    // 4 panes -> 2x2
+    expect(computeGridLayout(4, 100, 40)).toMatchObject({ cols: 2, rows: 2 });
+    // 5 panes -> ceil(sqrt(5)) = 3 cols, ceil(5/3) = 2 rows
+    expect(computeGridLayout(5, 100, 40)).toMatchObject({ cols: 3, rows: 2 });
+  });
+
+  it('divides available width/height evenly across cols/rows, flooring to a whole cell', () => {
+    const layout = computeGridLayout(4, 101, 41);
+    expect(layout).toEqual({ rows: 2, cols: 2, cellWidth: 50, cellHeight: 20 });
+  });
+
+  it('never returns a cell smaller than 1, even for a pathological non-positive width/height', () => {
+    expect(computeGridLayout(4, 0, 0)).toEqual({ rows: 2, cols: 2, cellWidth: 1, cellHeight: 1 });
+    expect(computeGridLayout(4, -10, -10)).toEqual({ rows: 2, cols: 2, cellWidth: 1, cellHeight: 1 });
+  });
+});
+
+describe('movePaneSubFocus', () => {
+  // A 2x2 grid: [0 1]
+  //             [2 3]
+  it('moves right/left/up/down within a full grid', () => {
+    expect(movePaneSubFocus(0, 'right', 2, 4)).toBe(1);
+    expect(movePaneSubFocus(1, 'down', 2, 4)).toBe(3);
+    expect(movePaneSubFocus(3, 'left', 2, 4)).toBe(2);
+    expect(movePaneSubFocus(2, 'up', 2, 4)).toBe(0);
+  });
+
+  it('clamps at every edge — never wraps', () => {
+    expect(movePaneSubFocus(0, 'left', 2, 4)).toBe(0);
+    expect(movePaneSubFocus(0, 'up', 2, 4)).toBe(0);
+    expect(movePaneSubFocus(1, 'right', 2, 4)).toBe(1);
+    expect(movePaneSubFocus(3, 'down', 2, 4)).toBe(3);
+  });
+
+  it('clamps onto the last real pane on a short trailing grid row (3 panes in a 2-col grid)', () => {
+    // Grid: [0 1]
+    //       [2  ] (row 1 only has index 2)
+    expect(movePaneSubFocus(0, 'down', 2, 3)).toBe(2);
+    // Moving right from index 2 (only pane on its row) has nowhere real to land at col 1.
+    expect(movePaneSubFocus(2, 'right', 2, 3)).toBe(2);
+  });
+
+  it('returns 0 for zero panes', () => {
+    expect(movePaneSubFocus(0, 'right', 2, 0)).toBe(0);
+  });
+});
+
+describe('reindexPaneSubFocus', () => {
+  it('keeps the same index when it is still in range', () => {
+    expect(reindexPaneSubFocus(1, 3)).toBe(1);
+  });
+
+  it('clamps down to the new last pane when the old index is now out of range', () => {
+    expect(reindexPaneSubFocus(2, 1)).toBe(0);
+    expect(reindexPaneSubFocus(5, 3)).toBe(2);
+  });
+
+  it('returns 0 when every pane is gone', () => {
+    expect(reindexPaneSubFocus(2, 0)).toBe(0);
+  });
+});
+
+describe('adjustScrollOffset / isAtOldestLine', () => {
+  it('scrolling up increases the offset, capped at lineCount - 1', () => {
+    expect(adjustScrollOffset(0, 'up', 5)).toBe(1);
+    expect(adjustScrollOffset(4, 'up', 5)).toBe(4);
+  });
+
+  it('scrolling down decreases the offset, floored at 0', () => {
+    expect(adjustScrollOffset(2, 'down', 5)).toBe(1);
+    expect(adjustScrollOffset(0, 'down', 5)).toBe(0);
+  });
+
+  it('returns 0 for an empty buffer', () => {
+    expect(adjustScrollOffset(3, 'up', 0)).toBe(0);
+  });
+
+  it('isAtOldestLine is true once the offset reaches lineCount - 1', () => {
+    expect(isAtOldestLine(4, 5)).toBe(true);
+    expect(isAtOldestLine(3, 5)).toBe(false);
+  });
+
+  it('isAtOldestLine is true for a genuinely empty pane too — its normal starting state, and the case that must still trigger the first scrollback fetch', () => {
+    expect(isAtOldestLine(0, 0)).toBe(true);
+  });
+});
+
+describe('resolvePostLoadScrollOffset', () => {
+  it('preserves the visible viewport when the pane already had lines before the fetch', () => {
+    // 3 lines were on screen (offset 2 into a 3-line buffer); 4 older lines get prepended —
+    // offset must grow by exactly the prepended count so the same lines stay in view.
+    expect(resolvePostLoadScrollOffset(2, 3, 4, 7)).toBe(6);
+  });
+
+  it('falls back to the buffer-length delta when appended undercounts a live line that arrived mid-fetch', () => {
+    expect(resolvePostLoadScrollOffset(1, 2, 1, 5)).toBe(4);
+  });
+
+  it('pins to 0 (the newest fetched line) when the pane started genuinely empty, instead of overshooting past every line just loaded', () => {
+    expect(resolvePostLoadScrollOffset(0, 0, 4, 4)).toBe(0);
+  });
+});
+
+describe('resolvePaneScrollDirection', () => {
+  it('requires ctrl — plain arrows are not a pane scroll (the grid view: bare arrows already move sub-focus between panes)', () => {
+    expect(resolvePaneScrollDirection({ upArrow: true })).toBeNull();
+    expect(resolvePaneScrollDirection({ ctrl: true, upArrow: true })).toBe('up');
+    expect(resolvePaneScrollDirection({ ctrl: true, downArrow: true })).toBe('down');
+  });
+
+  it('returns null for ctrl + a non-arrow key', () => {
+    expect(resolvePaneScrollDirection({ ctrl: true })).toBeNull();
+  });
+});
+
+describe('resolveFullscreenScrollDirection', () => {
+  it('accepts a bare arrow — fullscreen has no sub-focus grid to disambiguate from', () => {
+    expect(resolveFullscreenScrollDirection({ upArrow: true })).toBe('up');
+    expect(resolveFullscreenScrollDirection({ downArrow: true })).toBe('down');
+  });
+
+  it('also accepts Ctrl+arrow, so existing muscle memory keeps working', () => {
+    expect(resolveFullscreenScrollDirection({ upArrow: true, ctrl: true })).toBe('up');
+  });
+
+  it('returns null for a non-arrow key', () => {
+    expect(resolveFullscreenScrollDirection({})).toBeNull();
+  });
+});
+
+describe('isSelectAllKey', () => {
+  it('is true for Ctrl+A, case-insensitively', () => {
+    expect(isSelectAllKey('a', { ctrl: true })).toBe(true);
+    expect(isSelectAllKey('A', { ctrl: true })).toBe(true);
+  });
+
+  it('is false without ctrl, or for a different letter', () => {
+    expect(isSelectAllKey('a', {})).toBe(false);
+    expect(isSelectAllKey('b', { ctrl: true })).toBe(false);
+  });
+});
+
+describe('resolveSelectAllToggle', () => {
+  // Ctrl+letter combos never carry shift information at the byte level, so one shortcut does
+  // both select-all and deselect-all, based on the current selection.
+  it('resolves to select-all when not everything is currently selected', () => {
+    expect(resolveSelectAllToggle(['/a', '/b'], [])).toBe('select-all');
+    expect(resolveSelectAllToggle(['/a', '/b'], ['/a'])).toBe('select-all');
+  });
+
+  it('resolves to deselect-all once every listed path is already selected', () => {
+    expect(resolveSelectAllToggle(['/a', '/b'], ['/a', '/b'])).toBe('deselect-all');
+    // Extra, unrelated selections elsewhere don't prevent this — only the listed paths matter.
+    expect(resolveSelectAllToggle(['/a', '/b'], ['/a', '/b', '/c'])).toBe('deselect-all');
+  });
+
+  it('resolves to select-all (a harmless no-op) for an empty list', () => {
+    expect(resolveSelectAllToggle([], [])).toBe('select-all');
+  });
+});
+
+describe('resolveVisibilityToggleKey / toggleVisibilityFlag', () => {
+  it('maps t/o/p to their own toggle, and anything else (including the old "e" binding and "w", now per-pane) to null', () => {
+    expect(resolveVisibilityToggleKey('t')).toBe('timestamp');
+    expect(resolveVisibilityToggleKey('o')).toBe('stdout');
+    expect(resolveVisibilityToggleKey('p')).toBe('stderr');
+    // 'e' is not bound — it would collide with the EDTs zone's tab mnemonic.
+    expect(resolveVisibilityToggleKey('e')).toBeNull();
+    // 'w' is per-pane wrap state (togglePaneWrapFlag), not a shared flag.
+    expect(resolveVisibilityToggleKey('w')).toBeNull();
+    expect(resolveVisibilityToggleKey('x')).toBeNull();
+  });
+
+  it('toggles only the targeted flag, independently of the others', () => {
+    const flipped = toggleVisibilityFlag(DEFAULT_VISIBILITY_FLAGS, 'stdout');
+    expect(flipped).toEqual({ showTimestamps: true, showStdout: false, showStderr: true });
+
+    const flippedAgain = toggleVisibilityFlag(flipped, 'stdout');
+    expect(flippedAgain).toEqual(DEFAULT_VISIBILITY_FLAGS);
+  });
+});
+
+describe('filterVisibleLines', () => {
+  const lines: LogLine[] = [
+    { timestamp: 't1', stream: 'stdout', text: 'out' },
+    { timestamp: 't2', stream: 'stderr', text: 'err' },
+  ];
+
+  it('drops stdout lines when showStdout is false', () => {
+    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: false, showStderr: true })).toEqual([lines[1]]);
+  });
+
+  it('drops stderr lines when showStderr is false', () => {
+    expect(filterVisibleLines(lines, { showTimestamps: true, showStdout: true, showStderr: false })).toEqual([lines[0]]);
+  });
+
+  it('keeps everything when both are shown', () => {
+    expect(filterVisibleLines(lines, DEFAULT_VISIBILITY_FLAGS)).toEqual(lines);
+  });
+});
+
+describe('isClearAllLogsKey / isWrapAllLogsKey', () => {
+  it('is true for Ctrl+C (case-insensitively) and for Shift+W', () => {
+    expect(isClearAllLogsKey('c', { ctrl: true })).toBe(true);
+    expect(isClearAllLogsKey('C', { ctrl: true })).toBe(true);
+    expect(isWrapAllLogsKey('W', {})).toBe(true);
+  });
+
+  it('is false for the wrong modifier or a different letter; Ctrl+W is never wrap-all', () => {
+    expect(isClearAllLogsKey('c', {})).toBe(false);
+    expect(isClearAllLogsKey('w', { ctrl: true })).toBe(false);
+    expect(isWrapAllLogsKey('w', {})).toBe(false);
+    expect(isWrapAllLogsKey('w', { ctrl: true })).toBe(false);
+    expect(isWrapAllLogsKey('W', { ctrl: true })).toBe(false);
+    expect(isWrapAllLogsKey('c', { ctrl: true })).toBe(false);
+  });
+});
+
+describe('isPaneWrapped / togglePaneWrapFlag / toggleAllPanesWrapFlag', () => {
+  it('defaults an untouched pane (or a null repoPath) to DEFAULT_PANE_WRAP (truncate)', () => {
+    expect(DEFAULT_PANE_WRAP).toBe(false);
+    expect(isPaneWrapped({}, '/repo/a')).toBe(false);
+    expect(isPaneWrapped({}, null)).toBe(false);
+  });
+
+  it('togglePaneWrapFlag flips only the targeted repoPath', () => {
+    const flipped = togglePaneWrapFlag({}, '/repo/a');
+    expect(flipped).toEqual({ '/repo/a': true });
+    expect(isPaneWrapped(flipped, '/repo/b')).toBe(false);
+
+    const flippedBack = togglePaneWrapFlag(flipped, '/repo/a');
+    expect(flippedBack).toEqual({ '/repo/a': false });
+  });
+
+  it('toggleAllPanesWrapFlag flips every given repoPath independently of its current state', () => {
+    const current = { '/repo/a': true, '/repo/b': false };
+    const next = toggleAllPanesWrapFlag(current, ['/repo/a', '/repo/b', '/repo/c']);
+    expect(next).toEqual({ '/repo/a': false, '/repo/b': true, '/repo/c': true });
+  });
+});
+
+describe('formatLogLine', () => {
+  it('prefixes the timestamp when showTimestamps is true, omits it otherwise', () => {
+    const line: LogLine = { timestamp: '2026-01-01T00:00:00.000Z', stream: 'stdout', text: 'hello' };
+    expect(formatLogLine(line, true)).toBe('[2026-01-01T00:00:00.000Z] hello');
+    expect(formatLogLine(line, false)).toBe('hello');
+  });
+});
+
+describe('sliceVisibleWindow', () => {
+  const values = [1, 2, 3, 4, 5];
+
+  it('returns the last visibleCount values when offset is 0 (pinned to the tail)', () => {
+    expect(sliceVisibleWindow(values, 0, 2)).toEqual([4, 5]);
+  });
+
+  it('shifts the window back by offset lines', () => {
+    expect(sliceVisibleWindow(values, 2, 2)).toEqual([2, 3]);
+  });
+
+  it('never returns fewer than what is available at the buffer start', () => {
+    expect(sliceVisibleWindow(values, 4, 3)).toEqual([1]);
+  });
+
+  it('returns an empty array for an empty buffer or a non-positive visibleCount', () => {
+    expect(sliceVisibleWindow([], 0, 5)).toEqual([]);
+    expect(sliceVisibleWindow(values, 0, 0)).toEqual([]);
+  });
+
+  it('packs more short (1-row) lines into the same row budget than long (multi-row) ones — the fix for "w" leaving a blank gap', () => {
+    // 5 short lines, each costing 1 row: a 4-row budget fits 4 of them.
+    const shortRowCost = () => 1;
+    expect(sliceVisibleWindow(values, 0, 4, shortRowCost)).toEqual([2, 3, 4, 5]);
+
+    // Same 5 lines, but each now costs 2 rows (e.g. wrapped): the same 4-row budget only fits 2.
+    const longRowCost = () => 2;
+    expect(sliceVisibleWindow(values, 0, 4, longRowCost)).toEqual([4, 5]);
+  });
+
+  it('still renders the single oldest line even when its own row cost alone exceeds the budget', () => {
+    expect(sliceVisibleWindow(values, 0, 1, () => 5)).toEqual([5]);
+  });
+});
+
+describe('computeLineRowCount', () => {
+  it('always costs exactly 1 row when wrap is off, regardless of length', () => {
+    expect(computeLineRowCount('a'.repeat(200), 40, false)).toBe(1);
+    expect(computeLineRowCount('', 40, false)).toBe(1);
+  });
+
+  it('costs ceil(length / width) rows when wrap is on', () => {
+    expect(computeLineRowCount('a'.repeat(80), 40, true)).toBe(2);
+    expect(computeLineRowCount('a'.repeat(81), 40, true)).toBe(3);
+    expect(computeLineRowCount('short', 40, true)).toBe(1);
+  });
+
+  it('floors at 1 row even for an empty line under wrap', () => {
+    expect(computeLineRowCount('', 40, true)).toBe(1);
+  });
+
+  // computeLineRowCount must be ANSI-aware: an escape sequence's bytes are invisible on screen,
+  // and counting them would make sliceVisibleWindow stop short of the pane's real budget,
+  // leaving a blank gap in wrap mode. It delegates to wrap-ansi (the library and options Ink's
+  // own Text uses for wrap="wrap"), so the cost matches what Ink renders.
+  it('does not let ANSI colour escapes inflate the row cost beyond the visible text', () => {
+    const plain = 'word0 word1 word2 word3 word4 word5 word6 word7';
+    const colored = plain
+      .split(' ')
+      .map((word, index) => `\x1b[3${(index % 7) + 1}m${word}\x1b[0m`)
+      .join(' ');
+    expect(computeLineRowCount(colored, 40, true)).toBe(computeLineRowCount(plain, 40, true));
+  });
+
+  it('costs more rows than a naive length/width division for word-wrapped (space-separated) text', () => {
+    // Word-wrap can't split mid-word, so it trades some trailing whitespace per row for never
+    // breaking a word — costing a bit more than the naive division a truncated/hard-wrapped
+    // single token would (covered by the 'a'.repeat cases above).
+    const text = Array.from({ length: 20 }, (_, i) => `word${i}`).join(' ');
+    const naiveEstimate = Math.ceil(text.length / 10);
+    expect(computeLineRowCount(text, 10, true)).toBeGreaterThan(naiveEstimate);
+  });
+});
+
+// The two-tier text/regex/level filter over already-buffered lines.
+describe('detectLogLevel', () => {
+  it('matches ERROR/WARN/INFO/DEBUG case-insensitively', () => {
+    expect(detectLogLevel('2026-01-01 ERROR something broke')).toBe('ERROR');
+    expect(detectLogLevel('warn: retrying')).toBe('WARN');
+    expect(detectLogLevel('[INFO] starting up')).toBe('INFO');
+    expect(detectLogLevel('Debug values here')).toBe('DEBUG');
+  });
+
+  it('returns null when no level token is present', () => {
+    expect(detectLogLevel('plain line with no level tag')).toBeNull();
+  });
+
+  it('does not match a level substring embedded inside a larger word', () => {
+    expect(detectLogLevel('errorprone module loaded')).toBeNull();
+  });
+});
+
+const rule = (query: string, over: Partial<LogFilterRule> = {}): LogFilterRule => ({
+  mode: 'text',
+  query,
+  action: 'show',
+  target: 'line',
+  enabled: true,
+  ...over,
+});
+const scopeOf = (rules: LogFilterRule[], level: LogFilterScope['level'] = null): LogFilterScope => ({ level, rules });
+
+describe('compileLogFilter', () => {
+  const line = (text: string): LogLine => ({ timestamp: 't', stream: 'stdout', text });
+
+  it('text mode: case-insensitive substring match; an empty query passes everything', () => {
+    const compiled = compileLogFilter(rule('boom'));
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      expect((compiled.apply(line('a BOOM happened')) !== null)).toBe(true);
+      expect((compiled.apply(line('all quiet')) !== null)).toBe(false);
+    }
+    const emptyQuery = compileLogFilter(rule(''));
+    expect(emptyQuery.ok).toBe(true);
+    if (emptyQuery.ok) {
+      expect((emptyQuery.apply(line('anything')) !== null)).toBe(true);
+    }
+  });
+
+  it('regex mode: compiles and matches a valid pattern', () => {
+    const compiled = compileLogFilter(rule('^\\d+ms$', { mode: 'regex' }));
+    expect(compiled.ok).toBe(true);
+    if (compiled.ok) {
+      expect((compiled.apply(line('120ms')) !== null)).toBe(true);
+      expect((compiled.apply(line('120 ms')) !== null)).toBe(false);
+    }
+  });
+
+  it('regex mode: an invalid pattern fails to compile with an inline error, never throws', () => {
+    expect(() => compileLogFilter(rule('(unterminated', { mode: 'regex' }))).not.toThrow();
+    const compiled = compileLogFilter(rule('(unterminated', { mode: 'regex' }));
+    expect(compiled.ok).toBe(false);
+    if (!compiled.ok) {
+      expect(compiled.error.length).toBeGreaterThan(0);
+    }
+    expect(validateRuleDraft(rule('(', { mode: 'regex' }))).not.toBeNull();
+    expect(validateRuleDraft(rule('('))).toBeNull();
+  });
+});
+
+describe('applyLogRules', () => {
+  const lines: LogLine[] = [
+    { timestamp: 't1', stream: 'stdout', text: 'ERROR disk full' },
+    { timestamp: 't2', stream: 'stdout', text: 'INFO all fine' },
+    { timestamp: 't3', stream: 'stderr', text: 'WARN disk almost full' },
+  ];
+
+  it('passes everything when both global and own are null, or the rule list is empty', () => {
+    expect(applyLogRules(lines, null, null)).toEqual(lines);
+    expect(applyLogRules(lines, scopeOf([]), scopeOf([]))).toEqual(lines);
+  });
+
+  it('a disengaged pane (global passed as null) ignores the global rules entirely', () => {
+    const global = scopeOf([rule('disk')]);
+    expect(applyLogRules(lines, global, null)).toEqual([lines[0], lines[2]]);
+    expect(applyLogRules(lines, null, null)).toEqual(lines);
+  });
+
+  it('a level restriction ANDs with the rule pipeline, across scopes', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk')]), scopeOf([], 'ERROR'))).toEqual([lines[0]]);
+    expect(applyLogRules(lines, null, scopeOf([], 'WARN'))).toEqual([lines[2]]);
+    expect(applyLogRules([{ timestamp: 't', stream: 'stdout', text: 'no level tag' }], null, scopeOf([], 'ERROR'))).toEqual([]);
+  });
+
+  it('two show rules are an AND', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk'), rule('almost')]), null)).toEqual([lines[2]]);
+  });
+
+  it('a disabled rule is skipped as if absent', () => {
+    expect(applyLogRules(lines, scopeOf([rule('disk'), rule('almost', { enabled: false })]), null)).toEqual([lines[0], lines[2]]);
+  });
+
+  it('global rules run before the pane\'s own', () => {
+    const global = scopeOf([rule('disk', { action: 'hide', target: 'match' })]);
+    const own = scopeOf([rule('ERROR')]);
+    // The global rewrite leaves "ERROR  full", which the own rule still matches.
+    expect(applyLogRules(lines, global, own).map((l) => l.text)).toEqual(['ERROR  full']);
+  });
+
+  it('an uncompilable rule is pass-through', () => {
+    expect(applyLogRules(lines, scopeOf([rule('(', { mode: 'regex' })]), null)).toEqual(lines);
+  });
+});
+
+describe('isPaneEngagedInGlobalFilter / toggleGlobalFilterEngagement / setPaneGlobalFilterEngagement', () => {
+  it('defaults an untouched pane (or a null repoPath) to engaged', () => {
+    expect(DEFAULT_PANE_GLOBAL_FILTER_ENGAGED).toBe(true);
+    expect(isPaneEngagedInGlobalFilter({}, '/repo/a')).toBe(true);
+    expect(isPaneEngagedInGlobalFilter({}, null)).toBe(true);
+  });
+
+  it('toggleGlobalFilterEngagement flips only the targeted repoPath', () => {
+    const disengaged = toggleGlobalFilterEngagement({}, '/repo/a');
+    expect(disengaged).toEqual({ '/repo/a': false });
+    expect(isPaneEngagedInGlobalFilter(disengaged, '/repo/b')).toBe(true);
+
+    const reengaged = toggleGlobalFilterEngagement(disengaged, '/repo/a');
+    expect(reengaged).toEqual({ '/repo/a': true });
+  });
+
+  it('setPaneGlobalFilterEngagement sets an explicit value rather than toggling — a repeated disengage stays a no-op', () => {
+    const once = setPaneGlobalFilterEngagement({}, '/repo/a', false);
+    expect(once).toEqual({ '/repo/a': false });
+    const again = setPaneGlobalFilterEngagement(once, '/repo/a', false);
+    expect(again).toEqual({ '/repo/a': false });
+  });
+});
+
+describe('setPaneLogFilter', () => {
+  it('sets a scope for the targeted repoPath, independent of others', () => {
+    const scope = scopeOf([rule('x')]);
+    expect(setPaneLogFilter({}, '/repo/a', scope)).toEqual({ '/repo/a': scope });
+  });
+
+  it('clears (removes the key) when given null or a default scope', () => {
+    const withFilter = setPaneLogFilter({}, '/repo/a', scopeOf([rule('x')]));
+    expect(setPaneLogFilter(withFilter, '/repo/a', null)).toEqual({});
+    const cleared = setPaneLogFilter(withFilter, '/repo/a', DEFAULT_LOG_FILTER);
+    expect(Object.prototype.hasOwnProperty.call(cleared, '/repo/a')).toBe(false);
+  });
+});
+
+describe('rule list operations', () => {
+  const three = scopeOf([rule('a'), rule('b'), rule('c')]);
+  const queries = (scope: LogFilterScope | null) => scope?.rules.map((r) => r.query);
+
+  it('adds at the end and refuses beyond the cap', () => {
+    expect(queries(addLogRule(three, rule('d')))).toEqual(['a', 'b', 'c', 'd']);
+    const full = scopeOf(Array.from({ length: MAX_LOG_FILTER_RULES }, (_, i) => rule(`r${i}`)));
+    expect(addLogRule(full, rule('x'))).toBeNull();
+    expect(full.rules).toHaveLength(MAX_LOG_FILTER_RULES);
+  });
+
+  it('replaces, toggles and deletes by index without mutating the input', () => {
+    expect(queries(replaceLogRule(three, 1, rule('B')))).toEqual(['a', 'B', 'c']);
+    expect(toggleLogRule(three, 0).rules[0].enabled).toBe(false);
+    expect(three.rules[0].enabled).toBe(true);
+    expect(queries(deleteLogRule(three, 1))).toEqual(['a', 'c']);
+    expect(deleteLogRule(three, 9)).toBe(three);
+  });
+
+  it('moves a rule one step and is a no-op at either end', () => {
+    expect(queries(moveLogRule(three, 1, 'up'))).toEqual(['b', 'a', 'c']);
+    expect(queries(moveLogRule(three, 1, 'down'))).toEqual(['a', 'c', 'b']);
+    expect(moveLogRule(three, 0, 'up')).toBe(three);
+    expect(moveLogRule(three, 2, 'down')).toBe(three);
+  });
+
+  it('a scope with no rule and no level is the default', () => {
+    expect(isDefaultLogFilterScope(DEFAULT_LOG_FILTER)).toBe(true);
+    expect(isDefaultLogFilterScope(scopeOf([], 'WARN'))).toBe(false);
+    expect(isDefaultLogFilterScope(scopeOf([rule('x', { enabled: false })]))).toBe(false);
+  });
+});
+
+describe('cycleFilterLevel / toggleFilterMode', () => {
+  it('cycles null -> ERROR -> WARN -> INFO -> DEBUG -> null going forward', () => {
+    let level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | null = null;
+    const seen: ('ERROR' | 'WARN' | 'INFO' | 'DEBUG' | null)[] = [level];
+    for (let i = 0; i < 4; i += 1) {
+      level = cycleFilterLevel(level, 'next');
+      seen.push(level);
+    }
+    expect(seen).toEqual([null, 'ERROR', 'WARN', 'INFO', 'DEBUG']);
+    expect(cycleFilterLevel(level, 'next')).toBeNull();
+  });
+
+  it('cycles backward with "previous"', () => {
+    expect(cycleFilterLevel(null, 'previous')).toBe('DEBUG');
+    expect(cycleFilterLevel('ERROR', 'previous')).toBeNull();
+  });
+
+  it('toggleFilterMode flips text <-> regex', () => {
+    expect(toggleFilterMode('text')).toBe('regex');
+    expect(toggleFilterMode('regex')).toBe('text');
+  });
+});
+
+describe('formatLogFilterScope / formatLogRule', () => {
+  it('renders a count of rules, with the disabled ones and the level', () => {
+    expect(formatLogFilterScope(scopeOf([]))).toBe('(any)');
+    expect(formatLogFilterScope(scopeOf([], 'WARN'))).toBe('(any) [WARN]');
+    expect(formatLogFilterScope(scopeOf([rule('a')]))).toBe('1 rule');
+    expect(formatLogFilterScope(scopeOf([rule('a'), rule('b', { enabled: false })], 'ERROR'))).toBe('2 rules (1 off) [ERROR]');
+  });
+
+  it('renders a rule row with its state, action, target, mode and query', () => {
+    expect(formatLogRule(rule('boom'))).toBe('[x] show line text "boom"');
+    expect(formatLogRule(rule('b', { enabled: false, action: 'hide', target: 'match', mode: 'regex' }))).toBe('[ ] hide match regex "b"');
+  });
+});
+
+describe('resolveFilterClearTarget', () => {
+  // Esc, pane sub-focused, own filter set -> that pane's own filter clears; engagement/global
+  // unaffected.
+  it('targets the pane\'s own filter when sub-focused with an own filter set', () => {
+    expect(resolveFilterClearTarget(true, '/repo/a', true)).toEqual({ scope: 'pane-own', repoPath: '/repo/a' });
+  });
+
+  it('targets pane-disengage when sub-focused with no own filter set', () => {
+    expect(resolveFilterClearTarget(true, '/repo/a', false)).toEqual({ scope: 'pane-disengage', repoPath: '/repo/a' });
+  });
+
+  // Esc, list-focused, global filter active -> the global filter clears; disengaged panes stay
+  // disengaged.
+  it('targets global when not sub-focused (list-focus), regardless of any own filter', () => {
+    expect(resolveFilterClearTarget(false, '/repo/a', true)).toEqual({ scope: 'global' });
+    expect(resolveFilterClearTarget(false, null, false)).toEqual({ scope: 'global' });
+  });
+
+  it('targets global when sub-focused but no real pane is under it (repoPath null)', () => {
+    expect(resolveFilterClearTarget(true, null, false)).toEqual({ scope: 'global' });
+  });
+});
+
+// Filter history recall.
+describe('filterHistoryKeyString', () => {
+  it('encodes a global scope as "global:<mode>", ignoring repoPath', () => {
+    expect(filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'text' })).toBe('global:text');
+    expect(filterHistoryKeyString({ scope: 'global', repoPath: '/repos/a', mode: 'regex' })).toBe('global:regex');
+  });
+
+  it('encodes a pane scope as "service:<repoPath>:<mode>"', () => {
+    const key: FilterHistoryKey = { scope: 'pane', repoPath: '/repos/api-gateway', mode: 'text' };
+    expect(filterHistoryKeyString(key)).toBe('service:/repos/api-gateway:text');
+  });
+
+  it('gives global-text/global-regex and per-service-text/per-service-regex four distinct keys', () => {
+    const keys = [
+      filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'text' }),
+      filterHistoryKeyString({ scope: 'global', repoPath: null, mode: 'regex' }),
+      filterHistoryKeyString({ scope: 'pane', repoPath: '/repos/a', mode: 'text' }),
+      filterHistoryKeyString({ scope: 'pane', repoPath: '/repos/a', mode: 'regex' }),
+    ];
+    expect(new Set(keys).size).toBe(4);
+  });
+});
+
+describe('pushFilterHistoryEntry', () => {
+  it('front-pushes a new query onto an empty list', () => {
+    expect(pushFilterHistoryEntry([], 'boom', 20)).toEqual(['boom']);
+  });
+
+  it('front-pushes a new query ahead of existing entries', () => {
+    expect(pushFilterHistoryEntry(['old'], 'new', 20)).toEqual(['new', 'old']);
+  });
+
+  it('moves an identical-to-top entry to the front without duplicating it', () => {
+    expect(pushFilterHistoryEntry(['boom', 'other'], 'boom', 20)).toEqual(['boom', 'other']);
+  });
+
+  it('does not dedup an entry that matches a non-top entry (only the current top is special-cased)', () => {
+    expect(pushFilterHistoryEntry(['other', 'boom'], 'boom', 20)).toEqual(['boom', 'other', 'boom']);
+  });
+
+  it('with dedupEverywhere, moves a non-top repeat to the front keeping a single instance', () => {
+    expect(pushFilterHistoryEntry(['other', 'boom'], 'boom', 20, true)).toEqual(['boom', 'other']);
+  });
+
+  it('with dedupEverywhere, a top repeat stays a single instance', () => {
+    expect(pushFilterHistoryEntry(['boom', 'other'], 'boom', 20, true)).toEqual(['boom', 'other']);
+  });
+
+  it('with dedupEverywhere, removes every duplicate before front-pushing and trims', () => {
+    expect(pushFilterHistoryEntry(['a', 'b', 'a', 'c'], 'a', 3, true)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('trims to maxSize, dropping the oldest entries', () => {
+    expect(pushFilterHistoryEntry(['a', 'b', 'c'], 'd', 3)).toEqual(['d', 'a', 'b']);
+  });
+
+  it('never produces a negative-length slice for a degenerate maxSize', () => {
+    expect(pushFilterHistoryEntry(['a'], 'b', 0)).toEqual([]);
+  });
+});
+
+describe('resolveHistoryBrowseUp', () => {
+  it('recalls the most-recent entry on an untouched draft, preserving the draft', () => {
+    const result = resolveHistoryBrowseUp('my-draft', null, ['newest', 'older', 'oldest']);
+    expect(result).toEqual({ query: 'newest', browsing: { index: 0, savedDraft: 'my-draft' } });
+  });
+
+  it('walks to older entries on further ↑ presses', () => {
+    const first = resolveHistoryBrowseUp('draft', null, ['newest', 'older', 'oldest']);
+    const second = resolveHistoryBrowseUp(first.query, first.browsing, ['newest', 'older', 'oldest']);
+    expect(second).toEqual({ query: 'older', browsing: { index: 1, savedDraft: 'draft' } });
+  });
+
+  it('is a no-op once already at the oldest entry', () => {
+    const browsing = { index: 2, savedDraft: 'draft' };
+    const result = resolveHistoryBrowseUp('oldest', browsing, ['newest', 'older', 'oldest']);
+    expect(result).toEqual({ query: 'oldest', browsing });
+  });
+
+  it('is a no-op against an empty history', () => {
+    expect(resolveHistoryBrowseUp('draft', null, [])).toEqual({ query: 'draft', browsing: null });
+  });
+
+  it('skips the most-recent entry when it equals the pre-filled draft (active filter), showing older values first', () => {
+    const result = resolveHistoryBrowseUp('active', null, ['active', 'older', 'oldest']);
+    expect(result).toEqual({ query: 'older', browsing: { index: 1, savedDraft: 'active' } });
+  });
+
+  it('is a no-op when the whole history equals the draft', () => {
+    expect(resolveHistoryBrowseUp('only', null, ['only'])).toEqual({ query: 'only', browsing: null });
+  });
+
+  it('skips entries equal to the saved draft while walking older', () => {
+    const first = resolveHistoryBrowseUp('draft', null, ['newest', 'draft', 'oldest']);
+    expect(first).toEqual({ query: 'newest', browsing: { index: 0, savedDraft: 'draft' } });
+    const second = resolveHistoryBrowseUp(first.query, first.browsing, ['newest', 'draft', 'oldest']);
+    expect(second).toEqual({ query: 'oldest', browsing: { index: 2, savedDraft: 'draft' } });
+  });
+});
+
+describe('resolveHistoryBrowseDown', () => {
+  it('walks back toward the draft one entry at a time', () => {
+    const browsing = { index: 1, savedDraft: 'draft' };
+    const result = resolveHistoryBrowseDown(browsing, ['newest', 'older', 'oldest']);
+    expect(result).toEqual({ query: 'newest', browsing: { index: 0, savedDraft: 'draft' } });
+  });
+
+  it('restores the original draft exactly one ↓ past the most-recent entry, ending browsing', () => {
+    const browsing = { index: 0, savedDraft: 'my-original-draft' };
+    const result = resolveHistoryBrowseDown(browsing, ['newest', 'older']);
+    expect(result).toEqual({ query: 'my-original-draft', browsing: null });
+  });
+
+  it('skips the most-recent entry on the way down when it equals the saved draft', () => {
+    const browsing = { index: 1, savedDraft: 'active' };
+    const result = resolveHistoryBrowseDown(browsing, ['active', 'older']);
+    expect(result).toEqual({ query: 'active', browsing: null });
+  });
+});
+
+describe('computeLogsLayout list ratio', () => {
+  const base = {
+    windowColumns: 120,
+    windowRows: 40,
+    activePaneCount: 1,
+    edtServiceCount: 0,
+    otherServiceCount: 0,
+    filterEditorOpen: false,
+    historyGridOpen: false,
+    filterHistoryGridMaxRows: 8,
+  };
+
+  it('gives the grid less width as the list ratio grows, and the columns always fit the window', () => {
+    const narrowList = computeLogsLayout({ ...base, listRatio: 0.15 });
+    const wideList = computeLogsLayout({ ...base, listRatio: 0.5 });
+    expect(wideList.layout.cellWidth).toBeLessThan(narrowList.layout.cellWidth);
+    for (const [ratio, result] of [[0.15, narrowList], [0.5, wideList]] as const) {
+      const listColumns = Math.floor((base.windowColumns - 1) * ratio);
+      expect(listColumns + 1 + result.layout.cellWidth * result.layout.cols).toBeLessThanOrEqual(base.windowColumns);
+    }
+  });
+});
+
+describe('logsFooterContext restart mode and O hint', () => {
+  it('picks the clean fullscreen context only for a restartable pane in clean mode', () => {
+    const full = { open: true, restartable: true };
+    expect(logsFooterContext(false, false, full, 'clean')).toBe('logs-fullscreen-clean');
+    expect(logsFooterContext(false, false, full, 'simple')).toBe('logs-fullscreen');
+    const noContainer = { open: true, restartable: false };
+    expect(logsFooterContext(false, false, noContainer, 'clean')).toBe('logs-fullscreen-no-container');
+    expect(logsFooterContext(false, false, noContainer, 'simple')).toBe('logs-fullscreen-no-container');
+  });
+
+  it('lists the O hint in all three fullscreen footer contexts', () => {
+    for (const id of ['logs-fullscreen', 'logs-fullscreen-clean', 'logs-fullscreen-no-container'] as const) {
+      expect(FOOTER_CONTEXTS[id].hints).toContainEqual(['O', 'open in IDE']);
+    }
+  });
+});
+
+describe('logsFooterContext', () => {
+  const closed = { open: false, restartable: true };
+  const full = { open: true, restartable: true };
+
+  it('puts the filter editor (and its history grid) above the fullscreen pane', () => {
+    expect(logsFooterContext(false, false, closed)).toBeNull();
+    expect(logsFooterContext(false, false, full)).toBe('logs-fullscreen');
+    expect(logsFooterContext(true, false, full)).toBe('logs-filter-edit');
+    expect(logsFooterContext(true, true, full)).toBe('logs-filter-history');
+    expect(logsFooterContext(true, false, full, 'simple', false, { listOpen: true, confirmingClear: false })).toBe('logs-filter-rules');
+    expect(logsFooterContext(true, false, full, 'simple', false, { listOpen: true, confirmingClear: true })).toBe('logs-filter-rules-confirm');
+  });
+
+  it('never advertises a restart for a pane without a container', () => {
+    expect(logsFooterContext(false, false, { open: true, restartable: false })).toBe('logs-fullscreen-no-container');
+    expect(JSON.stringify(FOOTER_CONTEXTS['logs-fullscreen-no-container'].hints)).not.toContain('restart');
+  });
+});
+
+describe('logsLegendHints', () => {
+  it('shows the live state of the stream toggles', () => {
+    const hints = logsLegendHints({ showTimestamps: true, showStdout: false, showStderr: true });
+    expect(hints).toContainEqual(['t', 'timestamps on']);
+    expect(hints).toContainEqual(['o', 'stdout off']);
+  });
+});
+
+describe('actions menu', () => {
+  const full = { open: true, restartable: true };
+
+  it('puts the actions menu context first, above the filter editor and the fullscreen pane', () => {
+    expect(logsFooterContext(false, false, { open: false, restartable: true }, 'simple', true)).toBe('logs-actions-menu');
+    expect(logsFooterContext(false, false, full, 'clean', true)).toBe('logs-actions-menu');
+    expect(FOOTER_CONTEXTS['logs-actions-menu'].hints.map(([key]) => key)).toEqual(['↑/↓', 'Enter', 'Esc']);
+  });
+
+  it('advertises `a` in every fullscreen context and in the legend', () => {
+    for (const id of ['logs-fullscreen', 'logs-fullscreen-clean', 'logs-fullscreen-no-container'] as const) {
+      expect(FOOTER_CONTEXTS[id].hints).toContainEqual(['a', 'actions']);
+    }
+    expect(logsLegendHints({ showTimestamps: true, showStdout: true, showStderr: true }).map(([key]) => key)).toContain('a');
+  });
+
+  it('isPaneRestartAdvertised hides R only for a pane known to be container-less', () => {
+    expect(isPaneRestartAdvertised(undefined)).toBe(true);
+    expect(isPaneRestartAdvertised({ health: 'up' })).toBe(true);
+    expect(isPaneRestartAdvertised({ health: 'no-container' })).toBe(false);
+    expect(isPaneRestartAdvertised({ health: 'up', noContainer: true })).toBe(false);
+  });
+
+  it("reserves the menu's rendered rows off the list column budget while it is open", () => {
+    const base = {
+      windowColumns: 120,
+      listRatio: 0.3,
+      windowRows: 40,
+      activePaneCount: 1,
+      edtServiceCount: 50,
+      otherServiceCount: 0,
+      filterEditorOpen: false,
+      historyGridOpen: false,
+      filterHistoryGridMaxRows: 8,
+    };
+    const closed = computeLogsLayout(base);
+    expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 12 }).edtListMaxVisibleRows).toBe(12);
+    expect(closed.edtListMaxVisibleRows - computeLogsLayout({ ...base, actionsMenuRows: 8 }).edtListMaxVisibleRows).toBe(8);
+    expect(computeLogsLayout({ ...base, actionsMenuRows: 0 }).edtListMaxVisibleRows).toBe(closed.edtListMaxVisibleRows);
+  });
+
+  it.each([
+    { rules: 0, reserved: 10 },
+    { rules: 1, reserved: 10 },
+    { rules: 4, reserved: 13 },
+    { rules: 10, reserved: 19 },
+  ])('reserves the rule list view rows off the list column budget ($rules rules)', ({ rules, reserved }) => {
+    const base = {
+      windowColumns: 120,
+      listRatio: 0.3,
+      windowRows: 60,
+      activePaneCount: 1,
+      edtServiceCount: 80,
+      otherServiceCount: 0,
+      filterEditorOpen: false,
+      historyGridOpen: false,
+      filterHistoryGridMaxRows: 8,
+    };
+    const closed = computeLogsLayout(base);
+    const open = computeLogsLayout({ ...base, filterEditorOpen: true, filterEditorView: 'list', filterRuleCount: rules });
+    expect(closed.edtListMaxVisibleRows - open.edtListMaxVisibleRows).toBe(reserved);
+  });
+
+  it('never gives the rule list a zero-row budget', () => {
+    const tiny = computeLogsLayout({
+      windowColumns: 80, listRatio: 0.3, windowRows: 4, activePaneCount: 0, edtServiceCount: 0, otherServiceCount: 0,
+      filterEditorOpen: true, filterEditorView: 'list', filterRuleCount: 5, historyGridOpen: false, filterHistoryGridMaxRows: 8,
+    });
+    expect(tiny.rulesListMaxVisibleRows).toBeGreaterThanOrEqual(1);
+  });
+
+  it('collapses newlines and control characters in a rule row', () => {
+    expect(formatLogRule(rule('a\nb\t\tc'))).toBe('[x] show line text "a b c"');
+  });
+});
+
+describe('hide / show-only filters (action x target)', () => {
+  const NEST = '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase] Aucun service de restauration trouvé pour le 12';
+  const lines: LogLine[] = [
+    { timestamp: 't1', stream: 'stdout', text: NEST },
+    { timestamp: 't2', stream: 'stdout', text: '[Nest] 12  - 09/11/2026 LOG [Other] fine' },
+    { timestamp: 't3', stream: 'stdout', text: 'Aucun service' },
+  ];
+  const spec = (over: Partial<LogFilterRule>): LogFilterRule => rule('Aucun service', over);
+  const texts = (r: LogFilterRule) => applyLogRules(lines, scopeOf([r]), null).map((l) => l.text);
+
+  it('show+line keeps matching lines unchanged', () => {
+    expect(texts(spec({}))).toEqual([NEST, 'Aucun service']);
+  });
+
+  it('hide+line drops matching lines', () => {
+    expect(texts(spec({ action: 'hide' }))).toEqual(['[Nest] 12  - 09/11/2026 LOG [Other] fine']);
+  });
+
+  it('hide+match removes matched text, keeps the rest and drops emptied lines', () => {
+    expect(texts(spec({ action: 'hide', target: 'match' }))).toEqual([
+      '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase]  de restauration trouvé pour le 12',
+      '[Nest] 12  - 09/11/2026 LOG [Other] fine',
+    ]);
+  });
+
+  it('show+match displays only matched text and hides non-matching lines', () => {
+    expect(texts(spec({ target: 'match', mode: 'regex', query: 'WARN|\\d+$' }))).toEqual(['WARN 12']);
+  });
+
+  it('never mutates the stored lines', () => {
+    const before = JSON.stringify(lines);
+    texts(spec({ action: 'hide', target: 'match' }));
+    expect(JSON.stringify(lines)).toBe(before);
+  });
+
+  it('ignores empty regex matches', () => {
+    expect(texts(spec({ mode: 'regex', query: 'a*', action: 'hide', target: 'match' }))).toHaveLength(3);
+    expect(texts(spec({ mode: 'regex', query: 'x*', target: 'match' }))).toEqual([]);
+  });
+
+  it('rejects an invalid regex for every action/target', () => {
+    for (const action of ['show', 'hide'] as const) {
+      for (const target of ['line', 'match'] as const) {
+        expect(compileLogFilter(spec({ mode: 'regex', query: '(', action, target })).ok).toBe(false);
+      }
+    }
+  });
+
+  it('judges the level on the stored text even after an earlier rule rewrote it', () => {
+    const rewritten = applyLogRules(lines, scopeOf([spec({ target: 'match' })]), scopeOf([], 'WARN'));
+    expect(rewritten.map((l) => l.text)).toEqual(['Aucun service']);
+    const hidden = applyLogRules(lines, scopeOf([spec({ action: 'hide', target: 'match' })]), scopeOf([], 'WARN'));
+    expect(hidden).toHaveLength(1);
+  });
+
+  it('a hide+match rule above a show rule feeds it the rewritten line; moving it below changes the result', () => {
+    const hide = spec({ action: 'hide', target: 'match' });
+    const show = rule('Aucun');
+    expect(applyLogRules(lines, scopeOf([hide, show]), null)).toEqual([]);
+    expect(applyLogRules(lines, scopeOf([show, hide]), null).map((l) => l.text)).toEqual([
+      '[Nest] 12  - 09/11/2026 WARN [AffectationJoursUseCase]  de restauration trouvé pour le 12',
+    ]);
+  });
+
+  it('AND of shows over the Nest fixtures', () => {
+    expect(applyLogRules(lines, scopeOf([rule('WARN'), rule('Affectation')]), null).map((l) => l.text)).toEqual([NEST]);
+  });
+
+  it('history entries: legacy plain string reads as show+line; encoding round-trips and keeps entries distinct', () => {
+    expect(decodeFilterHistoryEntry('plain')).toEqual({ query: 'plain', action: 'show', target: 'line' });
+    expect(encodeFilterHistoryEntry({ query: 'plain', action: 'show', target: 'line' })).toBe('plain');
+    const hidden = encodeFilterHistoryEntry({ query: 'plain', action: 'hide', target: 'match' });
+    expect(hidden).not.toBe('plain');
+    expect(decodeFilterHistoryEntry(hidden)).toEqual({ query: 'plain', action: 'hide', target: 'match' });
+    expect(historyEntryLabel(hidden)).toBe('[hide match] plain');
+    expect(historyEntryLabel('plain')).toBe('plain');
+  });
+
+  it('keeps match ranges aligned when lowercasing would change the text length', () => {
+    const line: LogLine = { timestamp: 't', stream: 'stdout', text: 'İİ boom end' };
+    const out = applyLogRules([line], scopeOf([spec({ query: 'boom', action: 'hide', target: 'match' })]), null);
+    expect(out.map((l) => l.text)).toEqual(['İİ  end']);
+  });
+
+  it('never misdecodes a show+line query that starts with the header pattern', () => {
+    const query = '\u001fhide:match\u001frest';
+    const encoded = encodeFilterHistoryEntry({ query, action: 'show', target: 'line' });
+    expect(decodeFilterHistoryEntry(encoded)).toEqual({ query, action: 'show', target: 'line' });
+  });
+});
+
+describe('rule-set editor views', () => {
+  const closed = { open: false, restartable: true };
+
+  it('picks the library footer contexts over the rule list while an editor is open', () => {
+    const open = openFilterEditorState('global', null);
+    expect(ruleSetsFooterContext(open)).toBeNull();
+    const library = { ...open, view: 'library' as const };
+    expect(ruleSetsFooterContext(library)).toBe('logs-filter-sets');
+    expect(ruleSetsFooterContext({ ...library, setConfirm: { kind: 'delete', index: 0 } })).toBe('logs-filter-sets-confirm');
+    const naming = openRuleSetNameState(open, null, '');
+    expect(ruleSetsFooterContext(naming)).toBe('logs-filter-set-name');
+    expect(ruleSetsFooterContext({ ...naming, setConfirm: { kind: 'overwrite', name: 'x' } })).toBe('logs-filter-sets-confirm');
+    expect(logsFooterContext(true, false, closed, 'simple', false, { listOpen: false, confirmingClear: false }, 'logs-filter-sets')).toBe(
+      'logs-filter-sets',
+    );
+  });
+
+  it('declares every key of the new views in the footer contexts', () => {
+    expect(FOOTER_CONTEXTS['logs-filter-rules'].hints.map(([key]) => key)).toEqual(expect.arrayContaining(['s', 'l']));
+    expect(FOOTER_CONTEXTS['logs-filter-sets'].hints.map(([key]) => key)).toEqual(expect.arrayContaining(['Enter', 'r', 'd']));
+  });
+
+  it('openRuleSetNameState seeds the name and caret; backToRuleListState resets the transient state', () => {
+    const open = openFilterEditorState('pane', '/repo');
+    const renaming = openRuleSetNameState(open, 2, 'noise');
+    expect(renaming).toMatchObject({ view: 'name', nameMode: 'rename', nameIndex: 2, name: 'noise', nameCursor: 5 });
+    expect(backToRuleListState({ ...renaming, error: 'x', setConfirm: { kind: 'apply', index: 0 } }, 'done')).toMatchObject({
+      view: 'list',
+      error: null,
+      notice: 'done',
+      setConfirm: null,
+    });
+  });
+
+  it('formats rows and confirmation questions on one line', () => {
+    expect(formatRuleSetRow({ name: 'a\nb', rules: [1] })).toBe('a b (1 rule)');
+    expect(formatRuleSetRow({ name: 'n', rules: [1, 2] })).toBe('n (2 rules)');
+    expect(formatRuleSetConfirm({ kind: 'delete', index: 0 }, [{ name: 'n' }], 3)).toContain('Delete set "n"');
+    expect(formatRuleSetConfirm({ kind: 'apply', index: 0 }, [{ name: 'n' }], 3)).toContain('Replace the 3 active rules');
+  });
+});
+
+describe('rule-set views layout budget', () => {
+  const base = {
+    windowColumns: 100,
+    listRatio: 0.4,
+    windowRows: 40,
+    activePaneCount: 0,
+    edtServiceCount: 3,
+    otherServiceCount: 3,
+    filterEditorOpen: true,
+    historyGridOpen: false,
+    filterHistoryGridMaxRows: 8,
+  };
+
+  it('shares one rule cap between core and the editor', () => {
+    expect(MAX_LOG_FILTER_RULES).toBe(MAX_RULES_PER_LIST);
+  });
+
+  it('reserves one row more for the library than for the rule list, with the same item rows', () => {
+    const list = computeLogsLayout({ ...base, filterEditorView: 'list', filterRuleCount: 4 });
+    const library = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 4 });
+    expect(list.edtListMaxVisibleRows - library.edtListMaxVisibleRows).toBe(1);
+  });
+
+  it('an empty library still reserves its placeholder row, and a long one is bounded by the window', () => {
+    const empty = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 0 });
+    const one = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 1 });
+    expect(empty.edtListMaxVisibleRows).toBe(one.edtListMaxVisibleRows);
+    const many = computeLogsLayout({ ...base, filterEditorView: 'library', filterRuleCount: 20 });
+    expect(many.rulesListMaxVisibleRows).toBeGreaterThanOrEqual(1);
+    expect(many.edtListMaxVisibleRows).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('ANSI-aware rules', () => {
+  const line = (text: string): LogLine => ({ timestamp: 't', stream: 'stdout', text });
+  const stripAnsi = (text: string): string => text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
+  const nest =
+    '\u001b[32m[Nest] 32  - \u001b[39m11/09/2026, 9:20:21 AM \u001b[32m    LOG\u001b[39m \u001b[33m[Ctx]\u001b[39m hello';
+  const prefix = String.raw`^\[[\w-]+\]\s+\d+\s+(?:-\s+)?\d{1,2}\/\d{1,2}\/\d{4},\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\s*`;
+  const hideRule = (query: string): LogFilterRule => ({ ...rule(query), mode: 'regex', action: 'hide', target: 'match' });
+
+  const applyOne = (r: LogFilterRule, l: LogLine): LogLine | null => {
+    const compiled = compileLogFilter(r);
+    if (!compiled.ok) {
+      throw new Error(compiled.error);
+    }
+    return compiled.apply(l);
+  };
+
+  it('hides the Nest prefix across colour changes and keeps the remainder colours', () => {
+    const result = applyOne(hideRule(prefix), line(nest));
+    expect(result).not.toBeNull();
+    // Every escape is kept in order (the two leading ones are an empty pair, harmless on screen).
+    expect(result).toEqual({
+      ...line(nest),
+      text: '\u001b[32m\u001b[39m\u001b[32mLOG\u001b[39m \u001b[33m[Ctx]\u001b[39m hello',
+    });
+  });
+
+  it('show+match with several matches keeps each range with its own escapes', () => {
+    const r: LogFilterRule = { ...rule('\\d+'), mode: 'regex', action: 'show', target: 'match' };
+    const result = applyOne(r, line('\u001b[32m12\u001b[39m ab \u001b[33m34\u001b[39m'));
+    expect(result?.text).toBe('\u001b[32m12 \u001b[39m\u001b[33m34\u001b[39m');
+  });
+
+  it('keeps a trailing escape after the last kept character and the line metadata', () => {
+    const result = applyOne(hideRule('b'), { timestamp: 'ts', stream: 'stderr', text: '\u001b[32mab\u001b[39m' });
+    expect(result).toEqual({ timestamp: 'ts', stream: 'stderr', text: '\u001b[32ma\u001b[39m' });
+  });
+
+  it('removes the prefix of an uncoloured api-gateway line', () => {
+    const result = applyOne(hideRule(prefix), line('[api-gateway] 32 11/9/2026, 1:34:52 PM  LOG [FAST] GET /health'));
+    expect(result?.text).toBe('LOG [FAST] GET /health');
+  });
+
+  it('removes a span across a colour change and keeps all escapes', () => {
+    const result = applyOne(hideRule(String.raw`Nest\] 32`), line(nest));
+    expect(stripAnsi(result!.text)).toContain('[  - 11/09/2026');
+    expect(result!.text.match(/\u001b\[/g)).toHaveLength(nest.match(/\u001b\[/g)!.length);
+  });
+
+  it('returns null when every visible char is hidden', () => {
+    expect(applyOne(hideRule('.+'), line('\u001b[32mabc\u001b[39m'))).toBeNull();
+  });
+
+  it('show+match keeps matched visible chars with escapes', () => {
+    const r: LogFilterRule = { ...rule('LOG'), action: 'show', target: 'match' };
+    const result = applyOne(r, line(nest));
+    expect(stripAnsi(result!.text)).toBe('LOG');
+    expect(result!.text).toContain('\u001b[32m');
+  });
+
+  it('line target tests the stripped text and returns the original line', () => {
+    const r: LogFilterRule = { ...rule('^\\[Nest\\]'), mode: 'regex', action: 'show', target: 'line' };
+    const original = line(nest);
+    expect(applyOne(r, original)).toBe(original);
+  });
+
+  it('detects the level next to an escape code', () => {
+    expect(detectLogLevel('\u001b[32mDEBUG\u001b[39m')).toBe('DEBUG');
+  });
+
+  it('pipes two rules over a coloured line', () => {
+    const out = applyLogRules([line(nest)], scopeOf([hideRule(prefix), { ...rule('hello'), action: 'show', target: 'line' }]), null);
+    expect(out).toHaveLength(1);
+    expect(stripAnsi(out[0].text)).toBe('LOG [Ctx] hello');
+  });
+});

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { ok, err } from "../../../../core/result.js";
-import type { EdtRegistryEntry, EdtRegistryPort } from "../../../../core/ports/edt-registry.js";
-import type { GitPort } from "../../../../core/ports/git.js";
-import type { ManifestPort } from "../../../../core/ports/manifest.js";
-import type { RegistryPort } from "../../../../core/ports/registry.js";
-import type { StatePort } from "../../../../core/ports/state.js";
+import type { EdtRegistryEntry, EdtRegistryPort } from "../../../../core/ports/storage/edt-registry.js";
+import type { GitPort } from "../../../../core/ports/vcs/git.js";
+import type { ManifestPort } from "../../../../core/ports/vcs/manifest.js";
+import type { RegistryPort } from "../../../../core/ports/storage/registry.js";
+import type { StatePort } from "../../../../core/ports/storage/state.js";
 import { createAppStore, NO_BRANCH_CREATION } from "./app-store.js";
 import { manifestFor, fakeDeps, makeEdtsBaseDir, removeTmpDirs } from "./store.test-support.js";
 
@@ -530,7 +530,7 @@ describe("app store", () => {
   });
 
   // The create-EDT dialog always builds and supplies its own CreateBranchOptions — the store
-  // must forward exactly what it's given to core/edt/create.ts, never substitute a default.
+  // must forward exactly what it's given to core/workspace/edt/lifecycle/create.ts, never substitute a default.
   describe("createEdt passes branchOptions through unchanged", () => {
     it("a real (non-NO_BRANCH_CREATION) branchOptions reaches git.createBranch with the caller's base/name", async () => {
       const edtsBaseDir = await makeEdtsBaseDir();

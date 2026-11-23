@@ -1,5 +1,5 @@
 // tui/commands/commands: the static, in-memory command registry (name → handler) the `:`
-// command bar (shared/command-bar.tsx) dispatches against — no core/port involvement. `run`
+// command bar (shared/screens/command-bar/command-bar.tsx) dispatches against — no core/port involvement. `run`
 // takes the store as a parameter (rather than closing over the `useAppStore` singleton) so
 // it dispatches against whichever store instance the bar was mounted with.
 import type { AppStore } from '../store/app-store.js';

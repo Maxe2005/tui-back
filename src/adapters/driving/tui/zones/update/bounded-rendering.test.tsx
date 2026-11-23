@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { BoundsProvider } from '../../shared/bounds/bounds-context.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
 import { frameLines } from '../../shared/test-support/matrix.js';
-import { UpdateServiceDetail } from './update-service-detail.js';
+import { UpdateServiceDetail } from './services/update-service-detail.js';
 import { UpdateZone } from './update-zone.js';
 import { createAppStore } from '../../store/app-store.js';
 import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../../shared/test-support/fake-tty.js';

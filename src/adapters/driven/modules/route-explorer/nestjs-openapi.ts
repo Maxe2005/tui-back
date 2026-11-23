@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { err, ok, type Result } from '../../../../core/result.js';
-import type { Route, RouteParameter, RouteScannerPort } from '../../../../core/ports/route-scanner.js';
+import type { Route, RouteParameter, RouteScannerPort } from '../../../../core/ports/modules/route-scanner.js';
 import { dereference, generateExample, isRecord } from './schema-example.js';
 
 const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;

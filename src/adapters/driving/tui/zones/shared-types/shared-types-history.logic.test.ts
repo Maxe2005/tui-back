@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SharedTypesHistory } from '../../store/slices/shared-types-slice.js';
+import type { SharedTypesHistory } from '../../store/slices/shared-types/shared-types-slice.js';
 import {
   HISTORY_VERSION_INPUT_ERROR,
   branchStatusLine,

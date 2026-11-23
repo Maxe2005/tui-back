@@ -1,15 +1,15 @@
 // tui/zones/shared-types: the read-only History view over the shared-types source repo. By
 // branch (version bumps newest first, streamed) or by version (bumping commit, containing
 // branches, date). Rendering and key dispatch only: the searches live in core
-// (`core/shared-types/version-history.ts`) and run through the store slice, which owns the
+// (`core/workspace/shared-types/versioning/version-history.ts`) and run through the store slice, which owns the
 // cancellable walk. Enter on a row hands that version to the form.
 import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { BoundedList } from '../../shared/components/bounded-list.js';
-import { BranchAutocompleteInput } from '../../shared/components/branch-autocomplete-input.js';
+import { BoundedList } from '../../shared/components/lists/bounded-list.js';
+import { BranchAutocompleteInput } from '../../shared/components/inputs/branch-autocomplete-input.js';
 import { Spinner, StateLine, TextInputLine } from '../../shared/components/index.js';
-import { ClampedParagraph, TruncatedText } from '../../shared/components/truncated-text.js';
+import { ClampedParagraph, TruncatedText } from '../../shared/components/display/truncated-text.js';
 import { useInput } from '../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
 import { colors } from '../../shared/theme/theme.js';

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { ok, err } from "../../../../core/result.js";
-import { DEFAULT_SETTINGS, type SettingsPort } from "../../../../core/ports/settings.js";
+import { DEFAULT_SETTINGS, type SettingsPort } from "../../../../core/ports/storage/settings.js";
 import { createAppStore } from "./app-store.js";
 import { fakeDeps } from "./store.test-support.js";
 

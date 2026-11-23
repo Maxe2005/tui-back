@@ -27,8 +27,8 @@ Duplicates are the main reason a shared test-support module is needed. Names bel
 | Store deps: `fakeDeps`, `manifestFor` | `app-shell.interaction`, `app-store`, `update-slice` (`fakeDeps`) | `tui/store/store.test-support.ts` |
 | Core port fakes: `fakeGit`, `fakeManifest`, `fakeLock`, `fakeState`, `fakeRegistry`, `fakeEdtRegistry`, `fakeContainer`, `fakeMigration`, `fakeRestart`, `calls`, `manifestFor` | `group-update`, `switch` (near-identical copies) | `core/shared/core-ports.test-support.ts`, used by both |
 | EDT builders: `member`, `edtEntry`, `makeParams` | `group-update`, `switch`, `git/index` (`edtEntry`) | same core test-support module; `makeParams` stays per module |
-| Temp dirs and git repos: `tmpDirs`, `makeTempDir`, `makeGitRepo`, `runGit`, `branchExists`, `commit`, `makeOriginAndClone` | `git/index`, `tui-back.e2e` | `adapters/driven/git/git.test-support.ts`, reused by e2e |
-| CLI runner: `runCli`, `runCliAsync`, `makeRepo`, `manifestYaml` | `tui-back.e2e` | `bin/e2e.test-support.ts` |
+| Temp dirs and git repos: `tmpDirs`, `makeTempDir`, `makeGitRepo`, `runGit`, `branchExists`, `commit`, `makeOriginAndClone` | `git/index`, `tui-back.e2e` | `adapters/driven/vcs/git/git.test-support.ts`, reused by e2e |
+| CLI runner: `runCli`, `runCliAsync`, `makeRepo`, `manifestYaml` | `tui-back.e2e` | `bin/e2e/e2e.test-support.ts` |
 | CLI fakes: `fakeLock`, `fakeState`, `fakeSubcommands` | `dispatch` | `cli/dispatch.test-support.ts` |
 | EDT/Logs zone fixtures: `edt`, `service`, `step3Store`, `reachStep3`, `seedStore`, `openRuleEditor` | `edts-zone.interaction`, `logs-zone.interaction` | per-zone `*.test-support.tsx` |
 

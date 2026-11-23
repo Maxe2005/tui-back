@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { ok } from "../../../../core/result.js";
-import type { EdtRegistryPort } from "../../../../core/ports/edt-registry.js";
-import type { GitPort } from "../../../../core/ports/git.js";
+import type { EdtRegistryPort } from "../../../../core/ports/storage/edt-registry.js";
+import type { GitPort } from "../../../../core/ports/vcs/git.js";
 import { createAppStore } from "./app-store.js";
 import { fakeDeps } from "./store.test-support.js";
 
