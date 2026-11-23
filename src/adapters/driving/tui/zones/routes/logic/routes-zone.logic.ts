@@ -1,10 +1,10 @@
 // tui/zones/routes/logic: the Routes zone's pure formatting/selection logic, kept out of
 // routes-zone.tsx so the component stays scannable. Every keystroke behavior is a standalone
 // pure function, unit-tested directly; the component's `useInput` stays a thin dispatcher.
-import type { Route } from '../../../../../core/ports/route-scanner.js';
-import type { FireResult } from '../../../../../core/routes/fire-request.js';
-import { MAX_BODY_CHARS as MAX_FIRE_BODY_CHARS } from '../../shared/components/json-tree/model.js';
-import type { FooterContextId } from '../../keybindings/index.js';
+import type { Route } from '../../../../../../core/ports/route-scanner.js';
+import type { FireResult } from '../../../../../../core/routes/fire-request.js';
+import { MAX_BODY_CHARS as MAX_FIRE_BODY_CHARS } from '../../../shared/components/json-tree/model.js';
+import type { FooterContextId } from '../../../keybindings/index.js';
 import { formatByteSize } from './routes-request.logic.js';
 
 export type RoutesSelectionDirection = 'up' | 'down';

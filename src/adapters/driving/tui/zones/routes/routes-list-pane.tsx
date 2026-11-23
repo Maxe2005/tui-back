@@ -7,7 +7,7 @@ import { ListRow } from '../../shared/components/lists/list-row.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatRouteRow } from './routes-zone.logic.js';
+import { formatRouteRow } from './logic/routes-zone.logic.js';
 
 export function RoutesListPane({
   routes,

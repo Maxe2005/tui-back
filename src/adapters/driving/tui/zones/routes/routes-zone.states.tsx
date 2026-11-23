@@ -5,7 +5,7 @@ import type { AppStore } from '../../store/app-store.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 import { FooterContext } from '../../shared/components/chrome/footer-context.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { routesFooterContext, UNAVAILABLE_FOOTER_INPUT } from './routes-zone.logic.js';
+import { routesFooterContext, UNAVAILABLE_FOOTER_INPUT } from './logic/routes-zone.logic.js';
 
 export function formatRoutesDisabledMessage(carryingServices: string[]): string {
   const list = carryingServices.join(', ');

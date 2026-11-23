@@ -7,8 +7,8 @@ import {
   resolveTreeKeyAction,
   resolveTreePanelKeyAction,
 } from '../../../shared/components/json-tree/model.js';
-import { moveRoutesSelection, resolveRoutesDirection } from '../routes-zone.logic.js';
-import { nextRequestSection, type RequestRowSection } from '../routes-request.logic.js';
+import { moveRoutesSelection, resolveRoutesDirection } from '../logic/routes-zone.logic.js';
+import { nextRequestSection, type RequestRowSection } from '../logic/routes-request.logic.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 
 export function handleRequestTabKey(c: RoutesZoneCtx, input: string, key: Key): void {

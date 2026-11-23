@@ -18,7 +18,7 @@ import { canEditRouteBody, resolveAddParentPath } from '../../shared/components/
 import { colors } from '../../shared/theme/theme.js';
 import { formatRoutesDisabledMessage, RoutesDisabledView, RoutesNoticeView } from './routes-zone.states.js';
 import { renderBodyNode, renderResponseNode } from './routes-zone.nodes.js';
-import { routesFooterContext } from './routes-zone.logic.js';
+import { routesFooterContext } from './logic/routes-zone.logic.js';
 import { type AppStore, useAppStore } from '../../store/app-store.js';
 import { useRoutesBodyEditor } from './hooks/use-routes-body-editor.js';
 import { useRoutesDerived } from './hooks/use-routes-derived.js';

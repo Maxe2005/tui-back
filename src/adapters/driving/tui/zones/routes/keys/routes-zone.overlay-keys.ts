@@ -8,7 +8,7 @@ import {
   matchPickItemsBySubstring,
 } from '../../../shared/components/pickers/filterable-pick-list.js';
 import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
-import { resolveRouteIndex } from '../routes-request.logic.js';
+import { resolveRouteIndex } from '../logic/routes-request.logic.js';
 import { routeKeyFor } from '../../../shared/components/json-tree/model.js';
 
 // The destructive overwrite confirm owns every key: Enter overwrites, Esc backs out to the name

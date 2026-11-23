@@ -37,7 +37,7 @@ import {
   bodyTreeKey,
   seedRequestDraft,
   type RequestDraft,
-} from '../../../zones/routes/routes-request.logic.js';
+} from '../../../zones/routes/logic/routes-request.logic.js';
 
 export const MAX_DRAFT_ORIGINS = 50;
 

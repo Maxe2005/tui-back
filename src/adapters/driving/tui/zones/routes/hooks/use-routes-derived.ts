@@ -20,8 +20,8 @@ import {
   seedBodyDraft,
 } from '../../../shared/components/json-tree/model.js';
 import { RESPONSE_AREA_CHROME_ROWS } from '../routes-zone.constants.js';
-import { bodyTreeKey, type RequestDraft, seedRequestDraft } from '../routes-request.logic.js';
-import { filterRoutes, resolveEnterFireTarget } from '../routes-zone.logic.js';
+import { bodyTreeKey, type RequestDraft, seedRequestDraft } from '../logic/routes-request.logic.js';
+import { filterRoutes, resolveEnterFireTarget } from '../logic/routes-zone.logic.js';
 
 export function useRoutesDerived(c: RoutesState) {
   const {
