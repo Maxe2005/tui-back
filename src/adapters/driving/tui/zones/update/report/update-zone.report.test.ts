@@ -1,6 +1,6 @@
 // Pure logic of the full-screen service report.
 import { describe, expect, it } from 'vitest';
-import type { GroupUpdateRepoResult } from '../../../../../core/scripts/group-update.js';
+import type { GroupUpdateRepoResult } from '../../../../../../core/scripts/group-update.js';
 import {
   applyReportScroll,
   buildServiceReport,
@@ -12,7 +12,7 @@ import {
   resolveReportKey,
   splitReportText,
   type ServiceReportInput,
-} from './logic/update-zone.logic.js';
+} from '../logic/update-zone.logic.js';
 
 const LONG_ERROR = `merge failed\n${'conflict in file\n'.repeat(40)}end`;
 const FAILED: GroupUpdateRepoResult = {

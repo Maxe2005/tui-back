@@ -9,7 +9,7 @@ import { Box, Text } from 'ink';
 import { ZoneLayout } from '../../shared/components/index.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { FullscreenReport } from './fullscreen-report.js';
+import { FullscreenReport } from './report/fullscreen-report.js';
 import { UpdateDetailColumn } from './update-detail-column.js';
 import { UpdateServiceListColumn } from './update-service-list-column.js';
 import { UpdateZoneDialogs } from './update-zone-dialogs.js';

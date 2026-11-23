@@ -3,6 +3,6 @@
 // lastServiceOutcomes merge the store applies on run completion. The useInput callback stays a
 // thin dispatcher over these unit-tested functions.
 export * from './update-zone.status.logic.js';
-export * from '../update-zone.recap.logic.js';
+export * from '../report/update-zone.recap.logic.js';
 export * from './update-zone.steps.logic.js';
-export * from '../update-zone.report.logic.js';
+export * from '../report/update-zone.report.logic.js';

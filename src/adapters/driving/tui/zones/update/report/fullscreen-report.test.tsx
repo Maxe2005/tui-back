@@ -3,15 +3,15 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it } from 'vitest';
-import { BoundsProvider } from '../../shared/bounds/bounds-context.js';
-import { renderToString } from '../../shared/components/render-to-string.js';
-import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../../shared/test-support/fake-tty.js';
-import { frameLines } from '../../shared/test-support/matrix.js';
-import { createAppStore } from '../../store/app-store.js';
+import { BoundsProvider } from '../../../shared/bounds/bounds-context.js';
+import { renderToString } from '../../../shared/components/render-to-string.js';
+import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../../../shared/test-support/fake-tty.js';
+import { frameLines } from '../../../shared/test-support/matrix.js';
+import { createAppStore } from '../../../store/app-store.js';
 import { FullscreenReport } from './fullscreen-report.js';
-import { activeFooterContext, footerContextHints } from '../../keybindings/index.js';
-import { buildServiceReport } from './logic/update-zone.logic.js';
-import { UpdateZone } from './update-zone.js';
+import { activeFooterContext, footerContextHints } from '../../../keybindings/index.js';
+import { buildServiceReport } from '../logic/update-zone.logic.js';
+import { UpdateZone } from '../update-zone.js';
 
 const HUGE_ERROR = Array.from({ length: 5000 }, (_, i) => `error line ${i} ${'x'.repeat(120)}`).join('\n');
 const ISSUES = Array.from({ length: 300 }, (_, i) => ({ kind: 'merge-conflict' as const, detail: `issue ${i}\n${'long '.repeat(100)}`, resolved: i % 2 === 0 }));
