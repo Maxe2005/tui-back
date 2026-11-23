@@ -2,10 +2,10 @@
 // state.json holds (an uncompilable rule or a corrupt value is dropped with a warning naming the
 // field, never a failure) and the pure operations of the named rule-set library (save, overwrite,
 // apply, rename, delete). Rule shapes are plain JSON: core never imports the TUI's rule types.
-import type { StatePort, StoredLogRule, StoredRuleLists, StoredRuleSet } from '../ports/storage/state.js';
-import { err, ok, type Result } from '../result.js';
+import type { StatePort, StoredLogRule, StoredRuleLists, StoredRuleSet } from '../../ports/storage/state.js';
+import { err, ok, type Result } from '../../result.js';
 
-export type { StoredLogRule, StoredRuleLists, StoredRuleSet } from '../ports/storage/state.js';
+export type { StoredLogRule, StoredRuleLists, StoredRuleSet } from '../../ports/storage/state.js';
 
 export const MAX_RULES_PER_LIST = 10;
 export const MAX_RULE_SETS = 20;

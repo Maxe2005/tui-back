@@ -1,9 +1,9 @@
 // core/routes/list-routes: unit tests against fake ports — no real manifests, no real OpenAPI
 // specs.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok, type Result } from '../result.js';
-import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
-import type { Route, RouteScannerPort } from '../ports/modules/route-scanner.js';
+import { err, ok, type Result } from '../../result.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import type { Route, RouteScannerPort } from '../../ports/modules/route-scanner.js';
 import { listRoutes } from './list-routes.js';
 
 function manifestWithModules(modules: Manifest['modules']): Manifest {

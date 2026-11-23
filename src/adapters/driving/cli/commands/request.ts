@@ -1,9 +1,9 @@
 // cli/commands/request: list-routes, fire-request and the saved-request commands (usage strings, flag parsers, runners).
 import { resolve } from 'node:path';
 import { err, ok, type Result } from '../../../../core/result.js';
-import { listRoutes } from '../../../../core/routes/list-routes.js';
-import { fireRequest, type FireRequestOptions } from '../../../../core/routes/fire-request.js';
-import { deleteSavedRequest, fireSavedRequest, listSavedRequests, saveRequest } from '../../../../core/routes/saved-requests.js';
+import { listRoutes } from '../../../../core/insight/routes/list-routes.js';
+import { fireRequest, type FireRequestOptions } from '../../../../core/insight/routes/fire-request.js';
+import { deleteSavedRequest, fireSavedRequest, listSavedRequests, saveRequest } from '../../../../core/insight/routes/saved-requests.js';
 import { Subcommand } from '../dispatch/dispatch.js';
 import { SubcommandDeps } from './deps.js';
 

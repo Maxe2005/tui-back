@@ -1,7 +1,7 @@
 // tui/store/slices: the Logs slice's display filters and their persistence — visibility flags,
 // global/per-service filters, wrap, the persisted filter history, and the persisted rule lists
 // and rule-set library.
-import { GLOBAL_RULES_KEY, deleteRuleSet, renameRuleSet, saveRuleSet, type StoredRuleLists, type StoredRuleSet } from '../../../../../../core/logs/rule-sets.js';
+import { GLOBAL_RULES_KEY, deleteRuleSet, renameRuleSet, saveRuleSet, type StoredRuleLists, type StoredRuleSet } from '../../../../../../core/insight/logs/rule-sets.js';
 import { ok, type Result } from '../../../../../../core/result.js';
 import { pushHistoryEntry } from '../../../shared/input-history/index.js';
 import {

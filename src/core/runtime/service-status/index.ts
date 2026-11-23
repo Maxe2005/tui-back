@@ -3,7 +3,7 @@
 // first, then its outcome is combined with the container state. The combination table lives only
 // in `combineStatus`; a new probe kind is added here, never in a consumer. Ports are injected and
 // nothing here rejects: every failure comes back as a `Result`.
-import { getServiceHealth } from '../../logs/use-cases.js';
+import { getServiceHealth } from '../../insight/logs/use-cases.js';
 import type { DockerPort, HealthState } from '../../ports/runtime/docker.js';
 import type { HealthProbePort } from '../../ports/runtime/health-probe.js';
 import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';

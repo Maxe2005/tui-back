@@ -9,7 +9,7 @@ import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
 import type { RegistryPort } from '../../ports/storage/registry.js';
 import type { StatePort } from '../../ports/storage/state.js';
 import type { ServiceFinalState } from '../../runtime/service-actions/index.js';
-import type { DriftCandidate } from '../../dashboard/drift.js';
+import type { DriftCandidate } from '../../insight/dashboard/drift.js';
 import { realignServices, resolveRealignSelection, type RealignServicesParams } from './index.js';
 
 // Members a (EDT branch feat/a) and b (feat/b); others c and d (sharedBranch develop).

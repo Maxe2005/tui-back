@@ -4,11 +4,11 @@
 // Stale is advisory at list time (a fresh scan per repo); the hard gate stays at fire time,
 // where `fireRequest`'s route-exists check rejects a vanished route with `unknown-route`.
 import { ulid as generateUlid } from 'ulid';
-import type { DevAuthPort } from '../ports/runtime/dev-auth.js';
-import type { ManifestPort } from '../ports/vcs/manifest.js';
-import type { Route, RouteScannerPort } from '../ports/modules/route-scanner.js';
-import type { SavedRequest, SavedRequestInput, SavedRequestPort } from '../ports/storage/saved-request.js';
-import { err, ok, type Result } from '../result.js';
+import type { DevAuthPort } from '../../ports/runtime/dev-auth.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { Route, RouteScannerPort } from '../../ports/modules/route-scanner.js';
+import type { SavedRequest, SavedRequestInput, SavedRequestPort } from '../../ports/storage/saved-request.js';
+import { err, ok, type Result } from '../../result.js';
 import { fireRequest, type FireRequestOptions, type FireResult } from './fire-request.js';
 
 export type SavedWithStale = SavedRequest & { stale: boolean };

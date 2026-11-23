@@ -3,7 +3,7 @@
 // The services table is the list pane; the focused row's reason and actions are the detail pane.
 import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import type { DashboardService } from '../../../../../core/dashboard/snapshot.js';
+import type { DashboardService } from '../../../../../core/insight/dashboard/snapshot.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { BoundedList } from '../../shared/components/lists/bounded-list.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';

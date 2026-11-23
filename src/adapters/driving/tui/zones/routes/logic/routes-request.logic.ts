@@ -3,7 +3,7 @@
 // body itself stays the route's `bodyDrafts` entry; this file only decides whether and how it
 // travels.
 import type { Route, RouteParameter } from '../../../../../../core/ports/modules/route-scanner.js';
-import type { FireRequestOptions } from '../../../../../../core/routes/fire-request.js';
+import type { FireRequestOptions } from '../../../../../../core/insight/routes/fire-request.js';
 import { canEditRouteBody } from '../../../shared/components/json-tree/model.js';
 
 export type RequestRow = { name: string; value: string; required: boolean };

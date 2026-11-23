@@ -9,15 +9,15 @@ import { ROUTES_MODULE_ID } from '../../../../../../core/workspace/edt/shared-ed
 import type { Route } from '../../../../../../core/ports/modules/route-scanner.js';
 import type { SavedRequest } from '../../../../../../core/ports/storage/saved-request.js';
 import { err, ok, type Result } from '../../../../../../core/result.js';
-import { fireRequest, type FireRequestOptions, type FireResult } from '../../../../../../core/routes/fire-request.js';
-import { listRoutes } from '../../../../../../core/routes/list-routes.js';
+import { fireRequest, type FireRequestOptions, type FireResult } from '../../../../../../core/insight/routes/fire-request.js';
+import { listRoutes } from '../../../../../../core/insight/routes/list-routes.js';
 import {
   deleteSavedRequest as deleteSavedRequestUseCase,
   listSavedRequests,
   overwriteSavedRequest,
   saveRequest,
   type SavedWithStale,
-} from '../../../../../../core/routes/saved-requests.js';
+} from '../../../../../../core/insight/routes/saved-requests.js';
 import { listRepos } from '../../../../../../core/workspace/scripts/registry/list-repos.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';

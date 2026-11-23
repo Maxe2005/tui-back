@@ -1,7 +1,7 @@
 // tui/zones/logs: logs-zone.editor-actions — the filter editor's state transitions: opening it,
 // reading/updating the scope it edits, history recall helpers, rule-set apply/save and rule-draft
 // commit. Plain functions rebuilt each render over the zone's state, like the original closures.
-import { applyRuleSet } from '../../../../../../core/logs/rule-sets.js';
+import { applyRuleSet } from '../../../../../../core/insight/logs/rule-sets.js';
 import {
   addLogRule,
   backToRuleListState,

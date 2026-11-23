@@ -8,14 +8,14 @@
 // `createLogsSlice(deps)` call and spreads the sub-creators (filters, panes, health, actions).
 // Every symbol it used to export is re-exported from here.
 import type { StateCreator } from 'zustand';
-import { createLogsManager, type LogsManager } from '../../../../../../core/logs/index.js';
+import { createLogsManager, type LogsManager } from '../../../../../../core/insight/logs/index.js';
 import { createServiceActions, type ServiceActions } from '../../../../../../core/runtime/service-actions/index.js';
 import {
   readRuleLists,
   readRuleSets,
   type StoredRuleLists,
   type StoredRuleSet,
-} from '../../../../../../core/logs/rule-sets.js';
+} from '../../../../../../core/insight/logs/rule-sets.js';
 import { err, ok } from '../../../../../../core/result.js';
 import { createPersistedHistoryStore } from '../../../shared/input-history/index.js';
 import { createInFlightGuard } from '../../../shared/hooks/in-flight-guard.js';

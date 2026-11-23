@@ -2,10 +2,10 @@
 // manifests, no live servers. The stub fetchFn is the only network seam: it serves the fire
 // itself (the auth module is faked here; its own coverage lives in cookie-session-auth.test.ts).
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok, type Result } from '../result.js';
-import type { DevAuthPort, DevAuthSession } from '../ports/runtime/dev-auth.js';
-import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
-import type { Route, RouteScannerPort } from '../ports/modules/route-scanner.js';
+import { err, ok, type Result } from '../../result.js';
+import type { DevAuthPort, DevAuthSession } from '../../ports/runtime/dev-auth.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import type { Route, RouteScannerPort } from '../../ports/modules/route-scanner.js';
 import { fireRequest } from './fire-request.js';
 
 function manifestWithModules(modules: Manifest['modules']): Manifest {

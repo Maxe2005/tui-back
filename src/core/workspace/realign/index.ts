@@ -3,7 +3,7 @@
 // optionally restarts the realigned ones. Work is never stashed, discarded or moved: a dirty or
 // mid-merge repo is skipped. One closed row per selected service; the run never rejects.
 import { resolve } from 'node:path';
-import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../../dashboard/drift.js';
+import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../../insight/dashboard/drift.js';
 import { checkoutExpectedBranch, memberTargetSpec, type TargetBranchSpec } from '../edt/branches/checkout-expected.js';
 import { MANIFEST_FILE, withCarriedManifest } from '../edt/shared-edt/manifest-carry.js';
 import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention, type RestartReport, type RestartRow } from '../edt/switch/restart/switch-restart.js';

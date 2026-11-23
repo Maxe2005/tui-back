@@ -2,7 +2,7 @@
 import { err } from '../../../../core/result.js';
 import { ping } from '../../../../core/ping.js';
 import { listEdtBranchesDivergence } from '../../../../core/workspace/edt/lifecycle/list.js';
-import { buildDashboardSnapshot } from '../../../../core/dashboard/snapshot.js';
+import { buildDashboardSnapshot } from '../../../../core/insight/dashboard/snapshot.js';
 import { healthCheckEnabledFrom } from '../../../../core/ports/storage/settings.js';
 import { registerRepo } from '../../../../core/workspace/scripts/registry/register.js';
 import { resetRepo } from '../../../../core/workspace/scripts/reset/reset.js';

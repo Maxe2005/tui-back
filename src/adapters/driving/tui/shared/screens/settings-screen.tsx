@@ -15,7 +15,7 @@ import { nextCursorForKey } from '../keys/list-cursor.js';
 import { spacing } from '../theme/theme.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { cycleSwitchRestartMode, cycleRealignScope } from '../../../../../core/ports/storage/settings.js';
-import { GLOBAL_RULES_KEY } from '../../../../../core/logs/rule-sets.js';
+import { GLOBAL_RULES_KEY } from '../../../../../core/insight/logs/rule-sets.js';
 import { SETTINGS_TABS, SETTINGS_TAB_LABELS, nextSettingsTab, resolveSettingsTabState, type SettingsTab } from '../settings/settings-tabs.logic.js';
 import { buildServicesSettingsRows, resolveServicesSettingsKey } from '../settings/services/services.logic.js';
 import { resolveSharedTypesSettingsKey } from '../settings/shared-types/shared-types.logic.js';

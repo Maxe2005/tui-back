@@ -2,7 +2,7 @@
 // routes-zone.tsx so the component stays scannable. Every keystroke behavior is a standalone
 // pure function, unit-tested directly; the component's `useInput` stays a thin dispatcher.
 import type { Route } from '../../../../../../core/ports/modules/route-scanner.js';
-import type { FireResult } from '../../../../../../core/routes/fire-request.js';
+import type { FireResult } from '../../../../../../core/insight/routes/fire-request.js';
 import { MAX_BODY_CHARS as MAX_FIRE_BODY_CHARS } from '../../../shared/components/json-tree/model.js';
 import type { FooterContextId } from '../../../keybindings/index.js';
 import { formatByteSize } from './routes-request.logic.js';
