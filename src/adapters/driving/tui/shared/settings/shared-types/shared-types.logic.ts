@@ -1,7 +1,7 @@
 // tui/shared/settings/shared-types.logic: the st tab's row list, number clamping and key mapping. Pure; no Ink/React.
-import type { TextEditKey } from '../components/inputs/text-edit.js';
-import { nextCursorForKey } from '../keys/list-cursor.js';
-import { MAX_HISTORY_DEPTH, MAX_MAX_COMMITS_SCANNED, MIN_HISTORY_DEPTH, MIN_MAX_COMMITS_SCANNED } from '../../../../../core/ports/settings.js';
+import type { TextEditKey } from '../../components/inputs/text-edit.js';
+import { nextCursorForKey } from '../../keys/list-cursor.js';
+import { MAX_HISTORY_DEPTH, MAX_MAX_COMMITS_SCANNED, MIN_HISTORY_DEPTH, MIN_MAX_COMMITS_SCANNED } from '../../../../../../core/ports/settings.js';
 
 // st tab: a flat Up/Down list of the shared-types zone's option defaults (Space toggles the
 // checkboxes) followed by the History view's two numeric bounds (+/- step them, always clamped to
