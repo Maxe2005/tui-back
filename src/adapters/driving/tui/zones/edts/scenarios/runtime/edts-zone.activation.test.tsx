@@ -1,16 +1,16 @@
 // EdtsZone real-keypress tests: activation.
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import type { Result } from '../../../../../core/result.js';
-import type { ActivateEdtData } from '../../../../../core/edt/activate.js';
-import type { CreateEdtData } from '../../../../../core/edt/create.js';
-import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../core/edt/switch.js';
-import { createAppStore } from '../../store/app-store.js';
-import { FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from './dialogs/create-wizard/create-wizard.js';
-import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
-import { edt, press, pressEscape, settle, lastWizardFrame, step3Store, reachStep3, mount } from './edts-zone.test-support.js';
+import type { Result } from '../../../../../../../core/result.js';
+import type { ActivateEdtData } from '../../../../../../../core/edt/activate.js';
+import type { CreateEdtData } from '../../../../../../../core/edt/create.js';
+import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../../../core/edt/switch.js';
+import { createAppStore } from '../../../../store/app-store.js';
+import { FakeTtyStdout, KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { CREATE_WIZARD_TITLE as WIZARD_TITLE } from '../../dialogs/create-wizard/create-wizard.js';
+import { footerIdOf } from '../../../../shared/test-support/mount-for-test.js';
+import { edt, press, pressEscape, settle, lastWizardFrame, step3Store, reachStep3, mount } from '../../edts-zone.test-support.js';
 
 // The wizard's Step 4 — explicit activation. Two services (svc-a, svc-b); svc-a is the new EDT's
 // only member. Every log entry must go to the NEW EDT's ulid ('new-ulid').

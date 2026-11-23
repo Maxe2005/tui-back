@@ -1,11 +1,11 @@
 // EdtsZone real-keypress tests: quick pick.
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
-import { createAppStore } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
-import { edt, press, pressEscape, type, mount } from './edts-zone.test-support.js';
+import { createAppStore } from '../../../../store/app-store.js';
+import { KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { footerIdOf } from '../../../../shared/test-support/mount-for-test.js';
+import { edt, press, pressEscape, type, mount } from '../../edts-zone.test-support.js';
 
 // ==========================================================================================
 // EDT quick-pick: edt-switch/edt-modify/edt-delete with no argument open a shared filterable,

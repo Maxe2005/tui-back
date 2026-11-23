@@ -1,13 +1,13 @@
 // EdtsZone real-keypress tests: switch.
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
-import type { Result } from '../../../../../core/result.js';
-import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../core/edt/switch.js';
-import { createAppStore } from '../../store/app-store.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { EdtsZone } from './edts-zone.js';
-import { footerIdOf } from '../../shared/test-support/mount-for-test.js';
-import { edt, press, pressEscape, settle, mount } from './edts-zone.test-support.js';
+import type { Result } from '../../../../../../../core/result.js';
+import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../../../core/edt/switch.js';
+import { createAppStore } from '../../../../store/app-store.js';
+import { KEYS } from '../../../../shared/test-support/fake-tty.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { footerIdOf } from '../../../../shared/test-support/mount-for-test.js';
+import { edt, press, pressEscape, settle, mount } from '../../edts-zone.test-support.js';
 
 describe('EdtsZone real-keypress interactions — switch', () => {
   it('a switch failure that is not the lock-block code stays in switch-confirm — never a silent return to the list', async () => {

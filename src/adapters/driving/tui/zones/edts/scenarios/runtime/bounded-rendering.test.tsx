@@ -2,17 +2,17 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it } from 'vitest';
-import { createAppStore } from '../../store/app-store.js';
-import { BoundsProvider } from '../../shared/bounds/bounds-context.js';
-import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../../shared/test-support/fake-tty.js';
-import { renderToString } from '../../shared/components/render-to-string.js';
-import { adversarialEdt, adversarialServices, failedRows, MULTILINE_ERROR } from '../../shared/test-support/dialog-registry.js';
-import { EdtsZone } from './edts-zone.js';
-import { IssuesDialogView } from './dialogs/issues-dialog.js';
-import { DeleteDialogView } from './dialogs/delete-dialog.js';
-import { FastForwardDialogView } from './dialogs/fast-forward-dialog.js';
-import { initialDeleteDialog } from './logic/edts-zone.logic.js';
-import { frameLines } from '../../shared/test-support/matrix.js';
+import { createAppStore } from '../../../../store/app-store.js';
+import { BoundsProvider } from '../../../../shared/bounds/bounds-context.js';
+import { FakeTtyStdout, KEYS, fakeInteractiveTtyStdin } from '../../../../shared/test-support/fake-tty.js';
+import { renderToString } from '../../../../shared/components/render-to-string.js';
+import { adversarialEdt, adversarialServices, failedRows, MULTILINE_ERROR } from '../../../../shared/test-support/dialog-registry.js';
+import { EdtsZone } from '../../edts-zone.js';
+import { IssuesDialogView } from '../../dialogs/issues-dialog.js';
+import { DeleteDialogView } from '../../dialogs/delete-dialog.js';
+import { FastForwardDialogView } from '../../dialogs/fast-forward-dialog.js';
+import { initialDeleteDialog } from '../../logic/edts-zone.logic.js';
+import { frameLines } from '../../../../shared/test-support/matrix.js';
 
 const region = { columns: 60, rows: 15, children: null };
 
