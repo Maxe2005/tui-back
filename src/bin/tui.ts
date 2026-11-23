@@ -7,13 +7,13 @@ import {
   acquireTuiLock,
   readLockFile,
 } from "../adapters/driving/tui/single-instance.js";
-import { createManifestCarryPort } from "../adapters/driven/manifest/carry.js";
-import { loadManifest } from "../adapters/driven/manifest/index.js";
+import { createManifestCarryPort } from "../adapters/driven/vcs/manifest/carry.js";
+import { loadManifest } from "../adapters/driven/vcs/manifest/index.js";
 import { createContainerPort } from "../adapters/driven/container/index.js";
-import { createMigrationPort } from "../adapters/driven/migration/index.js";
+import { createMigrationPort } from "../adapters/driven/vcs/migration/index.js";
 import { createEditorPort } from "../adapters/driven/editor/index.js";
 import { createRestartPort } from "../adapters/driven/restart/index.js";
-import { createGitPort } from "../adapters/driven/git/index.js";
+import { createGitPort } from "../adapters/driven/vcs/git/index.js";
 import { createLockPort } from "../adapters/driven/lock/index.js";
 import {
   createRegistryPort,

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runGit, branchExists } from '../../adapters/driven/git/git.test-support.js';
+import { runGit, branchExists } from '../../adapters/driven/vcs/git/git.test-support.js';
 
 export const scriptPath = fileURLToPath(new URL('../tui-back.mjs', import.meta.url));
 
