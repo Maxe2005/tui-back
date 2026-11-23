@@ -6,7 +6,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
-import { CheckboxListItem } from './components/checkbox-list-item.js';
+import { CheckboxListItem } from './components/pickers/checkbox-list-item.js';
 import { DimAnnotation } from './components/feedback/dim-annotation.js';
 import { TextInputLine } from './components/inputs/text-input-line.js';
 import { StateLine } from './components/feedback/state-line.js';

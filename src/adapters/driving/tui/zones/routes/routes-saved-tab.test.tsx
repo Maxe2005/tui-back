@@ -2,7 +2,7 @@
 // not-loaded vs. teaching empty states, the filtered list and the inline error line.
 import { describe, it, expect } from 'vitest';
 import { renderToString } from '../../shared/components/render-to-string.js';
-import { createFilterablePickListState } from '../../shared/components/filterable-pick-list.js';
+import { createFilterablePickListState } from '../../shared/components/pickers/filterable-pick-list.js';
 import { RoutesSavedTab } from './routes-saved-tab.js';
 
 function item(name: string, method = 'GET', path = '/users') {

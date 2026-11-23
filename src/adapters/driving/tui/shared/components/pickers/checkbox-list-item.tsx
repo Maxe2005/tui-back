@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { colors } from '../theme/theme.js';
+import { colors } from '../../theme/theme.js';
 
 export type CheckboxListItemProps = {
   label: string;

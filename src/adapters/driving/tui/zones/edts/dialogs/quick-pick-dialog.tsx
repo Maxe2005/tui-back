@@ -10,7 +10,7 @@ import {
   FilterablePickList,
   handleFilterablePickListKey,
   type FilterablePickItem,
-} from '../../../shared/components/filterable-pick-list.js';
+} from '../../../shared/components/pickers/filterable-pick-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {

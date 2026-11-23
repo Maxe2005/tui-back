@@ -11,7 +11,7 @@ import { DimAnnotation } from '../../../shared/components/feedback/dim-annotatio
 import { FailedResultList } from '../../../shared/components/lists/failed-result-list.js';
 import { SwitchRestartReport } from './switch-restart-report.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
-import { RestartModeSelector } from '../../../shared/components/restart-mode-selector.js';
+import { RestartModeSelector } from '../../../shared/components/pickers/restart-mode-selector.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {
   initialSwitchDialog,

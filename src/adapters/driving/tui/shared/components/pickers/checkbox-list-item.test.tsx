@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { colors, spacing } from '../theme/theme.js';
-import { CheckboxListItem, resolveCheckboxItemLayout } from './index.js';
-import { renderToString } from './render-to-string.js';
+import { colors, spacing } from '../../theme/theme.js';
+import { CheckboxListItem, resolveCheckboxItemLayout } from '../index.js';
+import { renderToString } from '../render-to-string.js';
 
 describe('resolveCheckboxItemLayout', () => {
   it('resolves the unchecked row', () => {

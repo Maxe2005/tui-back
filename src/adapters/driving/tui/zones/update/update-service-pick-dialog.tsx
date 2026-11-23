@@ -6,7 +6,7 @@ import {
   FilterablePickList,
   type FilterablePickItem,
   type FilterablePickListState,
-} from '../../shared/components/filterable-pick-list.js';
+} from '../../shared/components/pickers/filterable-pick-list.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
 
 export const UPDATE_SERVICE_PICK_TITLE = 'UPDATE SERVICE';

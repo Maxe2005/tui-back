@@ -12,7 +12,7 @@ import {
   type FilterablePickItem,
   type FilterablePickListState,
 } from './filterable-pick-list.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 
 function item(label: string, meta?: string): FilterablePickItem<string> {
   return { key: meta ?? label, label, meta, value: label };

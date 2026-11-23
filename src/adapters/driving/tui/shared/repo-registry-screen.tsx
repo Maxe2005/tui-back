@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { Box, Text, type Key } from 'ink';
 import { useInput } from './hooks/use-input.js';
-import { CheckboxListItem } from './components/checkbox-list-item.js';
+import { CheckboxListItem } from './components/pickers/checkbox-list-item.js';
 import { DimAnnotation } from './components/feedback/dim-annotation.js';
 import { ModalDialog } from './components/dialogs/modal-dialog.js';
 import { StateLine } from './components/feedback/state-line.js';

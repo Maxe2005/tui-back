@@ -3,7 +3,7 @@
 // states.
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
-import { CheckboxListItem } from '../../../../shared/components/checkbox-list-item.js';
+import { CheckboxListItem } from '../../../../shared/components/pickers/checkbox-list-item.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import {
   type CandidateListState,

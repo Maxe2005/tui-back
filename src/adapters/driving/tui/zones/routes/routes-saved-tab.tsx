@@ -7,7 +7,7 @@ import {
   FilterablePickList,
   type FilterablePickItem,
   type FilterablePickListState,
-} from '../../shared/components/filterable-pick-list.js';
+} from '../../shared/components/pickers/filterable-pick-list.js';
 import { colors } from '../../shared/theme/theme.js';
 import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';

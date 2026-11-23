@@ -7,9 +7,9 @@ import {
   handleBranchPickerKey,
   matchBranchesBySubstring,
   type BranchPickerState,
-} from './index.js';
+} from '../index.js';
 import { branchPickerFooterContext } from './branch-picker.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 
 function baseState(overrides: Partial<BranchPickerState> = {}): BranchPickerState {
   return {

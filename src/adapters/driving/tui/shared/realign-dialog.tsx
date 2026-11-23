@@ -9,7 +9,7 @@ import { useBounds } from './bounds/bounds-context.js';
 import { BoundedList } from './components/lists/bounded-list.js';
 import { DimAnnotation } from './components/feedback/dim-annotation.js';
 import { ModalDialog } from './components/dialogs/modal-dialog.js';
-import { RestartModeSelector } from './components/restart-mode-selector.js';
+import { RestartModeSelector } from './components/pickers/restart-mode-selector.js';
 import { StateLine } from './components/feedback/state-line.js';
 import { ClampedParagraph } from './components/display/truncated-text.js';
 import { colors } from './theme/theme.js';

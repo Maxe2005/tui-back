@@ -4,11 +4,11 @@
 // reducer the host zone's useInput calls; the host owns where the state lives, the dialog
 // chrome, the candidates and what `select`/`cancel` do.
 import { Box } from 'ink';
-import { BoundedList } from './lists/bounded-list.js';
-import { DimAnnotation } from './feedback/dim-annotation.js';
-import { ListRow } from './lists/list-row.js';
-import { nextTextInputValue, type TextEditKey } from './inputs/text-edit.js';
-import { TextInputLine } from './inputs/text-input-line.js';
+import { BoundedList } from '../lists/bounded-list.js';
+import { DimAnnotation } from '../feedback/dim-annotation.js';
+import { ListRow } from '../lists/list-row.js';
+import { nextTextInputValue, type TextEditKey } from '../inputs/text-edit.js';
+import { TextInputLine } from '../inputs/text-input-line.js';
 
 // The row budget of every pick dialog — one shared constant, deliberately not a prop, so the
 // dialogs can never disagree on how tall the list gets. A *total* budget in BoundedList's

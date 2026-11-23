@@ -7,7 +7,7 @@ import {
   clampPickListCursor,
   handleFilterablePickListKey,
   matchPickItemsBySubstring,
-} from '../../shared/components/filterable-pick-list.js';
+} from '../../shared/components/pickers/filterable-pick-list.js';
 
 export function handleSavedTabKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const {

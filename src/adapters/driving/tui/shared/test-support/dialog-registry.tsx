@@ -7,7 +7,7 @@ import { createElement, type ReactElement } from 'react';
 import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 import { createAppStore } from '../../store/app-store.js';
-import { createFilterablePickListState } from '../components/filterable-pick-list.js';
+import { createFilterablePickListState } from '../components/pickers/filterable-pick-list.js';
 import { KeybindingHelp } from '../components/dialogs/keybinding-help.js';
 import { IssuesDialogView } from '../../zones/edts/dialogs/issues-dialog.js';
 import { FastForwardDialogView } from '../../zones/edts/dialogs/fast-forward-dialog.js';

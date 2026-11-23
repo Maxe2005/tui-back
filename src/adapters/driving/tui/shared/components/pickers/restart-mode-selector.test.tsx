@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 import { RestartModeSelector } from './restart-mode-selector.js';
 
 describe('RestartModeSelector', () => {

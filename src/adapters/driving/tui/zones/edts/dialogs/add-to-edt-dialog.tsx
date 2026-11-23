@@ -1,7 +1,7 @@
 // tui/zones/edts/dialogs: the OTHER SERVICES row's Add-to-EDT dialog, opened by Enter.
 import { Box, Text, type Key } from 'ink';
 import type { AppState } from '../../../store/app-store.js';
-import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/branch-picker.js';
+import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '../../../shared/components/pickers/branch-picker.js';
 import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
 import { FailedResultList, type FailedResultRow } from '../../../shared/components/lists/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
