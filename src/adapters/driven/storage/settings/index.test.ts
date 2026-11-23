@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import { DEFAULT_SETTINGS } from '../../../core/ports/storage/settings.js';
+import { DEFAULT_SETTINGS } from '../../../../core/ports/storage/settings.js';
 import { createSettingsPort, loadSettings, resolveSettingsFile, saveSettings } from './index.js';
 
 const tmpDirs: string[] = [];

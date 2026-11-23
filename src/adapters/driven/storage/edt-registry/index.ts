@@ -6,12 +6,12 @@
  import { dirname, join, resolve } from 'node:path';
  import { parse, stringify } from 'yaml';
  import Database from 'better-sqlite3';
- import { err, ok, type Result } from '../../../core/result.js';
- import type { EdtRegistryEntry, EdtRegistryPort, EdtMember, EdtStatus, EdtActionLogEntry } from '../../../core/ports/storage/edt-registry.js';
- import type { RegistryPort } from '../../../core/ports/storage/registry.js';
- import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
- import type { SettingsPort } from '../../../core/ports/storage/settings.js';
- import { buildSharedBranchesEdt, isSharedEdtTopic, isSystemEdt, systemEdtReadonly as systemReadonly, type SharedEdtRepo } from '../../../core/workspace/edt/shared-edt/shared-edt.js';
+ import { err, ok, type Result } from '../../../../core/result.js';
+ import type { EdtRegistryEntry, EdtRegistryPort, EdtMember, EdtStatus, EdtActionLogEntry } from '../../../../core/ports/storage/edt-registry.js';
+ import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
+ import type { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+ import type { SettingsPort } from '../../../../core/ports/storage/settings.js';
+ import { buildSharedBranchesEdt, isSharedEdtTopic, isSystemEdt, systemEdtReadonly as systemReadonly, type SharedEdtRepo } from '../../../../core/workspace/edt/shared-edt/shared-edt.js';
  import type { XdgPaths } from '../xdg/index.js';
  import { ensureXdgDir } from '../xdg/index.js';
  import { edtRegistrySchema } from './schema.js';

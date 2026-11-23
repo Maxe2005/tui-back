@@ -18,24 +18,24 @@ import { createLockPort } from "../adapters/driven/lock/index.js";
 import {
   createRegistryPort,
   resolveRegistryFile,
-} from "../adapters/driven/registry/index.js";
+} from "../adapters/driven/storage/registry/index.js";
 import {
   createEdtRegistryPort,
   resolveEdtRegistryFile,
-} from "../adapters/driven/edt-registry/index.js";
+} from "../adapters/driven/storage/edt-registry/index.js";
 import {
   createStatePort,
   resolveStateFile,
-} from "../adapters/driven/state/index.js";
+} from "../adapters/driven/storage/state/index.js";
 import {
   createSettingsPort,
   resolveSettingsFile,
-} from "../adapters/driven/settings/index.js";
-import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/saved-requests/index.js";
+} from "../adapters/driven/storage/settings/index.js";
+import { createSavedRequestPort, resolveGlobalDbFile } from "../adapters/driven/storage/saved-requests/index.js";
 import { createDockerPort } from "../adapters/driven/docker/index.js";
 import { createShellSessionPort } from "../adapters/driven/shell-session/index.js";
 import { createHttpHealthProbe } from "../adapters/driven/health/http-probe.js";
-import { resolveXdgPaths } from "../adapters/driven/xdg/index.js";
+import { resolveXdgPaths } from "../adapters/driven/storage/xdg/index.js";
 import { moduleRegistry, resolveModule } from "../adapters/driven/modules/module-registry.js";
 import { ROUTES_MODULE_ID, SHARED_TYPES_MODULE_IDS } from "../core/workspace/edt/shared-edt/resolve-tab-visibility.js";
 import { err, ok } from "../core/result.js";

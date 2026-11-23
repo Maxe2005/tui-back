@@ -25,7 +25,7 @@ import {
   SWITCH_RESTART_MODES,
   UPDATE_MERGE_SOURCES,
   type Settings,
-} from '../../../core/ports/storage/settings.js';
+} from '../../../../core/ports/storage/settings.js';
 
 export const settingsSchema: z.ZodType<Settings> = z
   .object({

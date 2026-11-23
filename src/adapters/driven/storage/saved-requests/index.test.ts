@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { createSavedRequestPort, resolveGlobalDbFile } from './index.js';
-import type { SavedRequest } from '../../../core/ports/storage/saved-request.js';
+import type { SavedRequest } from '../../../../core/ports/storage/saved-request.js';
 
 const tmpDirs: string[] = [];
 

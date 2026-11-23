@@ -5,8 +5,8 @@
 import { copyFile, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { parse, stringify } from 'yaml';
-import { err, ok, type Result } from '../../../core/result.js';
-import type { RegistryPort, ResetResult, ScanResult } from '../../../core/ports/storage/registry.js';
+import { err, ok, type Result } from '../../../../core/result.js';
+import type { RegistryPort, ResetResult, ScanResult } from '../../../../core/ports/storage/registry.js';
 import type { XdgPaths } from '../xdg/index.js';
 import { ensureXdgDir } from '../xdg/index.js';
 import { registrySchema } from './schema.js';
