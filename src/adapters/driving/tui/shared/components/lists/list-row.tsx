@@ -16,6 +16,8 @@ export type ListRowProps = {
   // status). A row can be active, emphasized, both, or neither.
   active?: boolean;
   nested?: boolean;
+  // Dimmed label for an unavailable row (e.g. a stale favorite).
+  dim?: boolean;
   meta?: string;
 };
 
@@ -33,12 +35,12 @@ export type ResolvedRow = {
 export function resolveRowLayout(
   props: ListRowProps,
 ): ResolvedRow {
-  const { selected = false, nested = false, emphasized = false, active = false } = props;
+  const { selected = false, nested = false, emphasized = false, active = false, dim = false } = props;
   return {
     barGlyph: selected ? '▌' : ' ',
     marker: selected ? '›' : ' ',
     background: selected ? colors['surface-selected'] : colors.surface,
-    labelColor: emphasized ? colors.accent : colors.text,
+    labelColor: emphasized ? colors.accent : dim ? colors['text-dim'] : colors.text,
     metaColor: colors['text-dim'],
     paddingLeft: nested ? spacing.indent : 0,
     bold: emphasized,

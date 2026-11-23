@@ -83,6 +83,7 @@ const EXPECTED = [
   ['i (Update)', 'Update: reopen the incident queue of the running update (also `:update-incidents`)'],
   ['Enter (Update config)', 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box'],
   ['R (load error)', 'EDTs, Update and Logs: retry a failed list load'],
+  ['* (Routes)', 'Routes: toggle the cursor route (or the open pane route) as a favorite of the active EDT; Tab focuses the Favorites pane above the list'],
   ['Ctrl+R (Routes)', 'Routes: fire the request of the open pane'],
   ['Ctrl+T (branch picker)', 'Branch picker: rename the highlighted branch'],
   ['PgUp / PgDn', 'Scroll a dialog taller than the window; page the Update last-run recap and full report'],

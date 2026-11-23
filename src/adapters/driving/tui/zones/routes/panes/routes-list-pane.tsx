@@ -7,6 +7,8 @@ import { ListRow } from '../../../shared/components/lists/list-row.js';
 import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { TextInputLine } from '../../../shared/components/inputs/text-input-line.js';
 import { colors, spacing } from '../../../shared/theme/theme.js';
+import { RoutesFavoritesPane } from './routes-favorites-pane.js';
+import { resolveFavoritesPaneRows } from '../logic/routes-favorites.logic.js';
 import { formatRouteRow } from '../logic/routes-zone.logic.js';
 
 export function RoutesListPane({
@@ -19,6 +21,7 @@ export function RoutesListPane({
   listAreaRef,
   maxVisibleRows,
   clamped,
+  favorites,
 }: {
   routes: NonNullable<RoutesZoneCtx['routes']>;
   visibleRoutes: RoutesZoneCtx['visibleRoutes'];
@@ -29,9 +32,21 @@ export function RoutesListPane({
   listAreaRef: RoutesZoneCtx['listAreaRef'];
   maxVisibleRows: number;
   clamped: number;
+  favorites: Pick<RoutesZoneCtx, 'favorites' | 'clampedFavCursor' | 'favoritesFocused' | 'favNotice' | 'favoriteRoutesError' | 'routes' | 'windowSize'>;
 }) {
+  const favoriteRows = resolveFavoritesPaneRows(favorites.windowSize.rows, favorites.favorites.length);
   return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+        <RoutesFavoritesPane
+          favorites={favorites.favorites}
+          routes={favorites.routes}
+          cursor={favorites.clampedFavCursor}
+          focused={favorites.favoritesFocused}
+          notice={favorites.favNotice}
+          loadError={favorites.favoriteRoutesError === null ? null : favorites.favoriteRoutesError.message}
+          totalRows={favoriteRows.total}
+          bodyRows={favoriteRows.body}
+        />
         <Text color={colors['text-dim']} wrap="truncate-end">
           ROUTES{filterActive || routes.length !== visibleRoutes.length ? ` (${visibleRoutes.length}/${routes.length})` : ` (${routes.length})`}
         </Text>

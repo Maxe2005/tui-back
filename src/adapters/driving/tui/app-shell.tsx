@@ -356,7 +356,7 @@ export function AppShell({
     // shortcut, `?` help included, may fire while it's set. The focused Routes right pane
     // counts as captured straight from the store: the zone's own zoneInputCaptured effect lands
     // one render later, and a keypress in between must not switch zones (or quit) mid-edit.
-    if (state.zoneInputCaptured || (state.activeZone === 'routes' && state.routesPaneFocus === 'detail')) {
+    if (state.zoneInputCaptured || (state.activeZone === 'routes' && state.routesPaneFocus !== 'list')) {
       return;
     }
 

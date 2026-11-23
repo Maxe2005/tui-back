@@ -45,6 +45,12 @@ describe('resolveRowLayout', () => {
     expect(spacing.indent).toBe(2);
   });
 
+  it('dims the label of an unavailable row, but emphasized keeps precedence', () => {
+    expect(resolveRowLayout({ label: 'GET /gone', dim: true }).labelColor).toBe(colors['text-dim']);
+    expect(resolveRowLayout({ label: 'GET /ok' }).labelColor).toBe(colors.text);
+    expect(resolveRowLayout({ label: 'x', dim: true, emphasized: true }).labelColor).toBe(colors.accent);
+  });
+
   // `emphasized` (whichever row drives a categorized split) is accent+bold, independent of
   // `selected`.
   it('resolves an emphasized row: accent-colored, bold label — independent of selected', () => {

@@ -1,5 +1,5 @@
 // tui/zones/routes: use-routes-state — the Routes zone's store selectors, zone-local `useState`s and measured element sizes, in their original call order.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWindowSize } from 'ink';
 import type { AppStore } from '../../../store/app-store.js';
 import type { JsonScalarKind } from '../../../shared/components/json-tree/model.js';
@@ -40,6 +40,10 @@ export function useRoutesState(useStore: AppStore) {
   const saveRequestDraft = useStore((state) => state.saveRequestDraft);
   const loadSavedRequest = useStore((state) => state.loadSavedRequest);
   const deleteSavedRequest = useStore((state) => state.deleteSavedRequest);
+
+  const favoriteRoutes = useStore((state) => state.favoriteRoutes);
+  const refreshFavoriteRoutes = useStore((state) => state.refreshFavoriteRoutes);
+  const toggleFavoriteRoute = useStore((state) => state.toggleFavoriteRoute);
 
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
 
@@ -92,6 +96,23 @@ export function useRoutesState(useStore: AppStore) {
   const [scalarEdit, setScalarEdit] = useState<{ path: string; kind: JsonScalarKind; input: TextInputState } | null>(null);
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
   const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
+  // The Favorites pane's cursor (clamped on read) and its one-line failure notice.
+  const [favCursor, setFavCursor] = useState(0);
+  const [favNotice, setFavNoticeRaw] = useState<string | null>(null);
+  // A toggle outcome can land after the zone unmounted: never set state then.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const setFavNotice = (next: string | null) => {
+    if (mountedRef.current) {
+      setFavNoticeRaw(next);
+    }
+  };
+  const favoriteRoutesError = useStore((state) => state.favoriteRoutesError);
   const windowSize = useWindowSize();
   // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout, but the panes' content reflows
   // (the repo path wraps or unwraps, changing the list's height). Subscribing here makes this
@@ -102,6 +123,7 @@ export function useRoutesState(useStore: AppStore) {
   const [bodyAreaRef, bodyAreaSize] = useElementSize();
 
   const paneFocused = paneFocus === 'detail';
+  const favoritesFocused = paneFocus === 'favorites';
   return {
     useStore, status, carryingServices, routes, routesStatus, routesError, routesRepoPath, loadRoutes,
     fireRoute, responses, requestDrafts, ensureRequestDraft, updateRequestDraft, paneFocus, setPaneFocus,
@@ -116,7 +138,8 @@ export function useRoutesState(useStore: AppStore) {
     setPickerDeleteConfirm, savedTabState, setSavedTabState, savedTabError, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, scalarEdit, setScalarEdit, addPrompt, setAddPrompt,
     rawEditor, setRawEditor, windowSize, listAreaRef, listAreaSize, responseAreaRef, responseAreaSize,
-    bodyAreaRef, bodyAreaSize, paneFocused,
+    bodyAreaRef, bodyAreaSize, paneFocused, favoritesFocused, favoriteRoutes, refreshFavoriteRoutes,
+    toggleFavoriteRoute, favCursor, setFavCursor, favNotice, setFavNotice, favoriteRoutesError,
   };
 }
 

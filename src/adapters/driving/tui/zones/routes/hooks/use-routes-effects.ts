@@ -11,23 +11,39 @@ export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
     setRowEdit, setRowAddPrompt, setFireBlock, savePrompt, setSavePrompt, overwriteConfirm,
     setOverwriteConfirm, setSaveNotice, pickerOpen, pickerDeleteConfirm, setSavedTabState, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, setScalarEdit, setAddPrompt, setRawEditor, paneFocused,
-    paneRoute, paneRouteKey, firedRouteKey, closePane,
+    paneRoute, paneRouteKey, firedRouteKey, closePane, favoritesFocused, refreshFavoriteRoutes,
   } = c;
   useEffect(() => {
     setZoneInputCaptured(
       filterEditing ||
         paneFocused ||
+        favoritesFocused ||
         savePrompt !== null ||
         pickerOpen ||
         overwriteConfirm !== null ||
         pickerDeleteConfirm !== null ||
         savedTabDeleteConfirm !== null,
     );
-  }, [filterEditing, paneFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
-  useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
+  }, [filterEditing, paneFocused, favoritesFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
+  // Leaving the zone must not leave the keyboard parked on the Favorites pane (AppShell treats a
+  // non-list Routes focus as captured, so zone keys would stay dead).
+  useEffect(
+    () => () => {
+      setZoneInputCaptured(false);
+      if (c.useStore.getState().routesPaneFocus === 'favorites') {
+        c.useStore.getState().setRoutesPaneFocus('list');
+      }
+    },
+    [setZoneInputCaptured],
+  );
 
   useEffect(() => {
-    void loadRoutes();
+    // The favorites follow the active EDT: reloaded on every mount, after the routes (the stale
+    // flags scan the same repo).
+    void (async () => {
+      await loadRoutes();
+      await refreshFavoriteRoutes();
+    })();
     // Deliberately fires once on mount only — a re-render never re-triggers a fetch of its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

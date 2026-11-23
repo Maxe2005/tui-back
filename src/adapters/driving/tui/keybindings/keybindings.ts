@@ -284,6 +284,10 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'EDTs, Update and Logs: retry a failed list load',
   },
   {
+    keys: '* (Routes)',
+    description: 'Routes: toggle the cursor route (or the open pane route) as a favorite of the active EDT; Tab focuses the Favorites pane above the list',
+  },
+  {
     keys: 'Ctrl+R (Routes)',
     description: 'Routes: fire the request of the open pane',
   },

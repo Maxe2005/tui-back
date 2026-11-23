@@ -10,6 +10,11 @@ import type { Route } from '../../../../../../core/ports/modules/route-scanner.j
 import type { SavedRequest } from '../../../../../../core/ports/storage/saved-request.js';
 import { err, ok, type Result } from '../../../../../../core/result.js';
 import { fireRequest, type FireRequestOptions, type FireResult } from '../../../../../../core/insight/routes/fire-request.js';
+import {
+  listFavoriteRoutes,
+  toggleFavoriteRoute as toggleFavoriteRouteUseCase,
+  type FavoriteWithStale,
+} from '../../../../../../core/insight/routes/favorites.js';
 import { listRoutes } from '../../../../../../core/insight/routes/list-routes.js';
 import {
   deleteSavedRequest as deleteSavedRequestUseCase,
@@ -45,6 +50,7 @@ const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 const NO_SCANNER_ERROR = 'No route scanner wired into the TUI store';
 const NO_AUTH_ERROR = 'No dev auth wired into the TUI store';
 const NO_SAVED_ERROR = 'No saved-request store wired into the TUI store';
+const NO_FAVORITES_ERROR = 'No EDT registry wired into the TUI store';
 
 export type RoutesStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -54,7 +60,8 @@ export type RouteResponse =
   | { status: 'fired'; result: FireResult }
   | { status: 'error'; error: { code: string; message: string } };
 
-export type RoutesPaneFocus = 'list' | 'detail';
+// 'favorites' = the Favorites pane above the route list owns the keyboard.
+export type RoutesPaneFocus = 'list' | 'favorites' | 'detail';
 
 // The right pane's sub-tabs, in display order.
 export type RoutesPaneTab = 'saved' | 'request' | 'response';
@@ -131,6 +138,15 @@ export type RoutesSlice = {
   // Removes one record by exact name (`saved-request-not-found` when unknown) and unlinks
   // every draft origin pointing at it.
   deleteSavedRequest: (name: string) => Promise<Result<void>>;
+  // The active EDT's favorite routes (all repos; the zone only lists those of the displayed
+  // repo) with advisory stale flags. `null` until first loaded or after a failed load.
+  favoriteRoutes: FavoriteWithStale[] | null;
+  favoriteRoutesError: { code: string; message: string } | null;
+  // Reloads the list with a fresh per-repo scan for the stale flags (one scan per repo).
+  refreshFavoriteRoutes: () => Promise<void>;
+  // Toggles (repoPath, METHOD, path) on the active EDT and updates the cached list at once
+  // (stale flags carried over, no rescan). A failure leaves the cached list untouched.
+  toggleFavoriteRoute: (method: string, path: string, repoPath?: string) => Promise<Result<{ favorite: boolean }>>;
 };
 
 function hasDraft(drafts: Record<string, unknown>, routeKey: string): boolean {
@@ -182,7 +198,52 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
   // — never lands in the fresh maps.
   const inFlight = new Set<string>();
   let repoGeneration = 0;
-  return (set, get) => ({
+  let favoritesSeq = 0;
+  let favoritesToggleChain: Promise<void> = Promise.resolve();
+  const favoriteKey = (item: { repoPath: string; method: string; path: string }) =>
+    `${resolve(item.repoPath)}\u0000${item.method}\u0000${item.path}`;
+  return (set, get) => {
+    const toggleOnce = async (method: string, path: string, repoPathArg: string | undefined): Promise<Result<{ favorite: boolean }>> => {
+      if (!deps) {
+        return err('store-not-wired', NO_FAVORITES_ERROR);
+      }
+      const repoPath = repoPathArg ?? get().routesRepoPath;
+      if (repoPath === null) {
+        return err('missing-argument', 'No routes repo selected');
+      }
+      try {
+        const toggled = await toggleFavoriteRouteUseCase(
+          { edtRegistry: deps.edtRegistry, edtRegistryResourceKey: deps.edtRegistryResourceKey, lock: deps.lock, state: deps.state },
+          { repoPath, method, path },
+        );
+        if (!toggled.ok) {
+          return toggled;
+        }
+        // Any refresh still in flight predates this toggle: its result must not land.
+        favoritesSeq += 1;
+        const previous = get().favoriteRoutes;
+        if (previous === null) {
+          // Nothing to carry stale flags over from: a full (scanning) refresh gets them right.
+          await get().refreshFavoriteRoutes();
+          return toggled;
+        }
+        // Quick listing (no scan): stale flags of surviving rows are carried over, new rows are fresh.
+        const listed = await listFavoriteRoutes({ edtRegistry: deps.edtRegistry, state: deps.state }, {});
+        if (listed.ok) {
+          const wasStale = new Set(previous.filter((item) => item.stale).map(favoriteKey));
+          set({
+            favoriteRoutes: listed.data.favorites.map((item) => ({ ...item, stale: wasStale.has(favoriteKey(item)) })),
+            favoriteRoutesError: null,
+          });
+        } else {
+          set({ favoriteRoutesError: { code: listed.error.code, message: listed.error.message } });
+        }
+        return toggled;
+      } catch (error) {
+        return err('favorites-failed', reasonOf(error));
+      }
+    };
+    return {
     routesRepoPath: null,
     routes: null,
     routesStatus: 'idle',
@@ -196,6 +257,8 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     draftOrigins: {},
     savedRequests: null,
     savedRequestsError: null,
+    favoriteRoutes: null,
+    favoriteRoutesError: null,
     routesPaneFocus: 'list',
     routesPaneTab: 'request',
     setRoutesPaneFocus: (focus) => set({ routesPaneFocus: focus }),
@@ -590,7 +653,41 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       });
       return ok(undefined);
     },
-  });
+    refreshFavoriteRoutes: async () => {
+      if (!deps) {
+        set({ favoriteRoutes: null, favoriteRoutesError: { code: 'store-not-wired', message: NO_FAVORITES_ERROR } });
+        return;
+      }
+      // Out-of-order guard: only the newest call (or a toggle that landed since) may write.
+      favoritesSeq += 1;
+      const token = favoritesSeq;
+      let patch: Pick<RoutesSlice, 'favoriteRoutes' | 'favoriteRoutesError'>;
+      try {
+        const listed = await listFavoriteRoutes(
+          { edtRegistry: deps.edtRegistry, state: deps.state, manifest: deps.manifest, scanner: deps.scanner },
+          {},
+        );
+        patch = listed.ok
+          ? { favoriteRoutes: listed.data.favorites, favoriteRoutesError: null }
+          : { favoriteRoutes: null, favoriteRoutesError: { code: listed.error.code, message: listed.error.message } };
+      } catch (error) {
+        patch = { favoriteRoutes: null, favoriteRoutesError: { code: 'favorites-failed', message: reasonOf(error) } };
+      }
+      if (token === favoritesSeq) {
+        set(patch);
+      }
+    },
+    // Toggles are serialized so rapid presses cannot overwrite each other's cache.
+    toggleFavoriteRoute: (method, path, repoPathArg) => {
+      const run = favoritesToggleChain.then(() => toggleOnce(method, path, repoPathArg));
+      favoritesToggleChain = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    },
+  };
+  };
 }
 
 function isJsonTreeState(value: unknown): value is JsonTreeState {
