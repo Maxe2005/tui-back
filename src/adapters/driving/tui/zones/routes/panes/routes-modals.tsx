@@ -1,12 +1,12 @@
 // tui/zones/routes: routes-modals — the Routes zone's modal dialogs: overwrite confirm, saved-requests picker and the two delete confirms.
 import { Box, Text } from 'ink';
-import type { RoutesZoneCtx } from './routes-zone.ctx.js';
-import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
-import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
-import { FilterablePickList } from '../../shared/components/pickers/filterable-pick-list.js';
-import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
-import { colors } from '../../shared/theme/theme.js';
-import { formatHints } from '../../shared/components/dialogs/hints.js';
+import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
+import { FilterablePickList } from '../../../shared/components/pickers/filterable-pick-list.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
+import { colors } from '../../../shared/theme/theme.js';
+import { formatHints } from '../../../shared/components/dialogs/hints.js';
 
 export function RoutesModals({ c }: { c: RoutesZoneCtx }) {
   const {

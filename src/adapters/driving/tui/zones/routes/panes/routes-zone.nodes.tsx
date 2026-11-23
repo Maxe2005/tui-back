@@ -1,7 +1,7 @@
 // tui/zones/routes: routes-zone.nodes — builds the request-body editor node and the fired-response node handed to the right pane.
 import type { ReactElement } from 'react';
-import type { RoutesZoneCtx } from './routes-zone.ctx.js';
-import { JsonEmptyState, JsonRawEditor, JsonRawFallback, JsonTree, JsonTreeEditor } from '../../shared/components/json-tree/json-tree.js';
+import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
+import { JsonEmptyState, JsonRawEditor, JsonRawFallback, JsonTree, JsonTreeEditor } from '../../../shared/components/json-tree/json-tree.js';
 
 export function renderBodyNode(c: RoutesZoneCtx): ReactElement {
   const {

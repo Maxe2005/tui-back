@@ -1,17 +1,17 @@
 // tui/zones/routes: routes-detail-pane — the right pane: route detail, sub-tab strip and the Request / Saved / Response tab views.
 import type { ReactNode } from 'react';
 import { Box } from 'ink';
-import type { RoutesZoneCtx } from './routes-zone.ctx.js';
-import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
-import { DetailPane } from '../../shared/components/layout/detail-pane.js';
-import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
-import { ROUTES_PANE_TABS } from '../../store/slices/workspace/routes-slice.js';
+import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
+import { DetailPane } from '../../../shared/components/layout/detail-pane.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
+import { ROUTES_PANE_TABS } from '../../../store/slices/workspace/routes-slice.js';
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
 import { RoutesSavedTab } from './routes-saved-tab.js';
-import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
-import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatRouteDetail } from './logic/routes-zone.logic.js';
+import { TextInputLine } from '../../../shared/components/inputs/text-input-line.js';
+import { colors, spacing } from '../../../shared/theme/theme.js';
+import { formatRouteDetail } from '../logic/routes-zone.logic.js';
 
 export function RoutesDetailPane({
   c,

@@ -2,15 +2,15 @@
 // pane route's saved requests with a `/` filter. Stateless; the zone owns the pick state,
 // the load/delete calls and the route-scoped filtering.
 import { Box, Text } from 'ink';
-import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
 import {
   FilterablePickList,
   type FilterablePickItem,
   type FilterablePickListState,
-} from '../../shared/components/pickers/filterable-pick-list.js';
-import { colors } from '../../shared/theme/theme.js';
-import type { SavedWithStale } from '../../../../../core/routes/saved-requests.js';
-import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
+} from '../../../shared/components/pickers/filterable-pick-list.js';
+import { colors } from '../../../shared/theme/theme.js';
+import type { SavedWithStale } from '../../../../../../core/routes/saved-requests.js';
+import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 export function RoutesSavedTab({
   items,
