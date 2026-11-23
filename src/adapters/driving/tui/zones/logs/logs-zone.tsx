@@ -9,11 +9,11 @@ import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.j
 import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { FullscreenPane } from './fullscreen-pane.js';
+import { FullscreenPane } from './panes/fullscreen-pane.js';
 import { LogFilterEditor } from './filters/log-filter-editor.js';
-import { LogsActionsMenu } from './logs-actions-menu.js';
-import { LogsGrid } from './logs-grid.js';
-import { LogsServiceLists } from './logs-service-lists.js';
+import { LogsActionsMenu } from './panes/logs-actions-menu.js';
+import { LogsGrid } from './panes/logs-grid.js';
+import { LogsServiceLists } from './panes/logs-service-lists.js';
 import { isPaneEngagedInGlobalFilter, isPaneWrapped } from './logic/logs-zone.logic.js';
 import type { LogsZoneCtx } from './logs-zone.ctx.js';
 import { createEditorActions } from './keys/logs-zone.editor-actions.js';

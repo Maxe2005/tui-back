@@ -1,6 +1,6 @@
 // tui/zones/logs: logs-zone.overlay-keys — the key handlers of the two modal overlays that sit
 // outside the filter editor: the `a` actions menu and the per-pane fullscreen view.
-import { LOGS_ACTIONS_MENU_CLOSE, toMenuItems, type LogsActionsMenuState } from '../logs-actions-menu.js';
+import { LOGS_ACTIONS_MENU_CLOSE, toMenuItems, type LogsActionsMenuState } from '../panes/logs-actions-menu.js';
 import { resolveMenuKey } from '../../../shared/components/lists/menu-list.js';
 import { resolveFullscreenScrollDirection, resolveVisibilityToggleKey, toggleGlobalFilterEngagement, togglePaneWrapFlag, toggleVisibilityFlag } from '../logic/logs-zone.logic.js';
 import type { LogsKey, LogsZoneCtx } from '../logs-zone.ctx.js';

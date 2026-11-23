@@ -3,12 +3,12 @@
 // Purely presentational: the rows come from the registry (no availability rule here) and every
 // keystroke is routed by LogsZone's useInput through resolveMenuKey.
 import { Box, Text } from 'ink';
-import type { RestartMode, ServiceAction } from '../../../../../core/service-actions/index.js';
-import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS } from '../../store/slices/app/service-action-ids.js';
-import { MenuList, type MenuItem } from '../../shared/components/lists/menu-list.js';
-import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
-import { StateLine } from '../../shared/components/feedback/state-line.js';
-import { colors } from '../../shared/theme/theme.js';
+import type { RestartMode, ServiceAction } from '../../../../../../core/service-actions/index.js';
+import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS } from '../../../store/slices/app/service-action-ids.js';
+import { MenuList, type MenuItem } from '../../../shared/components/lists/menu-list.js';
+import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
+import { colors } from '../../../shared/theme/theme.js';
 
 export const LOGS_ACTIONS_MENU_TITLE = 'SERVICE ACTIONS';
 

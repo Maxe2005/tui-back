@@ -1,9 +1,9 @@
 // tui/zones/logs: real-keypress filter-history grid pagination and wrap keys.
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import { FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
-import { LogsZone } from './logs-zone.js';
-import { service, press, openRuleEditor, mount, seedStore } from './logs-zone.test-support.js';
+import { FakeTtyStdout, KEYS } from '../../../shared/test-support/fake-tty.js';
+import { LogsZone } from '../logs-zone.js';
+import { service, press, openRuleEditor, mount, seedStore } from '../logs-zone.test-support.js';
 
 describe('LogsZone real-keypress interactions — history grid', () => {
   // Bounds the filter-history grid browser's vertical extent to the terminal's actual row count,

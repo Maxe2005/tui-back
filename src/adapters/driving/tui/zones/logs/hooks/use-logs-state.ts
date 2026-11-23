@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import type { AppStore } from '../../../store/app-store.js';
 import type { GridCursor } from '../../../shared/screens/command-bar/command-bar.js';
-import type { LogsActionsMenuState } from '../logs-actions-menu.js';
+import type { LogsActionsMenuState } from '../panes/logs-actions-menu.js';
 import type { FilterEditorState, LogsPaneFocus } from '../logic/logs-zone.logic.js';
 
 export function useLogsState(useStore: AppStore) {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
-import type { ServiceAction } from '../../../../../core/service-actions/index.js';
-import { resolveMenuKey } from '../../shared/components/lists/menu-list.js';
-import { renderToString } from '../../shared/components/render-to-string.js';
+import type { ServiceAction } from '../../../../../../core/service-actions/index.js';
+import { resolveMenuKey } from '../../../shared/components/lists/menu-list.js';
+import { renderToString } from '../../../shared/components/render-to-string.js';
 import {
   LOGS_ACTIONS_MENU_CHROME_ROWS,
   LOGS_ACTIONS_MENU_CLOSE,

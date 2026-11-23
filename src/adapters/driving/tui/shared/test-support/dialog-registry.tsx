@@ -32,7 +32,7 @@ import { UpdateServicePickDialog } from '../../zones/update/services/update-serv
 import { UpdateServiceMenuDialog } from '../../zones/update/services/update-service-menu-dialog.js';
 import { UpdateIncidentsDialog } from '../../zones/update/incidents/update-incidents-dialog.js';
 import { LogFilterEditor } from '../../zones/logs/filters/log-filter-editor.js';
-import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
+import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/panes/logs-actions-menu.js';
 import { CommandBar } from '../screens/command-bar/command-bar.js';
 import { RepoRegistryScreen } from '../screens/repo-registry-screen.js';
 import { SettingsScreen } from '../screens/settings-screen.js';
@@ -363,12 +363,12 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/actions-menu-loading',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null }), restartMode: 'simple' }),
   },
   {
     id: 'logs/actions-menu',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () =>
       createElement(LogsActionsMenu, {
         menu: actionsMenu({
@@ -385,7 +385,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/actions-menu-error',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }), restartMode: 'simple' }),
   },
   { id: 'shared/keybinding-help', file: 'shared/components/dialogs/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },

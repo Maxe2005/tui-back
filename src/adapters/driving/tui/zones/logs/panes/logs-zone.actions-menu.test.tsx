@@ -1,10 +1,10 @@
 // tui/zones/logs: real-keypress actions menu (a).
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import type { ServiceAction } from '../../../../../core/service-actions/index.js';
-import { KEYS } from '../../shared/test-support/fake-tty.js';
-import { LogsZone } from './logs-zone.js';
-import { service, press, pressEscape, mount, seedStore } from './logs-zone.test-support.js';
+import type { ServiceAction } from '../../../../../../core/service-actions/index.js';
+import { KEYS } from '../../../shared/test-support/fake-tty.js';
+import { LogsZone } from '../logs-zone.js';
+import { service, press, pressEscape, mount, seedStore } from '../logs-zone.test-support.js';
 
 // The `a` actions menu: the service-action registry's rows for the focused pane, in a MenuList.
 describe('LogsZone actions menu (a)', () => {

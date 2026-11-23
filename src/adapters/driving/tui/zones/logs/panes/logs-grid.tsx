@@ -2,10 +2,10 @@
 // one LogsPaneView per pane; purely presentational, all keystroke handling stays in LogsZone's
 // useInput.
 import { Box, Text } from 'ink';
-import { colors } from '../../shared/theme/theme.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { RestartMode } from '../../../../../core/service-actions/index.js';
-import type { LogsPaneData } from '../../store/app-store.js';
+import { colors } from '../../../shared/theme/theme.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import type { RestartMode } from '../../../../../../core/service-actions/index.js';
+import type { LogsPaneData } from '../../../store/app-store.js';
 import { LogsPaneView } from './logs-pane-view.js';
 import {
   isPaneEngagedInGlobalFilter,
@@ -13,7 +13,7 @@ import {
   type GridLayout,
   type LogFilterScope,
   type VisibilityFlags,
-} from './logic/logs-zone.logic.js';
+} from '../logic/logs-zone.logic.js';
 
 export function LogsGrid({
   panes,

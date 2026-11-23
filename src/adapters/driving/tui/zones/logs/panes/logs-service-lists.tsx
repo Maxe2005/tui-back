@@ -1,15 +1,15 @@
 // tui/zones/logs: logs-service-lists — the Logs zone's left pane: the active-EDT and other-services
 // checkbox lists with health badges, the info-only no-container section and the legend hints.
 import { Box, Text } from 'ink';
-import { BoundedList } from '../../shared/components/lists/bounded-list.js';
-import { CheckboxListItem } from '../../shared/components/pickers/checkbox-list-item.js';
-import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
-import { formatHint } from '../../shared/components/dialogs/hints.js';
-import { STATUS_BADGES, StatusBadge } from '../../shared/components/feedback/status-badge.js';
-import { colors, spacing } from '../../shared/theme/theme.js';
-import { logsLegendHints, formatHealthLabel, healthBadgeState } from './logic/logs-zone.logic.js';
-import { StateLine } from '../../shared/components/feedback/state-line.js';
-import type { LogsZoneCtx } from './logs-zone.ctx.js';
+import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
+import { CheckboxListItem } from '../../../shared/components/pickers/checkbox-list-item.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
+import { formatHint } from '../../../shared/components/dialogs/hints.js';
+import { STATUS_BADGES, StatusBadge } from '../../../shared/components/feedback/status-badge.js';
+import { colors, spacing } from '../../../shared/theme/theme.js';
+import { logsLegendHints, formatHealthLabel, healthBadgeState } from '../logic/logs-zone.logic.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
+import type { LogsZoneCtx } from '../logs-zone.ctx.js';
 
 // The info-only list of services without a container never takes more than this.
 const WITHOUT_CONTAINER_MAX_ROWS = 5;

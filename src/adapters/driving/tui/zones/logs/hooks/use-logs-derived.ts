@@ -13,7 +13,7 @@ import {
   type FilterEditorState,
   type LogFilterScope,
 } from '../logic/logs-zone.logic.js';
-import { logsActionsMenuRows } from '../logs-actions-menu.js';
+import { logsActionsMenuRows } from '../panes/logs-actions-menu.js';
 import type { LogsState } from './use-logs-state.js';
 
 export function useLogsDerived(s: LogsState) {

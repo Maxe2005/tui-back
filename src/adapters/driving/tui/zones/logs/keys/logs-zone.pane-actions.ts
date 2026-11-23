@@ -2,7 +2,7 @@
 // the oldest-line history fetch), the `a` actions menu, registry shortcuts and the service name
 // of a pane. Plain functions rebuilt each render over the zone's state, like the original closures.
 import { basename } from 'node:path';
-import { LOGS_ACTIONS_MENU_LIST_ERROR } from '../logs-actions-menu.js';
+import { LOGS_ACTIONS_MENU_LIST_ERROR } from '../panes/logs-actions-menu.js';
 import {
   adjustScrollOffset,
   applyLogRules,
