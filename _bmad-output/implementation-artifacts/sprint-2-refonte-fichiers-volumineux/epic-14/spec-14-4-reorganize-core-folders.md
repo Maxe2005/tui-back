@@ -2,7 +2,7 @@
 title: 'Reorganize core folders'
 type: 'refactor'
 created: '2026-11-23'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'e32bc0ec7291251361220b56ffd20faa65bd8f4f'
 review_loop_iteration: 0
 context:
