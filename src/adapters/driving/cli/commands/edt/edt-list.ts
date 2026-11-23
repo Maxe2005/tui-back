@@ -1,10 +1,10 @@
 // cli/commands/edt-list: `edt list` — every registered EDT, with a `kind` marking the
 // preconfigured "Shared branches" system EDT (`system-shared`, present only while
 // `edts.sharedBranchesEdtEnabled` is on) apart from ordinary EDTs (`user`).
-import { err, ok, type Result } from '../../../../core/result.js';
-import type { StatePort } from '../../../../core/ports/storage/state.js';
-import type { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
-import { isSystemEdt } from '../../../../core/edt/shared-edt/shared-edt.js';
+import { err, ok, type Result } from '../../../../../core/result.js';
+import type { StatePort } from '../../../../../core/ports/storage/state.js';
+import type { EdtRegistryPort } from '../../../../../core/ports/storage/edt-registry.js';
+import { isSystemEdt } from '../../../../../core/edt/shared-edt/shared-edt.js';
 
 export const EDT_LIST_USAGE = 'tui-back edt list';
 

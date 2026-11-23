@@ -8,7 +8,7 @@ import { generateBashCompletion } from './completion-spec.js';
 import { createInstallSubcommand } from './install.js';
 import type { SubcommandDeps } from './commands/deps.js';
 import { dashboardSubcommand, edtsSubcommand, listReposSubcommand, pingSubcommand, registerSubcommand, scanSubcommand } from './commands/basic.js';
-import { edtSubcommand } from './commands/edt.js';
+import { edtSubcommand } from './commands/edt/edt.js';
 import { updateSubcommand } from './commands/update.js';
 import { realignSubcommand } from './commands/realign.js';
 import { healSubcommand } from './commands/heal.js';

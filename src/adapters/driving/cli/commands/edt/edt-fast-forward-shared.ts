@@ -1,10 +1,10 @@
 // cli/commands/edt-fast-forward-shared: `edt fast-forward-shared` — fast-forwards each managed
 // service's local shared branch from origin without switching EDT. Needs the
 // "Shared branches" EDT setting on (`edt-not-found` otherwise); exits non-zero when any row failed.
-import { err, ok, type Result } from '../../../../core/result.js';
-import { anyFastForwardFailed, fastForwardShared, FAST_FORWARD_FAILED_CODE } from '../../../../core/edt/branches/fast-forward-shared.js';
-import type { GitPort } from '../../../../core/ports/vcs/git.js';
-import type { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import { err, ok, type Result } from '../../../../../core/result.js';
+import { anyFastForwardFailed, fastForwardShared, FAST_FORWARD_FAILED_CODE } from '../../../../../core/edt/branches/fast-forward-shared.js';
+import type { GitPort } from '../../../../../core/ports/vcs/git.js';
+import type { EdtRegistryPort } from '../../../../../core/ports/storage/edt-registry.js';
 
 export const EDT_FAST_FORWARD_SHARED_USAGE = 'tui-back edt fast-forward-shared';
 

@@ -1,22 +1,22 @@
 // cli/commands/edt-switch: `edt switch` usage, flag parsing and runner.
-import { err, ok, type Result } from '../../../../core/result.js';
-import { type DirtyPolicy, switchActiveEdt } from '../../../../core/edt/switch/switch.js';
-import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention } from '../../../../core/edt/switch/restart/switch-restart.js';
-import { createServiceActions } from '../../../../core/service-actions/index.js';
-import { ContainerPort } from '../../../../core/ports/runtime/container.js';
-import { DockerPort } from '../../../../core/ports/runtime/docker.js';
-import { EditorPort } from '../../../../core/ports/runtime/editor.js';
-import { HealthProbePort } from '../../../../core/ports/runtime/health-probe.js';
-import { GitPort } from '../../../../core/ports/vcs/git.js';
-import { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
-import { ManifestCarryPort } from '../../../../core/ports/vcs/manifest-carry.js';
-import { RestartPort } from '../../../../core/ports/runtime/restart.js';
-import { RegistryPort } from '../../../../core/ports/storage/registry.js';
-import { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
-import { LockPort } from '../../../../core/ports/runtime/lock.js';
-import { SWITCH_RESTART_MODES, healthCheckEnabledFrom, type Settings, type SettingsPort, type SwitchRestartMode } from '../../../../core/ports/storage/settings.js';
-import { StatePort } from '../../../../core/ports/storage/state.js';
-import { loadSettingsOrDefaults } from './shared.js';
+import { err, ok, type Result } from '../../../../../core/result.js';
+import { type DirtyPolicy, switchActiveEdt } from '../../../../../core/edt/switch/switch.js';
+import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention } from '../../../../../core/edt/switch/restart/switch-restart.js';
+import { createServiceActions } from '../../../../../core/service-actions/index.js';
+import { ContainerPort } from '../../../../../core/ports/runtime/container.js';
+import { DockerPort } from '../../../../../core/ports/runtime/docker.js';
+import { EditorPort } from '../../../../../core/ports/runtime/editor.js';
+import { HealthProbePort } from '../../../../../core/ports/runtime/health-probe.js';
+import { GitPort } from '../../../../../core/ports/vcs/git.js';
+import { ManifestPort } from '../../../../../core/ports/vcs/manifest.js';
+import { ManifestCarryPort } from '../../../../../core/ports/vcs/manifest-carry.js';
+import { RestartPort } from '../../../../../core/ports/runtime/restart.js';
+import { RegistryPort } from '../../../../../core/ports/storage/registry.js';
+import { EdtRegistryPort } from '../../../../../core/ports/storage/edt-registry.js';
+import { LockPort } from '../../../../../core/ports/runtime/lock.js';
+import { SWITCH_RESTART_MODES, healthCheckEnabledFrom, type Settings, type SettingsPort, type SwitchRestartMode } from '../../../../../core/ports/storage/settings.js';
+import { StatePort } from '../../../../../core/ports/storage/state.js';
+import { loadSettingsOrDefaults } from '../shared.js';
 
 export const EDT_SWITCH_USAGE =
   'tui-back edt switch --to <topic> [--force] [--discard-dirty | --adopt-dirty [--adopt-branch <name>]] [--restart none|simple|clean]' +
