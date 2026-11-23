@@ -7,10 +7,10 @@ import {
   stepSuggestField,
   validateSuggestValue,
   type SuggestFieldState,
-} from '../../shared/components/suggest-field.logic.js';
+} from '../../shared/components/inputs/suggest-field.logic.js';
 import type { SharedTypesMode } from '../../../../../core/shared-types/smart-update.js';
 import type { FooterContextId } from '../../keybindings/index.js';
-import type { TextEditKey } from '../../shared/components/text-edit.js';
+import type { TextEditKey } from '../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import { nextCursorForKey } from '../../shared/keys/list-cursor.js';
 import {

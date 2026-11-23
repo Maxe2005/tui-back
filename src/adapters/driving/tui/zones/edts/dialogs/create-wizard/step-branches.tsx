@@ -4,8 +4,8 @@
 // "Configure <service>" box). Tab switches panels; Enter never advances the wizard here. Esc
 // closes the innermost element first. A pure reducer (reduceBranchStepKey) handles the keys.
 import { Box, Text, type Key } from 'ink';
-import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/text-edit.js';
-import { TextInputLine } from '../../../../shared/components/text-input-line.js';
+import { nextTextInputValue, type TextEditKey } from '../../../../shared/components/inputs/text-edit.js';
+import { TextInputLine } from '../../../../shared/components/inputs/text-input-line.js';
 import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import type { BranchStepState, CreateDialogState, EdtDialogState } from '../../edts-zone.logic.js';

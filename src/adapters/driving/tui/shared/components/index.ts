@@ -27,9 +27,9 @@ export type { BoundedListProps, BoundedListVisibility } from './bounded-list.js'
 export { CheckboxListItem } from './checkbox-list-item.js';
 export type { CheckboxListItemProps, ResolvedCheckboxItem } from './checkbox-list-item.js';
 export { resolveCheckboxItemLayout } from './checkbox-list-item.js';
-export { TextInputLine } from './text-input-line.js';
-export type { TextInputLineProps, ResolvedTextInputLine } from './text-input-line.js';
-export { resolveTextInputLineLayout } from './text-input-line.js';
+export { TextInputLine } from './inputs/text-input-line.js';
+export type { TextInputLineProps, ResolvedTextInputLine } from './inputs/text-input-line.js';
+export { resolveTextInputLineLayout } from './inputs/text-input-line.js';
 export { Splitter } from './splitter.js';
 export type { SplitterProps } from './splitter.js';
 export { Spinner } from './feedback/spinner.js';
@@ -69,7 +69,7 @@ export {
   isBranchAutocompleteExactMatch,
   resolveBranchAutocompleteValidity,
   handleBranchAutocompleteKey,
-} from './branch-autocomplete-input.js';
+} from './inputs/branch-autocomplete-input.js';
 export type {
   BranchAutocompleteStatus,
   BranchAutocompleteState,
@@ -77,7 +77,7 @@ export type {
   BranchAutocompleteKey,
   BranchAutocompleteKeyResult,
   BranchAutocompleteInputProps,
-} from './branch-autocomplete-input.js';
+} from './inputs/branch-autocomplete-input.js';
 export {
   FilterablePickList,
   FILTERABLE_PICK_LIST_MAX_ROWS,

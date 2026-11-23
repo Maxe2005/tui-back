@@ -7,7 +7,7 @@ beforeAll(() => {
 
 describe('TextInputLine focused styling (inverse cursor when focused)', () => {
   it('renders inverse code when focused', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
 
     const output = await renderToString(<TextInputLine label="Topic" value="foo" focused />);
@@ -16,7 +16,7 @@ describe('TextInputLine focused styling (inverse cursor when focused)', () => {
   });
 
   it('does not render inverse code when unfocused', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
 
     const output = await renderToString(<TextInputLine label="Topic" value="foo" focused={false} />);
@@ -24,7 +24,7 @@ describe('TextInputLine focused styling (inverse cursor when focused)', () => {
   });
 
   it('does not render inverse code when focused omitted (defaults to unfocused)', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
 
     const output = await renderToString(<TextInputLine label="Topic" value="foo" />);
@@ -34,7 +34,7 @@ describe('TextInputLine focused styling (inverse cursor when focused)', () => {
 
 describe('TextInputLine cursor placement styling (inverse glyph tracks cursor)', () => {
   it('wraps the character at `cursor` in the inverse code, not the trailing character', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
 
     // cursor: 1 sits on 'b' — the inverse escape must immediately precede 'b', not 'd' (the
@@ -44,7 +44,7 @@ describe('TextInputLine cursor placement styling (inverse glyph tracks cursor)',
   });
 
   it("wraps the trailing inverse space when cursor equals value.length (today's look, unchanged)", async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
 
     const output = await renderToString(<TextInputLine label="Topic" value="abcd" cursor={4} focused />);
@@ -52,7 +52,7 @@ describe('TextInputLine cursor placement styling (inverse glyph tracks cursor)',
   });
 
   it("wraps the character at cursor:2 in the inverse code (matches the plain-text test's mid-string scenario)", async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { TextInputLine } = await import('./text-input-line.js');
 
     const output = await renderToString(<TextInputLine label="Topic" value="abcd" cursor={2} focused />);

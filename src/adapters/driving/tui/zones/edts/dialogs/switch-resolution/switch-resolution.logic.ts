@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { isSystemEdt } from '../../../../../../../core/edt/shared-edt.js';
 import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
 import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';

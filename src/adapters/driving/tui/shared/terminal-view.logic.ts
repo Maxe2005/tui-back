@@ -2,7 +2,7 @@
 // resolves to for the current focus and run state, which footer context shows, and the layout
 // numbers. The status-line wording lives store-side (store/slices/terminal-text.ts).
 import type { FooterContextId } from '../keybindings/index.js';
-import type { TextEditKey } from './components/text-edit.js';
+import type { TextEditKey } from './components/inputs/text-edit.js';
 import { resolveFocusStep } from './keys/focus-navigation.js';
 
 export type TerminalFocus = 'prompt' | 'output';

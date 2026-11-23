@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { Box } from 'ink';
-import { colors } from '../theme/theme.js';
-import { TextInputLine, resolveTextInputLineLayout } from './index.js';
+import { colors } from '../../theme/theme.js';
+import { TextInputLine, resolveTextInputLineLayout } from '../index.js';
 import { windowAroundCaret } from './text-input-line.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 
 describe('resolveTextInputLineLayout', () => {
   it('resolves unfocused: text color, no cursor', () => {

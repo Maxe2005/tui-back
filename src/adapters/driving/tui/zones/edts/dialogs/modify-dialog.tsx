@@ -11,8 +11,8 @@ import { BranchPicker, handleBranchPickerKey, type BranchPickerOutcome } from '.
 import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
 import { FailedResultList } from '../../../shared/components/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
-import { TextInputLine } from '../../../shared/components/text-input-line.js';
-import { nextTextInputValue } from '../../../shared/components/text-edit.js';
+import { TextInputLine } from '../../../shared/components/inputs/text-input-line.js';
+import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 import { colors } from '../../../shared/theme/theme.js';
 import {

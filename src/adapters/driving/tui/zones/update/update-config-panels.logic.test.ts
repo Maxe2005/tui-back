@@ -27,7 +27,7 @@ import {
   type PanelsViewState,
   updateConfigFooterContext,
 } from './update-config-panels.logic.js';
-import { createSuggestFieldState } from '../../shared/components/suggest-field.logic.js';
+import { createSuggestFieldState } from '../../shared/components/inputs/suggest-field.logic.js';
 
 const ROWS = [
   { service: 'api', repoPath: '/r/api', sourceBranch: 'development' },

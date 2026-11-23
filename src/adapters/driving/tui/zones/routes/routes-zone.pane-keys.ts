@@ -6,7 +6,7 @@ import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
 import { handleRequestTabKey } from './routes-zone.request-keys.js';
 import { handleResponseTabKey } from './routes-zone.response-keys.js';
 import { handleSavedTabKey } from './routes-zone.saved-tab-keys.js';
-import { nextTextInputValue } from '../../shared/components/text-edit.js';
+import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
 import { resolveTabNavKey, stepTab } from '../../shared/keys/tab-navigation.js';
 
 export function handlePaneKey(c: RoutesZoneCtx, input: string, key: Key): void {

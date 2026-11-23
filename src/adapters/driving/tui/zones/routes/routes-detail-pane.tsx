@@ -9,7 +9,7 @@ import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
 import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
 import { RoutesSavedTab } from './routes-saved-tab.js';
-import { TextInputLine } from '../../shared/components/text-input-line.js';
+import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
 import { formatRouteDetail } from './routes-zone.logic.js';
 

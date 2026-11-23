@@ -8,7 +8,7 @@ import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
 import { DimAnnotation } from './components/feedback/dim-annotation.js';
 import { ModalDialog } from './components/dialogs/modal-dialog.js';
-import type { TextInputState } from './components/text-edit.js';
+import type { TextInputState } from './components/inputs/text-edit.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
 import { resolveFocusStep } from './keys/focus-navigation.js';
 import { nextCursorForKey } from './keys/list-cursor.js';

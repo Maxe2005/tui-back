@@ -10,7 +10,7 @@ const SRC = fileURLToPath(new URL('../../../../../', import.meta.url));
 const ALLOWED = new Set([
   'adapters/driving/tui/shared/keys/focus-navigation.ts',
   'adapters/driving/tui/shared/command-bar.tsx',
-  'adapters/driving/tui/shared/components/text-edit.ts',
+  'adapters/driving/tui/shared/components/inputs/text-edit.ts',
   'adapters/driving/tui/shared/components/branch-picker.tsx',
   'adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx',
   'adapters/driving/tui/zones/routes/routes-zone.overlay-keys.ts',

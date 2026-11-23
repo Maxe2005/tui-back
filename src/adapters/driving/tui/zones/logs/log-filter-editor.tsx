@@ -10,7 +10,7 @@ import {
 } from '../../shared/command-bar.js';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
-import { TextInputLine } from '../../shared/components/text-input-line.js';
+import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
 import { BoundedList } from '../../shared/components/bounded-list.js';
 import { MAX_RULE_SETS } from '../../../../../core/logs/rule-sets.js';

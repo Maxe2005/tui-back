@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
-import { useElementSize } from '../hooks/use-element-size.js';
-import { colors } from '../theme/theme.js';
+import { useElementSize } from '../../hooks/use-element-size.js';
+import { colors } from '../../theme/theme.js';
 
 export type TextInputLineProps = {
   label: string;

@@ -4,7 +4,7 @@
 // the pure reducers into draft/store changes. The zone's `useInput` only forwards keys here.
 import { useEffect, useRef, useState } from 'react';
 import type { Result } from '../../../../../core/result.js';
-import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/suggest-field.logic.js';
+import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/inputs/suggest-field.logic.js';
 import { applyMergeStrategy, type UpdateConfigDraft } from './update-config-dialog.logic.js';
 import {
   checkEdtChoice,

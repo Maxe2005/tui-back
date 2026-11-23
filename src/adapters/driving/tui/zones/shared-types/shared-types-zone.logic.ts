@@ -4,7 +4,7 @@
 import type { PropagateOptions, PropagateServiceResult, PropagateStep } from '../../../../../core/shared-types/propagate-version.js';
 import { isValidVersion } from '../../../../../core/shared-types/propagate-version.js';
 import type { ServiceAction } from '../../../../../core/service-actions/index.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/text-edit.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/inputs/text-edit.js';
 import { resolveMenuKey, type MenuItem, type MenuKey, type MenuStep } from '../../shared/components/menu-list.js';
 import { SHARED_TYPES_ACTIONS, type SharedTypesActionId } from '../../keybindings/keybindings.js';
 

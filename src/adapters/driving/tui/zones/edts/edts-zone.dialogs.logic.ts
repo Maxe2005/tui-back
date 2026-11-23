@@ -9,7 +9,7 @@ import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState
 import { type FailedResultRow } from '../../shared/components/failed-result-list.js';
 import type { MenuItem } from '../../shared/components/menu-list.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
-import type { TextInputState } from '../../shared/components/text-edit.js';
+import type { TextInputState } from '../../shared/components/inputs/text-edit.js';
 import type { SwitchRestartRunMode } from '../../../../../core/edt/switch-restart.js';
 import type { SwitchResolutionState } from './dialogs/switch-resolution/switch-resolution.logic.js';
 import type { FormFocus } from './edts-zone.focus.logic.js';

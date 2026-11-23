@@ -5,8 +5,8 @@
 // line, all truncated to a single line — nothing here can wrap.
 import { Box, Text } from 'ink';
 import { ModalDialog } from '../../shared/components/dialogs/modal-dialog.js';
-import { BranchAutocompleteInput } from '../../shared/components/branch-autocomplete-input.js';
-import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/suggest-field.logic.js';
+import { BranchAutocompleteInput } from '../../shared/components/inputs/branch-autocomplete-input.js';
+import { createSuggestFieldState, type SuggestFieldState } from '../../shared/components/inputs/suggest-field.logic.js';
 import { colors } from '../../shared/theme/theme.js';
 import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../edts/dialogs/branch-plan-table.js';
 import type { UpdateConfigDraft, UpdateConfigRow } from './update-config-dialog.logic.js';

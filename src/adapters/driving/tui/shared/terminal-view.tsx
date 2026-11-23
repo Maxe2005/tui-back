@@ -12,8 +12,8 @@ import { useAppStore, type AppStore, type TerminalLine } from '../store/app-stor
 import { useBounds } from './bounds/bounds-context.js';
 import { FullscreenFrame } from './components/fullscreen-frame.js';
 import { ScrollableOutput } from './components/display/scrollable-output.js';
-import { nextTextInputValue, type TextInputState } from './components/text-edit.js';
-import { TextInputLine } from './components/text-input-line.js';
+import { nextTextInputValue, type TextInputState } from './components/inputs/text-edit.js';
+import { TextInputLine } from './components/inputs/text-input-line.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
 import { useInput } from './hooks/use-input.js';
 import { resolveHistoryBrowseDown, resolveHistoryBrowseUp, type HistoryBrowseState } from './input-history/index.js';

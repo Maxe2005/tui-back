@@ -5,7 +5,7 @@
 import { Box, Text } from 'ink';
 import type { SwitchDirtyRepo } from '../../../../../../../core/edt/switch.js';
 import { BoundedList } from '../../../../shared/components/bounded-list.js';
-import { TextInputLine } from '../../../../shared/components/text-input-line.js';
+import { TextInputLine } from '../../../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan-table.js';
 import {

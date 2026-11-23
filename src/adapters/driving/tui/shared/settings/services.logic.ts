@@ -1,5 +1,5 @@
 // tui/shared/settings/services.logic: the Services tab's row model and key mapping (per-service health-check toggle). Pure; no Ink/React.
-import type { TextEditKey } from '../components/text-edit.js';
+import type { TextEditKey } from '../components/inputs/text-edit.js';
 import { nextCursorForKey } from '../keys/list-cursor.js';
 import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../../core/edt/list.js';
 

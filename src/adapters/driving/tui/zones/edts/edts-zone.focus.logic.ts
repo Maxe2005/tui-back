@@ -1,6 +1,6 @@
 // tui/zones/edts: base-view and form focus cycling, member selection and branch-name suggestions.
 import { stepFocus, type FocusNavDeclaration, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
-import type { TextInputState } from '../../shared/components/text-edit.js';
+import type { TextInputState } from '../../shared/components/inputs/text-edit.js';
 import type { BranchStepState } from './edts-zone.wizard.logic.js';
 import { partitionServicesByEdtMembership } from './edts-zone.format.logic.js';
 

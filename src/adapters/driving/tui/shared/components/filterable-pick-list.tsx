@@ -7,8 +7,8 @@ import { Box } from 'ink';
 import { BoundedList } from './bounded-list.js';
 import { DimAnnotation } from './feedback/dim-annotation.js';
 import { ListRow } from './list-row.js';
-import { nextTextInputValue, type TextEditKey } from './text-edit.js';
-import { TextInputLine } from './text-input-line.js';
+import { nextTextInputValue, type TextEditKey } from './inputs/text-edit.js';
+import { TextInputLine } from './inputs/text-input-line.js';
 
 // The row budget of every pick dialog — one shared constant, deliberately not a prop, so the
 // dialogs can never disagree on how tall the list gets. A *total* budget in BoundedList's

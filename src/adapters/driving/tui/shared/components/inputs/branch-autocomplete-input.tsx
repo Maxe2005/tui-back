@@ -9,9 +9,9 @@ import { Box, Text } from 'ink';
 // that path would close an import cycle (autocomplete -> edts-zone.logic -> branch-picker ->
 // autocomplete).
 import { nextTextInputValue, type TextEditKey } from './text-edit.js';
-import { colors } from '../theme/theme.js';
+import { colors } from '../../theme/theme.js';
 import { TextInputLine } from './text-input-line.js';
-import { StateLine } from './feedback/state-line.js';
+import { StateLine } from '../feedback/state-line.js';
 
 export type BranchAutocompleteStatus = 'loading' | 'ready' | 'error';
 

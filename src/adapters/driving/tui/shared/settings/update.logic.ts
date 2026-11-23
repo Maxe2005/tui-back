@@ -1,5 +1,5 @@
 // tui/shared/settings/update.logic: the Update tab's rows, hints, concurrency clamp/adjust/parse and key mapping. Pure; no Ink/React.
-import type { TextEditKey } from '../components/text-edit.js';
+import type { TextEditKey } from '../components/inputs/text-edit.js';
 import { nextCursorForKey } from '../keys/list-cursor.js';
 import { MAX_UPDATE_CONCURRENCY, MIN_UPDATE_CONCURRENCY, type Settings, type UpdateMergeSourceDefault } from '../../../../../core/ports/settings.js';
 

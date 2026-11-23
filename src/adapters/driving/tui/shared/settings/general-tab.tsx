@@ -2,9 +2,9 @@
 import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../components/checkbox-list-item.js';
 import { DimAnnotation } from '../components/feedback/dim-annotation.js';
-import { TextInputLine } from '../components/text-input-line.js';
+import { TextInputLine } from '../components/inputs/text-input-line.js';
 import { colors } from '../theme/theme.js';
-import type { TextInputState } from '../components/text-edit.js';
+import type { TextInputState } from '../components/inputs/text-edit.js';
 import { EDITOR_COMMAND_PLACEHOLDER_TEXT, GENERAL_SETTINGS_ROWS } from './general.logic.js';
 import type { Settings } from '../../../../../core/ports/settings.js';
 

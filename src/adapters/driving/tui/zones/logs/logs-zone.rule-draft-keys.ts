@@ -1,6 +1,6 @@
 // tui/zones/logs: logs-zone.rule-draft-keys — the filter editor's rule-draft view: history grid
 // browser keys, mode/action/target toggles, caret moves, arrow-recall and text editing.
-import { nextTextInputValue } from '../../shared/components/text-edit.js';
+import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
 import { resolveHistoryBrowseDown, resolveHistoryBrowseUp } from '../../shared/input-history/index.js';
 import { commandAtGridCursor, groupCommandsByColumn, layoutCommandGrid, moveGridCursorHorizontal, moveGridCursorVertical, resolveGridHorizontalDirection, resolveGridVerticalDirection } from '../../shared/command-bar.js';

@@ -8,7 +8,7 @@ import { Box, Text } from 'ink';
 import { useInput } from './hooks/use-input.js';
 import { CheckboxListItem } from './components/checkbox-list-item.js';
 import { DimAnnotation } from './components/feedback/dim-annotation.js';
-import { TextInputLine } from './components/text-input-line.js';
+import { TextInputLine } from './components/inputs/text-input-line.js';
 import { StateLine } from './components/feedback/state-line.js';
 import { useFooterContext } from './hooks/use-footer-context.js';
 import type { FooterContextId } from '../keybindings/index.js';

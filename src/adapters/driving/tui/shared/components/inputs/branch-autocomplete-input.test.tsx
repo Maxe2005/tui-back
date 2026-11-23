@@ -2,7 +2,7 @@
 // covers every keystroke, since renderToString's fake stdin never emits keys) plus render
 // smoke coverage of the dropdown cap, the overflow line, and the glyph-paired validity signal.
 import { describe, it, expect } from 'vitest';
-import { colors } from '../theme/theme.js';
+import { colors } from '../../theme/theme.js';
 import {
   BranchAutocompleteInput,
   createBranchAutocompleteState,
@@ -13,7 +13,7 @@ import {
   resolveBranchAutocompleteValidity,
   type BranchAutocompleteState,
 } from './branch-autocomplete-input.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 
 const BRANCHES = ['development', 'feat-x', 'fix-y'];
 

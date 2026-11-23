@@ -4,7 +4,7 @@ import { useWindowSize } from 'ink';
 import type { AppStore } from '../../store/app-store.js';
 import type { JsonScalarKind } from '../../shared/components/json-tree/model.js';
 import type { RequestRowSection, RequestSection } from './routes-request.logic.js';
-import type { TextInputState } from '../../shared/components/text-edit.js';
+import type { TextInputState } from '../../shared/components/inputs/text-edit.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../shared/components/filterable-pick-list.js';
 import { useElementSize } from '../../shared/hooks/use-element-size.js';
 

@@ -7,7 +7,7 @@ import {
   handleFilterablePickListKey,
   matchPickItemsBySubstring,
 } from '../../shared/components/filterable-pick-list.js';
-import { nextTextInputValue } from '../../shared/components/text-edit.js';
+import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
 import { resolveRouteIndex } from './routes-request.logic.js';
 import { routeKeyFor } from '../../shared/components/json-tree/model.js';
 
