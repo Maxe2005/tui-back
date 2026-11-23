@@ -1,13 +1,13 @@
 // tui/zones/routes: routes-zone.pane-keys — key dispatcher while the right pane holds focus. Open sub-editors own every key first; then Ctrl+R fires,
 // Ctrl+→/N and Ctrl+←/P switch sub-tabs (no wrap), `s` saves, and each tab handles the rest.
 import type { Key } from 'ink';
-import type { RoutesZoneCtx } from './routes-zone.ctx.js';
-import { ROUTES_PANE_TABS } from '../../store/slices/workspace/routes-slice.js';
+import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
+import { ROUTES_PANE_TABS } from '../../../store/slices/workspace/routes-slice.js';
 import { handleRequestTabKey } from './routes-zone.request-keys.js';
 import { handleResponseTabKey } from './routes-zone.response-keys.js';
 import { handleSavedTabKey } from './routes-zone.saved-tab-keys.js';
-import { nextTextInputValue } from '../../shared/components/inputs/text-edit.js';
-import { resolveTabNavKey, stepTab } from '../../shared/keys/tab-navigation.js';
+import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
+import { resolveTabNavKey, stepTab } from '../../../shared/keys/tab-navigation.js';
 
 export function handlePaneKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const {

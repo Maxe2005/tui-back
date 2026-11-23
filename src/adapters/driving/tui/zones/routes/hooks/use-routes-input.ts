@@ -6,9 +6,9 @@ import {
   handlePickerKey,
   handleSavedTabDeleteConfirmKey,
   handleSavePromptKey,
-} from '../routes-zone.overlay-keys.js';
-import { handleFilterEditingKey, handleListKey } from '../routes-zone.list-keys.js';
-import { handlePaneKey } from '../routes-zone.pane-keys.js';
+} from '../keys/routes-zone.overlay-keys.js';
+import { handleFilterEditingKey, handleListKey } from '../keys/routes-zone.list-keys.js';
+import { handlePaneKey } from '../keys/routes-zone.pane-keys.js';
 import { useInput } from '../../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
 

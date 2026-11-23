@@ -1,15 +1,15 @@
 // tui/zones/routes: routes-zone.request-keys — Request sub-tab keys: section switching, the body editor (tree + rules panel) and the params/query/headers row cursor.
 import type { Key } from 'ink';
-import type { RoutesZoneCtx } from './routes-zone.ctx.js';
+import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import {
   clampTreeSelection,
   removeActiveRule,
   resolveTreeKeyAction,
   resolveTreePanelKeyAction,
-} from '../../shared/components/json-tree/model.js';
-import { moveRoutesSelection, resolveRoutesDirection } from './routes-zone.logic.js';
-import { nextRequestSection, type RequestRowSection } from './routes-request.logic.js';
-import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
+} from '../../../shared/components/json-tree/model.js';
+import { moveRoutesSelection, resolveRoutesDirection } from '../routes-zone.logic.js';
+import { nextRequestSection, type RequestRowSection } from '../routes-request.logic.js';
+import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 
 export function handleRequestTabKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const {

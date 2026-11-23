@@ -1,13 +1,13 @@
 // tui/zones/routes: routes-zone.response-keys — Response sub-tab keys: Esc unwinds the rules panel then returns to Request; the tree/raw keys follow the tree model.
 import type { Key } from 'ink';
-import type { RoutesZoneCtx } from './routes-zone.ctx.js';
+import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import {
   clampTreeSelection,
   moveTreeSelection,
   removeActiveRule,
   resolveTreeKeyAction,
   resolveTreePanelKeyAction,
-} from '../../shared/components/json-tree/model.js';
+} from '../../../shared/components/json-tree/model.js';
 
 export function handleResponseTabKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const {

@@ -2,12 +2,12 @@
 // arrows/`j`/`k` move, `Enter` loads into Request, `d` deletes through the confirm, `r` reloads the library,
 // `Esc` clears the filter first, then returns to the list.
 import type { Key } from 'ink';
-import type { RoutesZoneCtx } from './routes-zone.ctx.js';
+import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import {
   clampPickListCursor,
   handleFilterablePickListKey,
   matchPickItemsBySubstring,
-} from '../../shared/components/pickers/filterable-pick-list.js';
+} from '../../../shared/components/pickers/filterable-pick-list.js';
 
 export function handleSavedTabKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const {
