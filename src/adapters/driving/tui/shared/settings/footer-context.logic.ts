@@ -1,7 +1,7 @@
 // tui/shared/settings/footer-context.logic: which footer context the settings overlay advertises for the current tab and drill-down level. Pure; no Ink/React.
 import type { FooterContextId } from '../../keybindings/index.js';
 import type { SettingsTab } from './settings-tabs.logic.js';
-import type { SettingsGroupId } from './edts.logic.js';
+import type { SettingsGroupId } from './edts/edts.logic.js';
 import type { LogsSettingsGroupId } from './logs.logic.js';
 import type { PaletteSettingsGroupId } from './palette.logic.js';
 
