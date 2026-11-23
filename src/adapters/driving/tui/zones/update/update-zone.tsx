@@ -9,19 +9,19 @@ import { Box, Text } from 'ink';
 import { ZoneLayout } from '../../shared/components/index.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { FullscreenReport } from './fullscreen-report.js';
-import { UpdateDetailColumn } from './update-detail-column.js';
-import { UpdateServiceListColumn } from './update-service-list-column.js';
+import { FullscreenReport } from './report/fullscreen-report.js';
+import { UpdateDetailColumn } from './services/update-detail-column.js';
+import { UpdateServiceListColumn } from './services/update-service-list-column.js';
 import { UpdateZoneDialogs } from './update-zone-dialogs.js';
 import type { UpdateZoneCtx } from './update-zone.ctx.js';
-import { useUpdateDerived } from './use-update-derived.js';
-import { useUpdateEffects } from './use-update-effects.js';
-import { useUpdateInput } from './use-update-input.js';
-import { useUpdateState } from './use-update-state.js';
+import { useUpdateDerived } from './hooks/use-update-derived.js';
+import { useUpdateEffects } from './hooks/use-update-effects.js';
+import { useUpdateInput } from './hooks/use-update-input.js';
+import { useUpdateState } from './hooks/use-update-state.js';
 
 // Public surface unchanged: everything the pure modules export is still importable from here.
-export * from './update-zone.resolvers.logic.js';
-export * from './update-zone.blockers.logic.js';
+export * from './logic/update-zone.resolvers.logic.js';
+export * from './logic/update-zone.blockers.logic.js';
 
 // The zone opens on the global recap view with no service focused (`initialRecap`); an arrow
 // key focuses a service. Tests pass `initialRecap={false}` to start on a service.

@@ -6,7 +6,7 @@ import { DimAnnotation } from '../../../shared/components/feedback/dim-annotatio
 import { FailedResultList, type FailedResultRow } from '../../../shared/components/lists/failed-result-list.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
-import { summarizeFailedResults, type AddToEdtDialogState, type EdtDialogState } from '../edts-zone.logic.js';
+import { summarizeFailedResults, type AddToEdtDialogState, type EdtDialogState } from '../logic/edts-zone.logic.js';
 
 export type AddToEdtDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

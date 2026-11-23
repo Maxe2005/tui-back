@@ -16,7 +16,7 @@ import {
   summarizeFailedResults,
   type EdtDialogState,
   type ServiceActionsDialogState,
-} from '../edts-zone.logic.js';
+} from '../logic/edts-zone.logic.js';
 
 export type ServiceActionsDialogDeps = {
   setDialog: (updater: EdtDialogState | ((prev: EdtDialogState) => EdtDialogState)) => void;

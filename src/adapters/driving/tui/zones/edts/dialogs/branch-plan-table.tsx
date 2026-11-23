@@ -6,7 +6,7 @@
 import { Box, Text } from 'ink';
 import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
 import { colors } from '../../../shared/theme/theme.js';
-import { BRANCH_MAX_WIDTH, truncateBranchLabel } from '../edts-zone.logic.js';
+import { BRANCH_MAX_WIDTH, truncateBranchLabel } from '../logic/edts-zone.logic.js';
 
 export function PanelTitle({ text, focused }: { text: string; focused: boolean }) {
   return (

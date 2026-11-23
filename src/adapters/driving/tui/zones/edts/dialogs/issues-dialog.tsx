@@ -10,7 +10,7 @@ import { BoundedBlocks } from '../../../shared/components/lists/bounded-list.js'
 import { TruncatedText } from '../../../shared/components/display/truncated-text.js';
 import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../shared/theme/theme.js';
-import { explainIssueErrorCode, explainUnreachable } from '../edts-zone.logic.js';
+import { explainIssueErrorCode, explainUnreachable } from '../logic/edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/feedback/state-line.js';
 
 export type IssuesDialogViewProps = {

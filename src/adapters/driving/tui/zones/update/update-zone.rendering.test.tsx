@@ -1,5 +1,5 @@
 // tui/zones/update: renderToString coverage of the UpdateZone visual states and service-list shell.
-import { UPDATE_INCIDENTS_TITLE } from './update-incidents.logic.js';
+import { UPDATE_INCIDENTS_TITLE } from './incidents/update-incidents.logic.js';
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { render } from 'ink';

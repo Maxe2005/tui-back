@@ -9,24 +9,24 @@ import { ClampedParagraph } from '../../shared/components/display/truncated-text
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { FooterContext } from '../../shared/components/chrome/footer-context.js';
 import { ROUTES_LIST_CHROME_ROWS } from './routes-zone.constants.js';
-import { RoutesDetailPane } from './routes-detail-pane.js';
-import { RoutesListPane } from './routes-list-pane.js';
-import { RoutesModals } from './routes-modals.js';
+import { RoutesDetailPane } from './panes/routes-detail-pane.js';
+import { RoutesListPane } from './panes/routes-list-pane.js';
+import { RoutesModals } from './panes/routes-modals.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { canEditRouteBody, resolveAddParentPath } from '../../shared/components/json-tree/model.js';
 import { colors } from '../../shared/theme/theme.js';
-import { formatRoutesDisabledMessage, RoutesDisabledView, RoutesNoticeView } from './routes-zone.states.js';
-import { renderBodyNode, renderResponseNode } from './routes-zone.nodes.js';
-import { routesFooterContext } from './routes-zone.logic.js';
+import { formatRoutesDisabledMessage, RoutesDisabledView, RoutesNoticeView } from './panes/routes-zone.states.js';
+import { renderBodyNode, renderResponseNode } from './panes/routes-zone.nodes.js';
+import { routesFooterContext } from './logic/routes-zone.logic.js';
 import { type AppStore, useAppStore } from '../../store/app-store.js';
-import { useRoutesBodyEditor } from './use-routes-body-editor.js';
-import { useRoutesDerived } from './use-routes-derived.js';
-import { useRoutesEffects } from './use-routes-effects.js';
-import { useRoutesInput } from './use-routes-input.js';
-import { useRoutesPaneActions } from './use-routes-pane-actions.js';
-import { useRoutesResponseTree } from './use-routes-response-tree.js';
-import { useRoutesState } from './use-routes-state.js';
+import { useRoutesBodyEditor } from './hooks/use-routes-body-editor.js';
+import { useRoutesDerived } from './hooks/use-routes-derived.js';
+import { useRoutesEffects } from './hooks/use-routes-effects.js';
+import { useRoutesInput } from './hooks/use-routes-input.js';
+import { useRoutesPaneActions } from './hooks/use-routes-pane-actions.js';
+import { useRoutesResponseTree } from './hooks/use-routes-response-tree.js';
+import { useRoutesState } from './hooks/use-routes-state.js';
 
 export { formatRoutesDisabledMessage };
 

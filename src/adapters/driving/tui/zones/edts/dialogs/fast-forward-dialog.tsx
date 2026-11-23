@@ -9,7 +9,7 @@ import { ModalDialog } from '../../../shared/components/dialogs/modal-dialog.js'
 import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { TruncatedText } from '../../../shared/components/display/truncated-text.js';
 import { colors } from '../../../shared/theme/theme.js';
-import type { FastForwardDialogState } from '../edts-zone.logic.js';
+import type { FastForwardDialogState } from '../logic/edts-zone.logic.js';
 
 type Badge = { glyph: string; color: string; label: string };
 

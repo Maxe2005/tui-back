@@ -5,7 +5,7 @@ import type { RestartRow } from '../../../../../../core/edt/switch-restart.js';
 import type { FooterContextId } from '../../../keybindings/index.js';
 import type { HealRun } from '../../../store/app-store.js';
 
-export { HEAL_MODES } from '../../../store/slices/heal-slice.js';
+export { HEAL_MODES } from '../../../store/slices/maintenance/heal-slice.js';
 
 export const HEAL_CONFIRM_CLOSE_TEXT = 'The heal is still running — Enter closes this view and lets it finish in the background, Esc keeps it open.';
 

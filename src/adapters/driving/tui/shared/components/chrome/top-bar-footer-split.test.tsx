@@ -8,8 +8,8 @@ import { ZONE_LAYOUTS, clampBoundaryRatio, resolveBoundaryFlex } from '../../../
 import { renderToString } from '../render-to-string.js';
 import { focusNavFooterHint } from '../../keys/focus-navigation.js';
 import { createAppStore } from '../../../store/app-store.js';
-import { PANE_FOCUS_NAV } from '../../../zones/edts/edts-zone.logic.js';
-import { LOGS_PANE_FOCUS_NAV } from '../../../zones/logs/logs-zone.logic.js';
+import { PANE_FOCUS_NAV } from '../../../zones/edts/logic/edts-zone.logic.js';
+import { LOGS_PANE_FOCUS_NAV } from '../../../zones/logs/logic/logs-zone.logic.js';
 
 const EDTS: EdtRegistryEntry[] = [
   {

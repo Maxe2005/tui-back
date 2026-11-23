@@ -26,13 +26,13 @@ import {
   initialQuickPickDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
-} from '../../zones/edts/edts-zone.logic.js';
+} from '../../zones/edts/logic/edts-zone.logic.js';
 import { initialSwitchResolution } from '../../zones/edts/dialogs/switch-resolution/switch-resolution.logic.js';
-import { UpdateServicePickDialog } from '../../zones/update/update-service-pick-dialog.js';
-import { UpdateServiceMenuDialog } from '../../zones/update/update-service-menu-dialog.js';
-import { UpdateIncidentsDialog } from '../../zones/update/update-incidents-dialog.js';
-import { LogFilterEditor } from '../../zones/logs/log-filter-editor.js';
-import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/logs-actions-menu.js';
+import { UpdateServicePickDialog } from '../../zones/update/services/update-service-pick-dialog.js';
+import { UpdateServiceMenuDialog } from '../../zones/update/services/update-service-menu-dialog.js';
+import { UpdateIncidentsDialog } from '../../zones/update/incidents/update-incidents-dialog.js';
+import { LogFilterEditor } from '../../zones/logs/filters/log-filter-editor.js';
+import { LogsActionsMenu, type LogsActionsMenuState } from '../../zones/logs/panes/logs-actions-menu.js';
 import { CommandBar } from '../screens/command-bar/command-bar.js';
 import { RepoRegistryScreen } from '../screens/repo-registry-screen.js';
 import { SettingsScreen } from '../screens/settings-screen.js';
@@ -247,7 +247,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'update/service-pick',
-    file: 'zones/update/update-service-pick-dialog.tsx',
+    file: 'zones/update/services/update-service-pick-dialog.tsx',
     render: () =>
       createElement(UpdateServicePickDialog, {
         state: createFilterablePickListState(),
@@ -256,12 +256,12 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'update/service-menu',
-    file: 'zones/update/update-service-menu-dialog.tsx',
+    file: 'zones/update/services/update-service-menu-dialog.tsx',
     render: () => createElement(UpdateServiceMenuDialog, { service: 's'.repeat(500), cursor: 0 }),
   },
   {
     id: 'update/incidents',
-    file: 'zones/update/update-incidents-dialog.tsx',
+    file: 'zones/update/incidents/update-incidents-dialog.tsx',
     render: () =>
       createElement(UpdateIncidentsDialog, {
         incidents: Array.from({ length: 200 }, (_, i) => ({
@@ -279,7 +279,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-editor',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'global', repoPath: null, view: 'rule', mode: 'text', query: '', cursor: 0, action: 'show', target: 'line', error: MULTILINE_ERROR } as never,
@@ -297,7 +297,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rules',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'pane', repoPath: '/repo', view: 'list', listCursor: 6, ruleIndex: null, error: null, notice: LONG_TEXT, confirmClear: true } as never,
@@ -318,7 +318,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rule-sets',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: { scope: 'global', repoPath: null, view: 'library', libraryCursor: 6, error: MULTILINE_ERROR, notice: LONG_TEXT, setConfirm: { kind: 'delete', index: 6 } } as never,
@@ -336,7 +336,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/filter-rule-set-name',
-    file: 'zones/logs/log-filter-editor.tsx',
+    file: 'zones/logs/filters/log-filter-editor.tsx',
     render: (rows) =>
       createElement(LogFilterEditor, {
         editor: {
@@ -363,12 +363,12 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/actions-menu-loading',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null }), restartMode: 'simple' }),
   },
   {
     id: 'logs/actions-menu',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () =>
       createElement(LogsActionsMenu, {
         menu: actionsMenu({
@@ -385,7 +385,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'logs/actions-menu-error',
-    file: 'zones/logs/logs-actions-menu.tsx',
+    file: 'zones/logs/panes/logs-actions-menu.tsx',
     render: () => createElement(LogsActionsMenu, { menu: actionsMenu({ actions: null, error: MULTILINE_ERROR }), restartMode: 'simple' }),
   },
   { id: 'shared/keybinding-help', file: 'shared/components/dialogs/keybinding-help.tsx', render: () => createElement(KeybindingHelp, { useStore: helpStore() }) },
@@ -409,9 +409,9 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   { id: 'shared/terminal-running', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000 }) }) },
   { id: 'shared/terminal-fullscreen', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, fullscreen: true }) }) },
   { id: 'shared/terminal-confirm-close', file: 'shared/screens/terminal-view/terminal-view.tsx', overlay: true, render: () => createElement(TerminalView, { useStore: terminalStore({ running: true, lines: 5000, confirming: true }), initial: { confirming: true } }) },
-  { id: 'update/config-panels', file: 'zones/update/update-config-panels.tsx', embedded: 'update' },
+  { id: 'update/config-panels', file: 'zones/update/config/update-config-panels.tsx', embedded: 'update' },
   { id: 'update/zone', file: 'zones/update/update-zone-dialogs.tsx', embedded: 'update' },
-  { id: 'routes/zone', file: 'zones/routes/routes-modals.tsx', embedded: 'routes' },
+  { id: 'routes/zone', file: 'zones/routes/panes/routes-modals.tsx', embedded: 'routes' },
   { id: 'shared-types/zone', file: 'zones/shared-types/shared-types-zone.tsx', embedded: 'shared-types' },
 ];
 

@@ -9,19 +9,19 @@ import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.j
 import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { FullscreenPane } from './fullscreen-pane.js';
-import { LogFilterEditor } from './log-filter-editor.js';
-import { LogsActionsMenu } from './logs-actions-menu.js';
-import { LogsGrid } from './logs-grid.js';
-import { LogsServiceLists } from './logs-service-lists.js';
-import { isPaneEngagedInGlobalFilter, isPaneWrapped } from './logs-zone.logic.js';
+import { FullscreenPane } from './panes/fullscreen-pane.js';
+import { LogFilterEditor } from './filters/log-filter-editor.js';
+import { LogsActionsMenu } from './panes/logs-actions-menu.js';
+import { LogsGrid } from './panes/logs-grid.js';
+import { LogsServiceLists } from './panes/logs-service-lists.js';
+import { isPaneEngagedInGlobalFilter, isPaneWrapped } from './logic/logs-zone.logic.js';
 import type { LogsZoneCtx } from './logs-zone.ctx.js';
-import { createEditorActions } from './logs-zone.editor-actions.js';
-import { createPaneActions } from './logs-zone.pane-actions.js';
-import { useLogsDerived } from './use-logs-derived.js';
-import { useLogsEffects } from './use-logs-effects.js';
-import { useLogsInput } from './use-logs-input.js';
-import { useLogsState } from './use-logs-state.js';
+import { createEditorActions } from './keys/logs-zone.editor-actions.js';
+import { createPaneActions } from './keys/logs-zone.pane-actions.js';
+import { useLogsDerived } from './hooks/use-logs-derived.js';
+import { useLogsEffects } from './hooks/use-logs-effects.js';
+import { useLogsInput } from './hooks/use-logs-input.js';
+import { useLogsState } from './hooks/use-logs-state.js';
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const state = useLogsState(useStore);

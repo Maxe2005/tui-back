@@ -20,7 +20,7 @@ import {
   stripAssistedActionCodes,
   summarizeFailedResults,
   type WizardStep,
-} from '../../edts-zone.logic.js';
+} from '../../logic/edts-zone.logic.js';
 import { overwriteFrom, reduceActivationKey } from './activation.logic.js';
 import { ActivationStepView } from './step-activation.js';
 import { BranchStepView, createBranchStepHandlers } from './step-branches.js';

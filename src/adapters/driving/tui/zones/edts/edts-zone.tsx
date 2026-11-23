@@ -9,18 +9,18 @@ import { Box } from 'ink';
 import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors } from '../../shared/theme/theme.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { EdtsDetailColumn } from './edts-detail-column.js';
-import { EdtsDialogViews } from './edts-dialog-views.js';
-import { EdtsListColumn } from './edts-list-column.js';
-import type { InitialDialogKind } from './edts-zone.dialog-seed.js';
+import { EdtsDetailColumn } from './views/edts-detail-column.js';
+import { EdtsDialogViews } from './views/edts-dialog-views.js';
+import { EdtsListColumn } from './views/edts-list-column.js';
+import type { InitialDialogKind } from './logic/edts-zone.dialog-seed.js';
 import type { EdtsZoneCtx } from './edts-zone.ctx.js';
-import type { PaneFocus } from './edts-zone.logic.js';
-import { useEdtsDerived } from './use-edts-derived.js';
-import { useEdtsDialogEffects } from './use-edts-dialog-effects.js';
-import { useEdtsEffects } from './use-edts-effects.js';
-import { createEdtsHandlers } from './use-edts-handlers.js';
-import { useEdtsInput } from './use-edts-input.js';
-import { useEdtsState } from './use-edts-state.js';
+import type { PaneFocus } from './logic/edts-zone.logic.js';
+import { useEdtsDerived } from './hooks/use-edts-derived.js';
+import { useEdtsDialogEffects } from './hooks/use-edts-dialog-effects.js';
+import { useEdtsEffects } from './hooks/use-edts-effects.js';
+import { createEdtsHandlers } from './hooks/use-edts-handlers.js';
+import { useEdtsInput } from './hooks/use-edts-input.js';
+import { useEdtsState } from './hooks/use-edts-state.js';
 
 export function EdtsZone({
   useStore = useAppStore,

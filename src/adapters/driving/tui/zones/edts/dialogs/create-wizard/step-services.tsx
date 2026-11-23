@@ -10,7 +10,7 @@ import {
   type CreateDialogState,
   type EdtDialogState,
   toggleMemberSelection,
-} from '../../edts-zone.logic.js';
+} from '../../logic/edts-zone.logic.js';
 import { missingSeedMembers } from './wizard.logic.js';
 import { StateLine } from '../../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../../shared/keys/list-cursor.js';

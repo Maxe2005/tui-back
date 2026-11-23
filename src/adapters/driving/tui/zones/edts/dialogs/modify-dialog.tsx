@@ -30,7 +30,7 @@ import {
   type CandidateListState,
   type EdtDialogState,
   type ModifyDialogState,
-} from '../edts-zone.logic.js';
+} from '../logic/edts-zone.logic.js';
 import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { jumpSelection, moveSelection, resolveSelectionDirection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
