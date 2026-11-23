@@ -9,7 +9,7 @@ import { resolveFocusStep, stepFocus, type FocusNavDirection } from '../../keys/
 import { colors } from '../../theme/theme.js';
 import { TextInputLine } from '../inputs/text-input-line.js';
 import { DimAnnotation } from '../feedback/dim-annotation.js';
-import { ownerAnnotations, ownerRefusalForBranch, type BranchOwners } from '../../branch-owners-text.js';
+import { ownerAnnotations, ownerRefusalForBranch, type BranchOwners } from './branch-owners-text.js';
 import { BranchAutocompleteInput, clampAutocompletePickCursor, handleBranchAutocompleteKey, isBranchAutocompleteExactMatch, matchBranchesBySubstring } from '../inputs/branch-autocomplete-input.js';
 import { StateLine } from '../feedback/state-line.js';
 

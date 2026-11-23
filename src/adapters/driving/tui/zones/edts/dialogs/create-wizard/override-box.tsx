@@ -8,7 +8,7 @@ import {
 import type { TextInputState } from '../../../../shared/components/inputs/text-edit.js';
 import { TextInputLine } from '../../../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import { ownerAnnotations } from '../../../../shared/branch-owners-text.js';
+import { ownerAnnotations } from '../../../../shared/components/pickers/branch-owners-text.js';
 import { isProtectedTarget } from './wizard.logic.js';
 import {
   overrideBoxBranches,
