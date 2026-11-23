@@ -6,7 +6,7 @@ beforeAll(() => {
 
 describe('ZoneTabBar rendered styling', () => {
   it('applies the accent background and bold to the active tab only', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { ZoneTabBar } = await import('./zone-tab-bar.js');
     const output = await renderToString(
       <ZoneTabBar
@@ -26,7 +26,7 @@ describe('ZoneTabBar rendered styling', () => {
   });
 
   it('renders the pending-event badge in the zone status color', async () => {
-    const { renderToString } = await import('./render-to-string.js');
+    const { renderToString } = await import('../render-to-string.js');
     const { ZoneTabBar } = await import('./zone-tab-bar.js');
     const output = await renderToString(
       <ZoneTabBar

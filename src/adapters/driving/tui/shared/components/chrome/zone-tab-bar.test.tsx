@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import type { ResolveTabVisibilityData } from '../../../../../core/edt/resolve-tab-visibility.js';
-import { ZONES } from '../../zones/zones.js';
-import { colors } from '../theme/theme.js';
+import type { ResolveTabVisibilityData } from '../../../../../../core/edt/resolve-tab-visibility.js';
+import { ZONES } from '../../../zones/zones.js';
+import { colors } from '../../theme/theme.js';
 import { resolveZoneTabState } from './zone-tab-bar.js';
-import { renderToString } from './render-to-string.js';
+import { renderToString } from '../render-to-string.js';
 import { ZoneTabBar } from './zone-tab-bar.js';
 
 const ZERO_EVENTS = { dashboard: 0, edts: 0, update: 0, logs: 0, routes: 0, 'shared-types': 0 };

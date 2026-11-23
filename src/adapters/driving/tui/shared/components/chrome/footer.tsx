@@ -1,12 +1,12 @@
 import { Box, Text } from 'ink';
 import wrapAnsi from 'wrap-ansi';
-import { hasResizableBoundary } from '../../zones/zone-layouts.js';
-import type { ZoneId } from '../../zones/zones.js';
-import { KEYBINDINGS, activeFooterContext, footerContextHints, type FooterContextId } from '../../keybindings/index.js';
-import { useAppStore, type AppStore } from '../../store/app-store.js';
-import { colors, spacing } from '../theme/theme.js';
-import { formatHint } from './hints.js';
-import type { AppState } from '../../store/app-store.js';
+import { hasResizableBoundary } from '../../../zones/zone-layouts.js';
+import type { ZoneId } from '../../../zones/zones.js';
+import { KEYBINDINGS, activeFooterContext, footerContextHints, type FooterContextId } from '../../../keybindings/index.js';
+import { useAppStore, type AppStore } from '../../../store/app-store.js';
+import { colors, spacing } from '../../theme/theme.js';
+import { formatHint } from '../hints.js';
+import type { AppState } from '../../../store/app-store.js';
 
 // The hint list wraps on a narrow terminal; past this many rows the rest is clipped.
 export const FOOTER_MAX_ROWS = 3;

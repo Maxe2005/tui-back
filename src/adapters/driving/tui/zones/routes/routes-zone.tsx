@@ -7,7 +7,7 @@ import { Box } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
 import { ClampedParagraph } from '../../shared/components/truncated-text.js';
 import { DimAnnotation } from '../../shared/components/dim-annotation.js';
-import { FooterContext } from '../../shared/components/footer-context.js';
+import { FooterContext } from '../../shared/components/chrome/footer-context.js';
 import { ROUTES_LIST_CHROME_ROWS } from './routes-zone.constants.js';
 import { RoutesDetailPane } from './routes-detail-pane.js';
 import { RoutesListPane } from './routes-list-pane.js';

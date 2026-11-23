@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { Text } from 'ink';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
 import { TopBar } from './top-bar.js';
 import { Footer, DEFAULT_FOOTER_HINTS, footerHintsFor } from './footer.js';
-import { ZoneLayout } from './zone-layout.js';
-import { ZONE_LAYOUTS, clampBoundaryRatio, resolveBoundaryFlex } from '../../zones/zone-layouts.js';
-import { renderToString } from './render-to-string.js';
-import { focusNavFooterHint } from '../keys/focus-navigation.js';
-import { createAppStore } from '../../store/app-store.js';
-import { PANE_FOCUS_NAV } from '../../zones/edts/edts-zone.logic.js';
-import { LOGS_PANE_FOCUS_NAV } from '../../zones/logs/logs-zone.logic.js';
+import { ZoneLayout } from '../zone-layout.js';
+import { ZONE_LAYOUTS, clampBoundaryRatio, resolveBoundaryFlex } from '../../../zones/zone-layouts.js';
+import { renderToString } from '../render-to-string.js';
+import { focusNavFooterHint } from '../../keys/focus-navigation.js';
+import { createAppStore } from '../../../store/app-store.js';
+import { PANE_FOCUS_NAV } from '../../../zones/edts/edts-zone.logic.js';
+import { LOGS_PANE_FOCUS_NAV } from '../../../zones/logs/logs-zone.logic.js';
 
 const EDTS: EdtRegistryEntry[] = [
   {

@@ -3,10 +3,10 @@ import {
   DEFAULT_TAB_VISIBILITY,
   type GatedTabStatus,
   type ResolveTabVisibilityData,
-} from '../../../../../core/edt/resolve-tab-visibility.js';
-import { ZONES, zoneGatedStatus, type Zone, type ZoneId } from '../../zones/zones.js';
-import { useBounds } from '../bounds/bounds-context.js';
-import { colors, spacing, typography } from '../theme/theme.js';
+} from '../../../../../../core/edt/resolve-tab-visibility.js';
+import { ZONES, zoneGatedStatus, type Zone, type ZoneId } from '../../../zones/zones.js';
+import { useBounds } from '../../bounds/bounds-context.js';
+import { colors, spacing, typography } from '../../theme/theme.js';
 
 // Re-exported for callers that don't care about manifest-gating — every zone renders
 // 'enabled'. The single source of truth lives in resolve-tab-visibility.ts.
