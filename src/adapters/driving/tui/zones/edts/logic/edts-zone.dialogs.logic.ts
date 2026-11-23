@@ -1,6 +1,6 @@
 // tui/zones/edts: remaining EDT dialog states and their initialisers.
-import type { ActivationBlockedRepo } from '../../../../../../core/edt/activate.js';
-import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../../core/edt/delete.js';
+import type { ActivationBlockedRepo } from '../../../../../../core/edt/lifecycle/activate.js';
+import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../../core/edt/lifecycle/delete.js';
 import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
 import type { FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
 import type { SwitchEdtRepoResult } from '../../../../../../core/edt/switch.js';

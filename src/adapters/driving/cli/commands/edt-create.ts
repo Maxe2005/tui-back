@@ -1,7 +1,7 @@
 // cli/commands/edt-create: `edt create` usage, flag parsing and runner.
 import { resolve } from 'node:path';
 import { err, type Result } from '../../../../core/result.js';
-import { createEdt } from '../../../../core/edt/create.js';
+import { createEdt } from '../../../../core/edt/lifecycle/create.js';
 import { GitPort } from '../../../../core/ports/git.js';
 import { ManifestPort } from '../../../../core/ports/manifest.js';
 import { RegistryPort } from '../../../../core/ports/registry.js';

@@ -4,18 +4,18 @@
 // target) block the run unless confirmed in `overwrite`. Confirmed paths are discarded path by
 // path, never with discardAll; per-repo failures never block the others.
 import { resolve } from 'node:path';
-import { withActionLock } from '../locking.js';
-import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
-import type { LockPort } from '../ports/lock.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { ManifestCarryPort } from '../ports/manifest-carry.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
-import { err, ok, type Result } from '../result.js';
-import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
-import { failed, resolveTargetBranch, type SwitchEdtRepoResult, type TargetBranchSpec } from './switch.js';
-import { memberTargetSpec } from './branches/checkout-expected.js';
+import { withActionLock } from '../../locking.js';
+import type { EdtMember, EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { GitPort } from '../../ports/git.js';
+import type { LockPort } from '../../ports/lock.js';
+import type { ManifestPort } from '../../ports/manifest.js';
+import type { ManifestCarryPort } from '../../ports/manifest-carry.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import type { StatePort } from '../../ports/state.js';
+import { err, ok, type Result } from '../../result.js';
+import { MANIFEST_FILE, withCarriedManifest } from '../manifest-carry.js';
+import { failed, resolveTargetBranch, type SwitchEdtRepoResult, type TargetBranchSpec } from '../switch.js';
+import { memberTargetSpec } from '../branches/checkout-expected.js';
 
 export interface ActivateEdtParams {
   edtRegistry: EdtRegistryPort;

@@ -4,9 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import { ok } from '../result.js';
 import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import { createEdt } from './create.js';
-import { deleteEdt } from './delete.js';
-import { addMemberUnderLock, modifyEdt } from './modify.js';
+import { createEdt } from './lifecycle/create.js';
+import { deleteEdt } from './lifecycle/delete.js';
+import { addMemberUnderLock, modifyEdt } from './lifecycle/modify.js';
 import { buildSharedBranchesEdt } from './shared-edt.js';
 
 const untouched = <T>(): T =>

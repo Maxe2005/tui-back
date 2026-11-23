@@ -1,7 +1,7 @@
 // tui/zones/logs: a single grid pane's rendering. Purely presentational — all keystroke handling
 // stays in LogsZone's useInput.
 import { Box, Text } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
 import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
 import { formatHint } from '../../../shared/components/dialogs/hints.js';
 import { StatusBadge } from '../../../shared/components/feedback/status-badge.js';

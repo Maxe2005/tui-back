@@ -2,7 +2,7 @@
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
 import type { Result } from '../../../../../../../core/result.js';
-import type { CreateEdtData } from '../../../../../../../core/edt/create.js';
+import type { CreateEdtData } from '../../../../../../../core/edt/lifecycle/create.js';
 import type { SwitchActiveEdtData } from '../../../../../../../core/edt/switch.js';
 import { FakeTtyStdout, KEYS } from '../../../../shared/test-support/fake-tty.js';
 import { EdtsZone } from '../../edts-zone.js';

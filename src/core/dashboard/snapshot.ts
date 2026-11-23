@@ -14,7 +14,7 @@ import { ok, type Result } from '../result.js';
 import { resolveManifestStatus, type ServiceStatus } from '../service-status/index.js';
 import { isProtectedBranch } from '../edt/branches/shared-branches.js';
 import { isSystemEdt } from '../edt/shared-edt.js';
-import { readServiceDivergence, type BranchDivergenceStatus } from '../edt/list.js';
+import { readServiceDivergence, type BranchDivergenceStatus } from '../edt/lifecycle/list.js';
 import { driftOf, readOthers, type DashboardOtherService, type DriftState } from './drift.js';
 
 export type { DashboardOtherService, DriftState } from './drift.js';

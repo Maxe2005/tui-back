@@ -10,7 +10,7 @@ import {
   type CreateCandidateBranches,
   type CreateEdtData,
   type MemberBranchPlan,
-} from '../../../../../../core/edt/create.js';
+} from '../../../../../../core/edt/lifecycle/create.js';
 import {
   listSwitchRestartRepos,
   isChangedSwitchOutcome,
@@ -20,7 +20,7 @@ import {
   type SwitchRestartRunMode,
 } from '../../../../../../core/edt/switch-restart.js';
 import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
-import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../../core/edt/activate.js';
+import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../../core/edt/lifecycle/activate.js';
 import {
   switchActiveEdt as switchActiveEdtUseCase,
   type SwitchActiveEdtData,
@@ -33,8 +33,8 @@ import {
   renameMemberBranch as renameMemberBranchUseCase,
   listMemberBranches as listMemberBranchesUseCase,
   type ModifyEdtData,
-} from '../../../../../../core/edt/modify.js';
-import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+} from '../../../../../../core/edt/lifecycle/modify.js';
+import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
 import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../../core/edt/shared-edt.js';
 import {
   deleteEdt as deleteEdtUseCase,
@@ -42,7 +42,7 @@ import {
   type DeleteEdtData,
   type MemberDeleteStatus,
   type MemberDisposition,
-} from '../../../../../../core/edt/delete.js';
+} from '../../../../../../core/edt/lifecycle/delete.js';
 import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
 import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
 import type { Result } from '../../../../../../core/result.js';

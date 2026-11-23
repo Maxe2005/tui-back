@@ -8,11 +8,11 @@ import { ulid as generateUlid } from 'ulid';
 import { stringify } from 'yaml';
 import { modifyEdt, createMemberBranch, renameMemberBranch, listMemberBranches, addMemberUnderLock } from './modify.js';
 import type { ModifyEdtResult, ModifyEdtData } from './modify.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { LockPort } from '../ports/lock.js';
-import { Result, err, ok } from '../result.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import type { ManifestPort } from '../../ports/manifest.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { LockPort } from '../../ports/lock.js';
+import { Result, err, ok } from '../../result.js';
 
 const tmpDirs: string[] = [];
 

@@ -1,5 +1,5 @@
 // tui/zones/logs: log-filter model — rules, scopes, level detection, ANSI-safe compile/apply, formatting.
-import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
 import type { LogLine } from '../../../../../../core/ports/docker.js';
 import { MAX_RULES_PER_LIST } from '../../../../../../core/logs/rule-sets.js';
 import type { VisibilityFlags } from '../keys/logs-zone.keys.logic.js';

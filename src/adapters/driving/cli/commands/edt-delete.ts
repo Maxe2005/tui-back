@@ -1,7 +1,7 @@
 // cli/commands/edt-delete: `edt delete` usage, flag parsing and runner.
 import { resolve } from 'node:path';
 import { err, type Result } from '../../../../core/result.js';
-import { deleteEdt, type MemberDisposition } from '../../../../core/edt/delete.js';
+import { deleteEdt, type MemberDisposition } from '../../../../core/edt/lifecycle/delete.js';
 import { GitPort } from '../../../../core/ports/git.js';
 import { ManifestPort } from '../../../../core/ports/manifest.js';
 import { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';

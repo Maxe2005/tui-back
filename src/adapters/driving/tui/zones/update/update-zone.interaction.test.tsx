@@ -7,7 +7,7 @@ import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
 import type { Result } from '../../../../../core/result.js';
 import { ok } from '../../../../../core/result.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { ServiceBranchDivergence } from '../../../../../core/edt/lifecycle/list.js';
 import type { DockerPort } from '../../../../../core/ports/docker.js';
 import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
 import type { GitPort } from '../../../../../core/ports/git.js';

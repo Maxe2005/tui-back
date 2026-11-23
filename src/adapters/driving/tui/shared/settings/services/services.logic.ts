@@ -1,7 +1,7 @@
 // tui/shared/settings/services.logic: the Services tab's row model and key mapping (per-service health-check toggle). Pure; no Ink/React.
 import type { TextEditKey } from '../../components/inputs/text-edit.js';
 import { nextCursorForKey } from '../../keys/list-cursor.js';
-import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import type { BranchDivergenceEntryError, ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
 
 // Services tab: one "health check" checkbox per registered service (checked = enabled), listed
 // from the already-loaded EDT branch rows plus the manifests that failed to load. A service with

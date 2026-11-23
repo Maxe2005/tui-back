@@ -6,12 +6,12 @@ import { describe, expect, it, vi, afterEach, type Mock } from 'vitest';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ok, err } from '../result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
-import type { LockPort } from '../ports/lock.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
+import { ok, err } from '../../result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { GitPort } from '../../ports/git.js';
+import type { LockPort } from '../../ports/lock.js';
+import type { Manifest, ManifestPort } from '../../ports/manifest.js';
+import type { RegistryPort } from '../../ports/registry.js';
 import { createEdt, listCreateCandidateBranches, type CreateBranchOptions, type CreateEdtParams, type MemberBranchPlan } from './create.js';
 
 const tmpDirs: string[] = [];

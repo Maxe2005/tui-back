@@ -5,14 +5,14 @@
 // soft-delete and no undo.
 import { rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { withActionLock } from '../locking.js';
-import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
-import type { LockPort } from '../ports/lock.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { StatePort } from '../ports/state.js';
-import { err, ok, type Result } from '../result.js';
-import { isSystemEdt, systemEdtReadonly } from './shared-edt.js';
+import { withActionLock } from '../../locking.js';
+import type { EdtMember, EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { GitPort } from '../../ports/git.js';
+import type { LockPort } from '../../ports/lock.js';
+import type { ManifestPort } from '../../ports/manifest.js';
+import type { StatePort } from '../../ports/state.js';
+import { err, ok, type Result } from '../../result.js';
+import { isSystemEdt, systemEdtReadonly } from '../shared-edt.js';
 
 export type MemberDisposition = 'leave' | 'delete';
 

@@ -3,9 +3,9 @@
 // breadcrumb, Step 3's branch resolution, row views and memberPlans, edt-create-from seeding, and
 // Step 4's helpers. Step 4's key reducer lives in activation.logic.ts.
 import { isSharedEdtTopic } from '../../../../../../../core/edt/shared-edt.js';
-import type { MemberBranchPlan } from '../../../../../../../core/edt/create.js';
+import type { MemberBranchPlan } from '../../../../../../../core/edt/lifecycle/create.js';
 import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
-import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
+import type { ServiceBranchDivergence } from '../../../../../../../core/edt/lifecycle/list.js';
 import { ownerRefusalText } from '../../../../shared/components/pickers/branch-owners-text.js';
 import { isProtectedBranch, type BranchProtection } from '../../../../../../../core/edt/branches/shared-branches.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';

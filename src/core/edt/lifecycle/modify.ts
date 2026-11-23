@@ -3,14 +3,14 @@
 // one helper per step; only the final edts.yaml assembly and write is held under the registry
 // lock (AD-9). Only step 1's registry read can fail the whole use-case.
 import { resolve } from 'node:path';
-import { withActionLock } from '../locking.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
-import type { LockPort } from '../ports/lock.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import { err, ok, type Result } from '../result.js';
-import { isSharedEdtTopic, isSystemEdt, systemEdtReadonly } from './shared-edt.js';
+import { withActionLock } from '../../locking.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { GitPort } from '../../ports/git.js';
+import type { LockPort } from '../../ports/lock.js';
+import type { ManifestPort } from '../../ports/manifest.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import { err, ok, type Result } from '../../result.js';
+import { isSharedEdtTopic, isSystemEdt, systemEdtReadonly } from '../shared-edt.js';
 
 export interface ModifyEdtResult {
   service: string;

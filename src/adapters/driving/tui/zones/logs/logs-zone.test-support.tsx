@@ -1,7 +1,7 @@
 // tui/zones/logs: shared fixtures and Ink helpers for the real-keypress LogsZone tests.
 import { createElement } from 'react';
 import { render } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { ServiceBranchDivergence } from '../../../../../core/edt/lifecycle/list.js';
 import { createAppStore } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../shared/test-support/fake-tty.js';
 import { LogsZone } from './logs-zone.js';
