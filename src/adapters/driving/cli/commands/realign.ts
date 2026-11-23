@@ -1,6 +1,6 @@
 // cli/commands/realign: the `realign` subcommand (usage, flag parsing and runner).
 import { err, ok, type Result } from '../../../../core/result.js';
-import { restartNeedsAttention } from '../../../../core/edt/switch-restart.js';
+import { restartNeedsAttention } from '../../../../core/edt/switch/restart/switch-restart.js';
 import { createServiceActions } from '../../../../core/service-actions/index.js';
 import { ContainerPort } from '../../../../core/ports/container.js';
 import { REALIGN_SCOPES, realignServices, type RealignScope } from '../../../../core/realign/index.js';

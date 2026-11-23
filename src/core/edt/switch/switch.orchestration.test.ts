@@ -1,8 +1,8 @@
 // core/edt/switch: unit tests against fake ports — target resolution, idempotency, lock gates, per-repo isolation and registry writes.
 import { describe, expect, it, type Mock, vi } from 'vitest';
-import { err, ok } from '../result.js';
+import { err, ok } from '../../result.js';
 import { switchActiveEdt } from './switch.js';
-import { calls, edtEntry, fakeEdtRegistry, fakeLock, fakeRegistry, fakeState, member } from '../shared/core-ports.test-support.js';
+import { calls, edtEntry, fakeEdtRegistry, fakeLock, fakeRegistry, fakeState, member } from '../../shared/core-ports.test-support.js';
 import { fakeGit, expectZeroWrites, fakeManifest, makeParams, manifestFor, OUTGOING, REPOS, TARGET } from './switch.test-support.js';
 
 describe('switchActiveEdt — validation before any write', () => {

@@ -1,9 +1,9 @@
 // core/edt/switch: unit tests against fake ports — the dirty .tui-back.yaml carry-over.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import type { GitPort } from '../ports/git.js';
+import { err, ok } from '../../result.js';
+import type { GitPort } from '../../ports/git.js';
 import { switchActiveEdt } from './switch.js';
-import { calls, fakeEdtRegistry } from '../shared/core-ports.test-support.js';
+import { calls, fakeEdtRegistry } from '../../shared/core-ports.test-support.js';
 import { fakeGit, callOrder, fakeManifestCarry, makeParams, OUTGOING, TARGET } from './switch.test-support.js';
 
 describe('switchActiveEdt — dirty .tui-back.yaml is carried over', () => {

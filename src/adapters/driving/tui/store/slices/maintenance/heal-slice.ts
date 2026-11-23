@@ -5,7 +5,7 @@
 // notice instead of the overlay. Closing mid-run only hides the overlay: the run finishes and
 // keeps other restarts blocked through `serviceRestartInFlight` until it ends.
 import type { StateCreator } from 'zustand';
-import { restartNeedsAttention, type RestartRow } from '../../../../../../core/edt/switch-restart.js';
+import { restartNeedsAttention, type RestartRow } from '../../../../../../core/edt/switch/restart/switch-restart.js';
 import { HEAL_NOTHING_TO_DO_MESSAGE, planHeal, runHeal, type HealPlan, type HealReport } from '../../../../../../core/heal/index.js';
 import { healthCheckEnabledFrom } from '../../../../../../core/ports/settings.js';
 import type { Result } from '../../../../../../core/result.js';

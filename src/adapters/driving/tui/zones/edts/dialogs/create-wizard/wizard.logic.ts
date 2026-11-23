@@ -4,7 +4,7 @@
 // Step 4's helpers. Step 4's key reducer lives in activation.logic.ts.
 import { isSharedEdtTopic } from '../../../../../../../core/edt/shared-edt/shared-edt.js';
 import type { MemberBranchPlan } from '../../../../../../../core/edt/lifecycle/create.js';
-import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
+import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch/switch.js';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/lifecycle/list.js';
 import { ownerRefusalText } from '../../../../shared/components/pickers/branch-owners-text.js';
 import { isProtectedBranch, type BranchProtection } from '../../../../../../../core/edt/branches/shared-branches.js';

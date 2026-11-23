@@ -1,9 +1,9 @@
 // core/edt: switchActiveEdt — the `unchanged` outcome and the shared-branches system EDT guards.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import { buildSharedBranchesEdt, SHARED_EDT_ULID } from './shared-edt/shared-edt.js';
+import { err, ok } from '../../result.js';
+import { buildSharedBranchesEdt, SHARED_EDT_ULID } from '../shared-edt/shared-edt.js';
 import { classifySwitchRepos, switchActiveEdt, type SwitchActiveEdtParams } from './switch.js';
-import { calls, edtEntry, fakeEdtRegistry, fakeState, member } from '../shared/core-ports.test-support.js';
+import { calls, edtEntry, fakeEdtRegistry, fakeState, member } from '../../shared/core-ports.test-support.js';
 import { fakeGit, makeParams, manifestFor, OUTGOING, REPOS, TARGET } from './switch.test-support.js';
 
 describe('switchActiveEdt — unchanged outcome', () => {

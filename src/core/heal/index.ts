@@ -7,7 +7,7 @@
 // restart lock and the restart-blocking locks right before it restarts, and a held one fails
 // that row only. Ports are injected and nothing here rejects.
 import { resolve } from 'node:path';
-import { runRestartRows, type RestartReport, type RestartRow, type RestartSkipReason } from '../edt/switch-restart.js';
+import { runRestartRows, type RestartReport, type RestartRow, type RestartSkipReason } from '../edt/switch/restart/switch-restart.js';
 import type { DockerPort } from '../ports/docker.js';
 import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
 import type { HealthProbePort } from '../ports/health-probe.js';

@@ -3,7 +3,7 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
-import type { RestartRow } from '../../../../../../core/edt/switch-restart.js';
+import type { RestartRow } from '../../../../../../core/edt/switch/restart/switch-restart.js';
 import { createAppStore } from '../../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout, KEYS } from '../../test-support/fake-tty.js';
 import { HealDialog } from './heal-dialog.js';

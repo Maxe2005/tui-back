@@ -3,8 +3,8 @@
 // on the edt-slice seam, and a per-repo results summary kept open after an adopt/discard/failure.
 import { Box, Text, type Key } from 'ink';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
-import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../core/edt/switch.js';
-import { isChangedSwitchOutcome, restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../core/edt/switch-restart.js';
+import type { SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../core/edt/switch/switch.js';
+import { isChangedSwitchOutcome, restartNeedsAttention, type SwitchRestartRunMode } from '../../../../../../core/edt/switch/restart/switch-restart.js';
 import { cycleSwitchRestartMode } from '../../../../../../core/ports/settings.js';
 import type { AppState } from '../../../store/app-store.js';
 import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';

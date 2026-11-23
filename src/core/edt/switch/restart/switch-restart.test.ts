@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../result.js';
-import type { ServiceFinalState } from '../service-actions/index.js';
-import { NO_CLEAN_RECIPE_NOTICE } from '../service-actions/index.js';
+import { err, ok } from '../../../result.js';
+import type { ServiceFinalState } from '../../../service-actions/index.js';
+import { NO_CLEAN_RECIPE_NOTICE } from '../../../service-actions/index.js';
 import {
   listSwitchRestartRepos,
   orderRestartRows,
@@ -11,7 +11,7 @@ import {
   type RestartRow,
   type SwitchRestartRepo,
 } from './switch-restart.js';
-import type { SwitchEdtRepoResult } from './switch.js';
+import type { SwitchEdtRepoResult } from '../switch.js';
 
 const repos: SwitchRestartRepo[] = [
   { service: 'api', repoPath: '/r/api', hasContainer: true },

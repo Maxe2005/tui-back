@@ -1,7 +1,7 @@
 // cli/commands/edt-switch: `edt switch` usage, flag parsing and runner.
 import { err, ok, type Result } from '../../../../core/result.js';
-import { type DirtyPolicy, switchActiveEdt } from '../../../../core/edt/switch.js';
-import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention } from '../../../../core/edt/switch-restart.js';
+import { type DirtyPolicy, switchActiveEdt } from '../../../../core/edt/switch/switch.js';
+import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention } from '../../../../core/edt/switch/restart/switch-restart.js';
 import { createServiceActions } from '../../../../core/service-actions/index.js';
 import { ContainerPort } from '../../../../core/ports/container.js';
 import { DockerPort } from '../../../../core/ports/docker.js';

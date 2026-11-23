@@ -2,7 +2,7 @@
 // .tui-back.yaml is captured, cleared to HEAD so nothing else touches it, and written back last.
 import type { GitPort } from '../../ports/git.js';
 import type { ManifestCarryPort } from '../../ports/manifest-carry.js';
-import type { SwitchEdtRepoResult } from '../switch.js';
+import type { SwitchEdtRepoResult } from '../switch/switch.js';
 
 export const MANIFEST_FILE = '.tui-back.yaml';
 

@@ -18,7 +18,7 @@ import {
   type RestartReport,
   type RestartRow,
   type SwitchRestartRunMode,
-} from '../../../../../../core/edt/switch-restart.js';
+} from '../../../../../../core/edt/switch/restart/switch-restart.js';
 import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
 import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../../core/edt/lifecycle/activate.js';
 import {
@@ -26,7 +26,7 @@ import {
   type SwitchActiveEdtData,
   type SwitchDirtyRepo,
   type SwitchDirtyReposChoice,
-} from '../../../../../../core/edt/switch.js';
+} from '../../../../../../core/edt/switch/switch.js';
 import {
   modifyEdt as modifyEdtUseCase,
   createMemberBranch as createMemberBranchUseCase,

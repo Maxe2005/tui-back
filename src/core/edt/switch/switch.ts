@@ -8,15 +8,15 @@
 // Dirty-work handling lives in switch/dirty.ts, per-repo switching in switch/member.ts and the
 // shared types in switch/types.ts; the public API is re-exported from here.
 import { resolve } from 'node:path';
-import { withActionLock } from '../locking.js';
-import { edtUpdateLockKey } from '../scripts/group-update.js';
-import type { EdtRegistryEntry, EdtStatus } from '../ports/edt-registry.js';
-import type { Manifest } from '../ports/manifest.js';
-import { err, ok, type Result } from '../result.js';
-import { withCarriedManifest } from './shared-edt/manifest-carry.js';
-import { isSystemEdt } from './shared-edt/shared-edt.js';
-import { resolveDirtyRepos } from './switch/dirty.js';
-import { switchMemberRepo, switchNonMemberRepo } from './switch/member.js';
+import { withActionLock } from '../../locking.js';
+import { edtUpdateLockKey } from '../../scripts/group-update.js';
+import type { EdtRegistryEntry, EdtStatus } from '../../ports/edt-registry.js';
+import type { Manifest } from '../../ports/manifest.js';
+import { err, ok, type Result } from '../../result.js';
+import { withCarriedManifest } from '../shared-edt/manifest-carry.js';
+import { isSystemEdt } from '../shared-edt/shared-edt.js';
+import { resolveDirtyRepos } from './dirty.js';
+import { switchMemberRepo, switchNonMemberRepo } from './member.js';
 import {
   failed,
   type ClassifiedSwitchRepo,
@@ -25,7 +25,7 @@ import {
   type SwitchActiveEdtParams,
   type SwitchEdtRepoResult,
   type SwitchRepoState,
-} from './switch/types.js';
+} from './types.js';
 
 export { failed };
 export type {
@@ -41,7 +41,7 @@ export type {
   SwitchEdtRepoResult,
   SwitchRepoState,
   SwitchUnresolvedDirtyRepo,
-} from './switch/types.js';
+} from './types.js';
 
 // The pure three-state classifier (see switchActiveEdt). Paths are compared resolve()'d on
 // both sides; `targetMember.repoPath` is the resolved path.
@@ -267,4 +267,4 @@ function blockedBy(outgoing: EdtRegistryEntry): Result<never> {
 
 // ---- Destination rule (shared with activate.ts and realign) ---------------------------------
 
-export { resolveTargetBranch, type TargetBranchSpec } from './branches/checkout-expected.js';
+export { resolveTargetBranch, type TargetBranchSpec } from '../branches/checkout-expected.js';
