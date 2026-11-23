@@ -1,4 +1,5 @@
 // tui/zones/routes: use-routes-pane-actions — save prompt / saved picker openers, pane transients reset, open/close/fire of the right pane and request-row confirms.
+import { useRef } from 'react';
 import type { RoutesBaseCtx } from './use-routes-derived.js';
 import {
   addRequestRow,
@@ -12,9 +13,11 @@ import {
   setRequestRowValue,
 } from '../logic/routes-request.logic.js';
 import { canEditRouteBody, firstEditError, routeKeyFor, seedBodyDraft } from '../../../shared/components/json-tree/model.js';
+import { hasBeenFired } from '../logic/routes-recent.logic.js';
 import { createFilterablePickListState } from '../../../shared/components/pickers/filterable-pick-list.js';
 
 export function useRoutesPaneActions(c: RoutesBaseCtx) {
+  const pendingFireBlockRef = useRef<ReturnType<typeof resolveFireBlock>>(null);
   const {
     useStore, fireRoute, ensureRequestDraft, updateRequestDraft, setPaneFocus, setPaneTab, ensureBodyDraft,
     draftOrigins, savedRequests, refreshSavedRequests, saveRequestDraft, loadSavedRequest,
@@ -22,7 +25,6 @@ export function useRoutesPaneActions(c: RoutesBaseCtx) {
     setRowAddPrompt, setFireBlock, savePrompt, setSavePrompt, setOverwriteConfirm, setSaveNotice,
     setPickerOpen, setPickerState, setPickerError, setSavedTabState, setSavedTabError,
     setSavedTabDeleteConfirm, setScalarEdit, setAddPrompt, setRawEditor, paneRoute, paneRouteKey,
-    paneHasBody,
   } = c;
   const openSavePrompt = () => {
     setSaveNotice(null);
@@ -117,34 +119,65 @@ export function useRoutesPaneActions(c: RoutesBaseCtx) {
     setPaneFocus('list');
   };
 
-  // Ctrl+R: fire the pane route's live draft, or show why it cannot go (nothing sent).
-  const firePaneRoute = () => {
-    if (paneRoute === null || paneRouteKey === null) {
-      return;
-    }
+  // Fires one route's live draft, or shows why it cannot go (nothing sent). Returns the fire
+  // block when blocked, null when the request left.
+  const fireRouteTarget = (route: NonNullable<typeof paneRoute>) => {
+    const routeKey = routeKeyFor(route.method, route.path);
     const live = useStore.getState();
-    const draft = live.requestDrafts[paneRouteKey] ?? seedRequestDraft(paneRoute);
-    const bodyDraft = Object.prototype.hasOwnProperty.call(live.bodyDrafts, paneRouteKey)
-      ? live.bodyDrafts[paneRouteKey]
-      : seedBodyDraft(paneRoute);
-    const bodyError = paneHasBody ? firstEditError(live.bodyEditErrors[paneRouteKey] ?? {}) : null;
+    const draft = live.requestDrafts[routeKey] ?? seedRequestDraft(route);
+    const hasBody = canEditRouteBody(route);
+    const bodyDraft = Object.prototype.hasOwnProperty.call(live.bodyDrafts, routeKey)
+      ? live.bodyDrafts[routeKey]
+      : seedBodyDraft(route);
+    const bodyError = hasBody ? firstEditError(live.bodyEditErrors[routeKey] ?? {}) : null;
     const block = resolveFireBlock(draft, bodyError);
     if (block !== null) {
       setFireBlock(block);
       setPaneTab('request');
-      return;
+      return block;
     }
     setFireBlock(null);
     setSaveNotice(null);
     setFilterPanelOpen(false);
     setPanelCursor(0);
-    const request = buildFireRequest(paneRoute, draft, bodyDraft);
+    const request = buildFireRequest(route, draft, bodyDraft);
     void fireRoute(
-      paneRouteKey,
-      paneRoute.method,
+      routeKey,
+      route.method,
       request.path,
       Object.keys(request.options).length === 0 ? undefined : request.options,
     );
+    return null;
+  };
+
+  // Ctrl+R from the right pane: fire the pane route's live draft.
+  const firePaneRoute = () => {
+    if (paneRoute !== null) {
+      fireRouteTarget(paneRoute);
+    }
+  };
+
+  // Ctrl+R from the list / Favorites / Recent: a route never fired this session opens its
+  // Request step (nothing sent); a fired one is re-fired with its current draft, or — draft
+  // incomplete — opens Request listing what is missing.
+  const reFireRoute = (route: NonNullable<typeof paneRoute>) => {
+    const live = useStore.getState();
+    const key = routeKeyFor(route.method, route.path);
+    if (!hasBeenFired(key, live.responses, live.recentRoutes, live.routesRepoPath)) {
+      openPaneForRoute(route);
+      return;
+    }
+    const block = fireRouteTarget(route);
+    if (block !== null) {
+      openPaneForRoute(route);
+      if (key === paneRouteKey) {
+        setFireBlock(block);
+      } else {
+        // The pane route is about to change: its reset effect would clear the block, so it
+        // re-applies this one right after.
+        pendingFireBlockRef.current = block;
+      }
+    }
   };
 
   const rowsOf = (draft: RequestDraft | null, rowSection: RequestRowSection) => (draft === null ? [] : draft[rowSection]);
@@ -176,7 +209,7 @@ export function useRoutesPaneActions(c: RoutesBaseCtx) {
   };
   return {
     openSavePrompt, attemptSave, openPicker, resetPaneTransients, loadSavedIntoRequest, openPaneForRoute,
-    closePane, firePaneRoute, rowsOf, confirmRowEdit, confirmRowAdd,
+    closePane, firePaneRoute, pendingFireBlockRef, fireRouteTarget, reFireRoute, rowsOf, confirmRowEdit, confirmRowAdd,
   };
 }
 

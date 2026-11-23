@@ -678,6 +678,7 @@ it('shouldQuit returns true for q', () => {
         fireRoute: async () => {},
         requestDrafts: {},
         responses: {},
+        recentRoutes: [],
         ensureRequestDraft: () => {},
         updateRequestDraft: () => {},
         routesPaneFocus: 'list',

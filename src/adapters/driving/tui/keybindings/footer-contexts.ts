@@ -242,15 +242,19 @@ export const FOOTER_CONTEXTS = {
   'routes-filter': { label: 'Routes filter', hints: [['Enter', 'apply'], ['Esc', 'clear']] },
   'routes-list': {
     label: 'Routes list',
-    hints: [['Enter', 'request'], ['*', 'favorite'], ['Tab', 'favorites'], ['/ f', 'filter'], ['p', 'picker'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], ['*', 'favorite'], ['Tab', 'favorites'], ['/ f', 'filter'], ['p', 'picker'], ['Home/End', 'jump']],
   },
   'routes-list-editable': {
     label: 'Routes list (body editable)',
-    hints: [['Enter', 'request'], ['*', 'favorite'], ['Tab', 'favorites'], ['/ f', 'filter'], ['p', 'picker'], ['e', 'edit body'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], ['*', 'favorite'], ['Tab', 'favorites'], ['/ f', 'filter'], ['p', 'picker'], ['e', 'edit body'], ['Home/End', 'jump']],
   },
   'routes-favorites': {
     label: 'Routes favorites',
-    hints: [['Enter', 'request'], [KEY_UP_DOWN, 'move'], ['*/d', 'remove'], ['Esc/Tab', 'list']],
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], [KEY_UP_DOWN, 'move'], ['*/d', 'remove'], ['Esc', 'list'], ['Tab', 'next']],
+  },
+  'routes-recent': {
+    label: 'Routes recent',
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], [KEY_UP_DOWN, 'move'], ['Esc', 'list'], ['Tab', 'next']],
   },
   'routes-response-raw': {
     label: 'Routes response (raw)',

@@ -180,4 +180,9 @@ describe('routesFooterContext favorites', () => {
     expect(routesFooterContext({ ...base, filterEditing: true })).toBe('routes-filter');
     expect(routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, favoritesFocused: true })).toBe('busy');
   });
+  it('uses the recent context while the Recent section holds focus', () => {
+    const base: RoutesFooterInput = { ...UNAVAILABLE_FOOTER_INPUT, unavailable: false, recentFocused: true };
+    expect(routesFooterContext(base)).toBe('routes-recent');
+    expect(routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, recentFocused: true })).toBe('busy');
+  });
 });

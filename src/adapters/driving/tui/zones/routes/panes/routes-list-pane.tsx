@@ -8,6 +8,7 @@ import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { TextInputLine } from '../../../shared/components/inputs/text-input-line.js';
 import { colors, spacing } from '../../../shared/theme/theme.js';
 import { RoutesFavoritesPane } from './routes-favorites-pane.js';
+import { RoutesRecentSection } from './routes-recent-section.js';
 import { resolveFavoritesPaneRows } from '../logic/routes-favorites.logic.js';
 import { formatRouteRow } from '../logic/routes-zone.logic.js';
 
@@ -32,9 +33,9 @@ export function RoutesListPane({
   listAreaRef: RoutesZoneCtx['listAreaRef'];
   maxVisibleRows: number;
   clamped: number;
-  favorites: Pick<RoutesZoneCtx, 'favorites' | 'clampedFavCursor' | 'favoritesFocused' | 'favNotice' | 'favoriteRoutesError' | 'routes' | 'windowSize'>;
+  favorites: Pick<RoutesZoneCtx, 'favorites' | 'clampedFavCursor' | 'favoritesFocused' | 'favNotice' | 'favoriteRoutesError' | 'routes' | 'windowSize' | 'recents' | 'clampedRecentCursor' | 'recentFocused'>;
 }) {
-  const favoriteRows = resolveFavoritesPaneRows(favorites.windowSize.rows, favorites.favorites.length);
+  const favoriteRows = resolveFavoritesPaneRows(favorites.windowSize.rows, favorites.favorites.length, favorites.recents.length);
   return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
         <RoutesFavoritesPane
@@ -46,6 +47,13 @@ export function RoutesListPane({
           loadError={favorites.favoriteRoutesError === null ? null : favorites.favoriteRoutesError.message}
           totalRows={favoriteRows.total}
           bodyRows={favoriteRows.body}
+        />
+        <RoutesRecentSection
+          recents={favorites.recents}
+          cursor={favorites.clampedRecentCursor}
+          focused={favorites.recentFocused}
+          totalRows={favoriteRows.recent.total}
+          bodyRows={favoriteRows.recent.body}
         />
         <Text color={colors['text-dim']} wrap="truncate-end">
           ROUTES{filterActive || routes.length !== visibleRoutes.length ? ` (${visibleRoutes.length}/${routes.length})` : ` (${routes.length})`}

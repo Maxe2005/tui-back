@@ -112,6 +112,8 @@ export function useRoutesState(useStore: AppStore) {
       setFavNoticeRaw(next);
     }
   };
+  const recentRoutes = useStore((state) => state.recentRoutes);
+  const [recentCursor, setRecentCursor] = useState(0);
   const favoriteRoutesError = useStore((state) => state.favoriteRoutesError);
   const windowSize = useWindowSize();
   // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout, but the panes' content reflows
@@ -124,6 +126,7 @@ export function useRoutesState(useStore: AppStore) {
 
   const paneFocused = paneFocus === 'detail';
   const favoritesFocused = paneFocus === 'favorites';
+  const recentFocused = paneFocus === 'recent';
   return {
     useStore, status, carryingServices, routes, routesStatus, routesError, routesRepoPath, loadRoutes,
     fireRoute, responses, requestDrafts, ensureRequestDraft, updateRequestDraft, paneFocus, setPaneFocus,
@@ -138,7 +141,7 @@ export function useRoutesState(useStore: AppStore) {
     setPickerDeleteConfirm, savedTabState, setSavedTabState, savedTabError, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, scalarEdit, setScalarEdit, addPrompt, setAddPrompt,
     rawEditor, setRawEditor, windowSize, listAreaRef, listAreaSize, responseAreaRef, responseAreaSize,
-    bodyAreaRef, bodyAreaSize, paneFocused, favoritesFocused, favoriteRoutes, refreshFavoriteRoutes,
+    bodyAreaRef, bodyAreaSize, paneFocused, favoritesFocused, recentFocused, recentRoutes, recentCursor, setRecentCursor, favoriteRoutes, refreshFavoriteRoutes,
     toggleFavoriteRoute, favCursor, setFavCursor, favNotice, setFavNotice, favoriteRoutesError,
   };
 }
