@@ -69,7 +69,7 @@ export type CreateDialogState = {
   step: WizardStep;
   topic: string;
   // topic's own caret position — see TextInputState/nextTextInputValue in
-  // shared/components/text-edit.ts.
+  // shared/components/inputs/text-edit.ts.
   topicCursor: number;
   formFocus: CreateFormFocus;
   selectedMembers: readonly string[];

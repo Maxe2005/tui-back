@@ -1,4 +1,4 @@
-// tui/shared/poll: the per-key in-flight guard the status polls share (Logs panes, Logs listed
+// tui/shared/hooks/in-flight-guard: the per-key in-flight guard the status polls share (Logs panes, Logs listed
 // rows, Update list). A tick for a key whose previous poll is still awaiting is skipped, so a
 // slow health route never stacks probes. Each poll holds a token: stopping the poll releases the
 // key, and a late-settling poll of an older token then neither writes state (`isCurrent` is

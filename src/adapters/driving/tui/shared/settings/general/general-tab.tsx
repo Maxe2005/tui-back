@@ -1,4 +1,4 @@
-// tui/shared/settings/general-tab: props-only view of the General tab's rows (quit shortcut, editor command). State and key handling stay in settings-screen; this file only renders.
+// tui/shared/settings/general/general-tab: props-only view of the General tab's rows (quit shortcut, editor command). State and key handling stay in settings-screen; this file only renders.
 import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../../components/pickers/checkbox-list-item.js';
 import { DimAnnotation } from '../../components/feedback/dim-annotation.js';

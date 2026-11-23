@@ -1,4 +1,4 @@
-// tui/shared/settings/shared-types-tab: props-only view of the st tab's checkbox and number rows. State and key handling stay in settings-screen; this file only renders.
+// tui/shared/settings/shared-types/shared-types-tab: props-only view of the st tab's checkbox and number rows. State and key handling stay in settings-screen; this file only renders.
 import { Box, Text } from 'ink';
 import { CheckboxListItem } from '../../components/pickers/checkbox-list-item.js';
 import { DimAnnotation } from '../../components/feedback/dim-annotation.js';

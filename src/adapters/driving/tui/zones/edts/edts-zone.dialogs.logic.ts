@@ -93,7 +93,7 @@ export type ModifyDialogState = {
   target: EdtRegistryEntry;
   topic: string;
   // topic's own caret position — see TextInputState/nextTextInputValue in
-  // shared/components/text-edit.ts.
+  // shared/components/inputs/text-edit.ts.
   topicCursor: number;
   formFocus: FormFocus;
   selectedMembers: readonly string[];

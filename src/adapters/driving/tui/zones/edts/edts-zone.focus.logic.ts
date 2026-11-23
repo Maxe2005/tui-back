@@ -30,7 +30,7 @@ export function cycleFormFocus(current: FormFocus, direction: FocusNavDirection 
 }
 
 // The hand-rolled controlled text-input interpreter (`TextEditKey`/`TextInputState`/
-// `nextTextInputValue`) lives in shared/components/text-edit.ts — a leaf module, so the shared
+// `nextTextInputValue`) lives in shared/components/inputs/text-edit.ts — a leaf module, so the shared
 // branch-autocomplete input can reuse it without closing an import cycle back through
 // branch-picker.
 
