@@ -2,8 +2,8 @@
 // dispatcher and the render subcomponents: every layer's return value in one flat object (names
 // are unique across layers).
 import type { AppStore } from '../../store/app-store.js';
-import type { UpdateState } from './use-update-state.js';
-import type { UpdateDerived } from './use-update-derived.js';
+import type { UpdateState } from './hooks/use-update-state.js';
+import type { UpdateDerived } from './hooks/use-update-derived.js';
 
 export type UpdateZoneCtx = { useStore: AppStore } & UpdateState & UpdateDerived;
 

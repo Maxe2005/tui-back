@@ -4,12 +4,13 @@
 // edt-slice seam until this view resolves `proceed` (with `buildResolutions(rows)`) or
 // `cancel`. The layout mirrors the create wizard's Step 3 (see the main reducer below).
 import { resolve } from 'node:path';
-import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch.js';
-import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/text-edit.js';
+import { isSystemEdt } from '../../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
+import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/workspace/edt/switch/switch.js';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/storage/edt-registry.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
-import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
-import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
+import { suggestBranchNameFromTopic } from '../../logic/edts-zone.logic.js';
+import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
 import { nextBoxLine as moveBoxLine } from '../../../../shared/keys/box-line-nav.js';
 
@@ -30,7 +31,8 @@ export type OtherEdtBranches = Readonly<Record<string, readonly EdtBranchClaim[]
 export function otherEdtBranches(edts: readonly EdtRegistryEntry[], outgoingUlid: string | null): OtherEdtBranches {
   const claims: Record<string, EdtBranchClaim[]> = {};
   for (const entry of edts) {
-    if (entry.ulid === outgoingUlid) {
+    // The system EDT registers no branch of its own (it only sits on shared branches).
+    if (entry.ulid === outgoingUlid || isSystemEdt(entry)) {
       continue;
     }
     for (const member of entry.members) {
@@ -543,7 +545,7 @@ function loggedPaths(paths: readonly string[]): string {
 
 // The dialog stays open on a results summary when anything beyond a plain switch happened.
 export function needsResultsView(results: readonly SwitchEdtRepoResult[]): boolean {
-  return results.some((row) => row.outcome !== 'switched');
+  return results.some((row) => row.outcome !== 'switched' && row.outcome !== 'unchanged');
 }
 
 // The action-log detail: adopted branches and discarded paths.

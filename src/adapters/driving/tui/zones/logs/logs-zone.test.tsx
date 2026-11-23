@@ -2,12 +2,12 @@
 // renderToString's fake stdin never emits keys, so keystroke behavior lives in
 // logs-zone.interaction.test.tsx and logs-zone.logic.test.ts.
 import { describe, expect, it } from 'vitest';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
+import type { ServiceBranchDivergence } from '../../../../../core/workspace/edt/lifecycle/list.js';
 import { createAppStore } from '../../store/app-store.js';
 import { footerContextOf } from '../../shared/test-support/mount-for-test.js';
 import { renderToString } from '../../shared/components/render-to-string.js';
-import { STATUS_BADGES } from '../../shared/components/status-badge.js';
+import { STATUS_BADGES } from '../../shared/components/feedback/status-badge.js';
 import { LogsZone } from './logs-zone.js';
 
 function service(overrides: Partial<ServiceBranchDivergence> = {}): ServiceBranchDivergence {

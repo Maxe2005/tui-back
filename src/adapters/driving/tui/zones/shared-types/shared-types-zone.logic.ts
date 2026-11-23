@@ -1,11 +1,11 @@
 // tui/zones/shared-types: the zone's pure decisions — the form reducer (version field,
 // consumer checklist, option toggles), the results cursor and the quit-confirm rule. The zone's
 // `useInput` stays a thin dispatcher over these.
-import type { PropagateOptions, PropagateServiceResult, PropagateStep } from '../../../../../core/shared-types/propagate-version.js';
-import { isValidVersion } from '../../../../../core/shared-types/propagate-version.js';
-import type { ServiceAction } from '../../../../../core/service-actions/index.js';
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/text-edit.js';
-import { resolveMenuKey, type MenuItem, type MenuKey, type MenuStep } from '../../shared/components/menu-list.js';
+import type { PropagateOptions, PropagateServiceResult, PropagateStep } from '../../../../../core/workspace/shared-types/versioning/propagate-version.js';
+import { isValidVersion } from '../../../../../core/workspace/shared-types/versioning/propagate-version.js';
+import type { ServiceAction } from '../../../../../core/runtime/service-actions/index.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/inputs/text-edit.js';
+import { resolveMenuKey, type MenuItem, type MenuKey, type MenuStep } from '../../shared/components/lists/menu-list.js';
 import { SHARED_TYPES_ACTIONS, type SharedTypesActionId } from '../../keybindings/keybindings.js';
 
 export const VERSION_PREFIX = '0.1.';

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { ok } from '../../../core/result.js';
-import type { Subcommand } from '../cli/dispatch.js';
+import type { Subcommand } from '../cli/dispatch/dispatch.js';
 import { buildToolRegistry, TOOL_DEFINITIONS, type ToolDefinition } from './tool-registry.js';
 
 function fake(name: string, seen: string[][] = []): Subcommand {
@@ -40,6 +40,26 @@ describe('buildToolRegistry', () => {
       expect(schema.safeParse({ repoPath: '/ok' }).success).toBe(true);
       expect(schema.safeParse({}).success).toBe(true);
     }
+  });
+
+  it('edt-list is a read tool that calls the edt subcommand with [list]', async () => {
+    const seen: string[][] = [];
+    const tools = buildToolRegistry(TOOL_DEFINITIONS.map((d) => fake(d.subcommand, seen)));
+    const tool = tools.find((t) => t.name === 'edt-list')!;
+
+    expect(tool.safety).toBe('read');
+    await tool.run({});
+    expect(seen).toEqual([['list']]);
+  });
+
+  it('edt-fast-forward-shared is a write tool that calls the edt subcommand with [fast-forward-shared]', async () => {
+    const seen: string[][] = [];
+    const tools = buildToolRegistry(TOOL_DEFINITIONS.map((d) => fake(d.subcommand, seen)));
+    const tool = tools.find((t) => t.name === 'edt-fast-forward-shared')!;
+
+    expect(tool.safety).toBe('write');
+    await tool.run({});
+    expect(seen).toEqual([['fast-forward-shared']]);
   });
 
   it('throws on an unknown wrapped subcommand', () => {

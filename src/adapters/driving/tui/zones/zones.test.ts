@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ResolveTabVisibilityData } from '../../../../core/edt/resolve-tab-visibility.js';
+import type { ResolveTabVisibilityData } from '../../../../core/workspace/edt/shared-edt/resolve-tab-visibility.js';
 import { ZONES, isZoneId, nextZoneId, zoneGatedStatus, resolveReachableZones, ALL_ZONE_IDS } from './zones.js';
 
 describe('zones metadata', () => {

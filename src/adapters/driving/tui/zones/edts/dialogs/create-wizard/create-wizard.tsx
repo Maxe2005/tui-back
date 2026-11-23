@@ -4,13 +4,13 @@
 // cancels with nothing written (or requests quit when no EDT exists yet). Every action-log entry
 // goes to the NEW EDT's ulid; pure logic lives in wizard.logic.ts and activation.logic.ts.
 import { Box, Text, type Key } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../../../core/edt/list.js';
-import { branchOwnersMap } from '../../../../../../../core/edt/branch-owners.js';
-import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
+import type { ServiceBranchDivergence } from '../../../../../../../core/workspace/edt/lifecycle/list.js';
+import { branchOwnersMap } from '../../../../../../../core/workspace/edt/branches/branch-owners.js';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/storage/edt-registry.js';
 import type { AppState } from '../../../../store/app-store.js';
-import { DimAnnotation } from '../../../../shared/components/dim-annotation.js';
-import { FailedResultList } from '../../../../shared/components/failed-result-list.js';
-import { ModalDialog } from '../../../../shared/components/modal-dialog.js';
+import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';
+import { FailedResultList } from '../../../../shared/components/lists/failed-result-list.js';
+import { ModalDialog } from '../../../../shared/components/dialogs/modal-dialog.js';
 import { colors } from '../../../../shared/theme/theme.js';
 import {
   type CandidateListState,
@@ -20,12 +20,12 @@ import {
   stripAssistedActionCodes,
   summarizeFailedResults,
   type WizardStep,
-} from '../../edts-zone.logic.js';
-import { overwriteFrom, reduceActivationKey } from './activation.logic.js';
-import { ActivationStepView } from './step-activation.js';
-import { BranchStepView, createBranchStepHandlers } from './step-branches.js';
-import { handleNameStepInput, NameStepView } from './step-name.js';
-import { handleServicesStepInput, ServicesStepView } from './step-services.js';
+} from '../../logic/edts-zone.logic.js';
+import { overwriteFrom, reduceActivationKey } from './steps/activation.logic.js';
+import { ActivationStepView } from './steps/step-activation.js';
+import { BranchStepView, createBranchStepHandlers } from './steps/step-branches.js';
+import { handleNameStepInput, NameStepView } from './steps/step-name.js';
+import { handleServicesStepInput, ServicesStepView } from './steps/step-services.js';
 import {
   buildBreadcrumb,
   buildMemberPlans,
@@ -43,7 +43,7 @@ import {
   summarizeActivationResults,
   type BreadcrumbTone,
 } from './wizard.logic.js';
-import { ClampedParagraph } from '../../../../shared/components/truncated-text.js';
+import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 
 export const CREATE_WIZARD_TITLE = 'CREATE EDT';
 
@@ -60,7 +60,7 @@ export type CreateWizardDeps = {
   candidates: readonly ServiceBranchDivergence[];
   // Step 3's per-service branch lists (local + remote-tracking, never fetched).
   listCreateBranches: AppState['listCreateBranches'];
-  // The first EDT's explicit activation (core/edt/activate.ts, via the store).
+  // The first EDT's explicit activation (core/workspace/edt/lifecycle/activate.ts, via the store).
   activateEdtAction: AppState['activateEdt'];
   // "Switch now" — replaces the wizard with the switch dialog on the new EDT and runs the
   // protected switch at once (the zone resolves the entry from the reloaded store).

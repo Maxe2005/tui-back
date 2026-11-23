@@ -4,7 +4,7 @@
 // minus a refresh skew. Endpoint non-2xx, network failure or a missing `Set-Cookie` is
 // `auth-endpoint-failed` with `details.reason`, never a throw; the cookie is never logged.
 import { err, ok, type Result } from '../../../../core/result.js';
-import type { DevAuthOptions, DevAuthSession, DevAuthPort } from '../../../../core/ports/dev-auth.js';
+import type { DevAuthOptions, DevAuthSession, DevAuthPort } from '../../../../core/ports/runtime/dev-auth.js';
 
 const DEFAULT_AUTH_PATH = '/auth/me';
 const DEFAULT_SESSION_TTL_SEC = 300;

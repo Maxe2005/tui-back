@@ -2,7 +2,7 @@
 // field-level error labels, the Attention items (severity order, drift lines for members and
 // other services) and the attention cycling that skips lines without a row.
 import { describe, expect, it } from 'vitest';
-import type { DashboardOtherService, DashboardService } from '../../../../../core/dashboard/snapshot.js';
+import type { DashboardOtherService, DashboardService } from '../../../../../core/insight/dashboard/snapshot.js';
 import { MIN_TERMINAL_ROWS, SHELL_CHROME_ROWS } from '../../shared/bounds/bounds.js';
 import { BANNER_LINES } from './launch-banner.js';
 import { healthCheckNote, edtKeyEffect, edtSectionActions, formatEdtAction, formatEdtLine, resolveEdtSection, actionForKey, aheadBehindLabel, disableWhileRunning, issueMarker, reasonLine, branchLabel, statusLabel, attentionBadge, formatRegistrySummary, formatUpdatedAgo, resolveDashboardBody, workingTreeLabel, attentionHeader, buildAttentionItems, formatAttentionLine, nextAttentionIndex, registryAllClear, type AttentionItem, rowIndexForAttention } from './dashboard.logic.js';

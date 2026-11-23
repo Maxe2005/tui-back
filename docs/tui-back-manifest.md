@@ -4,11 +4,11 @@ Ce document décrit exhaustivement les propriétés acceptées par le fichier
 `.tui-back.yaml` placé à la racine d'un dépôt géré par `tui-back`.
 
 Le schéma de référence (source de vérité) est le schéma Zod défini dans
-[`src/adapters/driven/manifest/schema.ts`](../src/adapters/driven/manifest/schema.ts),
+[`src/adapters/driven/vcs/manifest/schema.ts`](../src/adapters/driven/vcs/manifest/schema.ts),
 adossé au type `Manifest` de
-[`src/core/ports/manifest.ts`](../src/core/ports/manifest.ts).
+[`src/core/ports/vcs/manifest.ts`](../src/core/ports/vcs/manifest.ts).
 Le chargement/parsing est fait par
-[`src/adapters/driven/manifest/index.ts`](../src/adapters/driven/manifest/index.ts)
+[`src/adapters/driven/vcs/manifest/index.ts`](../src/adapters/driven/vcs/manifest/index.ts)
 (`loadManifest`).
 
 > ⚠️ L'objet racine est validé en mode **strict** (`.strict()`) : toute clé
@@ -142,7 +142,7 @@ modules:
 - **Rôle** : c'est la **sonde de statut au quotidien**. Toute vue qui affiche
   l'état d'un service (Dashboard, panneaux et badges de Logs, liste de l'onglet
   Update, CLI `tui-back dashboard`) le calcule par une seule règle
-  (`src/core/service-status`) : la `healthUrl` est sondée d'abord (`GET`, délai
+  (`src/core/runtime/service-status`) : la `healthUrl` est sondée d'abord (`GET`, délai
   maximal de 2 s, redirections non suivies : un 3xx n'est pas un 2xx), puis le
   résultat est combiné avec l'état du conteneur :
 
@@ -260,7 +260,7 @@ comme une liste vide.
 Définie dans
 [`src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`](../src/adapters/driven/modules/route-explorer/cookie-session-auth.ts),
 consommée par le use-case
-[`src/core/routes/fire-request.ts`](../src/core/routes/fire-request.ts)
+[`src/core/insight/routes/fire-request.ts`](../src/core/insight/routes/fire-request.ts)
 (commande `tui-back fire-request <repoPath> <METHOD> <path> [--body <json>]
 [--query name=value]... [--header 'Name: value']...` ; dans la zone Routes,
 `Entrée` ouvre l'onglet **Request** — Params, Query, Headers, Body — et
@@ -319,7 +319,7 @@ Déclarer l'un ou l'autre module active l'onglet `shared-types` du TUI (affiché
 masqué ou grisé selon l'appartenance à l'EDT actif). Les opérations
 elles-mêmes (lire la version déclarée, réécrire uniquement la ligne de
 dépendance, vérifier la publication sur le registre) passent par le port
-`SharedTypesPort` ([`src/core/ports/shared-types.ts`](../src/core/ports/shared-types.ts)).
+`SharedTypesPort` ([`src/core/ports/modules/shared-types.ts`](../src/core/ports/modules/shared-types.ts)).
 
 **Mise à jour de groupe « shared-types d'abord »** : lorsque l'EDT actif contient
 exactement un dépôt `shared-types-source` (parmi les services de la mise à jour),
@@ -534,16 +534,16 @@ du fichier sur la branche cible. Il apparaît alors modifié par rapport à cett
 
 ## Sources
 
-- Schéma Zod : `src/adapters/driven/manifest/schema.ts`
-- Type `Manifest` : `src/core/ports/manifest.ts`
-- Statut des services (`healthUrl` + conteneur) : `src/core/service-status/index.ts`
-- Loader : `src/adapters/driven/manifest/index.ts`
-- Clean restart (recette `restartCommands`) : `src/core/scripts/group-update.ts` (`runRestartStep`),
-  `src/core/scripts/service-restart.ts`, `src/core/ports/restart.ts`,
-  `src/adapters/driven/restart/index.ts`
+- Schéma Zod : `src/adapters/driven/vcs/manifest/schema.ts`
+- Type `Manifest` : `src/core/ports/vcs/manifest.ts`
+- Statut des services (`healthUrl` + conteneur) : `src/core/runtime/service-status/index.ts`
+- Loader : `src/adapters/driven/vcs/manifest/index.ts`
+- Clean restart (recette `restartCommands`) : `src/core/workspace/scripts/group-update/group-update.ts` (`runRestartStep`),
+  `src/core/workspace/scripts/update-support/service-restart.ts`, `src/core/ports/runtime/restart.ts`,
+  `src/adapters/driven/runtime/restart/index.ts`
 - Registre des modules : `src/adapters/driven/modules/module-registry.ts`
-- Modules `shared-types` : `src/adapters/driven/modules/shared-types/config.ts`, `src/adapters/driven/modules/shared-types/npm-package.ts`, `src/core/ports/shared-types.ts`
+- Modules `shared-types` : `src/adapters/driven/modules/shared-types/config.ts`, `src/adapters/driven/modules/shared-types/npm-package.ts`, `src/core/ports/modules/shared-types.ts`
 - Scanner `route-explorer` : `src/adapters/driven/modules/route-explorer/nestjs-openapi.ts`
 - Auth session cookie : `src/adapters/driven/modules/route-explorer/cookie-session-auth.ts`
-- Tir de requête : `src/core/routes/fire-request.ts`
-- Tests de référence : `src/adapters/driven/manifest/index.test.ts`
+- Tir de requête : `src/core/insight/routes/fire-request.ts`
+- Tests de référence : `src/adapters/driven/vcs/manifest/index.test.ts`

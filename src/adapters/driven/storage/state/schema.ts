@@ -1,0 +1,20 @@
+// adapters/driven/storage/state/schema: the zod schema for state.json (AD-7/AD-10) — strict, with
+// optional `splitterRatios`, `filterHistory` and `commandHistory` so older files still validate.
+// The first two are keyed by plain strings (zone ids, filter-history keys) narrowed in the
+// driving layer; `commandHistory` is a single flat list. A per-zone
+// ratio array of the wrong length is a semantic issue the driving layer defaults per zone,
+// never a reason to reject the whole file.
+import { z } from 'zod';
+
+export const stateSchema = z
+  .object({
+    activeEdt: z.string().min(1).nullable(),
+    splitterRatios: z.record(z.string(), z.array(z.number())).optional(),
+    filterHistory: z.record(z.string(), z.array(z.string())).optional(),
+    commandHistory: z.array(z.string()).optional(),
+    // Deliberately unvalidated here: core/insight/logs/rule-sets sanitizes them per element, so one bad
+    // rule drops alone with a visible warning instead of failing the whole field (or file).
+    logRules: z.unknown().optional(),
+    logRuleSets: z.unknown().optional(),
+  })
+  .strict();

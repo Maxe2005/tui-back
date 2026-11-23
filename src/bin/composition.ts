@@ -3,27 +3,27 @@
 // effects, unlike a composition root that runs on import.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Subcommand } from '../adapters/driving/cli/dispatch.js';
+import type { Subcommand } from '../adapters/driving/cli/dispatch/dispatch.js';
 import { buildSubcommands } from '../adapters/driving/cli/subcommands.js';
-import { createManifestCarryPort } from '../adapters/driven/manifest/carry.js';
-import { loadManifest } from '../adapters/driven/manifest/index.js';
-import { createDockerPort } from '../adapters/driven/docker/index.js';
-import { createContainerPort } from '../adapters/driven/container/index.js';
-import { createMigrationPort } from '../adapters/driven/migration/index.js';
-import { createEditorPort } from '../adapters/driven/editor/index.js';
-import { createHttpHealthProbe } from '../adapters/driven/health/http-probe.js';
-import { createRestartPort } from '../adapters/driven/restart/index.js';
-import { createLockPort } from '../adapters/driven/lock/index.js';
-import { createGitPort } from '../adapters/driven/git/index.js';
-import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/registry/index.js';
-import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/edt-registry/index.js';
-import { createStatePort, resolveStateFile } from '../adapters/driven/state/index.js';
-import { createSavedRequestPort, resolveGlobalDbFile } from '../adapters/driven/saved-requests/index.js';
-import { createSettingsPort, resolveSettingsFile } from '../adapters/driven/settings/index.js';
-import { createInstallerPort } from '../adapters/driven/installer/index.js';
-import { resolveXdgPaths } from '../adapters/driven/xdg/index.js';
+import { createManifestCarryPort } from '../adapters/driven/vcs/manifest/carry.js';
+import { loadManifest } from '../adapters/driven/vcs/manifest/index.js';
+import { createDockerPort } from '../adapters/driven/runtime/docker/index.js';
+import { createContainerPort } from '../adapters/driven/runtime/container/index.js';
+import { createMigrationPort } from '../adapters/driven/vcs/migration/index.js';
+import { createEditorPort } from '../adapters/driven/runtime/editor/index.js';
+import { createHttpHealthProbe } from '../adapters/driven/runtime/health/http-probe.js';
+import { createRestartPort } from '../adapters/driven/runtime/restart/index.js';
+import { createLockPort } from '../adapters/driven/runtime/lock/index.js';
+import { createGitPort } from '../adapters/driven/vcs/git/index.js';
+import { createRegistryPort, resolveRegistryFile } from '../adapters/driven/storage/registry/index.js';
+import { createEdtRegistryPort, resolveEdtRegistryFile } from '../adapters/driven/storage/edt-registry/index.js';
+import { createStatePort, resolveStateFile } from '../adapters/driven/storage/state/index.js';
+import { createSavedRequestPort, resolveGlobalDbFile } from '../adapters/driven/storage/saved-requests/index.js';
+import { createSettingsPort, resolveSettingsFile } from '../adapters/driven/storage/settings/index.js';
+import { createInstallerPort } from '../adapters/driven/runtime/installer/index.js';
+import { resolveXdgPaths } from '../adapters/driven/storage/xdg/index.js';
 import { moduleRegistry, resolveModule } from '../adapters/driven/modules/module-registry.js';
-import { ROUTES_MODULE_ID } from '../core/edt/resolve-tab-visibility.js';
+import { ROUTES_MODULE_ID } from '../core/workspace/edt/shared-edt/resolve-tab-visibility.js';
 
 export interface ComposeOptions {
   /** Whether a y/N prompt can be read back (stdin AND stdout are TTYs). The MCP path passes false: it never reads stdin. */
@@ -38,7 +38,10 @@ export function composeSubcommands({ interactive }: ComposeOptions): Subcommand[
   const manifestCarry = createManifestCarryPort();
   const edtsBaseDir = join(xdg.dataDir, 'edts');
   const edtRegistryFile = resolveEdtRegistryFile(xdg);
-  const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir);
+  const settings = createSettingsPort(resolveSettingsFile(xdg));
+  // The settings/registry/manifest triple lets the EDT registry synthesize the read-only
+  // "Shared branches" system EDT while edts.sharedBranchesEdtEnabled is on (never persisted).
+  const edtRegistry = createEdtRegistryPort(edtRegistryFile, edtsBaseDir, { settings, registry, manifest });
   // The git adapter is wired with the EdtRegistryPort so assertAllowedBranch can apply AD-8's
   // cross-EDT half (a branch already registered as a *different* EDT's own branch for a repo)
   // when a call site passes an edtId.
@@ -88,7 +91,7 @@ export function composeSubcommands({ interactive }: ComposeOptions): Subcommand[
     migration,
     restart,
     state,
-    settings: createSettingsPort(resolveSettingsFile(xdg)),
+    settings,
     editor: createEditorPort(),
     healthProbe: createHttpHealthProbe(),
     // `registry clean`'s prompt gate: only true when a y/N answer can be read back (see main.ts).

@@ -3,7 +3,7 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { ServiceBranchDivergence } from '../../../../../core/workspace/edt/lifecycle/list.js';
 import { createAppStore } from '../../store/app-store.js';
 import { fakeInteractiveTtyStdin, FakeTtyStdout } from '../../shared/test-support/fake-tty.js';
 import { LogsZone } from './logs-zone.js';

@@ -988,6 +988,34 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
   summary: settings-screen.tsx still holds all state and the single useInput (~726 lines); per-tab key resolvers/state hooks and a shared CursorRow component would shrink it and the ~15 duplicated cursor-glyph rows.
   evidence: wc -l settings-screen.tsx = 726 after the split; spec marks extracting key handlers as Ask First.
 
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-45-edt-switch-restart-only-services-whose-checkout-moved.md`
+  summary: Re-running an EDT switch after an interrupted or failed restart reports every repo `unchanged`, so containers still on the old checkout are never restarted.
+  evidence: `unchanged` rows are not restart targets by design (FR-37, story 2.45); a retry therefore cannot recover a restart that did not complete — needs a product decision (e.g. a standalone restart command or retry flag).
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
+  summary: Surface synthesis failures of the shared-branches EDT (settings/registry/manifest load errors) instead of silently dropping the entry or a member.
+  evidence: `list()` in the edt-registry adapter swallows every failure, so an enabled EDT can vanish or lose a repo with no explanation, and the stale-pointer fallback then misreports it as disabled.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
+  summary: Normalize a stale system-EDT active pointer in core so CLI/MCP flows (switch, group-update, realign, dashboard) handle it like the TUI startup fallback does.
+  evidence: `resolveActiveEdtPointer` is applied only in the TUI edt slice; other paths read `state.readActiveEdt()` directly and can hold a ulid absent from the registry when the setting is edited off outside the TUI.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
+  summary: Handle a legacy user EDT already named "Shared branches" in edts.yaml (topic collision with the system entry) and repos with unloadable manifests being silently omitted from a switch to the system EDT.
+  evidence: Topic-based lookups in switch/modify/delete become ambiguous with two same-topic entries; no migration or collision test exists.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-46-shared-branches-edt-model-guards-setting-switch-and-update.md`
+  summary: `edtRegistry.list()` re-reads settings.yaml and every manifest on each call from hot paths (gate, branchOwners, dashboard); consider caching.
+  evidence: The synthesis runs per call with no cache and no performance test for a large repo list.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-2/spec-2-48-fast-forward-the-shared-branches-without-switching.md`
+  summary: Make the TUI in-progress guard bidirectional so switch/activate/update also refuse while a shared-branches fast-forward runs, and vice versa for switch/activate.
+  evidence: `fastForwardShared` in `edt-slice.ts` only checks update/restart/fast-forward flags; a switch or activate in flight is not checked, and the other actions do not check `fastForwardSharedRunning`.
+
 - source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-12/spec-12-8-split-the-update-and-logs-slices.md`
   summary: `update-slice.config.ts` (~537 lines) and `update-slice.run.ts` (~615 lines) still exceed the ~400-line target.
   evidence: Review of story 12.8; the spec's file list put run/shared-types hook/auto-resolve and the config flow in single modules, so they were left whole and justified in their headers.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-13/spec-13-4-split-app-shell-and-store-tests.md`
+  summary: Fake timers are never restored (`vi.useRealTimers`) in `update-slice.health.test.ts` and `logs-slice.health.test.ts`.
+  evidence: Review found `vi.useFakeTimers()` calls without an `afterEach` restore; the monolithic originals had the same weakness, moved verbatim.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-13/spec-13-4-split-app-shell-and-store-tests.md`
+  summary: Three near-identical `fakeDeps` (app shell, store, update slice) could share a base with per-suite overrides, and `app-store.*` files repeat the `describe("app store")` wrapper.
+  evidence: Defaults differ (repo lists, ahead/behind, extra ports), so unifying would alter test bodies; deferred per the spec's Ask First rule.
