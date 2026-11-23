@@ -1,15 +1,15 @@
 // tui/zones/edts: edts-list-column — the left column: the EDTS selector, the issues line and the
 // EDT SERVICES / OTHER SERVICES lists, as nested ZoneLayouts (boundary 1 / boundary 2).
 import { Box, Text } from 'ink';
-import { BoundedList } from '../../shared/components/lists/bounded-list.js';
-import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
-import { formatHint, formatHints } from '../../shared/components/dialogs/hints.js';
-import { ListRow } from '../../shared/components/lists/list-row.js';
-import { StateLine } from '../../shared/components/feedback/state-line.js';
-import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
-import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatEdtRowMeta, formatServiceMeta } from './logic/edts-zone.logic.js';
-import type { EdtsZoneCtx } from './edts-zone.ctx.js';
+import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
+import { DimAnnotation } from '../../../shared/components/feedback/dim-annotation.js';
+import { formatHint, formatHints } from '../../../shared/components/dialogs/hints.js';
+import { ListRow } from '../../../shared/components/lists/list-row.js';
+import { StateLine } from '../../../shared/components/feedback/state-line.js';
+import { ZoneLayout } from '../../../shared/components/layout/zone-layout.js';
+import { colors, spacing } from '../../../shared/theme/theme.js';
+import { formatEdtRowMeta, formatServiceMeta } from '../logic/edts-zone.logic.js';
+import type { EdtsZoneCtx } from '../edts-zone.ctx.js';
 
 export function EdtsListColumn({ c }: { c: EdtsZoneCtx }) {
   const {

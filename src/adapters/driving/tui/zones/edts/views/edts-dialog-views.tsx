@@ -1,15 +1,15 @@
 // tui/zones/edts: edts-dialog-views — renders the open dialog's view (at most one), by dialog kind.
-import { CreateWizardView } from './dialogs/create-wizard/create-wizard.js';
-import { AddToEdtDialogView } from './dialogs/add-to-edt-dialog.js';
-import { DeleteDialogView } from './dialogs/delete-dialog.js';
-import { FastForwardDialogView } from './dialogs/fast-forward-dialog.js';
-import { isSystemEdt } from '../../../../../core/edt/shared-edt.js';
-import { IssuesDialogView } from './dialogs/issues-dialog.js';
-import { ModifyDialogView } from './dialogs/modify-dialog.js';
-import { QuickPickDialogView, resolveQuickPickCandidates } from './dialogs/quick-pick-dialog.js';
-import { ServiceActionsDialogView } from './dialogs/service-actions-dialog.js';
-import { SwitchDialogView } from './dialogs/switch-dialog.js';
-import type { EdtsZoneCtx } from './edts-zone.ctx.js';
+import { CreateWizardView } from '../dialogs/create-wizard/create-wizard.js';
+import { AddToEdtDialogView } from '../dialogs/add-to-edt-dialog.js';
+import { DeleteDialogView } from '../dialogs/delete-dialog.js';
+import { FastForwardDialogView } from '../dialogs/fast-forward-dialog.js';
+import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
+import { IssuesDialogView } from '../dialogs/issues-dialog.js';
+import { ModifyDialogView } from '../dialogs/modify-dialog.js';
+import { QuickPickDialogView, resolveQuickPickCandidates } from '../dialogs/quick-pick-dialog.js';
+import { ServiceActionsDialogView } from '../dialogs/service-actions-dialog.js';
+import { SwitchDialogView } from '../dialogs/switch-dialog.js';
+import type { EdtsZoneCtx } from '../edts-zone.ctx.js';
 
 export function EdtsDialogViews({ c }: { c: EdtsZoneCtx }) {
   const {
