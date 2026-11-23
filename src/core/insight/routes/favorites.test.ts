@@ -85,4 +85,29 @@ describe('favorite routes', () => {
     expect(await code(addFavoriteRoute(setup(null).deps, input))).toBe('edt-not-found');
     expect(s.writes()).toBe(0);
   });
+
+  it('normalizes trailing slash and rejects relative repo or path without a leading slash', async () => {
+    const s = setup();
+    await addFavoriteRoute(s.deps, { ...input, repoPath: '/r/', path: '/x/{id}/' });
+    await addFavoriteRoute(s.deps, input);
+    expect(s.edts[0]?.favoriteRoutes).toEqual([{ repoPath: '/r', method: 'GET', path: '/x/{id}' }]);
+    expect(s.writes()).toBe(1);
+    expect(await addFavoriteRoute(s.deps, { ...input, repoPath: 'rel' })).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(await addFavoriteRoute(s.deps, { ...input, path: 'x' })).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    expect(s.writes()).toBe(1);
+  });
+
+  it('propagates a readonly registry refusal (system-shared EDT) without swallowing it', async () => {
+    const s = setup();
+    (s.deps.edtRegistry as { update: unknown }).update = async () => err('system-edt-readonly', 'read-only');
+    expect(await addFavoriteRoute(s.deps, input)).toMatchObject({ ok: false, error: { code: 'system-edt-readonly' } });
+  });
+
+  it('never flags a favorite stale when its repo no longer activates the module', async () => {
+    const s = setup();
+    await addFavoriteRoute(s.deps, input);
+    const manifest = { load: async () => ok({ service: 's', container: 'c', sharedBranch: 'd', modules: {} }) } as unknown as ManifestPort;
+    const listed = await listFavoriteRoutes({ ...s.listDeps, manifest, scanner: { scan: async () => ok([]) } });
+    expect(listed).toEqual(ok({ favorites: [{ repoPath: '/r', method: 'GET', path: '/x/{id}', stale: false }] }));
+  });
 });

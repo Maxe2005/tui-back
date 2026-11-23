@@ -1019,3 +1019,7 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-13/spec-13-4-split-app-shell-and-store-tests.md`
   summary: Three near-identical `fakeDeps` (app shell, store, update slice) could share a base with per-suite overrides, and `app-store.*` files repeat the `describe("app store")` wrapper.
   evidence: Defaults differ (repo lists, ahead/behind, extra ports), so unifying would alter test bodies; deferred per the spec's Ask First rule.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-11-favorite-routes-per-edt-persistence-use-cases-and-cli.md`
+  summary: Expose `routes favorites list|add|remove` as MCP tools (currently in EXCLUDED_SUBCOMMANDS).
+  evidence: Agents cannot manage favorites; the CLI/MCP parity guard only passes because `routes` is on the exclusion list.

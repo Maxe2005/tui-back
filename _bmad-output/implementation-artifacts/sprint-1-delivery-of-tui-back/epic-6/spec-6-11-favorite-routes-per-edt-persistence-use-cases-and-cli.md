@@ -2,7 +2,7 @@
 title: 'Favorite Routes per EDT — Persistence, Use-Cases & CLI'
 type: 'feature'
 created: '2026-11-23'
-status: 'in-progress'
+status: 'done'
 baseline_commit: 'c4206c2ca8aef7adebf087e93f27879b7eff1252'
 review_loop_iteration: 0
 context:
@@ -76,3 +76,43 @@ Identity of a favorite is `(repoPath, method, path)` exact on the stored templat
 - `npx tsc --noEmit` -- expected: no errors
 - `npx vitest run` -- expected: all green
 - `npm run lint` -- expected: clean (if defined)
+
+## Suggested Review Order
+
+**Use-case design**
+
+- Entry point: one `mutate` path serves toggle/add/remove under the registry lock.
+  [`favorites.ts:108`](../../../../../src/core/insight/routes/favorites.ts#L108)
+
+- Input normalization: upper-cased verb, single trailing slash stripped, absolute repo only.
+  [`favorites.ts:43`](../../../../../src/core/insight/routes/favorites.ts#L43)
+
+- Stale flag from one scan per repo; scan or manifest failure stays "unknown", never stale.
+  [`favorites.ts:144`](../../../../../src/core/insight/routes/favorites.ts#L144)
+
+**Persistence**
+
+- Optional field on the EDT entry, so legacy `edts.yaml` validates unchanged.
+  [`schema.ts:29`](../../../../../src/adapters/driven/storage/edt-registry/schema.ts#L29)
+
+- `update` patch applies favorites; an empty list drops the key.
+  [`index.ts:182`](../../../../../src/adapters/driven/storage/edt-registry/index.ts#L182)
+
+- Port type and patch contract.
+  [`edt-registry.ts:36`](../../../../../src/core/ports/storage/edt-registry.ts#L36)
+
+**CLI**
+
+- `routes favorites list|add|remove` on the same use-cases; `--repo` resolved to absolute.
+  [`routes.ts:42`](../../../../../src/adapters/driving/cli/commands/routes.ts#L42)
+
+- Registered in the subcommand list.
+  [`subcommands.ts:39`](../../../../../src/adapters/driving/cli/subcommands.ts#L39)
+
+**Tests**
+
+- Use-case matrix: dedupe, isolation, stale, normalization, readonly refusal.
+  [`favorites.test.ts:1`](../../../../../src/core/insight/routes/favorites.test.ts#L1)
+
+- CLI flag parsing, dispatch and error codes.
+  [`routes.test.ts:1`](../../../../../src/adapters/driving/cli/commands/routes.test.ts#L1)

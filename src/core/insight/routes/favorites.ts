@@ -3,6 +3,7 @@
 // EDT deletes them. Writes go through EdtRegistryPort.update under the registry lock (AD-9).
 // Stale is advisory at list time (a fresh per-repo scan); a manifest/scan failure is never
 // stale, and a stale favorite is returned, never dropped or fired.
+import { isAbsolute, resolve } from 'node:path';
 import type { EdtRegistryEntry, EdtRegistryPort, FavoriteRoute } from '../../ports/storage/edt-registry.js';
 import type { LockPort } from '../../ports/runtime/lock.js';
 import type { RouteScannerPort } from '../../ports/modules/route-scanner.js';
@@ -53,11 +54,20 @@ function normalize(input: FavoriteRouteInput): Result<FavoriteRoute> {
   if (!HTTP_VERBS.has(method)) {
     return err('invalid-argument', `"${input.method.trim()}" is not a valid HTTP method`);
   }
-  const path = input.path.trim();
+  const rawPath = input.path.trim();
+  if (!rawPath.startsWith('/')) {
+    return err('invalid-argument', 'The favorite path must start with "/"');
+  }
+  // Same single-trailing-slash rule as isRoutePresent, so "/x" and "/x/" are one favorite.
+  const path = rawPath.length > 1 && rawPath.endsWith('/') ? rawPath.slice(0, -1) : rawPath;
   if (/[?#]/.test(path)) {
     return err('invalid-argument', 'The favorite path must not carry a query or fragment');
   }
-  return ok({ repoPath: input.repoPath.trim(), method, path });
+  const repoPath = input.repoPath.trim();
+  if (!isAbsolute(repoPath)) {
+    return err('invalid-argument', 'The favorite repoPath must be absolute');
+  }
+  return ok({ repoPath: resolve(repoPath), method, path });
 }
 
 function findEdt(edts: EdtRegistryEntry[], activeUlid: string | null, topic: string | undefined): Result<EdtRegistryEntry> {
@@ -149,7 +159,9 @@ export async function listFavoriteRoutes(
   for (const repoPath of new Set(favorites.map((favorite) => favorite.repoPath))) {
     try {
       const loaded = await manifest.load(repoPath);
-      scans.set(repoPath, loaded.ok ? await scanner.scan(repoPath, loaded.data.modules[ROUTES_MODULE_ID] ?? {}) : null);
+      // A repo that no longer activates the module cannot be scanned: unknown, never stale.
+      const config = loaded.ok ? loaded.data.modules[ROUTES_MODULE_ID] : undefined;
+      scans.set(repoPath, config === undefined ? null : await scanner.scan(repoPath, config));
     } catch {
       scans.set(repoPath, null);
     }
