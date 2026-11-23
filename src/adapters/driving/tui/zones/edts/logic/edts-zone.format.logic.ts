@@ -1,9 +1,9 @@
 // tui/zones/edts: pure formatters (branch, service, issues, EDT rows/details, action hints) for the EdtsZone.
-import { EDT_SYSTEM_READONLY_CODE, EDT_SYSTEM_READONLY_MESSAGE, isSystemEdt } from '../../../../../core/edt/shared-edt.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import { resolveAssistedAction } from '../../shared/components/lists/failed-result-list.js';
-import { formatHint, formatHints } from '../../shared/components/dialogs/hints.js';
+import { EDT_SYSTEM_READONLY_CODE, EDT_SYSTEM_READONLY_MESSAGE, isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import { resolveAssistedAction } from '../../../shared/components/lists/failed-result-list.js';
+import { formatHint, formatHints } from '../../../shared/components/dialogs/hints.js';
 import type { PaneFocus } from './edts-zone.focus.logic.js';
 
 // A fixed max width past which branch names ellipsize — generous enough for most feature-branch

@@ -7,7 +7,7 @@ import { Box, Text } from 'ink';
 import { ClampedParagraph } from '../../../../shared/components/display/truncated-text.js';
 import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import type { CreateDialogState } from '../../edts-zone.logic.js';
+import type { CreateDialogState } from '../../logic/edts-zone.logic.js';
 import {
   overwriteConfirmLines,
 } from './activation.logic.js';

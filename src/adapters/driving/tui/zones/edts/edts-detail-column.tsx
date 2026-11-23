@@ -13,7 +13,7 @@ import {
   formatEdtDetail,
   formatServiceDetail,
   resolveActionHint,
-} from './edts-zone.logic.js';
+} from './logic/edts-zone.logic.js';
 import type { EdtsZoneCtx } from './edts-zone.ctx.js';
 
 export function EdtsDetailColumn({ c }: { c: EdtsZoneCtx }) {

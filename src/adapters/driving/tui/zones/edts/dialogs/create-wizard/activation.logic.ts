@@ -4,7 +4,7 @@
 // effect hands it to the wizard's effectful handler exactly once.
 import type { ActivationBlockedRepo } from '../../../../../../../core/edt/activate.js';
 import type { TextEditKey } from '../../../../shared/components/inputs/text-edit.js';
-import type { ActivationState } from '../../edts-zone.logic.js';
+import type { ActivationState } from '../../logic/edts-zone.logic.js';
 
 export type ActivationConfirmLine = { key: string; text: string; kind: 'head' | 'file' };
 

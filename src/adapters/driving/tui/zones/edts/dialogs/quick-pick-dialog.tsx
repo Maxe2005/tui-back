@@ -22,7 +22,7 @@ import {
   type EdtDialogState,
   type QuickPickDialogState,
   type QuickPickMode,
-} from '../edts-zone.logic.js';
+} from '../logic/edts-zone.logic.js';
 import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 // The candidate pool for a given mode: switch mode filters out the active EDT (the system "Shared

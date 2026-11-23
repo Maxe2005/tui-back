@@ -8,7 +8,7 @@ import {
   resolutionRepos,
   type LocalBranchList,
 } from '../dialogs/switch-resolution/switch-resolution.logic.js';
-import { initialSwitchDialog, resolveOutgoingTopic, type DeleteDialogState } from '../edts-zone.logic.js';
+import { initialSwitchDialog, resolveOutgoingTopic, type DeleteDialogState } from '../logic/edts-zone.logic.js';
 import type { EdtsZoneCtx } from '../edts-zone.ctx.js';
 
 export function useEdtsDialogEffects(c: EdtsZoneCtx): void {

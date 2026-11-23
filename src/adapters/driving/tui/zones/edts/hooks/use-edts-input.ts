@@ -13,7 +13,7 @@ import {
   initialServiceActionsDialog,
   PANE_FOCUS_NAV,
   SYSTEM_EDT_NOTICE,
-} from '../edts-zone.logic.js';
+} from '../logic/edts-zone.logic.js';
 import type { EdtsZoneCtx } from '../edts-zone.ctx.js';
 
 export function useEdtsInput(c: EdtsZoneCtx): void {

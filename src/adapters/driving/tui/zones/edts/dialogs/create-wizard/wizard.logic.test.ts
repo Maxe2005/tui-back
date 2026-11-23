@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
-import { initialCreateDialog, type BranchListState, type BranchStepState, type CreateDialogState, type RowOverride } from '../../edts-zone.logic.js';
+import { initialCreateDialog, type BranchListState, type BranchStepState, type CreateDialogState, type RowOverride } from '../../logic/edts-zone.logic.js';
 import {
   buildBreadcrumb,
   buildMemberPlans,

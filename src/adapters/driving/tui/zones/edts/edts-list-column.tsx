@@ -8,7 +8,7 @@ import { ListRow } from '../../shared/components/lists/list-row.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { ZoneLayout } from '../../shared/components/layout/zone-layout.js';
 import { colors, spacing } from '../../shared/theme/theme.js';
-import { formatEdtRowMeta, formatServiceMeta } from './edts-zone.logic.js';
+import { formatEdtRowMeta, formatServiceMeta } from './logic/edts-zone.logic.js';
 import type { EdtsZoneCtx } from './edts-zone.ctx.js';
 
 export function EdtsListColumn({ c }: { c: EdtsZoneCtx }) {

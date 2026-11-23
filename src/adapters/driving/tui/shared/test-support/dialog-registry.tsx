@@ -26,7 +26,7 @@ import {
   initialQuickPickDialog,
   initialServiceActionsDialog,
   initialSwitchDialog,
-} from '../../zones/edts/edts-zone.logic.js';
+} from '../../zones/edts/logic/edts-zone.logic.js';
 import { initialSwitchResolution } from '../../zones/edts/dialogs/switch-resolution/switch-resolution.logic.js';
 import { UpdateServicePickDialog } from '../../zones/update/services/update-service-pick-dialog.js';
 import { UpdateServiceMenuDialog } from '../../zones/update/services/update-service-menu-dialog.js';

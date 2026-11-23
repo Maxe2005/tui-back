@@ -9,7 +9,7 @@ import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../.
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
-import { suggestBranchNameFromTopic } from '../../edts-zone.logic.js';
+import { suggestBranchNameFromTopic } from '../../logic/edts-zone.logic.js';
 import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
 import { nextBoxLine as moveBoxLine } from '../../../../shared/keys/box-line-nav.js';

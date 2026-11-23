@@ -11,7 +11,7 @@ import {
   partitionServicesByEdtMembership,
   resolveCandidateListState,
   resolveIssuesSeverity,
-} from '../edts-zone.logic.js';
+} from '../logic/edts-zone.logic.js';
 import type { EdtsState } from './use-edts-state.js';
 
 // Rough terminal-chrome budget (top bar, zone-tab bar, footer, the EDTS pane above the splitter,

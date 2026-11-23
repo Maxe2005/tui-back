@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
-import { createBranchPickerState } from '../../shared/components/pickers/branch-picker.js';
-import { openOverrideBox } from './dialogs/create-wizard/override-box.logic.js';
-import { initialSwitchResolution } from './dialogs/switch-resolution/switch-resolution.logic.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import { createBranchPickerState } from '../../../shared/components/pickers/branch-picker.js';
+import { openOverrideBox } from '../dialogs/create-wizard/override-box.logic.js';
+import { initialSwitchResolution } from '../dialogs/switch-resolution/switch-resolution.logic.js';
 import { edtsFooterContext, wizardFooterContext } from './edts-footer-context.js';
 import {
   initialActivationState,

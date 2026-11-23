@@ -10,7 +10,7 @@ import { createQuickPickDialogHandlers } from '../dialogs/quick-pick-dialog.js';
 import { createServiceActionsDialogHandlers } from '../dialogs/service-actions-dialog.js';
 import { createSwitchDialogHandlers } from '../dialogs/switch-dialog.js';
 import { isSystemEdt } from '../../../../../../core/edt/shared-edt.js';
-import { initialFastForwardDialog, initialModifyDialog, initialSwitchDialog, SYSTEM_EDT_NOTICE } from '../edts-zone.logic.js';
+import { initialFastForwardDialog, initialModifyDialog, initialSwitchDialog, SYSTEM_EDT_NOTICE } from '../logic/edts-zone.logic.js';
 import type { EdtsDerived } from './use-edts-derived.js';
 import type { EdtsState } from './use-edts-state.js';
 

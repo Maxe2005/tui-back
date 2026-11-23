@@ -5,7 +5,7 @@ import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry
 import type { GroupUpdateRepoResult, GroupUpdateScope, GroupUpdateSelectionItem, UpdateBlockerKind, UpdatePhase } from '../../../../../../core/scripts/group-update.js';
 import type { SharedTypesStage } from '../../../../../../core/shared-types/smart-update.js';
 import type { ServiceStatusState } from '../../../../../../core/service-status/index.js';
-import { partitionServicesByEdtMembership } from '../../edts/edts-zone.logic.js';
+import { partitionServicesByEdtMembership } from '../../edts/logic/edts-zone.logic.js';
 
 // The Update zone's own closed per-service status set: the health-first ServiceStatusState
 // passthrough (AD-23, `unhealthy` and `inconsistent` included), plus

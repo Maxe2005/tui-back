@@ -11,7 +11,7 @@ import { EdtsZone } from './edts-zone.js';
 import { IssuesDialogView } from './dialogs/issues-dialog.js';
 import { DeleteDialogView } from './dialogs/delete-dialog.js';
 import { FastForwardDialogView } from './dialogs/fast-forward-dialog.js';
-import { initialDeleteDialog } from './edts-zone.logic.js';
+import { initialDeleteDialog } from './logic/edts-zone.logic.js';
 import { frameLines } from '../../shared/test-support/matrix.js';
 
 const region = { columns: 60, rows: 15, children: null };

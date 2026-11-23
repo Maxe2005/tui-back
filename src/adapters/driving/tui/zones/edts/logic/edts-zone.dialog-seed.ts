@@ -1,6 +1,6 @@
 // tui/zones/edts: edts-zone.dialog-seed — the test-only initial dialog of EdtsZone's `dialog`
 // state (see `initialDialogKind`). Production always starts with no dialog open.
-import type { AppStore } from '../../store/app-store.js';
+import type { AppStore } from '../../../store/app-store.js';
 import {
   initialAddToEdtDialog,
   initialCreateDialog,

@@ -20,7 +20,7 @@ import {
   summarizeFailedResults,
   type EdtDialogState,
   type SwitchDialogState,
-} from '../edts-zone.logic.js';
+} from '../logic/edts-zone.logic.js';
 import { SwitchResolutionView } from './switch-resolution/switch-resolution-view.js';
 import { describeSwitchForLog, needsResultsView, reduceSwitchResolutionKey } from './switch-resolution/switch-resolution.logic.js';
 import { BoundedList } from '../../../shared/components/lists/bounded-list.js';

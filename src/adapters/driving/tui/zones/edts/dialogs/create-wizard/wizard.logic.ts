@@ -17,7 +17,7 @@ import {
   type CreateDialogState,
   type RowOverride,
   type WizardStep,
-} from '../../edts-zone.logic.js';
+} from '../../logic/edts-zone.logic.js';
 
 export const WIZARD_STEPS: readonly WizardStep[] = [1, 2, 3, 4];
 
