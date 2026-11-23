@@ -8,7 +8,7 @@ import { DetailPane } from '../../shared/components/layout/detail-pane.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';
 import { StateLine } from '../../shared/components/feedback/state-line.js';
 import { colors } from '../../shared/theme/theme.js';
-import type { RouteResponse } from '../../store/slices/routes-slice.js';
+import type { RouteResponse } from '../../store/slices/workspace/routes-slice.js';
 import { formatFireError, formatFireStatus } from './routes-zone.logic.js';
 import { ClampedParagraph } from '../../shared/components/display/truncated-text.js';
 

@@ -2,12 +2,12 @@
 // ratios, Ctrl+W resize-mode, gated-tab visibility, and the small app-shell-level UI flags
 // (help, run-in-progress, zone-input-capture, quit-request, the `:` command bar).
 import type { StateCreator } from 'zustand';
-import { resolveTabVisibility, DEFAULT_TAB_VISIBILITY, type ResolveTabVisibilityData } from '../../../../../core/edt/resolve-tab-visibility.js';
-import { stepFocus, type FocusNavDirection } from '../../shared/keys/focus-navigation.js';
-import { boundaryCount, clampBoundaryRatio, defaultZoneRatios, hasResizableBoundary } from '../../zones/zone-layouts.js';
-import { ZONES, type ZoneId } from '../../zones/zones.js';
-import type { FooterContextEntry, FooterContextId, FooterOwner } from '../../keybindings/index.js';
-import type { AppState, AppStoreDeps } from '../app-store.js';
+import { resolveTabVisibility, DEFAULT_TAB_VISIBILITY, type ResolveTabVisibilityData } from '../../../../../../core/edt/resolve-tab-visibility.js';
+import { stepFocus, type FocusNavDirection } from '../../../shared/keys/focus-navigation.js';
+import { boundaryCount, clampBoundaryRatio, defaultZoneRatios, hasResizableBoundary } from '../../../zones/zone-layouts.js';
+import { ZONES, type ZoneId } from '../../../zones/zones.js';
+import type { FooterContextEntry, FooterContextId, FooterOwner } from '../../../keybindings/index.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 export type ZoneEvents = Record<ZoneId, number>;
 // One ratio per boundary, per zone. The zone layout specs (zones/zone-layouts.ts) are the

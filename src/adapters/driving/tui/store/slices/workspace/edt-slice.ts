@@ -1,7 +1,7 @@
 // tui/store/slices: EDT domain state — registry entries, per-service branch/divergence,
 // EDT use-cases (in-process), branch-picker capabilities, and per-EDT action log.
 // Combined with other slices into the one Zustand store.
-import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
+import { healthCheckEnabledFrom } from '../../../../../../core/ports/settings.js';
 import type { StateCreator } from 'zustand';
 import {
   createEdt as createEdtUseCase,
@@ -10,7 +10,7 @@ import {
   type CreateCandidateBranches,
   type CreateEdtData,
   type MemberBranchPlan,
-} from '../../../../../core/edt/create.js';
+} from '../../../../../../core/edt/create.js';
 import {
   listSwitchRestartRepos,
   isChangedSwitchOutcome,
@@ -18,35 +18,35 @@ import {
   type RestartReport,
   type RestartRow,
   type SwitchRestartRunMode,
-} from '../../../../../core/edt/switch-restart.js';
-import { createServiceActions, type ServiceActions } from '../../../../../core/service-actions/index.js';
-import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../core/edt/activate.js';
+} from '../../../../../../core/edt/switch-restart.js';
+import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
+import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../../core/edt/activate.js';
 import {
   switchActiveEdt as switchActiveEdtUseCase,
   type SwitchActiveEdtData,
   type SwitchDirtyRepo,
   type SwitchDirtyReposChoice,
-} from '../../../../../core/edt/switch.js';
+} from '../../../../../../core/edt/switch.js';
 import {
   modifyEdt as modifyEdtUseCase,
   createMemberBranch as createMemberBranchUseCase,
   renameMemberBranch as renameMemberBranchUseCase,
   listMemberBranches as listMemberBranchesUseCase,
   type ModifyEdtData,
-} from '../../../../../core/edt/modify.js';
-import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../core/edt/shared-edt.js';
+} from '../../../../../../core/edt/modify.js';
+import { listEdtBranchesDivergence, type BranchDivergenceEntryError, type ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import { isSystemEdt, resolveActiveEdtPointer } from '../../../../../../core/edt/shared-edt.js';
 import {
   deleteEdt as deleteEdtUseCase,
   resolveMemberDeleteStatuses as resolveMemberDeleteStatusesUseCase,
   type DeleteEdtData,
   type MemberDeleteStatus,
   type MemberDisposition,
-} from '../../../../../core/edt/delete.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../core/edt/fast-forward-shared.js';
-import type { Result } from '../../../../../core/result.js';
-import type { AppState, AppStoreDeps } from '../app-store.js';
+} from '../../../../../../core/edt/delete.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
+import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../../core/edt/fast-forward-shared.js';
+import type { Result } from '../../../../../../core/result.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
 

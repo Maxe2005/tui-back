@@ -9,7 +9,7 @@ import { ListRow } from '../../shared/components/lists/list-row.js';
 import type { TextInputState } from '../../shared/components/inputs/text-edit.js';
 import { TextInputLine } from '../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../shared/theme/theme.js';
-import type { RoutesPaneTab } from '../../store/slices/routes-slice.js';
+import type { RoutesPaneTab } from '../../store/slices/workspace/routes-slice.js';
 import {
   REQUEST_SECTION_LABELS,
   type RequestDraft,

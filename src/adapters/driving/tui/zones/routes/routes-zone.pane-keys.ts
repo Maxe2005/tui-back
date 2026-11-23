@@ -2,7 +2,7 @@
 // Ctrl+→/N and Ctrl+←/P switch sub-tabs (no wrap), `s` saves, and each tab handles the rest.
 import type { Key } from 'ink';
 import type { RoutesZoneCtx } from './routes-zone.ctx.js';
-import { ROUTES_PANE_TABS } from '../../store/slices/routes-slice.js';
+import { ROUTES_PANE_TABS } from '../../store/slices/workspace/routes-slice.js';
 import { handleRequestTabKey } from './routes-zone.request-keys.js';
 import { handleResponseTabKey } from './routes-zone.response-keys.js';
 import { handleSavedTabKey } from './routes-zone.saved-tab-keys.js';

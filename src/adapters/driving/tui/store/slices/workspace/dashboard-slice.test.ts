@@ -1,14 +1,14 @@
 // tui/store/slices/dashboard-slice: section statuses, independence of the two loads and the
 // unwired degradation, against the real section builders over fake ports.
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok } from '../../../../../core/result.js';
-import type { DockerPort } from '../../../../../core/ports/docker.js';
-import type { EdtRegistryPort } from '../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../core/ports/git.js';
-import type { ManifestPort } from '../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../core/ports/registry.js';
-import type { StatePort } from '../../../../../core/ports/state.js';
-import { createAppStore, type AppStoreDeps } from '../app-store.js';
+import { err, ok } from '../../../../../../core/result.js';
+import type { DockerPort } from '../../../../../../core/ports/docker.js';
+import type { EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
+import type { GitPort } from '../../../../../../core/ports/git.js';
+import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
+import type { RegistryPort } from '../../../../../../core/ports/registry.js';
+import type { StatePort } from '../../../../../../core/ports/state.js';
+import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 function fakeDeps(overrides: Partial<Record<'registry' | 'edtRegistry' | 'state' | 'manifest' | 'healthProbe', unknown>> = {}): AppStoreDeps {
   return {

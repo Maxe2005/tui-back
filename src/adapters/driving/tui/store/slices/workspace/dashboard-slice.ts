@@ -1,10 +1,10 @@
 // tui/store/slices: the Dashboard's state — the services and registry-health sections, each with
 // its own load status so they fill independently, plus the time of the last completed load.
 // Builders run in-process over injected ports; unwired, a section degrades to an error state.
-import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
+import { healthCheckEnabledFrom } from '../../../../../../core/ports/settings.js';
 import { basename } from 'node:path';
 import type { StateCreator } from 'zustand';
-import { err, type Result } from '../../../../../core/result.js';
+import { err, type Result } from '../../../../../../core/result.js';
 import {
   createServiceActions,
   openInIde,
@@ -12,15 +12,15 @@ import {
   type RestartMode,
   type ServiceAction,
   type ServiceActions,
-} from '../../../../../core/service-actions/index.js';
+} from '../../../../../../core/service-actions/index.js';
 import {
   buildDashboardRegistrySummary,
   buildDashboardServices,
   type DashboardRegistrySummary,
   type DashboardServicesSection,
-} from '../../../../../core/dashboard/snapshot.js';
-import type { AppState, AppStoreDeps } from '../app-store.js';
-import { RESTART_MODES, TERMINAL_KINDS } from './app/service-action-ids.js';
+} from '../../../../../../core/dashboard/snapshot.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
+import { RESTART_MODES, TERMINAL_KINDS } from '../app/service-action-ids.js';
 
 export type DashboardSectionStatus = 'idle' | 'loading' | 'ready' | 'error';
 
