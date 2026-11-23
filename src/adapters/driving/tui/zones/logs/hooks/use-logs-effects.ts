@@ -2,9 +2,9 @@
 // declaration order (mount load, presence/health polling, pending-focus hand-off, pane
 // subscriptions, input-capture flags, footer context).
 import { useEffect } from 'react';
-import type { AppStore } from '../../store/app-store.js';
-import { useFooterContext } from '../../shared/hooks/use-footer-context.js';
-import { logsFooterContext, isPaneRestartAdvertised, reindexPaneSubFocus, ruleSetsFooterContext } from './logs-zone.logic.js';
+import type { AppStore } from '../../../store/app-store.js';
+import { useFooterContext } from '../../../shared/hooks/use-footer-context.js';
+import { logsFooterContext, isPaneRestartAdvertised, reindexPaneSubFocus, ruleSetsFooterContext } from '../logs-zone.logic.js';
 import { useLogsSubscriptions } from './use-logs-subscriptions.js';
 import type { LogsState } from './use-logs-state.js';
 import type { LogsDerived } from './use-logs-derived.js';

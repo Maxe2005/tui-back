@@ -2,9 +2,9 @@
 // the service partition, clamped cursors, active panes, row health and the window-driven layout.
 import { useMemo } from 'react';
 import { useWindowSize } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
-import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
-import { partitionServicesByEdtMembership } from '../edts/edts-zone.logic.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
+import type { ServiceStatusState } from '../../../../../../core/service-status/index.js';
+import { partitionServicesByEdtMembership } from '../../edts/edts-zone.logic.js';
 import {
   computeLogsLayout,
   DEFAULT_LOG_FILTER,
@@ -12,8 +12,8 @@ import {
   splitNoContainerRows,
   type FilterEditorState,
   type LogFilterScope,
-} from './logs-zone.logic.js';
-import { logsActionsMenuRows } from './logs-actions-menu.js';
+} from '../logs-zone.logic.js';
+import { logsActionsMenuRows } from '../logs-actions-menu.js';
 import type { LogsState } from './use-logs-state.js';
 
 export function useLogsDerived(s: LogsState) {

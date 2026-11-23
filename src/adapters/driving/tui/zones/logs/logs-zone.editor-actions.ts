@@ -19,8 +19,8 @@ import {
   type FilterHistoryKey,
   type LogFilterScope,
 } from './logs-zone.logic.js';
-import type { LogsState } from './use-logs-state.js';
-import type { LogsDerived } from './use-logs-derived.js';
+import type { LogsState } from './hooks/use-logs-state.js';
+import type { LogsDerived } from './hooks/use-logs-derived.js';
 
 export function createEditorActions(s: LogsState & LogsDerived) {
   const {

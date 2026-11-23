@@ -18,10 +18,10 @@ import { isPaneEngagedInGlobalFilter, isPaneWrapped } from './logs-zone.logic.js
 import type { LogsZoneCtx } from './logs-zone.ctx.js';
 import { createEditorActions } from './logs-zone.editor-actions.js';
 import { createPaneActions } from './logs-zone.pane-actions.js';
-import { useLogsDerived } from './use-logs-derived.js';
-import { useLogsEffects } from './use-logs-effects.js';
-import { useLogsInput } from './use-logs-input.js';
-import { useLogsState } from './use-logs-state.js';
+import { useLogsDerived } from './hooks/use-logs-derived.js';
+import { useLogsEffects } from './hooks/use-logs-effects.js';
+import { useLogsInput } from './hooks/use-logs-input.js';
+import { useLogsState } from './hooks/use-logs-state.js';
 
 export function LogsZone({ useStore = useAppStore }: { useStore?: AppStore }) {
   const state = useLogsState(useStore);

@@ -3,7 +3,7 @@
 // deselected or closed preview's stream stops. A key both selected and previewed is subscribed
 // once (subscribeLogsPane/LogsManager.subscribe are idempotent).
 import { useEffect, useRef } from 'react';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/list.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/edt/list.js';
 
 export function useLogsSubscriptions({
   activeRepoPaths,

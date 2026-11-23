@@ -1,9 +1,9 @@
 // tui/zones/logs: use-logs-input — registers the zone's single `useInput` and dispatches to the
 // per-mode key handlers in the original priority order: actions menu, filter editor, fullscreen,
 // then the zone-wide keys and the focused list/pane.
-import { useInput } from '../../shared/hooks/use-input.js';
-import { useZoneInputActive } from '../../shared/hooks/use-zone-input-active.js';
-import { resolveFocusStep } from '../../shared/keys/focus-navigation.js';
+import { useInput } from '../../../shared/hooks/use-input.js';
+import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
+import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 import {
   cycleLogsPaneFocus,
   DEFAULT_LOG_FILTER,
@@ -16,13 +16,13 @@ import {
   setPaneLogFilter,
   toggleAllPanesWrapFlag,
   toggleVisibilityFlag,
-} from './logs-zone.logic.js';
-import type { LogsZoneCtx } from './logs-zone.ctx.js';
-import { handleActionsMenuKey, handleFullscreenKey } from './logs-zone.overlay-keys.js';
-import { handleLibraryKey, handleRuleListKey, handleSetNameKey } from './logs-zone.rule-list-keys.js';
-import { handleRuleDraftKey } from './logs-zone.rule-draft-keys.js';
-import { handleEdtListKey, handleOtherListKey } from './logs-zone.list-keys.js';
-import { handlePaneKey } from './logs-zone.pane-keys.js';
+} from '../logs-zone.logic.js';
+import type { LogsZoneCtx } from '../logs-zone.ctx.js';
+import { handleActionsMenuKey, handleFullscreenKey } from '../logs-zone.overlay-keys.js';
+import { handleLibraryKey, handleRuleListKey, handleSetNameKey } from '../logs-zone.rule-list-keys.js';
+import { handleRuleDraftKey } from '../logs-zone.rule-draft-keys.js';
+import { handleEdtListKey, handleOtherListKey } from '../logs-zone.list-keys.js';
+import { handlePaneKey } from '../logs-zone.pane-keys.js';
 
 export function useLogsInput(c: LogsZoneCtx): void {
   const {
