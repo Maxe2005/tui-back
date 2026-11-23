@@ -8,7 +8,7 @@ import {
   validateSuggestValue,
   type SuggestFieldState,
 } from '../../../shared/components/inputs/suggest-field.logic.js';
-import type { SharedTypesMode } from '../../../../../../core/shared-types/consumers/smart-update.js';
+import type { SharedTypesMode } from '../../../../../../core/workspace/shared-types/consumers/smart-update.js';
 import type { FooterContextId } from '../../../keybindings/index.js';
 import type { TextEditKey } from '../../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';

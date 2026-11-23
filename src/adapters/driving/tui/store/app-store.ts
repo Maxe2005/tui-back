@@ -15,7 +15,7 @@ import type { LockPort } from '../../../../core/ports/runtime/lock.js';
 import type { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
 import type { ManifestCarryPort } from '../../../../core/ports/vcs/manifest-carry.js';
 import type { MigrationPort } from '../../../../core/ports/vcs/migration.js';
-import type { ConsumerConfigParser, SourceConfigParser } from '../../../../core/shared-types/consumers/list-consumers.js';
+import type { ConsumerConfigParser, SourceConfigParser } from '../../../../core/workspace/shared-types/consumers/list-consumers.js';
 import type { SharedTypesPort } from '../../../../core/ports/modules/shared-types.js';
 import type { RestartPort } from '../../../../core/ports/runtime/restart.js';
 import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
@@ -43,8 +43,8 @@ export type { ZoneEvents, ZoneRatios, ResizeMode } from './slices/workspace/navi
 export type { ActivateEdtRequest, CreateEdtParams, SwitchEdtParams, ModifyEdtParams, DeleteEdtParams, EdtActionState, EdtActionLogEntry } from './slices/workspace/edt-slice.js';
 export { DEFAULT_BASE_BRANCH, NO_BRANCH_CREATION } from './slices/workspace/edt-slice.js';
 export type { RegistryOutcome, RegistryRegisterResult } from './slices/workspace/registry-slice.js';
-export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryResult, RemoveStaleRegistryOutcome, RegistryEntryError } from '../../../../core/scripts/registry/clean-registry.js';
-export type { ValidateRegistryEntryResult, ValidateRegistryOutcome } from '../../../../core/scripts/registry/validate-registry.js';
+export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryResult, RemoveStaleRegistryOutcome, RegistryEntryError } from '../../../../core/workspace/scripts/registry/clean-registry.js';
+export type { ValidateRegistryEntryResult, ValidateRegistryOutcome } from '../../../../core/workspace/scripts/registry/validate-registry.js';
 export type { SettingsUpdate } from './slices/app/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update/update-slice.js';
 export type { LogsPaneData } from './slices/logs/logs-slice.js';
@@ -96,10 +96,10 @@ export type AppStoreDeps = {
   // The post-switch verification's HTTP touchpoint (manifest `healthUrl`). Optional like the
   // rest; without it a service declaring a healthUrl cannot be verified (explicit failed row).
   healthProbe?: HealthProbePort;
-  // The Routes zone's scanner touchpoint — the routes slice calls core/routes/list-routes.ts
+  // The Routes zone's scanner touchpoint — the routes slice calls core/insight/routes/list-routes.ts
   // in-process through it; loadRoutes degrades to an explicit error state when it is missing.
   scanner?: RouteScannerPort;
-  // The Routes zone's dev-auth touchpoint, used with the scanner by core/routes/fire-request.ts;
+  // The Routes zone's dev-auth touchpoint, used with the scanner by core/insight/routes/fire-request.ts;
   // fireRoute degrades to an explicit error state when it is missing.
   auth?: DevAuthPort;
   // The saved-request library touchpoint — the same global.db store the CLI's request-*

@@ -9,7 +9,7 @@ import {
   type FilterablePickListState,
 } from '../../../shared/components/pickers/filterable-pick-list.js';
 import { colors } from '../../../shared/theme/theme.js';
-import type { SavedWithStale } from '../../../../../../core/routes/saved-requests.js';
+import type { SavedWithStale } from '../../../../../../core/insight/routes/saved-requests.js';
 import { ClampedParagraph } from '../../../shared/components/display/truncated-text.js';
 
 export function RoutesSavedTab({

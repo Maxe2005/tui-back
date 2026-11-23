@@ -2,12 +2,12 @@
 // open), the selection draft seeded from the `realign.*` settings, and `runRealign`, which calls
 // core realignServices in-process with live per-service rows, then refreshes the Dashboard.
 import type { StateCreator } from 'zustand';
-import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../../../../../../core/dashboard/drift.js';
-import type { RestartRow } from '../../../../../../core/edt/switch/restart/switch-restart.js';
+import { listDriftCandidates, type DriftCandidate, type DriftCandidates } from '../../../../../../core/insight/dashboard/drift.js';
+import type { RestartRow } from '../../../../../../core/workspace/edt/switch/restart/switch-restart.js';
 import { REALIGN_SCOPES, cycleSwitchRestartMode, healthCheckEnabledFrom, type RealignScope, type SwitchRestartMode } from '../../../../../../core/ports/storage/settings.js';
-import { realignServices, type RealignOutcome, type RealignRow } from '../../../../../../core/realign/index.js';
+import { realignServices, type RealignOutcome, type RealignRow } from '../../../../../../core/workspace/realign/index.js';
 import type { Result } from '../../../../../../core/result.js';
-import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
+import { createServiceActions, type ServiceActions } from '../../../../../../core/runtime/service-actions/index.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';

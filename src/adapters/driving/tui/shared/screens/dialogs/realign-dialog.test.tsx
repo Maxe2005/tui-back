@@ -1,7 +1,7 @@
 // tui/shared/realign-dialog: pure key/footer/row decisions (renderToString never delivers a
 // keypress) plus render coverage of every view of the overlay.
 import { describe, expect, it } from 'vitest';
-import type { DriftCandidate } from '../../../../../../core/dashboard/drift.js';
+import type { DriftCandidate } from '../../../../../../core/insight/dashboard/drift.js';
 import { createAppStore } from '../../../store/app-store.js';
 import { renderToString } from '../../components/render-to-string.js';
 import { RealignDialog, realignRunBudget } from './realign-dialog.js';

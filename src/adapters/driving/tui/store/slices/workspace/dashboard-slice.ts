@@ -12,13 +12,13 @@ import {
   type RestartMode,
   type ServiceAction,
   type ServiceActions,
-} from '../../../../../../core/service-actions/index.js';
+} from '../../../../../../core/runtime/service-actions/index.js';
 import {
   buildDashboardRegistrySummary,
   buildDashboardServices,
   type DashboardRegistrySummary,
   type DashboardServicesSection,
-} from '../../../../../../core/dashboard/snapshot.js';
+} from '../../../../../../core/insight/dashboard/snapshot.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 import { RESTART_MODES, TERMINAL_KINDS } from '../app/service-action-ids.js';
 

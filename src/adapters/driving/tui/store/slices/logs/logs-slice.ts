@@ -1,6 +1,6 @@
 // tui/store/slices: Logs zone state — the selected services in both left-panel lists, the ad
 // hoc fullscreen preview target, and the per-pane buffer/error/scroll/health state. The ring
-// buffer itself lives in core/logs' LogsManager (one per store, in memory only); `logsPanes`
+// buffer itself lives in core/insight/logs' LogsManager (one per store, in memory only); `logsPanes`
 // is a mirror kept in sync via `onUpdate` so React re-renders, never a second source of truth.
 // Also owns the persisted filter-history lists, the persisted rule lists and the rule-set library.
 //
@@ -8,14 +8,14 @@
 // `createLogsSlice(deps)` call and spreads the sub-creators (filters, panes, health, actions).
 // Every symbol it used to export is re-exported from here.
 import type { StateCreator } from 'zustand';
-import { createLogsManager, type LogsManager } from '../../../../../../core/logs/index.js';
-import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
+import { createLogsManager, type LogsManager } from '../../../../../../core/insight/logs/index.js';
+import { createServiceActions, type ServiceActions } from '../../../../../../core/runtime/service-actions/index.js';
 import {
   readRuleLists,
   readRuleSets,
   type StoredRuleLists,
   type StoredRuleSet,
-} from '../../../../../../core/logs/rule-sets.js';
+} from '../../../../../../core/insight/logs/rule-sets.js';
 import { err, ok } from '../../../../../../core/result.js';
 import { createPersistedHistoryStore } from '../../../shared/input-history/index.js';
 import { createInFlightGuard } from '../../../shared/hooks/in-flight-guard.js';

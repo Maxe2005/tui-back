@@ -31,7 +31,7 @@ export interface StatePort {
   readCommandHistory(): Promise<Result<string[] | null>>;
   writeCommandHistory(history: string[]): Promise<Result<void>>;
   // The persisted active rule lists and named rule sets. Reads hand back the raw stored value
-  // (`unknown`): the file may hold anything, and core/logs/rule-sets sanitizes it element by
+  // (`unknown`): the file may hold anything, and core/insight/logs/rule-sets sanitizes it element by
   // element, dropping what it cannot trust with a warning.
   readLogRules(): Promise<Result<unknown | null>>;
   writeLogRules(rules: StoredRuleLists): Promise<Result<void>>;

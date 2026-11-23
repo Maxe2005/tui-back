@@ -1,7 +1,7 @@
 // tui/zones/edts: use-edts-input — the zone's single `useInput` dispatcher: an open dialog owns
 // the keystroke (routed to its handler); otherwise the base view handles Tab / reload / issues /
 // per-pane navigation. Inert behind any overlay or Ctrl+W resize-mode.
-import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
+import { isSystemEdt } from '../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
 import { useInput } from '../../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';

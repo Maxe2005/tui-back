@@ -12,7 +12,7 @@ const ALLOWED = new Set([
   'adapters/driving/tui/shared/screens/command-bar/command-bar.tsx',
   'adapters/driving/tui/shared/components/inputs/text-edit.ts',
   'adapters/driving/tui/shared/components/pickers/branch-picker.tsx',
-  'adapters/driving/tui/zones/edts/dialogs/create-wizard/step-branches.tsx',
+  'adapters/driving/tui/zones/edts/dialogs/create-wizard/steps/step-branches.tsx',
   'adapters/driving/tui/zones/routes/keys/routes-zone.overlay-keys.ts',
   'adapters/driving/tui/zones/routes/keys/routes-zone.pane-keys.ts',
   // History view: Tab toggles the by-branch / by-version search mode, not a focus move.

@@ -2,13 +2,13 @@
 // per-store context its sub-creators share. Kept free of any import from logs-slice.ts so the
 // sub-creators never form an import cycle with the composing slice.
 import type { StateCreator } from 'zustand';
-import type { LogsManager } from '../../../../../../core/logs/index.js';
+import type { LogsManager } from '../../../../../../core/insight/logs/index.js';
 import type { LogLine } from '../../../../../../core/ports/runtime/docker.js';
 import type { Manifest } from '../../../../../../core/ports/vcs/manifest.js';
-import { hasContainer, hasHealthUrl, type ServiceStatusState } from '../../../../../../core/service-status/index.js';
-import type { RestartMode, ServiceAction, ServiceActions } from '../../../../../../core/service-actions/index.js';
+import { hasContainer, hasHealthUrl, type ServiceStatusState } from '../../../../../../core/runtime/service-status/index.js';
+import type { RestartMode, ServiceAction, ServiceActions } from '../../../../../../core/runtime/service-actions/index.js';
 import type { Result } from '../../../../../../core/result.js';
-import { GLOBAL_RULES_KEY, type StoredLogRule, type StoredRuleLists, type StoredRuleSet } from '../../../../../../core/logs/rule-sets.js';
+import { GLOBAL_RULES_KEY, type StoredLogRule, type StoredRuleLists, type StoredRuleSet } from '../../../../../../core/insight/logs/rule-sets.js';
 import type { PersistedHistoryStore } from '../../../shared/input-history/index.js';
 import type { InFlightGuard } from '../../../shared/hooks/in-flight-guard.js';
 import type { FilterHistoryKey, LogFilterRule, LogFilterScope, VisibilityFlags } from '../../../zones/logs/logic/logs-zone.logic.js';
@@ -22,7 +22,7 @@ export type LogsPaneData = {
   lines: LogLine[];
   streamError: LogsPaneErrorState;
   noMoreHistory: boolean;
-  // Health-first status for this pane's service (AD-23, through core/service-status — never
+  // Health-first status for this pane's service (AD-23, through core/runtime/service-status — never
   // persisted, read on poll only) plus
   // whether a developer-triggered `docker restart` is in flight for this pane (gates the R
   // control + the no-op guard). Defaults: `down` (not yet proven up) and `false`.
@@ -177,7 +177,7 @@ export type LogsSlice = {
   closeLogsFullscreen: () => void;
   // Resolves repoPath's manifest-declared container and starts (or, if already subscribed,
   // no-ops) a live stream for it — the store action every list-row/pane-becomes-active
-  // transition calls (never core/logs directly from a component).
+  // transition calls (never core/insight/logs directly from a component).
   subscribeLogsPane: (repoPath: string, service: string) => Promise<void>;
   unsubscribeLogsPane: (repoPath: string) => void;
   // Restarts one pane's service through the registry, in `mode` (default: the

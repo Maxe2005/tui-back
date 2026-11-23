@@ -2,8 +2,8 @@
 // the service partition, clamped cursors, active panes, row health and the window-driven layout.
 import { useMemo } from 'react';
 import { useWindowSize } from 'ink';
-import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
-import type { ServiceStatusState } from '../../../../../../core/service-status/index.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/workspace/edt/lifecycle/list.js';
+import type { ServiceStatusState } from '../../../../../../core/runtime/service-status/index.js';
 import { partitionServicesByEdtMembership } from '../../edts/logic/edts-zone.logic.js';
 import {
   computeLogsLayout,

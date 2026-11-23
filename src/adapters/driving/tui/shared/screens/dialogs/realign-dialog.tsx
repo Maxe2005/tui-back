@@ -16,8 +16,8 @@ import { colors } from '../../theme/theme.js';
 import { REALIGN_SCOPES } from '../../../../../../core/ports/storage/settings.js';
 import { useAppStore, type AppStore } from '../../../store/app-store.js';
 import { matchingPreset } from '../../../store/slices/maintenance/realign-slice.js';
-import { BranchPlanTable } from '../../../zones/edts/dialogs/branch-plan-table.js';
-import { SwitchRestartReport } from '../../../zones/edts/dialogs/switch-restart-report.js';
+import { BranchPlanTable } from '../../../zones/edts/dialogs/edt/branch-plan-table.js';
+import { SwitchRestartReport } from '../../../zones/edts/dialogs/switch/switch-restart-report.js';
 import {
   REALIGN_ALIGNED_MESSAGE,
   REALIGN_NO_SELECTION_MESSAGE,

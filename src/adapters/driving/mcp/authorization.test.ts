@@ -4,7 +4,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { ok } from '../../../core/result.js';
-import type { Subcommand } from '../cli/dispatch.js';
+import type { Subcommand } from '../cli/dispatch/dispatch.js';
 import { createMcpServer } from './server.js';
 import { buildToolRegistry, TOOL_DEFINITIONS, type ToolDefinition } from './tool-registry.js';
 

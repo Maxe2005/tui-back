@@ -2,8 +2,8 @@
 // so these verify the wiring — the plan and its notices, the mode seeded from the settings, live
 // rows, the busy guard, closing mid-run and the dashboard refresh — not the use-case itself.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RestartRow } from '../../../../../../core/edt/switch/restart/switch-restart.js';
-import { HEAL_NOTHING_TO_DO_MESSAGE } from '../../../../../../core/heal/index.js';
+import type { RestartRow } from '../../../../../../core/workspace/edt/switch/restart/switch-restart.js';
+import { HEAL_NOTHING_TO_DO_MESSAGE } from '../../../../../../core/workspace/heal/index.js';
 import type { DockerPort, HealthState } from '../../../../../../core/ports/runtime/docker.js';
 import type { HealthProbePort } from '../../../../../../core/ports/runtime/health-probe.js';
 import type { EdtRegistryPort } from '../../../../../../core/ports/storage/edt-registry.js';

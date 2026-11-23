@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ResolveTabVisibilityData } from '../../../../../../core/edt/shared-edt/resolve-tab-visibility.js';
+import type { ResolveTabVisibilityData } from '../../../../../../core/workspace/edt/shared-edt/resolve-tab-visibility.js';
 import { ZONES } from '../../../zones/zones.js';
 import { colors } from '../../theme/theme.js';
 import { resolveZoneTabState } from './zone-tab-bar.js';

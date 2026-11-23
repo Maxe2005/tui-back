@@ -5,18 +5,18 @@
 // app-level overlays that are not a ModalDialog (the Terminal view) but get the same matrix.
 import { createElement, type ReactElement } from 'react';
 import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
-import type { ServiceBranchDivergence } from '../../../../../core/edt/lifecycle/list.js';
+import type { ServiceBranchDivergence } from '../../../../../core/workspace/edt/lifecycle/list.js';
 import { createAppStore } from '../../store/app-store.js';
 import { createFilterablePickListState } from '../components/pickers/filterable-pick-list.js';
 import { KeybindingHelp } from '../components/dialogs/keybinding-help.js';
-import { IssuesDialogView } from '../../zones/edts/dialogs/issues-dialog.js';
-import { FastForwardDialogView } from '../../zones/edts/dialogs/fast-forward-dialog.js';
-import { DeleteDialogView } from '../../zones/edts/dialogs/delete-dialog.js';
-import { ServiceActionsDialogView } from '../../zones/edts/dialogs/service-actions-dialog.js';
-import { AddToEdtDialogView } from '../../zones/edts/dialogs/add-to-edt-dialog.js';
-import { ModifyDialogView } from '../../zones/edts/dialogs/modify-dialog.js';
-import { SwitchDialogView } from '../../zones/edts/dialogs/switch-dialog.js';
-import { QuickPickDialogView } from '../../zones/edts/dialogs/quick-pick-dialog.js';
+import { IssuesDialogView } from '../../zones/edts/dialogs/edt/issues-dialog.js';
+import { FastForwardDialogView } from '../../zones/edts/dialogs/actions/fast-forward-dialog.js';
+import { DeleteDialogView } from '../../zones/edts/dialogs/edt/delete-dialog.js';
+import { ServiceActionsDialogView } from '../../zones/edts/dialogs/actions/service-actions-dialog.js';
+import { AddToEdtDialogView } from '../../zones/edts/dialogs/edt/add-to-edt-dialog.js';
+import { ModifyDialogView } from '../../zones/edts/dialogs/edt/modify-dialog.js';
+import { SwitchDialogView } from '../../zones/edts/dialogs/switch/switch-dialog.js';
+import { QuickPickDialogView } from '../../zones/edts/dialogs/actions/quick-pick-dialog.js';
 import { CreateWizardView } from '../../zones/edts/dialogs/create-wizard/create-wizard.js';
 import {
   initialAddToEdtDialog,
@@ -83,7 +83,7 @@ const store = () => createAppStore();
 export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   {
     id: 'edts/issues',
-    file: 'zones/edts/dialogs/issues-dialog.tsx',
+    file: 'zones/edts/dialogs/edt/issues-dialog.tsx',
     render: () =>
       createElement(IssuesDialogView, {
         unreachable: Array.from({ length: 80 }, (_, i) => `/repos/unreachable-${i}-${'u'.repeat(200)}`),
@@ -92,7 +92,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/fast-forward-shared',
-    file: 'zones/edts/dialogs/fast-forward-dialog.tsx',
+    file: 'zones/edts/dialogs/actions/fast-forward-dialog.tsx',
     render: () =>
       createElement(FastForwardDialogView, {
         dialog: {
@@ -112,7 +112,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/delete',
-    file: 'zones/edts/dialogs/delete-dialog.tsx',
+    file: 'zones/edts/dialogs/edt/delete-dialog.tsx',
     render: () =>
       createElement(DeleteDialogView, {
         dialog: {
@@ -133,7 +133,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/service-actions',
-    file: 'zones/edts/dialogs/service-actions-dialog.tsx',
+    file: 'zones/edts/dialogs/actions/service-actions-dialog.tsx',
     render: (rows) =>
       createElement(ServiceActionsDialogView, {
         dialog: { ...initialServiceActionsDialog(edt, '/repos/a', 'a'.repeat(300)), failedRows: failedRows(), error: MULTILINE_ERROR },
@@ -142,7 +142,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/add-to-edt',
-    file: 'zones/edts/dialogs/add-to-edt-dialog.tsx',
+    file: 'zones/edts/dialogs/edt/add-to-edt-dialog.tsx',
     render: (rows) =>
       createElement(AddToEdtDialogView, {
         dialog: { ...initialAddToEdtDialog(edt, '/repos/a', 'a'.repeat(300), 'feature/x', 'development'), failedRows: failedRows(), error: MULTILINE_ERROR },
@@ -151,7 +151,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/modify',
-    file: 'zones/edts/dialogs/modify-dialog.tsx',
+    file: 'zones/edts/dialogs/edt/modify-dialog.tsx',
     render: (rows) =>
       createElement(ModifyDialogView, {
         dialog: { ...initialModifyDialog(edt), failedRows: failedRows(), error: MULTILINE_ERROR },
@@ -162,7 +162,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/switch',
-    file: 'zones/edts/dialogs/switch-dialog.tsx',
+    file: 'zones/edts/dialogs/switch/switch-dialog.tsx',
     render: (rows) =>
       createElement(SwitchDialogView, {
         dialog: { ...initialSwitchDialog(edt), failedRows: failedRows(), error: MULTILINE_ERROR },
@@ -172,7 +172,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/quick-pick',
-    file: 'zones/edts/dialogs/quick-pick-dialog.tsx',
+    file: 'zones/edts/dialogs/actions/quick-pick-dialog.tsx',
     render: () =>
       createElement(QuickPickDialogView, {
         dialog: initialQuickPickDialog('switch', MULTILINE_ERROR),
@@ -207,7 +207,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   })),
   {
     id: 'edts/switch-results',
-    file: 'zones/edts/dialogs/switch-dialog.tsx',
+    file: 'zones/edts/dialogs/switch/switch-dialog.tsx',
     render: (rows) =>
       createElement(SwitchDialogView, {
         dialog: {
@@ -225,7 +225,7 @@ export const DIALOG_REGISTRY: readonly DialogEntry[] = [
   },
   {
     id: 'edts/switch-resolution',
-    file: 'zones/edts/dialogs/switch-dialog.tsx',
+    file: 'zones/edts/dialogs/switch/switch-dialog.tsx',
     render: (rows) => {
       const dirty = services.map((s) => ({
         service: s.service,

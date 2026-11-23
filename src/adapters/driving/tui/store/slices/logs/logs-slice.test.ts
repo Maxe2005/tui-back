@@ -1,5 +1,5 @@
 // tui/store/slices/logs-slice: unit tests for the Logs zone's pane lifecycle — the slice
-// calls core/logs use-cases against fake ports, so these verify the container-less guards
+// calls core/insight/logs use-cases against fake ports, so these verify the container-less guards
 // (no subscribe, no poll, no restart, no history fetch) rather than re-testing the manager.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../../../../core/result.js';

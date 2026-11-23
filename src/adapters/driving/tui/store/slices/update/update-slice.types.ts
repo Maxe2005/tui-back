@@ -9,12 +9,12 @@ import type {
   UpdateBlocker,
   UpdateBlockerChoice,
   UpdatePhase,
-} from '../../../../../../core/scripts/group-update/group-update.js';
+} from '../../../../../../core/workspace/scripts/group-update/group-update.js';
 import type { Result } from '../../../../../../core/result.js';
-import type { ServiceStatusState } from '../../../../../../core/service-status/index.js';
+import type { ServiceStatusState } from '../../../../../../core/runtime/service-status/index.js';
 import type { InFlightGuard } from '../../../shared/hooks/in-flight-guard.js';
 import { finalizeServiceSteps, type ServiceIssue, type ServiceStepStates } from '../../../zones/update/logic/update-zone.logic.js';
-import type { SHARED_TYPES_PHASE_FAILED, SharedTypesMode, SharedTypesStage } from '../../../../../../core/shared-types/consumers/smart-update.js';
+import type { SHARED_TYPES_PHASE_FAILED, SharedTypesMode, SharedTypesStage } from '../../../../../../core/workspace/shared-types/consumers/smart-update.js';
 import type { UpdateConfigDraft } from '../../../zones/update/config/update-config-dialog.logic.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 
@@ -206,7 +206,7 @@ export type UpdateSlice = {
   markUpdateInterrupted: () => Promise<void>;
   clearUpdate: () => void;
 
-  // Live per-service health-first status (AD-23, through core/service-status) for the Update
+  // Live per-service health-first status (AD-23, through core/runtime/service-status) for the Update
   // zone's always-visible service list — keyed by repoPath, independent of the Logs zone's
   // `logsPanes[*].health`. A repoPath with no entry yet (poll in flight, or never started) reads
   // as `down`, until the first poll resolves. `no-container` is a manifest declaring neither a

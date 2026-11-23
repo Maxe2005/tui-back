@@ -7,7 +7,7 @@ import { StatusBadge } from '../../../shared/components/feedback/status-badge.js
 import { FullscreenFrame } from '../../../shared/components/layout/fullscreen-frame.js';
 import { ScrollableOutput } from '../../../shared/components/display/scrollable-output.js';
 import { colors } from '../../../shared/theme/theme.js';
-import type { RestartMode } from '../../../../../../core/service-actions/index.js';
+import type { RestartMode } from '../../../../../../core/runtime/service-actions/index.js';
 import type { LogsPaneData } from '../../../store/app-store.js';
 import {
   formatHealthLabel,

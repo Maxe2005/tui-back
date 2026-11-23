@@ -498,7 +498,7 @@ export type BranchPickerProps = {
   // create-new's base branch; rename-current never shows a list.
   maxRows: number;
   // Create-EDT's base-branch step repurposes "Create new" mode's Name field to mean "the base
-  // branch itself" — that session never creates a branch (see create-wizard/step-branches.tsx's
+  // branch itself" — that session never creates a branch (see create-wizard/steps/step-branches.tsx's
   // applyBaseBranchOutcome), so the nested "base to create from" field is dead chrome there.
   // When true, hides that field and relabels the remaining one "Base branch" — but only while
   // it isn't focused, so the Tab-cycle (baseFocused resets to true) still falls back to the

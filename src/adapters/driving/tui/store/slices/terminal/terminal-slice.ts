@@ -1,4 +1,4 @@
-// tui/store/slices: the Terminal overlay — one `core/shell` session on a service's
+// tui/store/slices: the Terminal overlay — one `core/runtime/shell` session on a service's
 // repo dir or its container, owned here and nowhere else. The slice holds what the view shows:
 // the target, the bounded display lines (output plus the echoed command and status lines), the
 // cwd, the running flag, fullscreen and a one-line notice. Streamed lines are batched so a noisy
@@ -8,8 +8,8 @@ import type { StateCreator } from 'zustand';
 import type { Manifest } from '../../../../../../core/ports/vcs/manifest.js';
 import type { ShellLine, ShellTarget } from '../../../../../../core/ports/runtime/shell-session.js';
 import { err, type Result } from '../../../../../../core/result.js';
-import { createShellSession, type ShellRunResult, type ShellSession } from '../../../../../../core/shell/index.js';
-import { DEFAULT_MAX_LINES } from '../../../../../../core/shell/line-buffer.js';
+import { createShellSession, type ShellRunResult, type ShellSession } from '../../../../../../core/runtime/shell/index.js';
+import { DEFAULT_MAX_LINES } from '../../../../../../core/runtime/shell/line-buffer.js';
 import { pushHistoryEntry } from '../../../shared/input-history/index.js';
 import { TERMINAL_BUSY_NOTICE, firstLine, terminalEchoText, terminalStatusText } from './terminal-text.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { err, ok } from '../../../core/result.js';
-import type { Subcommand } from '../cli/dispatch.js';
+import type { Subcommand } from '../cli/dispatch/dispatch.js';
 import { createMcpServer } from './server.js';
 import { buildToolRegistry, TOOL_DEFINITIONS } from './tool-registry.js';
 

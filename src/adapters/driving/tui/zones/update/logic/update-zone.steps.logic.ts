@@ -1,5 +1,5 @@
 // tui/zones/update: per-service merge/migration/restart step tracking and step views.
-import type { GroupUpdateRepoResult, UpdatePhase } from '../../../../../../core/scripts/group-update/group-update.js';
+import type { GroupUpdateRepoResult, UpdatePhase } from '../../../../../../core/workspace/scripts/group-update/group-update.js';
 import { CONFLICT_OUTCOME_LABELS } from './update-zone.status.logic.js';
 
 // The per-service step tracker behind the detail pane. One service's update is three

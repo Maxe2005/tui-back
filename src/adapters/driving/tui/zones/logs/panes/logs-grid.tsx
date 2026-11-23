@@ -3,8 +3,8 @@
 // useInput.
 import { Box, Text } from 'ink';
 import { colors } from '../../../shared/theme/theme.js';
-import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
-import type { RestartMode } from '../../../../../../core/service-actions/index.js';
+import type { ServiceBranchDivergence } from '../../../../../../core/workspace/edt/lifecycle/list.js';
+import type { RestartMode } from '../../../../../../core/runtime/service-actions/index.js';
 import type { LogsPaneData } from '../../../store/app-store.js';
 import { LogsPaneView } from './logs-pane-view.js';
 import {

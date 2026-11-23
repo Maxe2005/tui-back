@@ -1,6 +1,6 @@
 // tui/zones/update: prompt/label constants, run-result formatters and the trigger/confirm key resolvers.
-import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../../core/edt/shared-edt/shared-edt.js';
-import type { GroupUpdateRepoResult } from '../../../../../../core/scripts/group-update/group-update.js';
+import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
+import type { GroupUpdateRepoResult } from '../../../../../../core/workspace/scripts/group-update/group-update.js';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import type { SummaryTone } from '../../../shared/components/index.js';
 import { formatHint, formatHints } from '../../../shared/components/dialogs/hints.js';

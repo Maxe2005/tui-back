@@ -50,7 +50,7 @@ describe('single-instance lock', () => {
     const lock = await acquireTuiLock();
     expect(lock).not.toBeNull();
 
-    const { resolveXdgPaths } = await import('../../driven/xdg/index.js');
+    const { resolveXdgPaths } = await import('../../driven/storage/xdg/index.js');
     const paths = resolveXdgPaths();
     const lockFile = join(paths.stateDir, 'locks', 'tui.lock');
     expect(existsSync(lockFile)).toBe(true);
@@ -63,7 +63,7 @@ describe('single-instance lock', () => {
   });
 
   it('auto-reclaims stale lock (dead PID) and acquires lock', async () => {
-    const { resolveXdgPaths, ensureXdgDir } = await import('../../driven/xdg/index.js');
+    const { resolveXdgPaths, ensureXdgDir } = await import('../../driven/storage/xdg/index.js');
     const paths = resolveXdgPaths();
     const lockDir = join(paths.stateDir, 'locks');
     const lockFile = join(lockDir, 'tui.lock');

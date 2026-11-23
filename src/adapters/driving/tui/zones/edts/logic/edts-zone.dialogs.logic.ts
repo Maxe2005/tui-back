@@ -1,16 +1,16 @@
 // tui/zones/edts: remaining EDT dialog states and their initialisers.
-import type { ActivationBlockedRepo } from '../../../../../../core/edt/lifecycle/activate.js';
-import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../../core/edt/lifecycle/delete.js';
-import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
-import type { FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
-import type { SwitchEdtRepoResult } from '../../../../../../core/edt/switch/switch.js';
+import type { ActivationBlockedRepo } from '../../../../../../core/workspace/edt/lifecycle/activate.js';
+import { defaultDispositionFor, type MemberDeleteStatus, type MemberDisposition } from '../../../../../../core/workspace/edt/lifecycle/delete.js';
+import { isSystemEdt } from '../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
+import type { FastForwardSharedRow } from '../../../../../../core/workspace/edt/branches/fast-forward-shared.js';
+import type { SwitchEdtRepoResult } from '../../../../../../core/workspace/edt/switch/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { createBranchPickerState, applyBranchPickerRetry, type BranchPickerState } from '../../../shared/components/pickers/branch-picker.js';
 import { type FailedResultRow } from '../../../shared/components/lists/failed-result-list.js';
 import type { MenuItem } from '../../../shared/components/lists/menu-list.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../../shared/components/pickers/filterable-pick-list.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
-import type { SwitchRestartRunMode } from '../../../../../../core/edt/switch/restart/switch-restart.js';
+import type { SwitchRestartRunMode } from '../../../../../../core/workspace/edt/switch/restart/switch-restart.js';
 import type { SwitchResolutionState } from '../dialogs/switch-resolution/switch-resolution.logic.js';
 import type { FormFocus } from './edts-zone.focus.logic.js';
 import type { CreateDialogState } from './edts-zone.wizard.logic.js';
@@ -145,7 +145,7 @@ export type ServiceActionsDialogState = {
 // The OTHER SERVICES row's Add-to-EDT dialog opened by Enter — the branch-picker opens
 // immediately (there is no "current branch" step to gate behind, so the picker *is* the dialog's
 // branch step); confirm calls modifyEdt with both `addMembers` and `setBranches` for the same
-// repoPath in one call (core/edt/lifecycle/modify.ts composes them).
+// repoPath in one call (core/workspace/edt/lifecycle/modify.ts composes them).
 export type AddToEdtDialogState = {
   kind: 'add-to-edt';
   edt: EdtRegistryEntry;
@@ -219,7 +219,7 @@ export function initialDeleteDialog(target: EdtRegistryEntry, isActive: boolean)
 
 // Per-member disposition defaults to 'Leave branch as-is', except a branch both merged into its
 // sharedBranch and clean, which defaults to 'Delete branch'; every row stays independently
-// toggleable. Reuses core/edt/lifecycle/delete.ts's defaultDispositionFor as the single source of truth.
+// toggleable. Reuses core/workspace/edt/lifecycle/delete.ts's defaultDispositionFor as the single source of truth.
 export function buildDeleteMemberRows(statuses: readonly MemberDeleteStatus[]): DeleteMemberRow[] {
   return statuses.map((status) => ({
     repoPath: status.repoPath,

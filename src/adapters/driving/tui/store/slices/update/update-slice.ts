@@ -1,5 +1,5 @@
 // tui/store/slices: the Update zone's group-update run state. Calls the same
-// core/scripts/group-update/group-update.ts use-case the CLI's `tui-back update` wraps, in-process (AD-2,
+// core/workspace/scripts/group-update/group-update.ts use-case the CLI's `tui-back update` wraps, in-process (AD-2,
 // never by shelling out to the CLI).
 //
 // This file only composes the slice: it creates the per-store closure context once per

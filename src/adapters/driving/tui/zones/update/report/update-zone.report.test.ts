@@ -1,6 +1,6 @@
 // Pure logic of the full-screen service report.
 import { describe, expect, it } from 'vitest';
-import type { GroupUpdateRepoResult } from '../../../../../../core/scripts/group-update/group-update.js';
+import type { GroupUpdateRepoResult } from '../../../../../../core/workspace/scripts/group-update/group-update.js';
 import {
   applyReportScroll,
   buildServiceReport,

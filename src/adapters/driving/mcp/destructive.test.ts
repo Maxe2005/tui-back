@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { Subcommand, SubcommandContext } from '../cli/dispatch.js';
+import type { Subcommand, SubcommandContext } from '../cli/dispatch/dispatch.js';
 import { createMcpServer } from './server.js';
 import { buildToolRegistry, TOOL_DEFINITIONS } from './tool-registry.js';
 

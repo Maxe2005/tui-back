@@ -34,7 +34,7 @@ export function useEdtsState(useStore: AppStore, initialPaneFocus: PaneFocus, in
   const deleteEdtAction = useStore((state) => state.deleteEdt);
   const resolveMemberDeleteStatusesAction = useStore((state) => state.resolveMemberDeleteStatuses);
   // The shared branch-picker's store actions — `deps.git` is never touched directly from this
-  // zone; these wrap core/edt/lifecycle/modify.ts's listMemberBranches/createMemberBranch/
+  // zone; these wrap core/workspace/edt/lifecycle/modify.ts's listMemberBranches/createMemberBranch/
   // renameMemberBranch exports.
   const listBranchesAction = useStore((state) => state.listBranches);
   // The create wizard's Step 3 per-service lists (local + remote-tracking refs).

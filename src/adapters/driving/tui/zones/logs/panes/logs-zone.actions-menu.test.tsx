@@ -1,7 +1,7 @@
 // tui/zones/logs: real-keypress actions menu (a).
 import { render } from 'ink';
 import { describe, it, expect, vi } from 'vitest';
-import type { ServiceAction } from '../../../../../../core/service-actions/index.js';
+import type { ServiceAction } from '../../../../../../core/runtime/service-actions/index.js';
 import { KEYS } from '../../../shared/test-support/fake-tty.js';
 import { LogsZone } from '../logs-zone.js';
 import { service, press, pressEscape, mount, seedStore } from '../logs-zone.test-support.js';

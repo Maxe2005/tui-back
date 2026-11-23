@@ -1,6 +1,6 @@
 // tui/zones/update: last-update recap formatting and the zone's footer-context resolution.
-import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../../core/edt/shared-edt/shared-edt.js';
-import type { GroupUpdateRepoResult, GroupUpdateSelectionItem } from '../../../../../../core/scripts/group-update/group-update.js';
+import { SHARED_EDT_TOPIC, isSharedEdtTopic } from '../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
+import type { GroupUpdateRepoResult, GroupUpdateSelectionItem } from '../../../../../../core/workspace/scripts/group-update/group-update.js';
 import type { FooterContextId } from '../../../keybindings/index.js';
 
 // The recap view's body: the last run's context (who it covered, from which sources to which

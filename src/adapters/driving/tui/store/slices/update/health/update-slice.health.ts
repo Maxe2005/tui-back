@@ -1,7 +1,7 @@
 // tui/store/slices: the Update slice's service-health polling (one shared timer for every
 // tracked service, independent of the Logs zone's per-pane polling).
 import { healthCheckEnabledFrom } from '../../../../../../../core/ports/storage/settings.js';
-import { resolveServiceStatus } from '../../../../../../../core/service-status/index.js';
+import { resolveServiceStatus } from '../../../../../../../core/runtime/service-status/index.js';
 import {
   UPDATE_HEALTH_POLL_INTERVAL_MS,
   type UpdateSlice,
@@ -17,7 +17,7 @@ export function createUpdateHealthActions(
 ): Pick<UpdateSlice, 'updateServiceHealth' | 'startUpdateHealthPolling' | 'stopUpdateHealthPolling'> {
   const { deps, healthInFlight } = ctx;
   // One poll cycle for a single service — resolves its health-first status through
-  // core/service-status, updating the badge only on success. Like logs-slice.ts's
+  // core/runtime/service-status, updating the badge only on success. Like logs-slice.ts's
   // pollPaneHealth, any failure (manifest load fails, Docker and the probe both fail) keeps
   // last-known health and never crashes the view. A tick for a repo whose previous poll (probe
   // included) is still awaiting is skipped.

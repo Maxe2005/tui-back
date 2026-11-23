@@ -1,7 +1,7 @@
 // EdtsZone real-keypress tests: create validation.
 import { describe, it, expect, vi } from 'vitest';
 import type { Result } from '../../../../../../../core/result.js';
-import type { CreateEdtData } from '../../../../../../../core/edt/lifecycle/create.js';
+import type { CreateEdtData } from '../../../../../../../core/workspace/edt/lifecycle/create.js';
 import { createAppStore } from '../../../../store/app-store.js';
 import { KEYS } from '../../../../shared/test-support/fake-tty.js';
 import { EdtsZone } from '../../edts-zone.js';

@@ -5,20 +5,20 @@
 // array length, drive the zone so failure and genuinely-empty stay distinct.
 import { resolve } from 'node:path';
 import type { StateCreator } from 'zustand';
-import { ROUTES_MODULE_ID } from '../../../../../../core/edt/shared-edt/resolve-tab-visibility.js';
+import { ROUTES_MODULE_ID } from '../../../../../../core/workspace/edt/shared-edt/resolve-tab-visibility.js';
 import type { Route } from '../../../../../../core/ports/modules/route-scanner.js';
 import type { SavedRequest } from '../../../../../../core/ports/storage/saved-request.js';
 import { err, ok, type Result } from '../../../../../../core/result.js';
-import { fireRequest, type FireRequestOptions, type FireResult } from '../../../../../../core/routes/fire-request.js';
-import { listRoutes } from '../../../../../../core/routes/list-routes.js';
+import { fireRequest, type FireRequestOptions, type FireResult } from '../../../../../../core/insight/routes/fire-request.js';
+import { listRoutes } from '../../../../../../core/insight/routes/list-routes.js';
 import {
   deleteSavedRequest as deleteSavedRequestUseCase,
   listSavedRequests,
   overwriteSavedRequest,
   saveRequest,
   type SavedWithStale,
-} from '../../../../../../core/routes/saved-requests.js';
-import { listRepos } from '../../../../../../core/scripts/registry/list-repos.js';
+} from '../../../../../../core/insight/routes/saved-requests.js';
+import { listRepos } from '../../../../../../core/workspace/scripts/registry/list-repos.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 import {
@@ -283,7 +283,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         return;
       }
 
-      // Mirrors core/edt/shared-edt/resolve-tab-visibility.ts's active-EDT-member resolution: prefer a
+      // Mirrors core/workspace/edt/shared-edt/resolve-tab-visibility.ts's active-EDT-member resolution: prefer a
       // carrying repo that belongs to the active EDT, else fall back to the first carrying
       // repo. A state/registry read failure degrades to the same fallback rather than
       // failing the whole load — the manifest gate above already decided listability.
@@ -340,7 +340,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         });
       }
     },
-    // Fires a route through core/routes/fire-request.ts in-process (AD-2) — the same use-case
+    // Fires a route through core/insight/routes/fire-request.ts in-process (AD-2) — the same use-case
     // `tui-back fire-request` runs — against the slice's loaded routes repo. The outcome is
     // recorded per route; a concurrent fire of the same route is dropped (other routes may
     // fire meanwhile). An unwired store degrades to an explicit error rather than throwing.

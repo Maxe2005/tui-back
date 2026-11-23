@@ -2,7 +2,7 @@
 import { render } from 'ink';
 import { describe, it, expect } from 'vitest';
 import type { Result } from '../../../../../../../core/result.js';
-import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../../../core/edt/switch/switch.js';
+import type { SwitchActiveEdtData, SwitchDirtyReposChoice } from '../../../../../../../core/workspace/edt/switch/switch.js';
 import { createAppStore } from '../../../../store/app-store.js';
 import { KEYS } from '../../../../shared/test-support/fake-tty.js';
 import { EdtsZone } from '../../edts-zone.js';
@@ -197,7 +197,7 @@ describe('EdtsZone real-keypress interactions — switch', () => {
   // When a service outside the outgoing EDT is dirty, the switch dialog shows the two-panel
   // resolution view. These fakes drive the same store fields (switchDirtyRepos /
   // resolveSwitchDirtyRepos) edt-slice.ts's real seam does — the end-to-end wiring through
-  // core/edt/switch/switch.ts is covered by edt-slice.test.ts; these cover the dialog's rendering and
+  // core/workspace/edt/switch/switch.ts is covered by edt-slice.test.ts; these cover the dialog's rendering and
   // keystroke routing.
   function resolutionStore(options: {
     activeTopic?: string | null;

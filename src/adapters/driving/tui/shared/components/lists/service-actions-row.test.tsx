@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ServiceAction } from '../../../../../../core/service-actions/index.js';
+import type { ServiceAction } from '../../../../../../core/runtime/service-actions/index.js';
 import { renderToString } from '../render-to-string.js';
 import { ServiceActionsRow } from './service-actions-row.js';
 

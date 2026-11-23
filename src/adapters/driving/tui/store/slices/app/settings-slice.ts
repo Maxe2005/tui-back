@@ -2,7 +2,7 @@
 // settings.yaml and applied to the live store immediately, with no separate save step.
 import type { StateCreator } from 'zustand';
 import { DEFAULT_SETTINGS, type Settings } from '../../../../../../core/ports/storage/settings.js';
-import { assertSharedEdtCanBeDisabled } from '../../../../../../core/edt/shared-edt/shared-edt.js';
+import { assertSharedEdtCanBeDisabled } from '../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 // A partial update accepted by updateSettings — each present top-level key shallow-merges

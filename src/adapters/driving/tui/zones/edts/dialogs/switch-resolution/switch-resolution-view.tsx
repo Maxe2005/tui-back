@@ -3,11 +3,11 @@
 // state-1 rows), the "Configure <service>" box and the discard confirmation. State and key
 // handling live in switch-resolution.logic.ts.
 import { Box, Text } from 'ink';
-import type { SwitchDirtyRepo } from '../../../../../../../core/edt/switch/switch.js';
+import type { SwitchDirtyRepo } from '../../../../../../../core/workspace/edt/switch/switch.js';
 import { BoundedList } from '../../../../shared/components/lists/bounded-list.js';
 import { TextInputLine } from '../../../../shared/components/inputs/text-input-line.js';
 import { colors } from '../../../../shared/theme/theme.js';
-import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../branch-plan-table.js';
+import { BranchPlanTable, PanelTitle, type BranchPlanCell } from '../edt/branch-plan-table.js';
 import {
   autoStashedRepos,
   blockedRow,

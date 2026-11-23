@@ -1,7 +1,7 @@
 // tui/shared/realign-dialog: the realign overlay's pure decisions — which view shows, what a key
 // does, the footer context, the table cells and the per-row badges and summary. The component
 // only feeds raw Ink keys here and dispatches the result to the store.
-import type { DriftCandidate } from '../../../../../../core/dashboard/drift.js';
+import type { DriftCandidate } from '../../../../../../core/insight/dashboard/drift.js';
 import { REALIGN_SCOPES, cycleRealignScope, type RealignScope } from '../../../../../../core/ports/storage/settings.js';
 import type { FooterContextId } from '../../../keybindings/index.js';
 import type { RealignCandidates, RealignLiveRow, RealignLiveStatus, RealignRun } from '../../../store/app-store.js';

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, useWindowSize } from 'ink';
-import type { ResolveTabVisibilityData } from '../../../core/edt/shared-edt/resolve-tab-visibility.js';
+import type { ResolveTabVisibilityData } from '../../../core/workspace/edt/shared-edt/resolve-tab-visibility.js';
 import { CommandBar } from './shared/screens/command-bar/command-bar.js';
 import { BoundsProvider } from './shared/bounds/bounds-context.js';
 import { SHELL_FIXED_ROWS, formatTooSmallMessage, isTerminalTooSmall } from './shared/bounds/bounds.js';

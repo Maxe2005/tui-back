@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import type { FilterablePickItem } from '../../../shared/components/pickers/filterable-pick-list.js';
 import type { RoutesState } from './use-routes-state.js';
-import type { SavedWithStale } from '../../../../../../core/routes/saved-requests.js';
+import type { SavedWithStale } from '../../../../../../core/insight/routes/saved-requests.js';
 import {
   type BodyEditError,
   canEditRouteBody,

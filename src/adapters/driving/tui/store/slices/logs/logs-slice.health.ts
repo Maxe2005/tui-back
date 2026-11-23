@@ -2,7 +2,7 @@
 // subscription) and the shared listed-row poll with its container-presence cache. Never
 // resubscribes a log stream.
 import { healthCheckEnabledFrom } from '../../../../../../core/ports/storage/settings.js';
-import { hasContainer, resolveManifestStatus, type ServiceStatusState } from '../../../../../../core/service-status/index.js';
+import { hasContainer, resolveManifestStatus, type ServiceStatusState } from '../../../../../../core/runtime/service-status/index.js';
 import {
   LOGS_HEALTH_POLL_INTERVAL_MS,
   LOGS_LISTED_HEALTH_POLL_INTERVAL_MS,
@@ -48,7 +48,7 @@ export function createLogsHealth(
     : null;
 
   // One poll cycle for a single pane — resolves the service's health-first status through
-  // core/service-status and updates the badge only on success. Any failure (manifest load
+  // core/runtime/service-status and updates the badge only on success. Any failure (manifest load
   // fails, Docker and the probe both fail) keeps last-known health and never crashes the view.
   // A manifest without `container` marks the pane container-less; unless it declares a probed
   // `healthUrl` (then it gets a real up/down) it records no-container, stops its own timer and

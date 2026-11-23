@@ -4,13 +4,13 @@
 // edt-slice seam until this view resolves `proceed` (with `buildResolutions(rows)`) or
 // `cancel`. The layout mirrors the create wizard's Step 3 (see the main reducer below).
 import { resolve } from 'node:path';
-import { isSystemEdt } from '../../../../../../../core/edt/shared-edt/shared-edt.js';
-import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/edt/switch/switch.js';
+import { isSystemEdt } from '../../../../../../../core/workspace/edt/shared-edt/shared-edt.js';
+import type { DirtyResolution, SwitchDirtyRepo, SwitchEdtRepoResult } from '../../../../../../../core/workspace/edt/switch/switch.js';
 import type { EdtRegistryEntry } from '../../../../../../../core/ports/storage/edt-registry.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../../../shared/components/inputs/text-edit.js';
 import { resolveFocusStep, stepFocus, TWO_PANEL_NAV } from '../../../../shared/keys/focus-navigation.js';
 import { suggestBranchNameFromTopic } from '../../logic/edts-zone.logic.js';
-import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box.logic.js';
+import { existingTargetError, OVERRIDE_BOX_ERRORS, protectedNameError } from '../create-wizard/override-box/override-box.logic.js';
 import { isProtectedTarget } from '../create-wizard/wizard.logic.js';
 import { nextBoxLine as moveBoxLine } from '../../../../shared/keys/box-line-nav.js';
 

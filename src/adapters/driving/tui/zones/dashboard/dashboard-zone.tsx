@@ -5,7 +5,7 @@
 // Overlays make the zone inert.
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
-import type { DashboardOtherService } from '../../../../../core/dashboard/snapshot.js';
+import type { DashboardOtherService } from '../../../../../core/insight/dashboard/snapshot.js';
 import { useAppStore, type AppStore } from '../../store/app-store.js';
 import { DimAnnotation } from '../../shared/components/feedback/dim-annotation.js';
 import { useInput } from '../../shared/hooks/use-input.js';

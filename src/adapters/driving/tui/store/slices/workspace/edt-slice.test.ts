@@ -1,5 +1,5 @@
 // tui/store/slices/edt-slice: unit tests for the switch dirty-repo seam — the slice calls the
-// real core/edt/switch/switch.ts use-case against fake ports, so these verify the wiring (preview
+// real core/workspace/edt/switch/switch.ts use-case against fake ports, so these verify the wiring (preview
 // raised/cleared, resolveSwitchDirtyRepos resuming the paused core call) rather than
 // re-testing switchActiveEdt itself. Mirrors update-slice.test.ts's onUpdateBlocker tests.
 import { mkdtemp, rm } from 'node:fs/promises';

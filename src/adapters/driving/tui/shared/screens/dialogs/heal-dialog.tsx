@@ -13,7 +13,7 @@ import { RestartModeSelector } from '../../components/pickers/restart-mode-selec
 import { ClampedParagraph } from '../../components/display/truncated-text.js';
 import { colors } from '../../theme/theme.js';
 import { useAppStore, type AppStore } from '../../../store/app-store.js';
-import { SwitchRestartReport } from '../../../zones/edts/dialogs/switch-restart-report.js';
+import { SwitchRestartReport } from '../../../zones/edts/dialogs/switch/switch-restart-report.js';
 import { HEAL_CONFIRM_CLOSE_TEXT, HEAL_MODES, describeHealPlan, healFooterContext, healView, resolveHealKey } from './heal-dialog.logic.js';
 
 // Modal frame: border, padding, title, separator and the PgUp/PgDn line.
