@@ -1,7 +1,7 @@
 // tui/store/slices: the Logs slice's service actions — pane notices, the registry-backed
 // action list/run, restart, the `R`/`O` shortcuts, and open-in-IDE. Failures surface as a
 // one-line pane notice; the public actions never reject.
-import { err, type Result } from '../../../../../core/result.js';
+import { err, type Result } from '../../../../../../core/result.js';
 import {
   NO_CLEAN_RECIPE_NOTICE,
   NO_CLEAN_RECIPE_REASON,
@@ -9,8 +9,8 @@ import {
   restartBlockingLocks,
   type RestartMode,
   type ServiceAction,
-} from '../../../../../core/service-actions/index.js';
-import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS, RESTART_MODES, TERMINAL_KINDS } from './app/service-action-ids.js';
+} from '../../../../../../core/service-actions/index.js';
+import { OPEN_IN_IDE_ACTION_ID, RESTART_ACTION_IDS, RESTART_MODES, TERMINAL_KINDS } from '../app/service-action-ids.js';
 import type { LogsHealthHelpers } from './logs-slice.health.js';
 import {
   LOGS_ACTION_FAILED_NOTICE,

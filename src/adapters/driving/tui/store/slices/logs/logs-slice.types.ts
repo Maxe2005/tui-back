@@ -2,17 +2,17 @@
 // per-store context its sub-creators share. Kept free of any import from logs-slice.ts so the
 // sub-creators never form an import cycle with the composing slice.
 import type { StateCreator } from 'zustand';
-import type { LogsManager } from '../../../../../core/logs/index.js';
-import type { LogLine } from '../../../../../core/ports/docker.js';
-import type { Manifest } from '../../../../../core/ports/manifest.js';
-import { hasContainer, hasHealthUrl, type ServiceStatusState } from '../../../../../core/service-status/index.js';
-import type { RestartMode, ServiceAction, ServiceActions } from '../../../../../core/service-actions/index.js';
-import type { Result } from '../../../../../core/result.js';
-import { GLOBAL_RULES_KEY, type StoredLogRule, type StoredRuleLists, type StoredRuleSet } from '../../../../../core/logs/rule-sets.js';
-import type { PersistedHistoryStore } from '../../shared/input-history/index.js';
-import type { InFlightGuard } from '../../shared/hooks/in-flight-guard.js';
-import type { FilterHistoryKey, LogFilterRule, LogFilterScope, VisibilityFlags } from '../../zones/logs/logs-zone.logic.js';
-import type { AppState, AppStoreDeps } from '../app-store.js';
+import type { LogsManager } from '../../../../../../core/logs/index.js';
+import type { LogLine } from '../../../../../../core/ports/docker.js';
+import type { Manifest } from '../../../../../../core/ports/manifest.js';
+import { hasContainer, hasHealthUrl, type ServiceStatusState } from '../../../../../../core/service-status/index.js';
+import type { RestartMode, ServiceAction, ServiceActions } from '../../../../../../core/service-actions/index.js';
+import type { Result } from '../../../../../../core/result.js';
+import { GLOBAL_RULES_KEY, type StoredLogRule, type StoredRuleLists, type StoredRuleSet } from '../../../../../../core/logs/rule-sets.js';
+import type { PersistedHistoryStore } from '../../../shared/input-history/index.js';
+import type { InFlightGuard } from '../../../shared/hooks/in-flight-guard.js';
+import type { FilterHistoryKey, LogFilterRule, LogFilterScope, VisibilityFlags } from '../../../zones/logs/logs-zone.logic.js';
+import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 export type LogsPaneErrorState = { code: string; message: string } | null;
 

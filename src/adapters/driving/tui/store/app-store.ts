@@ -29,7 +29,7 @@ import { createEdtSlice, type EdtSlice } from './slices/edt-slice.js';
 import { createRegistrySlice, type RegistrySlice } from './slices/registry-slice.js';
 import { createSettingsSlice, type SettingsSlice } from './slices/app/settings-slice.js';
 import { createUpdateSlice, type UpdateSlice } from './slices/update-slice.js';
-import { createLogsSlice, type LogsSlice } from './slices/logs-slice.js';
+import { createLogsSlice, type LogsSlice } from './slices/logs/logs-slice.js';
 import { createCommandHistorySlice, type CommandHistorySlice } from './slices/app/command-history-slice.js';
 import { createResetSlice, type ResetSlice } from './slices/reset-slice.js';
 import { createRoutesSlice, type RoutesSlice } from './slices/routes-slice.js';
@@ -47,7 +47,7 @@ export type { StaleRegistryEntry, StaleRegistryReason, RemoveStaleRegistryEntryR
 export type { ValidateRegistryEntryResult, ValidateRegistryOutcome } from '../../../../core/scripts/validate-registry.js';
 export type { SettingsUpdate } from './slices/app/settings-slice.js';
 export type { UpdateRunStatus } from './slices/update-slice.js';
-export type { LogsPaneData } from './slices/logs-slice.js';
+export type { LogsPaneData } from './slices/logs/logs-slice.js';
 export type { ResetPreview } from './slices/reset-slice.js';
 export type { SharedTypesPublish, SharedTypesPublishStatus, SharedTypesRun, SharedTypesRunStatus, SharedTypesSourceStatus } from './slices/shared-types-slice.js';
 export type { DashboardSectionStatus } from './slices/dashboard-slice.js';

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { ok, err } from "../../../../../core/result.js";
-import type { ManifestPort } from "../../../../../core/ports/manifest.js";
-import { DEFAULT_SETTINGS } from "../../../../../core/ports/settings.js";
-import type { DockerPort } from "../../../../../core/ports/docker.js";
-import { createAppStore } from "../app-store.js";
-import { manifestFor, fakeDeps } from "../store.test-support.js";
+import { ok, err } from "../../../../../../core/result.js";
+import type { ManifestPort } from "../../../../../../core/ports/manifest.js";
+import { DEFAULT_SETTINGS } from "../../../../../../core/ports/settings.js";
+import type { DockerPort } from "../../../../../../core/ports/docker.js";
+import { createAppStore } from "../../app-store.js";
+import { manifestFor, fakeDeps } from "../../store.test-support.js";
 
 describe("logs slice", () => {
   it("toggleLogsEdtSelection/toggleLogsOtherSelection add then remove a repoPath (Space toggle)", () => {

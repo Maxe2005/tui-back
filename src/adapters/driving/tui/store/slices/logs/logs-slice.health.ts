@@ -1,8 +1,8 @@
 // tui/store/slices: the Logs slice's health polling — the per-pane poll (started with a
 // subscription) and the shared listed-row poll with its container-presence cache. Never
 // resubscribes a log stream.
-import { healthCheckEnabledFrom } from '../../../../../core/ports/settings.js';
-import { hasContainer, resolveManifestStatus, type ServiceStatusState } from '../../../../../core/service-status/index.js';
+import { healthCheckEnabledFrom } from '../../../../../../core/ports/settings.js';
+import { hasContainer, resolveManifestStatus, type ServiceStatusState } from '../../../../../../core/service-status/index.js';
 import {
   LOGS_HEALTH_POLL_INTERVAL_MS,
   LOGS_LISTED_HEALTH_POLL_INTERVAL_MS,

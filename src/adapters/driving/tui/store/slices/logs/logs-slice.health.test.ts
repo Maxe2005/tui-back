@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { ok, err } from "../../../../../core/result.js";
-import type { LockPort } from "../../../../../core/ports/lock.js";
-import type { ManifestPort } from "../../../../../core/ports/manifest.js";
-import type { DockerPort } from "../../../../../core/ports/docker.js";
-import { createAppStore, type AppStoreDeps } from "../app-store.js";
-import { manifestFor, fakeDeps } from "../store.test-support.js";
+import { ok, err } from "../../../../../../core/result.js";
+import type { LockPort } from "../../../../../../core/ports/lock.js";
+import type { ManifestPort } from "../../../../../../core/ports/manifest.js";
+import type { DockerPort } from "../../../../../../core/ports/docker.js";
+import { createAppStore, type AppStoreDeps } from "../../app-store.js";
+import { manifestFor, fakeDeps } from "../../store.test-support.js";
 
 describe("logs slice: inline service health & restart", () => {
   async function flushPolls(): Promise<void> {

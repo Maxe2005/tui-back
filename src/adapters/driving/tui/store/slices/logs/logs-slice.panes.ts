@@ -1,9 +1,9 @@
 // tui/store/slices: the Logs slice's panes — service selection in both lists, the ad hoc
 // fullscreen target, and each pane's stream lifecycle (subscribe, unsubscribe, load older,
 // clear, scroll offset, stop-all).
-import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../../../../core/logs/use-cases.js';
-import { hasContainer } from '../../../../../core/service-status/index.js';
-import { resolvePostLoadScrollOffset } from '../../zones/logs/logs-zone.logic.js';
+import { clearLogs, loadOlderLogs, subscribeLogs, unsubscribeLogs } from '../../../../../../core/logs/use-cases.js';
+import { hasContainer } from '../../../../../../core/service-status/index.js';
+import { resolvePostLoadScrollOffset } from '../../../zones/logs/logs-zone.logic.js';
 import type { LogsHealthHelpers } from './logs-slice.health.js';
 import {
   emptyPane,
