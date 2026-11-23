@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ok } from '../../../core/result.js';
-import { createGitPort, diffNameOnly, diffStat, headRevision, discardAll, discardPaths, discardPathsToHead, hasUncommittedChanges, listDirtyPaths, stagePaths, commitPaths } from './index.js';
-import { runGit, makeGitRepo, makeCleanGitRepo, makeDirWithManifestOnly, makePlainDir, manifest, commit, cleanupTmpDirs } from './git.test-support.js';
+import { ok } from '../../../../core/result.js';
+import { createGitPort, diffNameOnly, diffStat, headRevision, discardAll, discardPaths, discardPathsToHead, hasUncommittedChanges, listDirtyPaths, stagePaths, commitPaths } from '../index.js';
+import { runGit, makeGitRepo, makeCleanGitRepo, makeDirWithManifestOnly, makePlainDir, manifest, commit, cleanupTmpDirs } from '../git.test-support.js';
 
 afterEach(cleanupTmpDirs);
 

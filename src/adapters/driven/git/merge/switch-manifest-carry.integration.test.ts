@@ -5,15 +5,15 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createGitPort } from './index.js';
-import { createManifestCarryPort } from '../manifest/carry.js';
-import { loadManifest } from '../manifest/index.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
-import type { LockPort } from '../../../core/ports/runtime/lock.js';
-import type { RegistryPort } from '../../../core/ports/storage/registry.js';
-import type { StatePort } from '../../../core/ports/storage/state.js';
-import { ok } from '../../../core/result.js';
-import { switchActiveEdt } from '../../../core/edt/switch/switch.js';
+import { createGitPort } from '../index.js';
+import { createManifestCarryPort } from '../../manifest/carry.js';
+import { loadManifest } from '../../manifest/index.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import type { LockPort } from '../../../../core/ports/runtime/lock.js';
+import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
+import type { StatePort } from '../../../../core/ports/storage/state.js';
+import { ok } from '../../../../core/result.js';
+import { switchActiveEdt } from '../../../../core/edt/switch/switch.js';
 
 const dirs: string[] = [];
 afterEach(async () => {

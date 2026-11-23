@@ -4,9 +4,9 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { ok } from '../../../core/result.js';
-import { abortMerge, createGitPort, finalizeMerge, hasUnmergedPaths, isMergeInProgress, isRebaseInProgress, mergeBranch, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './index.js';
-import { tmpDirs, runGit, makeCleanGitRepo, makeDirWithManifestOnly, manifest, commit, cleanupTmpDirs } from './git.test-support.js';
+import { ok } from '../../../../core/result.js';
+import { abortMerge, createGitPort, finalizeMerge, hasUnmergedPaths, isMergeInProgress, isRebaseInProgress, mergeBranch, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from '../index.js';
+import { tmpDirs, runGit, makeCleanGitRepo, makeDirWithManifestOnly, manifest, commit, cleanupTmpDirs } from '../git.test-support.js';
 
 afterEach(cleanupTmpDirs);
 

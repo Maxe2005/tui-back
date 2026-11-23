@@ -8,27 +8,27 @@
 import type { EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
 import type { GitPort } from '../../../core/ports/vcs/git.js';
 import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import { currentBranch } from './refs.js';
-import { assertAllowedBranch } from './gate.js';
-import { stashSave, restoreStash, hasStash } from './stash.js';
-import { fetchBranch, fetchRemoteBranch, listUnpushedCommits, pullBranch } from './remote.js';
-import { hasUncommittedChanges, listDirtyPaths, diffNameOnly, headRevision, diffStat } from './diff.js';
-import { discardPaths, discardPathsToHead, discardAll } from './discard.js';
-import { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge.js';
-import { stagePaths, commitPaths } from './commit.js';
-import { listVersionBumpCommits, listBranchesContaining } from './version-history.js';
-import { createBranch, deleteBranch, isBranchMerged, aheadBehind, checkoutBranch, branchExistsLocally, listBranches, renameBranch, listRemoteBranches, createTrackingBranch } from './branches.js';
+import { currentBranch } from './refs/refs.js';
+import { assertAllowedBranch } from './worktree/gate.js';
+import { stashSave, restoreStash, hasStash } from './worktree/stash.js';
+import { fetchBranch, fetchRemoteBranch, listUnpushedCommits, pullBranch } from './refs/remote.js';
+import { hasUncommittedChanges, listDirtyPaths, diffNameOnly, headRevision, diffStat } from './worktree/diff.js';
+import { discardPaths, discardPathsToHead, discardAll } from './worktree/discard.js';
+import { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge/merge.js';
+import { stagePaths, commitPaths } from './worktree/commit.js';
+import { listVersionBumpCommits, listBranchesContaining } from './history/version-history.js';
+import { createBranch, deleteBranch, isBranchMerged, aheadBehind, checkoutBranch, branchExistsLocally, listBranches, renameBranch, listRemoteBranches, createTrackingBranch } from './refs/branches.js';
 
-export { currentBranch } from './refs.js';
-export { assertAllowedBranch } from './gate.js';
-export { stashSave, restoreStash, findStashRef, hasStash } from './stash.js';
-export { fetchBranch, fetchRemoteBranch, listUnpushedCommits, pullBranch } from './remote.js';
-export { hasUncommittedChanges, listDirtyPaths, diffNameOnly, headRevision, diffStat } from './diff.js';
-export { discardPaths, discardPathsToHead, discardAll } from './discard.js';
-export { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge.js';
-export { stagePaths, commitPaths } from './commit.js';
-export { listVersionBumpCommits, listBranchesContaining } from './version-history.js';
-export { createBranch, deleteBranch, isBranchMerged, aheadBehind, checkoutBranch, branchExistsLocally, listBranches, renameBranch, listRemoteBranches, createTrackingBranch } from './branches.js';
+export { currentBranch } from './refs/refs.js';
+export { assertAllowedBranch } from './worktree/gate.js';
+export { stashSave, restoreStash, findStashRef, hasStash } from './worktree/stash.js';
+export { fetchBranch, fetchRemoteBranch, listUnpushedCommits, pullBranch } from './refs/remote.js';
+export { hasUncommittedChanges, listDirtyPaths, diffNameOnly, headRevision, diffStat } from './worktree/diff.js';
+export { discardPaths, discardPathsToHead, discardAll } from './worktree/discard.js';
+export { mergeBranch, abortMerge, isMergeInProgress, isRebaseInProgress, hasUnmergedPaths, finalizeMerge, listUnmergedPaths, readWorktreeFile, writeResolvedFile, checkoutSide } from './merge/merge.js';
+export { stagePaths, commitPaths } from './worktree/commit.js';
+export { listVersionBumpCommits, listBranchesContaining } from './history/version-history.js';
+export { createBranch, deleteBranch, isBranchMerged, aheadBehind, checkoutBranch, branchExistsLocally, listBranches, renameBranch, listRemoteBranches, createTrackingBranch } from './refs/branches.js';
 
 export function createGitPort(manifest: ManifestPort, edtRegistry?: EdtRegistryPort): GitPort {
   return {

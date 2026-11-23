@@ -1,9 +1,9 @@
 // adapters/driven/git/commit: gated staging and committing of explicit path lists (never pushes).
-import { type ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import { type Result, err, ok } from '../../../core/result.js';
-import { runProcess } from '../process.js';
+import { type ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import { type Result, err, ok } from '../../../../core/result.js';
+import { runProcess } from '../../process.js';
 import { assertCurrentBranchAllowed } from './gate.js';
-import { spawnFailureDetail } from './refs.js';
+import { spawnFailureDetail } from '../refs/refs.js';
 
 // `git add -- <paths>`: stages exactly the listed paths, nothing else. Gated on the current
 // branch before any git call.

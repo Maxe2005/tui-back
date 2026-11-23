@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ok } from '../../../core/result.js';
-import { branchExistsLocally, checkoutBranch, createBranch, createGitPort, currentBranch, deleteBranch, isBranchMerged, listBranches, renameBranch } from './index.js';
-import { tmpDirs, runGit, makeGitRepo, makeDirWithManifestOnly, makePlainDir, branchExists, manifest, fakeEdtRegistry, edtEntry, commit, makeGitRepoOriginAndClone, makeManagedClone, upstreamOf, cleanupTmpDirs } from './git.test-support.js';
+import { ok } from '../../../../core/result.js';
+import { branchExistsLocally, checkoutBranch, createBranch, createGitPort, currentBranch, deleteBranch, isBranchMerged, listBranches, renameBranch } from '../index.js';
+import { tmpDirs, runGit, makeGitRepo, makeDirWithManifestOnly, makePlainDir, branchExists, manifest, fakeEdtRegistry, edtEntry, commit, makeGitRepoOriginAndClone, makeManagedClone, upstreamOf, cleanupTmpDirs } from '../git.test-support.js';
 
 afterEach(cleanupTmpDirs);
 

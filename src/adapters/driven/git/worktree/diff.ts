@@ -1,7 +1,7 @@
 // adapters/driven/git/diff: read-only working-tree and revision inspection (status, dirty paths, name-only diff, stat, HEAD).
-import { type Result, err, ok } from '../../../core/result.js';
-import { runProcess } from '../process.js';
-import { spawnFailureDetail } from './refs.js';
+import { type Result, err, ok } from '../../../../core/result.js';
+import { runProcess } from '../../process.js';
+import { spawnFailureDetail } from '../refs/refs.js';
 
 // 64 MiB: the stdout budget of the path-listing calls in this file and discard.ts (spawnSync's default is 1 MiB).
 export const LARGE_OUTPUT_BUFFER = 64 * 1024 * 1024;

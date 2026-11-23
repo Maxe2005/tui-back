@@ -2,11 +2,11 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { type ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import { type Result, err, ok } from '../../../core/result.js';
-import { runProcess } from '../process.js';
-import { assertCurrentBranchAllowed } from './gate.js';
-import { spawnFailureDetail } from './refs.js';
+import { type ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import { type Result, err, ok } from '../../../../core/result.js';
+import { runProcess } from '../../process.js';
+import { assertCurrentBranchAllowed } from '../worktree/gate.js';
+import { spawnFailureDetail } from '../refs/refs.js';
 
 // `git merge` of the already-fetched shared branch into the member's own
 // current branch, never a rebase. `--no-edit` keeps the merge non-interactive (no editor).

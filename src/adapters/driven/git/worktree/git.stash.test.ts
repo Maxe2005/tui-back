@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ok } from '../../../core/result.js';
-import { hasStash, hasUncommittedChanges, restoreStash, stashSave } from './index.js';
-import { runGit, makeGitRepo, makeDirWithManifestOnly, commit, cleanupTmpDirs } from './git.test-support.js';
+import { ok } from '../../../../core/result.js';
+import { hasStash, hasUncommittedChanges, restoreStash, stashSave } from '../index.js';
+import { runGit, makeGitRepo, makeDirWithManifestOnly, commit, cleanupTmpDirs } from '../git.test-support.js';
 
 afterEach(cleanupTmpDirs);
 

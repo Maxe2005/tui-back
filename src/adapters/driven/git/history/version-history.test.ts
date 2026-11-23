@@ -5,10 +5,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import type { VersionBump } from '../../../core/ports/vcs/git.js';
-import { err } from '../../../core/result.js';
-import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import { createGitPort, listBranchesContaining, listVersionBumpCommits } from './index.js';
+import type { VersionBump } from '../../../../core/ports/vcs/git.js';
+import { err } from '../../../../core/result.js';
+import type { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import { createGitPort, listBranchesContaining, listVersionBumpCommits } from '../index.js';
 
 const dirs: string[] = [];
 afterEach(async () => {

@@ -1,7 +1,7 @@
 // adapters/driven/git/stash: tagged stash operations (save, find, restore, existence check).
-import { type Result, err, ok } from '../../../core/result.js';
-import { runProcess } from '../process.js';
-import { spawnFailureDetail } from './refs.js';
+import { type Result, err, ok } from '../../../../core/result.js';
+import { runProcess } from '../../process.js';
+import { spawnFailureDetail } from '../refs/refs.js';
 
 // `-u` stashes untracked files too (tracked + untracked); `-m` tags the stash with `message`
 // so restoreStash can find it later by content, not stack position.

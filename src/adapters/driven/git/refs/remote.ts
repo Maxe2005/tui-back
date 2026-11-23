@@ -1,6 +1,6 @@
 // adapters/driven/git/remote: operations that talk to origin (fetch, pull, unpushed-commit listing).
-import { type Result, err, ok } from '../../../core/result.js';
-import { runProcess } from '../process.js';
+import { type Result, err, ok } from '../../../../core/result.js';
+import { runProcess } from '../../process.js';
 import { spawnFailureDetail } from './refs.js';
 
 // Fetches branchName from origin straight into a same-named local branch, without checking

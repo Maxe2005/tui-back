@@ -1,8 +1,8 @@
 // adapters/driven/git/discard: consent-gated destructive primitives (path discard, discard to HEAD, discard all).
-import { type Result, err, ok } from '../../../core/result.js';
-import { runProcess } from '../process.js';
+import { type Result, err, ok } from '../../../../core/result.js';
+import { runProcess } from '../../process.js';
 import { LARGE_OUTPUT_BUFFER } from './diff.js';
-import { spawnFailureDetail } from './refs.js';
+import { spawnFailureDetail } from '../refs/refs.js';
 
 // How many paths one git invocation receives, so a huge confirmed list never hits E2BIG.
 export const PATHS_PER_CALL = 500;

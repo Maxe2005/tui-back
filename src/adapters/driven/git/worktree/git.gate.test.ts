@@ -6,10 +6,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ok } from '../../../core/result.js';
-import type { EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
-import { assertAllowedBranch, createGitPort } from './index.js';
-import { makeGitRepo, makeCleanGitRepo, makeDirWithManifestOnly, manifest, fakeEdtRegistry, edtEntry, cleanupTmpDirs } from './git.test-support.js';
+import { ok } from '../../../../core/result.js';
+import type { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import { assertAllowedBranch, createGitPort } from '../index.js';
+import { makeGitRepo, makeCleanGitRepo, makeDirWithManifestOnly, manifest, fakeEdtRegistry, edtEntry, cleanupTmpDirs } from '../git.test-support.js';
 
 afterEach(cleanupTmpDirs);
 

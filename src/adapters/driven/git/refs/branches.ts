@@ -1,10 +1,10 @@
 // adapters/driven/git/branches: branch lifecycle and queries (create, delete, rename, track, checkout, list, merged/ahead-behind checks); every ref write goes through the gate.
-import { branchOwners } from '../../../core/edt/branches/branch-owners.js';
-import { type EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
-import { type ManifestPort } from '../../../core/ports/vcs/manifest.js';
-import { type Result, err, ok } from '../../../core/result.js';
-import { runProcess } from '../process.js';
-import { assertAllowedBranch } from './gate.js';
+import { branchOwners } from '../../../../core/edt/branches/branch-owners.js';
+import { type EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import { type ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import { type Result, err, ok } from '../../../../core/result.js';
+import { runProcess } from '../../process.js';
+import { assertAllowedBranch } from '../worktree/gate.js';
 import { currentBranch, showFullRef, showRef, spawnFailureDetail } from './refs.js';
 
 export async function createBranch(
