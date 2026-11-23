@@ -2,7 +2,7 @@
 title: 'Reorganize store slices and zone folders'
 type: 'refactor'
 created: '2026-11-23'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '0b36c9d262db6ed794b88ef8dedb727a84c14a43'
 review_loop_iteration: 0
 context:
