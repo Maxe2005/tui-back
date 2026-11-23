@@ -1,6 +1,6 @@
 // tui/shared/settings/general.logic: the General tab's rows and its whole key mapping as one pure step. Pure; no Ink/React.
-import { nextTextInputValue, type TextEditKey, type TextInputState } from '../components/inputs/text-edit.js';
-import { nextCursorForKey } from '../keys/list-cursor.js';
+import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../components/inputs/text-edit.js';
+import { nextCursorForKey } from '../../keys/list-cursor.js';
 
 // General tab: a small Up/Down row list — the quit-shortcut checkbox (Space toggles; the cursor
 // starts on it) and the editor command, a free-text field (Enter opens it for editing, Enter
