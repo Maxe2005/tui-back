@@ -218,4 +218,73 @@ describe('RoutesZone favorites pane', () => {
       instance.unmount();
     }
   });
+
+  it('reloads the favorites after mount', async () => {
+    const store = seedWithFavorites([]);
+    let refreshed = 0;
+    store.setState({ refreshFavoriteRoutes: async () => { refreshed += 1; } });
+    const { instance } = mount(store, TALL);
+    try {
+      await instance.waitUntilRenderFlush();
+      await settle();
+      expect(refreshed).toBeGreaterThanOrEqual(1);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('shows a load error instead of the teaching line', async () => {
+    const store = seedWithFavorites([]);
+    store.setState({ favoriteRoutesError: { code: 'x', message: 'registry unreadable' } });
+    const { instance, stdout } = mount(store, TALL);
+    try {
+      await instance.waitUntilRenderFlush();
+      expect(lastFrame(stdout)).toContain('could not load');
+      expect(lastFrame(stdout)).not.toContain('press * on a route');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('`*` toggles on the Response tab but not on the Saved tab', async () => {
+    const store = seedWithFavorites([]);
+    const { instance, stdin } = mount(store, TALL);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, KEYS.enter);
+      store.getState().setRoutesPaneTab('saved');
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '*');
+      await settle();
+      expect(store.getState().favoriteRoutes).toEqual([]);
+      store.getState().setRoutesPaneTab('response');
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, '*');
+      await settle();
+      expect(store.getState().favoriteRoutes).toHaveLength(1);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('Tab is a no-op while the pane is not rendered (small terminal), and works when visible but empty', async () => {
+    const hidden = seedWithFavorites([]);
+    const small = mount(hidden, 12);
+    try {
+      await small.instance.waitUntilRenderFlush();
+      await press(small.instance, small.stdin, KEYS.tab);
+      expect(hidden.getState().routesPaneFocus).toBe('list');
+    } finally {
+      small.instance.unmount();
+    }
+    const visible = seedWithFavorites([]);
+    const tall = mount(visible, TALL);
+    try {
+      await tall.instance.waitUntilRenderFlush();
+      await press(tall.instance, tall.stdin, KEYS.tab);
+      expect(visible.getState().routesPaneFocus).toBe('favorites');
+    } finally {
+      tall.instance.unmount();
+    }
+  });
 });

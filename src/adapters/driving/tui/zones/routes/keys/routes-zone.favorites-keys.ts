@@ -31,6 +31,7 @@ export function handleFavoritesKey(c: RoutesZoneCtx, input: string, key: Key): v
   }
   const direction = resolveRoutesDirection(key) ?? (input === 'j' ? 'down' : input === 'k' ? 'up' : null);
   if (direction !== null) {
+    setFavNotice(null);
     setFavCursor(moveFavoriteCursor(clampedFavCursor, direction, favorites.length));
     return;
   }

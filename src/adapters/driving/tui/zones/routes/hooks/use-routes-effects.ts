@@ -25,7 +25,17 @@ export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
         savedTabDeleteConfirm !== null,
     );
   }, [filterEditing, paneFocused, favoritesFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
-  useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
+  // Leaving the zone must not leave the keyboard parked on the Favorites pane (AppShell treats a
+  // non-list Routes focus as captured, so zone keys would stay dead).
+  useEffect(
+    () => () => {
+      setZoneInputCaptured(false);
+      if (c.useStore.getState().routesPaneFocus === 'favorites') {
+        c.useStore.getState().setRoutesPaneFocus('list');
+      }
+    },
+    [setZoneInputCaptured],
+  );
 
   useEffect(() => {
     // The favorites follow the active EDT: reloaded on every mount, after the routes (the stale

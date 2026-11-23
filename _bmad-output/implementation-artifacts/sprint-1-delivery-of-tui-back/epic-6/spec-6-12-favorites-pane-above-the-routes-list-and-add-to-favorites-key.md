@@ -2,7 +2,7 @@
 title: 'Favorites Pane Above the Routes List & Add-to-Favorites Key'
 type: 'feature'
 created: '2026-11-23'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'c1cab3ff91b9c3abaa5bfaf99fef4407d3532ff6'
 review_loop_iteration: 0
 context:

@@ -32,7 +32,7 @@ export function RoutesListPane({
   listAreaRef: RoutesZoneCtx['listAreaRef'];
   maxVisibleRows: number;
   clamped: number;
-  favorites: Pick<RoutesZoneCtx, 'favorites' | 'clampedFavCursor' | 'favoritesFocused' | 'favNotice' | 'routes' | 'windowSize'>;
+  favorites: Pick<RoutesZoneCtx, 'favorites' | 'clampedFavCursor' | 'favoritesFocused' | 'favNotice' | 'favoriteRoutesError' | 'routes' | 'windowSize'>;
 }) {
   const favoriteRows = resolveFavoritesPaneRows(favorites.windowSize.rows, favorites.favorites.length);
   return (
@@ -43,6 +43,7 @@ export function RoutesListPane({
           cursor={favorites.clampedFavCursor}
           focused={favorites.favoritesFocused}
           notice={favorites.favNotice}
+          loadError={favorites.favoriteRoutesError === null ? null : favorites.favoriteRoutesError.message}
           totalRows={favoriteRows.total}
           bodyRows={favoriteRows.body}
         />

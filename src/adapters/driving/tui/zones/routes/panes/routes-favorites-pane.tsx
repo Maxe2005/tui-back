@@ -14,6 +14,7 @@ export function RoutesFavoritesPane({
   cursor,
   focused,
   notice,
+  loadError,
   totalRows,
   bodyRows,
 }: {
@@ -22,6 +23,8 @@ export function RoutesFavoritesPane({
   cursor: number;
   focused: boolean;
   notice: string | null;
+  // The favorites could not be loaded: shown instead of the (misleading) empty teaching line.
+  loadError: string | null;
   // Fixed row budget of the whole pane (header included) and of its body.
   totalRows: number;
   bodyRows: number;
@@ -39,7 +42,9 @@ export function RoutesFavoritesPane({
       {bodyRows > 0 ? (
         favorites.length === 0 ? (
           <Box flexShrink={0}>
-            <Text color={colors['text-dim']} wrap="truncate-end">{FAVORITES_TEACHING_LINE}</Text>
+            <Text color={loadError === null ? colors['text-dim'] : colors.error} wrap="truncate-end">
+              {loadError === null ? FAVORITES_TEACHING_LINE : `could not load: ${loadError}`}
+            </Text>
           </Box>
         ) : (
           <BoundedList

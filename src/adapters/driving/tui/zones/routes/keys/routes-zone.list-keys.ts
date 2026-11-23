@@ -5,6 +5,7 @@ import { canEditRouteBody } from '../../../shared/components/json-tree/model.js'
 import { jumpSelection, resolveSelectionJump } from '../../../shared/keys/list-cursor.js';
 import { moveRoutesSelection, resolveEnterFireTarget, resolveRoutesDirection } from '../logic/routes-zone.logic.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
+import { resolveFavoritesPaneRows } from '../logic/routes-favorites.logic.js';
 import { toggleRouteFavorite } from './routes-zone.favorites-keys.js';
 import { nextTextInputValue } from '../../../shared/components/inputs/text-edit.js';
 
@@ -36,7 +37,7 @@ export function handleFilterEditingKey(c: RoutesZoneCtx, input: string, key: Key
 }
 
 export function handleListKey(c: RoutesZoneCtx, input: string, key: Key): void {
-  const { selected, setSelected, filter, setFilter, setFilterEditing, visibleRoutes, openPicker, openPaneForRoute, setPaneFocus, setFavNotice } = c;
+  const { selected, setSelected, filter, setFilter, setFilterEditing, visibleRoutes, openPicker, openPaneForRoute, setPaneFocus, setFavNotice, windowSize, favorites } = c;
   // `e` opens the pane straight on the Body section for a route that carries a body (an
   // example or any content type — non-JSON starts empty); routes with neither stay inert
   // with no hint.
@@ -70,7 +71,11 @@ export function handleListKey(c: RoutesZoneCtx, input: string, key: Key): void {
     return;
   }
   // Tab / Shift+Tab moves the keyboard to the Favorites pane above the list.
+  // Inert while the pane is not rendered (small terminal): focus must never land on nothing.
   if (resolveFocusStep(input, key, 'tab') !== null) {
+    if (resolveFavoritesPaneRows(windowSize.rows, favorites.length).total === 0) {
+      return;
+    }
     setFavNotice(null);
     setPaneFocus('favorites');
     return;
