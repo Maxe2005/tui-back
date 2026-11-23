@@ -1,9 +1,9 @@
 // core/scripts/group-update: unit tests against fake ports — the clean-restart recipe and runRestartStep.
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import { err, ok } from '../../result.js';
-import type { ContainerPort } from '../../ports/container.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RestartPort } from '../../ports/restart.js';
+import type { ContainerPort } from '../../ports/runtime/container.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
 import { groupUpdate, runRestartStep } from './group-update.js';
 import { calls, fakeContainer, fakeRegistry, fakeRestart, manifestFor } from '../../shared/core-ports.test-support.js';
 import { fakeGit, makeParams } from './group-update.test-support.js';

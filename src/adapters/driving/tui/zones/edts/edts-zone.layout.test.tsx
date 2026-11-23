@@ -5,7 +5,7 @@
 // volume (from 0 to 100+ rows, only with all three props present).
 import { describe, it, expect } from 'vitest';
 import { Box } from 'ink';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
 
 function edtEntry(topic: string): EdtRegistryEntry {
   return {

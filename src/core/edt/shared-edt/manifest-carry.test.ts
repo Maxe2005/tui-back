@@ -1,8 +1,8 @@
 // core/edt/manifest-carry: the capture → clear → run → restore ordering and its failure paths.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../result.js';
-import type { GitPort } from '../../ports/git.js';
-import type { ManifestCarryPort } from '../../ports/manifest-carry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { ManifestCarryPort } from '../../ports/vcs/manifest-carry.js';
 import { MANIFEST_FILE, withCarriedManifest } from './manifest-carry.js';
 import type { SwitchEdtRepoResult } from '../switch/switch.js';
 

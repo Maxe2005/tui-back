@@ -8,12 +8,12 @@
 // that row only. Ports are injected and nothing here rejects.
 import { resolve } from 'node:path';
 import { runRestartRows, type RestartReport, type RestartRow, type RestartSkipReason } from '../edt/switch/restart/switch-restart.js';
-import type { DockerPort } from '../ports/docker.js';
-import type { EdtMember, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { HealthProbePort } from '../ports/health-probe.js';
-import type { LockPort } from '../ports/lock.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { StatePort } from '../ports/state.js';
+import type { DockerPort } from '../ports/runtime/docker.js';
+import type { EdtMember, EdtRegistryPort } from '../ports/storage/edt-registry.js';
+import type { HealthProbePort } from '../ports/runtime/health-probe.js';
+import type { LockPort } from '../ports/runtime/lock.js';
+import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
+import type { StatePort } from '../ports/storage/state.js';
 import { err, ok, type Result } from '../result.js';
 import { serviceRestartLockKey } from '../scripts/update-support/service-restart.js';
 import { heldLockName, restartBlockingLocks, type NamedLock, type RestartMode, type ServiceActions } from '../service-actions/index.js';

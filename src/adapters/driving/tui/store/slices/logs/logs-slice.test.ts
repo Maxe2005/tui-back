@@ -3,9 +3,9 @@
 // (no subscribe, no poll, no restart, no history fetch) rather than re-testing the manager.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../../../../core/result.js';
-import type { DockerPort } from '../../../../../../core/ports/docker.js';
-import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
-import type { StatePort } from '../../../../../../core/ports/state.js';
+import type { DockerPort } from '../../../../../../core/ports/runtime/docker.js';
+import type { ManifestPort } from '../../../../../../core/ports/vcs/manifest.js';
+import type { StatePort } from '../../../../../../core/ports/storage/state.js';
 import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 import { isPaneEngagedInGlobalFilter, resolveEffectiveLines } from '../../../zones/logs/logic/logs-zone.logic.js';
 import { LOGS_HEALTH_POLL_INTERVAL_MS, LOGS_LISTED_HEALTH_POLL_INTERVAL_MS } from './logs-slice.js';

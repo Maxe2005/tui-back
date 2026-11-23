@@ -3,7 +3,7 @@
 // container — and streams its stdout/stderr back line by line. Deliberately not a PTY: a PTY
 // adapter can later implement this same contract without touching core. The shipped adapter is
 // POSIX-only (a POSIX `sh`, detached process groups signalled via `kill(-pgid)`).
-import type { ResultError } from '../result.js';
+import type { ResultError } from '../../result.js';
 
 export type ShellTarget =
   | { kind: 'service'; repoPath: string }

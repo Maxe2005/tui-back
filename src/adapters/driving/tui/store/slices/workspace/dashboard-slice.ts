@@ -1,7 +1,7 @@
 // tui/store/slices: the Dashboard's state — the services and registry-health sections, each with
 // its own load status so they fill independently, plus the time of the last completed load.
 // Builders run in-process over injected ports; unwired, a section degrades to an error state.
-import { healthCheckEnabledFrom } from '../../../../../../core/ports/settings.js';
+import { healthCheckEnabledFrom } from '../../../../../../core/ports/storage/settings.js';
 import { basename } from 'node:path';
 import type { StateCreator } from 'zustand';
 import { err, type Result } from '../../../../../../core/result.js';

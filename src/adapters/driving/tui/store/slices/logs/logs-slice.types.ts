@@ -3,8 +3,8 @@
 // sub-creators never form an import cycle with the composing slice.
 import type { StateCreator } from 'zustand';
 import type { LogsManager } from '../../../../../../core/logs/index.js';
-import type { LogLine } from '../../../../../../core/ports/docker.js';
-import type { Manifest } from '../../../../../../core/ports/manifest.js';
+import type { LogLine } from '../../../../../../core/ports/runtime/docker.js';
+import type { Manifest } from '../../../../../../core/ports/vcs/manifest.js';
 import { hasContainer, hasHealthUrl, type ServiceStatusState } from '../../../../../../core/service-status/index.js';
 import type { RestartMode, ServiceAction, ServiceActions } from '../../../../../../core/service-actions/index.js';
 import type { Result } from '../../../../../../core/result.js';

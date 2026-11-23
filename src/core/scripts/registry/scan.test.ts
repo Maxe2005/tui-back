@@ -3,7 +3,7 @@
 // is covered in adapters/driven/registry/index.test.ts.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../result.js';
-import type { RegistryPort } from '../../ports/registry.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
 import { scanRepos } from './scan.js';
 
 const EMPTY_SCAN = { candidates: [], skipped: [] };

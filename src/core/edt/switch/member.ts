@@ -2,9 +2,9 @@
 // (then its target-tagged stash is popped back in); any other repo goes to its manifest
 // `sharedBranch`. Dirty work is delegated to dirty.ts; this module owns the checkout and the
 // failure/success result rows that depend on how far the dirty plan got.
-import type { EdtMember } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { Manifest } from '../../ports/manifest.js';
+import type { EdtMember } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { Manifest } from '../../ports/vcs/manifest.js';
 import type { Result, ResultError } from '../../result.js';
 import { checkoutExpectedBranch, memberTargetSpec } from '../branches/checkout-expected.js';
 import { executeDirtyPlan, planDirtyWork, restoreAndFail, stashMessage, type Prepared } from './dirty.js';

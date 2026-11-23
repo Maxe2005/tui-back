@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { ok, err } from "../../../../core/result.js";
-import type { StatePort } from "../../../../core/ports/state.js";
+import type { StatePort } from "../../../../core/ports/storage/state.js";
 import { createAppStore } from "./app-store.js";
 import { DEFAULT_LIST_RATIO, fakeDeps } from "./store.test-support.js";
 

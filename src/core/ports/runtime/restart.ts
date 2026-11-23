@@ -2,7 +2,7 @@
 // manifest-declared `restartCommands` recipe — one `run` per command, in order — when the
 // run's clean-restart toggle calls for it, else the plain `ContainerPort.restart`. Core owns
 // the loop and the stop-on-first-failure decision, never the adapter.
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 export interface RestartPort {
   // Runs one recipe command with repoPath as its working directory. A non-zero exit or

@@ -2,9 +2,9 @@
 // their manifests. Core never names the module: the caller passes the consuming module's id and
 // a `parseConfig` seam that validates/defaults its manifest parameters (the schema lives in the
 // driven module registry, which core must not import).
-import type { EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { ok, type Result } from '../../result.js';
 
 export interface DependencyConsumerConfig {

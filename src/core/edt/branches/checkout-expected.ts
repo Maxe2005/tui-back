@@ -1,7 +1,7 @@
 // core/edt/checkout-expected: the one "move a repo onto the branch it should be on" step shared
 // by switch and realign — resolve (gate, fetch) the destination, run the caller's preparation of
 // the working tree, check out, and let the caller undo its preparation when the checkout fails.
-import type { GitPort } from '../../ports/git.js';
+import type { GitPort } from '../../ports/vcs/git.js';
 import { err, ok, type Result, type ResultError } from '../../result.js';
 import { isSystemEdt } from '../shared-edt/shared-edt.js';
 

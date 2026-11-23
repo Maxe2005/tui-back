@@ -9,11 +9,11 @@ import Database from 'better-sqlite3';
 import { ulid as generateUlid } from 'ulid';
 import { stringify } from 'yaml';
 import { withActionLock } from '../../locking.js';
-import type { EdtMember, EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
+import type { EdtMember, EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
 import { err, ok, type Result } from '../../result.js';
 import { isSharedEdtTopic, systemEdtReadonly } from '../shared-edt/shared-edt.js';
 

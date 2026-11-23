@@ -6,7 +6,7 @@ import { TextInputLine } from '../../components/inputs/text-input-line.js';
 import { colors } from '../../theme/theme.js';
 import type { TextInputState } from '../../components/inputs/text-edit.js';
 import { EDITOR_COMMAND_PLACEHOLDER_TEXT, GENERAL_SETTINGS_ROWS } from './general.logic.js';
-import type { Settings } from '../../../../../../core/ports/settings.js';
+import type { Settings } from '../../../../../../core/ports/storage/settings.js';
 
 export type GeneralTabProps = {
   settings: Settings;

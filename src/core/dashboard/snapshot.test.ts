@@ -1,12 +1,12 @@
 // core/dashboard/snapshot: unit tests against fake ports — one per snapshot scenario.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../result.js';
-import type { DockerPort } from '../ports/docker.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
+import type { DockerPort } from '../ports/runtime/docker.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/storage/edt-registry.js';
+import type { GitPort } from '../ports/vcs/git.js';
+import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
+import type { RegistryPort } from '../ports/storage/registry.js';
+import type { StatePort } from '../ports/storage/state.js';
 import { buildDashboardRegistrySummary, buildDashboardServices, buildDashboardSnapshot } from './snapshot.js';
 
 function manifestFor(path: string, extra: Partial<Manifest> = {}): Manifest {

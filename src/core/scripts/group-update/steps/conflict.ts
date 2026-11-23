@@ -1,6 +1,6 @@
 // core/scripts/group-update/conflict: mid-run merge-conflict resolution (menu, edited, retry) and conflict abort.
 import { resolve } from "node:path";
-import type { GitPort } from "../../../ports/git.js";
+import type { GitPort } from "../../../ports/vcs/git.js";
 import { ok, type ResultError } from "../../../result.js";
 import type {
   GroupUpdateRunDetail,

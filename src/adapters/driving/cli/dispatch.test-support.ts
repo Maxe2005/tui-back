@@ -1,21 +1,21 @@
 // Shared fakes for the CLI dispatch tests: lock/state/registry/git ports and a fully wired
 // `buildTestSubcommands` registry that individual tests override port by port.
 import { ok, err } from '../../../core/result.js';
-import type { ContainerPort } from '../../../core/ports/container.js';
-import type { DevAuthPort } from '../../../core/ports/dev-auth.js';
-import type { ManifestPort } from '../../../core/ports/manifest.js';
-import type { MigrationPort } from '../../../core/ports/migration.js';
-import type { RestartPort } from '../../../core/ports/restart.js';
-import type { RegistryPort } from '../../../core/ports/registry.js';
-import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../core/ports/git.js';
-import type { LockPort } from '../../../core/ports/lock.js';
-import type { RouteScannerPort } from '../../../core/ports/route-scanner.js';
-import type { SavedRequestPort } from '../../../core/ports/saved-request.js';
-import { DEFAULT_SETTINGS } from '../../../core/ports/settings.js';
-import type { StatePort } from '../../../core/ports/state.js';
+import type { ContainerPort } from '../../../core/ports/runtime/container.js';
+import type { DevAuthPort } from '../../../core/ports/runtime/dev-auth.js';
+import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
+import type { MigrationPort } from '../../../core/ports/vcs/migration.js';
+import type { RestartPort } from '../../../core/ports/runtime/restart.js';
+import type { RegistryPort } from '../../../core/ports/storage/registry.js';
+import type { EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../core/ports/vcs/git.js';
+import type { LockPort } from '../../../core/ports/runtime/lock.js';
+import type { RouteScannerPort } from '../../../core/ports/modules/route-scanner.js';
+import type { SavedRequestPort } from '../../../core/ports/storage/saved-request.js';
+import { DEFAULT_SETTINGS } from '../../../core/ports/storage/settings.js';
+import type { StatePort } from '../../../core/ports/storage/state.js';
 import type { Subcommand } from './dispatch.js';
-import type { DockerPort } from '../../../core/ports/docker.js';
+import type { DockerPort } from '../../../core/ports/runtime/docker.js';
 import { buildSubcommands } from './subcommands.js';
 
 export function fakeLock(): LockPort {

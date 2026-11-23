@@ -4,9 +4,9 @@
 // source check is local-only, so an origin-only branch would be rejected later anyway.
 import { resolve } from 'node:path';
 import { err, ok, type Result } from '../../result.js';
-import type { GitPort } from '../../ports/git.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { StatePort } from '../../ports/state.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import type { GroupUpdateSelectionItem } from '../group-update/group-update.js';
 
 export type MergeSourceOrigin = 'shared' | 'edt' | 'manual';

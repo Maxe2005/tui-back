@@ -2,7 +2,7 @@
 // through ScrollableOutput, so each scenario runs against both views.
 import { createElement, type ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
-import type { LogLine } from '../../../../../../core/ports/docker.js';
+import type { LogLine } from '../../../../../../core/ports/runtime/docker.js';
 import type { LogsPaneData } from '../../../store/app-store.js';
 import { renderToString } from '../../../shared/components/render-to-string.js';
 import { LogsPaneView } from './logs-pane-view.js';

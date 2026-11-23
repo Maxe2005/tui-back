@@ -1,21 +1,21 @@
 // cli/commands/deps: the dependency bag `buildSubcommands` receives, shared by every command-family module.
-import { ContainerPort } from '../../../../core/ports/container.js';
-import { DevAuthPort } from '../../../../core/ports/dev-auth.js';
-import { DockerPort } from '../../../../core/ports/docker.js';
-import { EditorPort } from '../../../../core/ports/editor.js';
-import { HealthProbePort } from '../../../../core/ports/health-probe.js';
-import { GitPort } from '../../../../core/ports/git.js';
-import { ManifestPort } from '../../../../core/ports/manifest.js';
-import { ManifestCarryPort } from '../../../../core/ports/manifest-carry.js';
-import { MigrationPort } from '../../../../core/ports/migration.js';
-import { RestartPort } from '../../../../core/ports/restart.js';
-import { RegistryPort } from '../../../../core/ports/registry.js';
-import { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
-import { LockPort } from '../../../../core/ports/lock.js';
-import { RouteScannerPort } from '../../../../core/ports/route-scanner.js';
-import { SavedRequestPort } from '../../../../core/ports/saved-request.js';
-import { type SettingsPort } from '../../../../core/ports/settings.js';
-import { StatePort } from '../../../../core/ports/state.js';
+import { ContainerPort } from '../../../../core/ports/runtime/container.js';
+import { DevAuthPort } from '../../../../core/ports/runtime/dev-auth.js';
+import { DockerPort } from '../../../../core/ports/runtime/docker.js';
+import { EditorPort } from '../../../../core/ports/runtime/editor.js';
+import { HealthProbePort } from '../../../../core/ports/runtime/health-probe.js';
+import { GitPort } from '../../../../core/ports/vcs/git.js';
+import { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import { ManifestCarryPort } from '../../../../core/ports/vcs/manifest-carry.js';
+import { MigrationPort } from '../../../../core/ports/vcs/migration.js';
+import { RestartPort } from '../../../../core/ports/runtime/restart.js';
+import { RegistryPort } from '../../../../core/ports/storage/registry.js';
+import { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import { LockPort } from '../../../../core/ports/runtime/lock.js';
+import { RouteScannerPort } from '../../../../core/ports/modules/route-scanner.js';
+import { SavedRequestPort } from '../../../../core/ports/storage/saved-request.js';
+import { type SettingsPort } from '../../../../core/ports/storage/settings.js';
+import { StatePort } from '../../../../core/ports/storage/state.js';
 import { type InstallerPort } from '../install.js';
 
 export type SubcommandDeps = {

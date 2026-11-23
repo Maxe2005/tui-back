@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { SavedRequest, SavedRequestPort } from '../../../core/ports/saved-request.js';
+import type { SavedRequest, SavedRequestPort } from '../../../core/ports/storage/saved-request.js';
 import type { XdgPaths } from '../xdg/index.js';
 import { ensureXdgDir } from '../xdg/index.js';
 

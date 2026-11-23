@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../result.js';
-import type { GitPort, VersionBump, VersionBumpWalkOptions } from '../../ports/git.js';
+import type { GitPort, VersionBump, VersionBumpWalkOptions } from '../../ports/vcs/git.js';
 import { isValidHistoryVersion, searchByBranch, searchByVersion } from './version-history.js';
 
 function fakeGit(

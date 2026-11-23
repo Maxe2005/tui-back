@@ -2,8 +2,8 @@
 import { resolve } from 'node:path';
 import { isProtectedBranch } from '../../../core/edt/branches/shared-branches.js';
 import { isSystemEdt } from '../../../core/edt/shared-edt/shared-edt.js';
-import { type EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import { type ManifestPort } from '../../../core/ports/manifest.js';
+import { type EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
+import { type ManifestPort } from '../../../core/ports/vcs/manifest.js';
 import { type Result, err, ok } from '../../../core/result.js';
 import { currentBranch } from './refs.js';
 

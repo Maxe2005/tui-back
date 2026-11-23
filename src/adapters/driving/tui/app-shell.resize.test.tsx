@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ok } from '../../../core/result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import type { StatePort } from '../../../core/ports/state.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
+import type { StatePort } from '../../../core/ports/storage/state.js';
 import { AppShell } from './app-shell.js';
 import { createAppStore } from './store/app-store.js';
 import { KEYS } from './shared/test-support/fake-tty.js';

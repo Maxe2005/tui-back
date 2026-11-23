@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { normalizeMessage } from '../../bounds/message.js';
 import { colors, spacing } from '../../theme/theme.js';
 import { formatHints } from '../dialogs/hints.js';

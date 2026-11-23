@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Text } from 'ink';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { TopBar } from './top-bar.js';
 import { Footer, DEFAULT_FOOTER_HINTS, footerHintsFor } from './footer.js';
 import { ZoneLayout } from '../layout/zone-layout.js';

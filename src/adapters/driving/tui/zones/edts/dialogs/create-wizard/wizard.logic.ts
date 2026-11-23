@@ -8,7 +8,7 @@ import type { SwitchEdtRepoResult } from '../../../../../../../core/edt/switch/s
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/lifecycle/list.js';
 import { ownerRefusalText } from '../../../../shared/components/pickers/branch-owners-text.js';
 import { isProtectedBranch, type BranchProtection } from '../../../../../../../core/edt/branches/shared-branches.js';
-import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/storage/edt-registry.js';
 import type { FailedResultRow } from '../../../../shared/components/lists/failed-result-list.js';
 import {
   suggestBranchNameFromTopic,
@@ -42,7 +42,7 @@ export const NO_SERVICE_ERROR = 'Select at least one service';
 export type NameAvailability = 'empty' | 'available' | 'taken';
 
 // Trimmed, case-sensitive exact match against the loaded EDT topics — the same comparison
-// core/edt/create.ts's own duplicate-topic rejection makes, so the live check never disagrees
+// core/edt/lifecycle/create.ts's own duplicate-topic rejection makes, so the live check never disagrees
 // with what the core would later accept.
 export function checkNameAvailability(topic: string, edts: readonly Pick<EdtRegistryEntry, 'topic'>[]): NameAvailability {
   const trimmed = topic.trim();
@@ -146,10 +146,10 @@ export { resolveTabNavKey as resolveWizardNavKey, type TabNavKey as WizardNavKey
 
 // ---- Step 3: global branch strategy + per-service exceptions -------------------------------
 
-// The per-service facts Step 3 reads from the candidate pool (core/edt/list.ts).
+// The per-service facts Step 3 reads from the candidate pool (core/edt/lifecycle/list.ts).
 export type BranchCandidate = Pick<ServiceBranchDivergence, 'path' | 'service' | 'sharedBranch' | 'protectedBranches'>;
 
-// FR-7, advisory: the same rule the git gate enforces (core/edt/shared-branches.ts) — this
+// FR-7, advisory: the same rule the git gate enforces (core/edt/branches/shared-branches.ts) — this
 // service's own manifest-defined set, `protectedBranches ∪ {sharedBranch}`. The gate stays
 // authoritative.
 export function isProtectedTarget(name: string, protection: BranchProtection): boolean {

@@ -2,9 +2,9 @@
 // exactly once per attempt, then reads the source's own version and requires it to be
 // present on the registry before reporting success. No step loop, no resume.
 import { join } from 'node:path';
-import type { GitPort } from '../../ports/git.js';
-import type { RestartPort } from '../../ports/restart.js';
-import type { SharedTypesPort } from '../../ports/shared-types.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
+import type { SharedTypesPort } from '../../ports/modules/shared-types.js';
 import { err, ok, type Result } from '../../result.js';
 import { notPublishedMessage } from './propagate-version.js';
 

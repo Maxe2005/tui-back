@@ -1,9 +1,9 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { err, ok } from '../../result.js';
-import type { ContainerPort } from '../../ports/container.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { Manifest, ManifestPort } from '../../ports/manifest.js';
-import type { RestartPort } from '../../ports/restart.js';
+import type { ContainerPort } from '../../ports/runtime/container.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
 import { serviceRestart, serviceRestartLockKey, type ServiceRestartParams } from './service-restart.js';
 import type { UpdatePhase } from '../group-update/group-update.js';
 

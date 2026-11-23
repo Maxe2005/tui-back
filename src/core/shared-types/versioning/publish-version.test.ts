@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { GitPort } from '../../ports/git.js';
-import type { RestartPort } from '../../ports/restart.js';
-import type { SharedTypesPort } from '../../ports/shared-types.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
+import type { SharedTypesPort } from '../../ports/modules/shared-types.js';
 import { err, ok } from '../../result.js';
 import { runPublish } from './publish-version.js';
 

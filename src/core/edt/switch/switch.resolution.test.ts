@@ -1,8 +1,8 @@
 // core/edt/switch: unit tests against fake ports — adopt and discard resolutions, failure reporting and dirtyPolicy.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../result.js';
-import type { EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
+import type { EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
 import { switchActiveEdt, type SwitchActiveEdtParams } from './switch.js';
 import { calls, edtEntry, fakeEdtRegistry, fakeLock, fakeState, member } from '../../shared/core-ports.test-support.js';
 import { fakeGit, callOrder, expectZeroWrites, makeParams, OUTGOING, TARGET, WRITE_METHODS } from './switch.test-support.js';

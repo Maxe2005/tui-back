@@ -9,10 +9,10 @@ import { stringify } from 'yaml';
 import { createEdtRegistryPort } from './index.js';
 import { modifyEdt } from '../../../core/edt/lifecycle/modify.js';
 import { ok, type Result } from '../../../core/result.js';
-import type { GitPort } from '../../../core/ports/git.js';
-import type { ManifestPort } from '../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../core/ports/registry.js';
-import type { LockPort } from '../../../core/ports/lock.js';
+import type { GitPort } from '../../../core/ports/vcs/git.js';
+import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../core/ports/storage/registry.js';
+import type { LockPort } from '../../../core/ports/runtime/lock.js';
 
 const tmpDirs: string[] = [];
 

@@ -1,5 +1,5 @@
 // cli/commands/shared: helpers used by several command families (settings loading with stderr reporting).
-import { DEFAULT_SETTINGS, type Settings, type SettingsPort } from '../../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS, type Settings, type SettingsPort } from '../../../../core/ports/storage/settings.js';
 
 // Loads settings.yaml for a command; a load failure or a corrupt-file warning goes to stderr
 // (separate from the stdout JSON envelope) and the built-in defaults apply.

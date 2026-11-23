@@ -4,7 +4,7 @@
 // over GitPort: results are streamed through callbacks and every walk is cancellable through an
 // AbortSignal — after an abort no further entry is reported. Nothing is cached, fetched or written.
 import { err, ok, type Result } from '../../result.js';
-import type { GitPort } from '../../ports/git.js';
+import type { GitPort } from '../../ports/vcs/git.js';
 
 // By-version input is strict: three digit groups, nothing else (no prerelease suffix, no `v`).
 const HISTORY_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;

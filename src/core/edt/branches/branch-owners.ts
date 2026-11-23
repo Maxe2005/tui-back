@@ -3,7 +3,7 @@
 // rename gate and the TUI's chooser annotations / inline refusals. Paths are compared after
 // resolve() so a registry-stored shape (trailing slash, relative segments) still matches.
 import { resolve } from 'node:path';
-import type { EdtRegistryEntry } from '../../ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../ports/storage/edt-registry.js';
 import { isSystemEdt } from '../shared-edt/shared-edt.js';
 
 export function branchOwners(

@@ -7,7 +7,7 @@ import { BoundedList } from '../../components/lists/bounded-list.js';
 import { colors } from '../../theme/theme.js';
 import { type ServicesSettingsRow } from './services.logic.js';
 import { SETTINGS_LIST_CHROME_ROWS } from '../settings-tabs.logic.js';
-import type { Settings } from '../../../../../../core/ports/settings.js';
+import type { Settings } from '../../../../../../core/ports/storage/settings.js';
 
 export type ServicesTabProps = {
   settings: Settings;

@@ -1,7 +1,7 @@
 // tui/store/slices: EDT domain state — registry entries, per-service branch/divergence,
 // EDT use-cases (in-process), branch-picker capabilities, and per-EDT action log.
 // Combined with other slices into the one Zustand store.
-import { healthCheckEnabledFrom } from '../../../../../../core/ports/settings.js';
+import { healthCheckEnabledFrom } from '../../../../../../core/ports/storage/settings.js';
 import type { StateCreator } from 'zustand';
 import {
   createEdt as createEdtUseCase,
@@ -43,7 +43,7 @@ import {
   type MemberDeleteStatus,
   type MemberDisposition,
 } from '../../../../../../core/edt/lifecycle/delete.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/storage/edt-registry.js';
 import { fastForwardShared as fastForwardSharedUseCase, type FastForwardSharedRow } from '../../../../../../core/edt/branches/fast-forward-shared.js';
 import type { Result } from '../../../../../../core/result.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
@@ -116,7 +116,7 @@ export type ModifyEdtParams = {
   removeMembers: string[];
   setBranches: Array<{ repoPath: string; branch: string }>;
   renameTo?: string;
-  // Mirrors setBranches's shape — see core/edt/modify.ts's ModifyEdtParams for the full
+  // Mirrors setBranches's shape — see core/edt/lifecycle/modify.ts's ModifyEdtParams for the full
   // semantics (always renames a member's own currently-registered branch).
   renameBranches?: Array<{ repoPath: string; newName: string }>;
 };
@@ -181,7 +181,7 @@ export type EdtSlice = {
   activateEdt: (params: ActivateEdtRequest) => Promise<Result<ActivateEdtData>>;
   switchEdt: (params: SwitchEdtParams) => Promise<Result<SwitchActiveEdtData>>;
   // Quick action on the system "Shared branches" EDT: fast-forwards each service's local shared
-  // branch from origin with no switch, migration or restart (core/edt/fast-forward-shared.ts).
+  // branch from origin with no switch, migration or restart (core/edt/branches/fast-forward-shared.ts).
   // Rejected while an update, a restart run or another fast-forward is in flight; `edt-not-found`
   // when the setting is off. Never touches the active-EDT pointer.
   fastForwardSharedRunning: boolean;
@@ -204,18 +204,18 @@ export type EdtSlice = {
   switchDirtyRepos: SwitchDirtyRepo[] | null;
   resolveSwitchDirtyRepos: (choice: SwitchDirtyReposChoice) => void;
   modifyEdt: (params: ModifyEdtParams) => Promise<Result<ModifyEdtData>>;
-  // Delete dialog's confirm calls core/edt/delete.ts's deleteEdt in-process (AD-2).
+  // Delete dialog's confirm calls core/edt/lifecycle/delete.ts's deleteEdt in-process (AD-2).
   deleteEdt: (params: DeleteEdtParams) => Promise<Result<DeleteEdtData>>;
   // Delete-confirm dialog's per-member merge/clean status via core export.
   // Never fails outright: per-member read failure folds into statusError.
   // edtUlid needed for `tui-back:<edtUlid>` tagged-stash check.
   resolveMemberDeleteStatuses: (edtUlid: string, members: readonly EdtMember[]) => Promise<MemberDeleteStatus[]>;
-  // Branch-picker capabilities wrapping core/edt/modify.ts's exports.
+  // Branch-picker capabilities wrapping core/edt/lifecycle/modify.ts's exports.
   // renameBranch backs picker's row rename when adding member (where modifyEdt's
   // renameBranches cannot apply due to no existing membership).
   listBranches: (repoPath: string) => Promise<Result<string[]>>;
   // Create wizard's Step 3 per-service lists (local + remote-tracking refs).
-  // Wraps core/edt/create.ts's listCreateCandidateBranches — never fetches.
+  // Wraps core/edt/lifecycle/create.ts's listCreateCandidateBranches — never fetches.
   listCreateBranches: (repoPath: string) => Promise<Result<CreateCandidateBranches>>;
   createMemberBranch: (repoPath: string, branchName: string, baseBranch: string) => Promise<Result<void>>;
   renameBranch: (repoPath: string, oldName: string, newName: string, edtId?: string) => Promise<Result<void>>;

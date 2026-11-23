@@ -5,8 +5,8 @@
 // through `ServiceActions.verifyService`; every other managed service is reported `skipped`
 // with its reason, never `failed`. Ports are injected and the run never rejects.
 import { resolve } from 'node:path';
-import type { ManifestPort } from '../../../ports/manifest.js';
-import type { RegistryPort } from '../../../ports/registry.js';
+import type { ManifestPort } from '../../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../ports/storage/registry.js';
 import { err, ok, type Result } from '../../../result.js';
 import { runPool } from '../../../scripts/update-support/run-pool.js';
 import type { RestartMode, ServiceActions, ServiceFinalState } from '../../../service-actions/index.js';

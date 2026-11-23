@@ -2,7 +2,7 @@
 // candidates, register the selected ones, the empty-registry check behind Dashboard's
 // onboarding prompt, and classifying/removing stale registry entries.
 import type { StateCreator } from 'zustand';
-import type { ScanResult } from '../../../../../../core/ports/registry.js';
+import type { ScanResult } from '../../../../../../core/ports/storage/registry.js';
 import { registerRepo } from '../../../../../../core/scripts/registry/register.js';
 import { scanRepos } from '../../../../../../core/scripts/registry/scan.js';
 import {

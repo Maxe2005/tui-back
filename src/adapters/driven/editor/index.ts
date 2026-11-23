@@ -2,7 +2,7 @@
 // synchronously with stdio inherited so it owns the terminal until it exits.
 import { spawnSync } from 'node:child_process';
 import { err, ok } from '../../../core/result.js';
-import type { EditorPort } from '../../../core/ports/editor.js';
+import type { EditorPort } from '../../../core/ports/runtime/editor.js';
 import { resolveEditorCommand } from './command.js';
 
 export function createEditorPort(env: NodeJS.ProcessEnv = process.env): EditorPort {

@@ -2,7 +2,7 @@
 // no stale entries after a cancel, git failure recovery and the invalid-version guard.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../../../../core/result.js';
-import type { VersionBump, VersionBumpWalkOptions } from '../../../../../../core/ports/git.js';
+import type { VersionBump, VersionBumpWalkOptions } from '../../../../../../core/ports/vcs/git.js';
 import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 const SOURCE = 'source-module';

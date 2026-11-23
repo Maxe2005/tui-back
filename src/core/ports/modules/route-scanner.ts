@@ -3,7 +3,7 @@
 // never crosses this port. Error codes: `route-exploration-not-activated` (the repo's manifest
 // does not activate `route-explorer`) and `route-scan-failed` (no list could be produced —
 // unparsable/unreadable spec, never an empty list).
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 // A route may also carry the request details its scanner could discover — parameters, the
 // body content type and a body example. All optional and plain data: a scanner that discovers

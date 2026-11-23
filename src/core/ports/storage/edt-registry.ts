@@ -2,7 +2,7 @@
  // status, per-member branches) kept separate from RegistryPort's managed-repo path list (AD-6).
  // Each member records the branch that service is on for this EDT. The action-log methods
  // (per-EDT history in the EDT's SQLite db) are optional.
- import type { Result } from '../result.js';
+ import type { Result } from '../../result.js';
  
  export interface EdtMember {
    service: string;
@@ -22,7 +22,7 @@
    members: EdtMember[];
    // Absent for an ordinary (user) EDT. 'system-shared' marks the read-only "Shared branches"
    // EDT the registry adapter synthesizes while edts.sharedBranchesEdtEnabled is on; it is never
-   // persisted to edts.yaml (core/edt/shared-edt.ts).
+   // persisted to edts.yaml (core/edt/shared-edt/shared-edt.ts).
    kind?: 'system-shared';
  }
  

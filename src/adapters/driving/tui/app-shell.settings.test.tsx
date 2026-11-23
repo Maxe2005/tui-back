@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ok } from '../../../core/result.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/storage/settings.js';
 import { AppShell } from './app-shell.js';
 import { createAppStore } from './store/app-store.js';
 import { KEYS } from './shared/test-support/fake-tty.js';

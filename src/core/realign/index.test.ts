@@ -1,13 +1,13 @@
 // core/realign: unit tests against fake ports — selection, per-service outcomes, lock, log, restart.
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '../result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import { GIT_DETACHED_HEAD, type GitPort } from '../ports/git.js';
-import type { LockPort } from '../ports/lock.js';
-import type { ManifestCarryPort } from '../ports/manifest-carry.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/storage/edt-registry.js';
+import { GIT_DETACHED_HEAD, type GitPort } from '../ports/vcs/git.js';
+import type { LockPort } from '../ports/runtime/lock.js';
+import type { ManifestCarryPort } from '../ports/vcs/manifest-carry.js';
+import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
+import type { RegistryPort } from '../ports/storage/registry.js';
+import type { StatePort } from '../ports/storage/state.js';
 import type { ServiceFinalState } from '../service-actions/index.js';
 import type { DriftCandidate } from '../dashboard/drift.js';
 import { realignServices, resolveRealignSelection, type RealignServicesParams } from './index.js';

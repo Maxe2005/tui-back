@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { render } from 'ink';
 import { describe, expect, it, vi } from 'vitest';
 import { SHARED_EDT_ULID } from '../../../../../core/edt/shared-edt/shared-edt.js';
-import { DEFAULT_SETTINGS } from '../../../../../core/ports/settings.js';
+import { DEFAULT_SETTINGS } from '../../../../../core/ports/storage/settings.js';
 import { createAppStore } from '../../store/app-store.js';
 import { RepoRegistryScreen } from './repo-registry-screen.js';
 import { SettingsScreen } from './settings-screen.js';

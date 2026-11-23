@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../core/result.js';
-import type { RegistryPort } from '../../../core/ports/registry.js';
-import type { GitPort } from '../../../core/ports/git.js';
-import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/settings.js';
+import type { RegistryPort } from '../../../core/ports/storage/registry.js';
+import type { GitPort } from '../../../core/ports/vcs/git.js';
+import { DEFAULT_SETTINGS, type SettingsPort } from '../../../core/ports/storage/settings.js';
 import { runCli } from './dispatch.js';
 import { fakeState, fakeEdtRegistry, fakeGitPort, buildTestSubcommands } from './dispatch.test-support.js';
 

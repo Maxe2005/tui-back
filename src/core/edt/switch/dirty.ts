@@ -2,9 +2,9 @@
 // dirty repo (resolveDirtyRepos), then per repo the plan (reads only), its execution (stash /
 // discard / adopt) and the stash-restore failure path. No checkout happens here.
 import { resolve } from 'node:path';
-import type { EdtRegistryEntry } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { ManifestPort } from '../../ports/manifest.js';
+import type { EdtRegistryEntry } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
 import { err, ok, type Result, type ResultError } from '../../result.js';
 import { type CheckoutStep } from '../branches/checkout-expected.js';
 import { MANIFEST_FILE } from '../shared-edt/manifest-carry.js';

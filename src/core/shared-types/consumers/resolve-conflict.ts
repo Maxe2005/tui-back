@@ -7,8 +7,8 @@
 // rerun after the developer has edited, so the lockfile is regenerated as soon as they are done.
 // Core never names the module: the dependency and file path come from the consumer.
 import { dirname, join, posix } from 'node:path';
-import type { GitPort } from '../../ports/git.js';
-import type { RestartPort } from '../../ports/restart.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
 import type { AutoResolveResult } from '../../scripts/group-update/group-update.js';
 import type { DependencyConsumerConfig } from './list-consumers.js';
 

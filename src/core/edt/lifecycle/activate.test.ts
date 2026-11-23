@@ -3,12 +3,12 @@
 // re-blocking), per-repo failure isolation, and the refusal when an active EDT already exists.
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { err, ok } from '../../result.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { activateEdt, type ActivateEdtParams } from './activate.js';
 
 function calls(fn: unknown): Array<unknown[]> {

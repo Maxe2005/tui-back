@@ -3,11 +3,11 @@
 // it to every consumer of the EDT with a commit (propagateVersion) — install and clean restart
 // off, nothing ever pushed. It has no I/O of its own: every port is injected, and a failure is
 // returned as a Result (never thrown) so the driving side can route it to its pause seam.
-import type { ContainerPort } from '../../ports/container.js';
-import type { GitPort } from '../../ports/git.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RestartPort } from '../../ports/restart.js';
-import type { SharedTypesPort } from '../../ports/shared-types.js';
+import type { ContainerPort } from '../../ports/runtime/container.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
+import type { SharedTypesPort } from '../../ports/modules/shared-types.js';
 import { err, ok, type Result } from '../../result.js';
 import type { GroupUpdateRepoResult } from '../../scripts/group-update/group-update.js';
 import type { DependencyConsumer, SourceEntry } from './list-consumers.js';

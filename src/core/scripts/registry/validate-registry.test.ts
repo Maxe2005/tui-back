@@ -3,9 +3,9 @@
 // loader codes, all three inconclusive codes, empty registry, per-path isolation.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err, type Result } from '../../result.js';
-import type { GitPort } from '../../ports/git.js';
-import type { Manifest, ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
 import { validateRegistry } from './validate-registry.js';
 
 function manifestFor(sharedBranch = 'development'): Manifest {

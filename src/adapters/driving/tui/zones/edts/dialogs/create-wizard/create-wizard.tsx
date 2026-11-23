@@ -6,7 +6,7 @@
 import { Box, Text, type Key } from 'ink';
 import type { ServiceBranchDivergence } from '../../../../../../../core/edt/lifecycle/list.js';
 import { branchOwnersMap } from '../../../../../../../core/edt/branches/branch-owners.js';
-import type { EdtRegistryEntry } from '../../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../../core/ports/storage/edt-registry.js';
 import type { AppState } from '../../../../store/app-store.js';
 import { DimAnnotation } from '../../../../shared/components/feedback/dim-annotation.js';
 import { FailedResultList } from '../../../../shared/components/lists/failed-result-list.js';
@@ -60,7 +60,7 @@ export type CreateWizardDeps = {
   candidates: readonly ServiceBranchDivergence[];
   // Step 3's per-service branch lists (local + remote-tracking, never fetched).
   listCreateBranches: AppState['listCreateBranches'];
-  // The first EDT's explicit activation (core/edt/activate.ts, via the store).
+  // The first EDT's explicit activation (core/edt/lifecycle/activate.ts, via the store).
   activateEdtAction: AppState['activateEdt'];
   // "Switch now" — replaces the wizard with the switch dialog on the new EDT and runs the
   // protected switch at once (the zone resolves the entry from the reloaded store).

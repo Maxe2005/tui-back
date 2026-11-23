@@ -3,7 +3,7 @@
 // per-zone splitter ratios, the Logs filter-history lists, the command-bar history and the Logs filter rules (active lists and named sets). Both are keyed by a plain
 // `string` because core never imports the TUI's zone or filter types (AD-1); `null` means
 // nothing was ever persisted (ENOENT), like `readActiveEdt`.
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 // Plain-JSON shapes of the persisted Logs filter rules (AD-1: no TUI types in core). The active
 // lists are keyed by `global` or a service's repoPath; the library is an ordered list of named sets.

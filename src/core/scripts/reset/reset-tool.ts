@@ -6,10 +6,10 @@
 import { readdir, rm } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { withActionLock } from '../../locking.js';
-import type { EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { RegistryPort } from '../../ports/registry.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { err, ok, type Result, type ResultError } from '../../result.js';
 
 export type ResetCategory = 'edts' | 'histories' | 'services';

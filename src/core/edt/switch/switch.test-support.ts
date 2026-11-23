@@ -2,9 +2,9 @@
 // the params factory and the zero-write / call-order assertions.
 import { expect, vi, type Mock } from 'vitest';
 import { ok } from '../../result.js';
-import type { GitPort } from '../../ports/git.js';
-import type { Manifest, ManifestPort } from '../../ports/manifest.js';
-import type { ManifestCarryPort } from '../../ports/manifest-carry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import type { ManifestCarryPort } from '../../ports/vcs/manifest-carry.js';
 import {
   calls,
   edtEntry,

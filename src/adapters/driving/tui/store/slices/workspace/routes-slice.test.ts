@@ -3,14 +3,14 @@
 // ports. The zone's render tests cover the visible states.
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { err, ok } from '../../../../../../core/result.js';
-import type { DevAuthPort } from '../../../../../../core/ports/dev-auth.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
-import type { LockPort } from '../../../../../../core/ports/lock.js';
-import type { Manifest, ManifestPort } from '../../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../../core/ports/registry.js';
-import type { Route, RouteScannerPort } from '../../../../../../core/ports/route-scanner.js';
-import type { SavedRequest, SavedRequestPort } from '../../../../../../core/ports/saved-request.js';
-import type { StatePort } from '../../../../../../core/ports/state.js';
+import type { DevAuthPort } from '../../../../../../core/ports/runtime/dev-auth.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../../../../core/ports/storage/edt-registry.js';
+import type { LockPort } from '../../../../../../core/ports/runtime/lock.js';
+import type { Manifest, ManifestPort } from '../../../../../../core/ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../../../../core/ports/storage/registry.js';
+import type { Route, RouteScannerPort } from '../../../../../../core/ports/modules/route-scanner.js';
+import type { SavedRequest, SavedRequestPort } from '../../../../../../core/ports/storage/saved-request.js';
+import type { StatePort } from '../../../../../../core/ports/storage/state.js';
 import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 function manifestFor(service: string, modules: Manifest['modules']): Manifest {

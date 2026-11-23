@@ -4,10 +4,10 @@
 // `shared-types-source` alone (consumers depend on the source, they never drive the tab). Module ids are matched as declared, never
 // validated against the compiled-in module registry.
 import { resolve } from 'node:path';
-import type { EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { ok, type Result } from '../../result.js';
 import { listRepos, type ManagedRepo } from '../../scripts/registry/list-repos.js';
 
@@ -55,7 +55,7 @@ export async function resolveTabVisibility(
     return listed;
   }
 
-  // Same resolution as core/edt/list.ts: the active EDT's member repo paths, used only to
+  // Same resolution as core/edt/lifecycle/list.ts: the active EDT's member repo paths, used only to
   // decide disabled-vs-enabled below — never to source a branch/identity value.
   const activeUlid = await state.readActiveEdt();
   if (!activeUlid.ok) {

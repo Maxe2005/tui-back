@@ -7,11 +7,11 @@
 // ever pushed. Core receives every port; it never names the module that provides them.
 import { existsSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
-import type { ContainerPort } from '../../ports/container.js';
-import type { GitPort } from '../../ports/git.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RestartPort } from '../../ports/restart.js';
-import type { SharedTypesPort } from '../../ports/shared-types.js';
+import type { ContainerPort } from '../../ports/runtime/container.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
+import type { SharedTypesPort } from '../../ports/modules/shared-types.js';
 import { err, ok, type Result } from '../../result.js';
 import { runRestartStep } from '../../scripts/group-update/group-update.js';
 import type { DependencyConsumer } from '../consumers/list-consumers.js';

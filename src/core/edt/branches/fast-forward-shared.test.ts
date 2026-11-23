@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../result.js';
-import type { GitPort } from '../../ports/git.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/storage/edt-registry.js';
 import { anyFastForwardFailed, fastForwardShared } from './fast-forward-shared.js';
 import { buildSharedBranchesEdt } from '../shared-edt/shared-edt.js';
 

@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ok } from '../../../core/result.js';
-import type { EdtRegistryPort } from '../../../core/ports/edt-registry.js';
+import type { EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
 import { aheadBehind, abortMerge, assertAllowedBranch, branchExistsLocally, createBranch, createGitPort, createTrackingBranch, currentBranch, deleteBranch, hasStash, hasUncommittedChanges, hasUnmergedPaths, isBranchMerged, isMergeInProgress, isRebaseInProgress, listBranches, listDirtyPaths, listRemoteBranches, mergeBranch, renameBranch, restoreStash, stashSave } from './index.js';
 import { runGit, makeGitRepo, makeCleanGitRepo, branchExists, manifest, fakeEdtRegistry, edtEntry, makeOriginAndClone, commit, makeManagedClone, upstreamOf, cleanupTmpDirs } from './git.test-support.js';
 

@@ -1,13 +1,13 @@
 // core/edt/list: unit tests against fake ports (FR-9) — upstream configured, no upstream,
 // offline/unresolvable, member vs. non-member uniformity, and the reachability/manifest-error
-// passthrough mirroring core/scripts/list-repos.ts.
+// passthrough mirroring core/scripts/registry/list-repos.ts.
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { Manifest, ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { listEdtBranchesDivergence } from './list.js';
 
 function manifestFor(repoPath: string): Manifest {

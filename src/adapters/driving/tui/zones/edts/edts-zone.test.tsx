@@ -3,7 +3,7 @@
 // plus the pure helpers behind its keystrokes (renderToString never emits keys).
 import { describe, it, expect } from 'vitest';
 import type { ServiceBranchDivergence } from '../../../../../core/edt/lifecycle/list.js';
-import type { EdtRegistryEntry } from '../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../core/ports/storage/edt-registry.js';
 import type { NavigationKey } from '../../keybindings/index.js';
 import { createAppStore } from '../../store/app-store.js';
 import { footerContextOf } from '../../shared/test-support/mount-for-test.js';

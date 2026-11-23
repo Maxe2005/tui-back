@@ -4,7 +4,7 @@
 // and which pre-targeted dialog a selection opens.
 import { Box, Text, type Key } from 'ink';
 import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import type { AppState } from '../../../store/app-store.js';
 import {
   FilterablePickList,

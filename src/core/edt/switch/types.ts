@@ -1,13 +1,13 @@
 // core/edt/switch/types: public and shared types of the EDT switch (results, dirty-work
 // resolutions, params, per-repo context) plus the `failed` row builder. Leaf module: imports
 // nothing from the rest of the switch, so dirty.ts / member.ts / switch.ts never form a cycle.
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { ManifestCarryPort } from '../../ports/manifest-carry.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { ManifestCarryPort } from '../../ports/vcs/manifest-carry.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import type { ResultError } from '../../result.js';
 
 export interface SwitchEdtRepoResult {

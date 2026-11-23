@@ -2,7 +2,7 @@
 // The driven adapter shells the real `docker` binary (no dockerode). `streamLogs` returns a
 // `stop` function, never a Result: start failures arrive via `onError`, never thrown. Lines
 // are tagged stdout/stderr before they reach `onLine`.
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 export type LogStreamTag = 'stdout' | 'stderr';
 

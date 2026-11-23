@@ -3,14 +3,14 @@
 // Branch and divergence are read live from git on every call, never cached in the EDT
 // registry; the registry only tells which repos belong to the active EDT (isMember).
 import { resolve } from 'node:path';
-import type { EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { ok, type Result } from '../../result.js';
 
-// Mirrors GitPort.aheadBehind's Result contract 1:1 (see core/ports/git.ts):
+// Mirrors GitPort.aheadBehind's Result contract 1:1 (see core/ports/vcs/git.ts):
 //   'current'          -> upstream resolved; ahead/behind are real counts.
 //   'no-upstream'       -> no upstream is configured for the branch at all.
 //   'unknown-offline'  -> upstream configured but currently unresolvable, or any other git

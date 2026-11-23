@@ -2,8 +2,8 @@
 // driven settings adapter implements. Unlike other ports' load(), a corrupt or invalid
 // settings.yaml must never block the `:settings` screen: `load()` is `ok` with every default
 // and a field-naming `warning`; only a genuine I/O error is an `err`.
-import type { Manifest } from './manifest.js';
-import type { Result } from '../result.js';
+import type { Manifest } from '../vcs/manifest.js';
+import type { Result } from '../../result.js';
 
 export const UPDATE_MERGE_SOURCES = ['shared', 'edt-pending'] as const;
 export type UpdateMergeSourceDefault = (typeof UPDATE_MERGE_SOURCES)[number];

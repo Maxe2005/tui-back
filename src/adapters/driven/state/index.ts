@@ -6,7 +6,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { StatePort, StoredRuleLists, StoredRuleSet } from '../../../core/ports/state.js';
+import type { StatePort, StoredRuleLists, StoredRuleSet } from '../../../core/ports/storage/state.js';
 import type { XdgPaths } from '../xdg/index.js';
 import { ensureXdgDir } from '../xdg/index.js';
 import { stateSchema } from './schema.js';

@@ -10,8 +10,8 @@
 import { resolve } from 'node:path';
 import { withActionLock } from '../../locking.js';
 import { edtUpdateLockKey } from '../../scripts/group-update/group-update.js';
-import type { EdtRegistryEntry, EdtStatus } from '../../ports/edt-registry.js';
-import type { Manifest } from '../../ports/manifest.js';
+import type { EdtRegistryEntry, EdtStatus } from '../../ports/storage/edt-registry.js';
+import type { Manifest } from '../../ports/vcs/manifest.js';
 import { err, ok, type Result } from '../../result.js';
 import { withCarriedManifest } from '../shared-edt/manifest-carry.js';
 import { isSystemEdt } from '../shared-edt/shared-edt.js';

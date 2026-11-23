@@ -4,8 +4,8 @@
 // Validations mirror register so the recovery path is unambiguous and idempotent (FR-1).
 import { isAbsolute, resolve } from 'node:path';
 import { err, ok, type Result } from '../../result.js';
-import type { RegistryPort, ResetResult } from '../../ports/registry.js';
-import type { LockPort } from '../../ports/lock.js';
+import type { RegistryPort, ResetResult } from '../../ports/storage/registry.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
 import { withActionLock } from '../../locking.js';
 
 export async function resetRepo(

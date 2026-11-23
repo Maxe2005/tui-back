@@ -3,7 +3,7 @@
 // instead of racing a read-modify-write; the driven adapter owns the cross-process mechanics.
 // resourceKey is an opaque caller-derived string (a file path, or `edt:<ulid>` for an EDT's
 // action lock, which switch peeks without acquiring).
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 export interface LockHandle {
   release(): Promise<Result<void>>;

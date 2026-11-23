@@ -4,7 +4,7 @@
 import { useWindowSize } from 'ink';
 import { isSystemEdt } from '../../../../../../core/edt/shared-edt/shared-edt.js';
 import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecycle/list.js';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { autoStashedRepos } from '../dialogs/switch-resolution/switch-resolution.logic.js';
 import {
   formatIssuesSummary,

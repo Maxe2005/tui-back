@@ -7,11 +7,11 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ok, err } from '../../result.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { Manifest, ManifestPort } from '../../ports/manifest.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort, EdtStatus } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { deleteEdt, defaultDispositionFor, resolveMemberDeleteStatuses, type DeleteEdtParams } from './delete.js';
 
 function calls(fn: unknown): Array<unknown[]> {

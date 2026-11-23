@@ -14,7 +14,7 @@ import {
   initialSwitchDialog,
   SYSTEM_EDT_NOTICE,
 } from '../logic/edts-zone.logic.js';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import type { EdtsZoneCtx } from '../edts-zone.ctx.js';
 
 export function useEdtsEffects(c: EdtsZoneCtx): void {

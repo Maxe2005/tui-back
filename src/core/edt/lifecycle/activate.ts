@@ -5,13 +5,13 @@
 // path, never with discardAll; per-repo failures never block the others.
 import { resolve } from 'node:path';
 import { withActionLock } from '../../locking.js';
-import type { EdtMember, EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { GitPort } from '../../ports/git.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { ManifestCarryPort } from '../../ports/manifest-carry.js';
-import type { RegistryPort } from '../../ports/registry.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtMember, EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { ManifestCarryPort } from '../../ports/vcs/manifest-carry.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { err, ok, type Result } from '../../result.js';
 import { MANIFEST_FILE, withCarriedManifest } from '../shared-edt/manifest-carry.js';
 import { failed, resolveTargetBranch, type SwitchEdtRepoResult, type TargetBranchSpec } from '../switch/switch.js';

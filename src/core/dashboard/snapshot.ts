@@ -3,13 +3,13 @@
 // the other managed services' drift and a registry-health summary. Read-only; every probed
 // field fails on its own, never the snapshot.
 import { resolve } from 'node:path';
-import type { DockerPort } from '../ports/docker.js';
-import type { HealthProbePort } from '../ports/health-probe.js';
-import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { GitPort } from '../ports/git.js';
-import type { Manifest, ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
+import type { DockerPort } from '../ports/runtime/docker.js';
+import type { HealthProbePort } from '../ports/runtime/health-probe.js';
+import type { EdtMember, EdtRegistryEntry, EdtRegistryPort } from '../ports/storage/edt-registry.js';
+import type { GitPort } from '../ports/vcs/git.js';
+import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
+import type { RegistryPort } from '../ports/storage/registry.js';
+import type { StatePort } from '../ports/storage/state.js';
 import { ok, type Result } from '../result.js';
 import { resolveManifestStatus, type ServiceStatus } from '../service-status/index.js';
 import { isProtectedBranch } from '../edt/branches/shared-branches.js';

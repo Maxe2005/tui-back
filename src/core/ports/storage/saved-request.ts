@@ -1,7 +1,7 @@
 // core/ports/saved-request: the SavedRequestPort — the global saved-request library kept in
 // `global.db`. Names are unique by exact match; the session cookie is never persisted. The
 // `overwrite` method updates one name in place (bumping `updatedAt`); `save` inserts only.
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 export interface SavedRequest {
   id: string;

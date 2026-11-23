@@ -2,11 +2,11 @@
 // active-EDT member: its EDT branch; any other managed repo: its sharedBranch). Shared by the
 // dashboard snapshot and realign; read-only, a failed probe is `unknown`, never a verdict.
 import { resolve } from 'node:path';
-import type { EdtRegistryPort } from '../ports/edt-registry.js';
-import { GIT_DETACHED_HEAD, type GitPort } from '../ports/git.js';
-import type { ManifestPort } from '../ports/manifest.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
+import type { EdtRegistryPort } from '../ports/storage/edt-registry.js';
+import { GIT_DETACHED_HEAD, type GitPort } from '../ports/vcs/git.js';
+import type { ManifestPort } from '../ports/vcs/manifest.js';
+import type { RegistryPort } from '../ports/storage/registry.js';
+import type { StatePort } from '../ports/storage/state.js';
 import { err, ok, type Result } from '../result.js';
 
 // aligned/drifted compare the current branch with the expected one (a detached HEAD is

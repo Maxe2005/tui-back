@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { Manifest, ManifestPort } from '../../ports/manifest.js';
-import type { StatePort } from '../../ports/state.js';
+import type { EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import type { StatePort } from '../../ports/storage/state.js';
 import { err, ok } from '../../result.js';
 import { listConsumers, type ConsumerConfigParser } from './list-consumers.js';
 

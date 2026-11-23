@@ -197,7 +197,7 @@ describe('EdtsZone real-keypress interactions — switch', () => {
   // When a service outside the outgoing EDT is dirty, the switch dialog shows the two-panel
   // resolution view. These fakes drive the same store fields (switchDirtyRepos /
   // resolveSwitchDirtyRepos) edt-slice.ts's real seam does — the end-to-end wiring through
-  // core/edt/switch.ts is covered by edt-slice.test.ts; these cover the dialog's rendering and
+  // core/edt/switch/switch.ts is covered by edt-slice.test.ts; these cover the dialog's rendering and
   // keystroke routing.
   function resolutionStore(options: {
     activeTopic?: string | null;

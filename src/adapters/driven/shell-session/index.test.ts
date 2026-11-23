@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createShellSessionPort } from './index.js';
-import type { ShellLine, ShellRunOutcome, ShellTarget } from '../../../core/ports/shell-session.js';
+import type { ShellLine, ShellRunOutcome, ShellTarget } from '../../../core/ports/runtime/shell-session.js';
 
 const tmpDirs: string[] = [];
 

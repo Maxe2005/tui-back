@@ -13,7 +13,7 @@ import { RestartModeSelector } from '../../components/pickers/restart-mode-selec
 import { StateLine } from '../../components/feedback/state-line.js';
 import { ClampedParagraph } from '../../components/display/truncated-text.js';
 import { colors } from '../../theme/theme.js';
-import { REALIGN_SCOPES } from '../../../../../../core/ports/settings.js';
+import { REALIGN_SCOPES } from '../../../../../../core/ports/storage/settings.js';
 import { useAppStore, type AppStore } from '../../../store/app-store.js';
 import { matchingPreset } from '../../../store/slices/maintenance/realign-slice.js';
 import { BranchPlanTable } from '../../../zones/edts/dialogs/branch-plan-table.js';

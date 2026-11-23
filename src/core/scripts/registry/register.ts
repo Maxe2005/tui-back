@@ -4,8 +4,8 @@
 // canonicalized so `/a/b/` and `/a/b` dedupe to one entry (FR-1).
 import { isAbsolute, resolve } from 'node:path';
 import { err, ok, type Result } from '../../result.js';
-import type { RegistryPort } from '../../ports/registry.js';
-import type { LockPort } from '../../ports/lock.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
 import { withActionLock } from '../../locking.js';
 
 export async function registerRepo(

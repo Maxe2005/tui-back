@@ -3,7 +3,7 @@
 // adapter owns the auth route and the session cache. Error codes: `auth-endpoint-failed`
 // (auth route down, non-2xx or no session — cookie never logged), `auth-unauthorized` (still
 // 401 after the re-auth budget), `auth-forbidden` (403 on the fired request).
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 export interface DevAuthSession {
   cookie: string;

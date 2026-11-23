@@ -5,7 +5,7 @@
 // Error codes: `package-json-unreadable` (I/O or parse failure), `dependency-not-found`
 // (absent from dependencies and devDependencies), `registry-unreachable` (the registry could
 // not be queried — distinct from "version not found", which is `ok(false)`).
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 export interface SharedTypesPort {
   // The declared version string, verbatim (it may be a range such as `^0.1.3`).

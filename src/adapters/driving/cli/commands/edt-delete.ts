@@ -2,11 +2,11 @@
 import { resolve } from 'node:path';
 import { err, type Result } from '../../../../core/result.js';
 import { deleteEdt, type MemberDisposition } from '../../../../core/edt/lifecycle/delete.js';
-import { GitPort } from '../../../../core/ports/git.js';
-import { ManifestPort } from '../../../../core/ports/manifest.js';
-import { EdtRegistryPort } from '../../../../core/ports/edt-registry.js';
-import { LockPort } from '../../../../core/ports/lock.js';
-import { StatePort } from '../../../../core/ports/state.js';
+import { GitPort } from '../../../../core/ports/vcs/git.js';
+import { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
+import { EdtRegistryPort } from '../../../../core/ports/storage/edt-registry.js';
+import { LockPort } from '../../../../core/ports/runtime/lock.js';
+import { StatePort } from '../../../../core/ports/storage/state.js';
 
 export const EDT_DELETE_USAGE =
   'tui-back edt delete <topic> [--branches <repoPath>=<leave|delete>]... ' +

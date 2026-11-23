@@ -1,6 +1,6 @@
 import { err, ok, type Result } from '../result.js';
-import type { DockerPort } from '../ports/docker.js';
-import type { ShellLine, ShellRunHandle, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../ports/shell-session.js';
+import type { DockerPort } from '../ports/runtime/docker.js';
+import type { ShellLine, ShellRunHandle, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../ports/runtime/shell-session.js';
 import { createLineBuffer, DEFAULT_MAX_LINES, type LineBufferSnapshot } from './line-buffer.js';
 import { detectTtyCommand } from './tty-guard.js';
 

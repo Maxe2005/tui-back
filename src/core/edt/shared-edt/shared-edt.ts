@@ -3,8 +3,8 @@
 // persisted to edts.yaml — whose members are every managed repo on its manifest `sharedBranch`.
 // It is recognized by `kind` (and, defensively, its constant ulid), never by topic alone.
 import { err, ok, type Result } from '../../result.js';
-import type { EdtMember, EdtRegistryEntry } from '../../ports/edt-registry.js';
-import type { Manifest } from '../../ports/manifest.js';
+import type { EdtMember, EdtRegistryEntry } from '../../ports/storage/edt-registry.js';
+import type { Manifest } from '../../ports/vcs/manifest.js';
 
 // A valid 26-char Crockford ULID shape (no I, L, O, U), constant so the active-EDT pointer and
 // the per-EDT action log can name the system EDT across runs.

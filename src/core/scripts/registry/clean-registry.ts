@@ -4,10 +4,10 @@
 // is removed. Other manifest errors and inconclusive exists() checks are never pruned.
 // memberOfEdts is a display-only note — edts.yaml is never written here.
 import { withActionLock } from '../../locking.js';
-import type { EdtRegistryPort } from '../../ports/edt-registry.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
+import type { EdtRegistryPort } from '../../ports/storage/edt-registry.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
 import { ok, type Result } from '../../result.js';
 import type { RegistryEntryError } from './list-repos.js';
 

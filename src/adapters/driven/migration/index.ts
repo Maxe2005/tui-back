@@ -5,7 +5,7 @@
 // integration tests can stub it.
 import { runProcess } from '../process.js';
 import { err, ok, type Result } from '../../../core/result.js';
-import type { MigrationPort } from '../../../core/ports/migration.js';
+import type { MigrationPort } from '../../../core/ports/vcs/migration.js';
 
 export function createMigrationPort(shell = 'sh'): MigrationPort {
   return {

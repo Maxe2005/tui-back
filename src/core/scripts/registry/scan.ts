@@ -3,7 +3,7 @@
 // registry adapter owns the walk, the root-existence probe (scan-root-not-found), and the
 // reporting of unreadable subtrees (`skipped`) so a partial scan is never silent.
 import { err, ok, type Result } from '../../result.js';
-import type { RegistryPort, ScanResult } from '../../ports/registry.js';
+import type { RegistryPort, ScanResult } from '../../ports/storage/registry.js';
 
 export type ScanData = ScanResult;
 

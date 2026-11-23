@@ -1,6 +1,6 @@
 // core/ports/settings: the pure helpers the settings model ships with.
 import { describe, expect, it } from 'vitest';
-import type { Manifest } from './manifest.js';
+import type { Manifest } from '../vcs/manifest.js';
 import { DEFAULT_SETTINGS, healthCheckEnabledFrom, type Settings } from './settings.js';
 
 const manifest = (service: string): Manifest => ({ service, sharedBranch: 'development', modules: {} });

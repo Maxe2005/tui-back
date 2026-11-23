@@ -1,5 +1,5 @@
 // tui/zones/edts: modify-flow operations, candidate-list state and failed-result summaries.
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { resolveAssistedAction, type FailedResultRow } from '../../../shared/components/lists/failed-result-list.js';
 import type { FormFocus } from './edts-zone.focus.logic.js';
 import { suggestBranchForNewMember } from './edts-zone.focus.logic.js';

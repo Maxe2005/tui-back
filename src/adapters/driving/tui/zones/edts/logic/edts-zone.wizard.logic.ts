@@ -1,6 +1,6 @@
 // tui/zones/edts: create-wizard branch-step state and the create dialog state.
 import type { MemberBranchPlan } from '../../../../../../core/edt/lifecycle/create.js';
-import type { EdtRegistryEntry } from '../../../../../../core/ports/edt-registry.js';
+import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import { type FailedResultRow } from '../../../shared/components/lists/failed-result-list.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import type { OverrideBoxState } from '../dialogs/create-wizard/override-box.logic.js';

@@ -2,8 +2,8 @@
 // ports (an in-memory worktree standing in for git).
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../result.js';
-import type { GitPort } from '../../ports/git.js';
-import type { RestartPort } from '../../ports/restart.js';
+import type { GitPort } from '../../ports/vcs/git.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
 import { autoResolveSharedTypesConflict, hasConflictMarkers, rewriteDependencyBlocks } from './resolve-conflict.js';
 
 const DEP = '@ianord/shared-types';

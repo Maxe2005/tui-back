@@ -8,10 +8,10 @@ import { join } from 'node:path';
 import { createGitPort } from './index.js';
 import { createManifestCarryPort } from '../manifest/carry.js';
 import { loadManifest } from '../manifest/index.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import type { LockPort } from '../../../core/ports/lock.js';
-import type { RegistryPort } from '../../../core/ports/registry.js';
-import type { StatePort } from '../../../core/ports/state.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
+import type { LockPort } from '../../../core/ports/runtime/lock.js';
+import type { RegistryPort } from '../../../core/ports/storage/registry.js';
+import type { StatePort } from '../../../core/ports/storage/state.js';
 import { ok } from '../../../core/result.js';
 import { switchActiveEdt } from '../../../core/edt/switch/switch.js';
 

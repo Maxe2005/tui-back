@@ -3,8 +3,8 @@
 // silently unmanaged (no .tui-back.yaml), or an error entry (manifest fails to load/validate —
 // surfaced, never hidden). Output keeps registry-file order so reruns are identical (FR-1).
 import { err, ok, type Result } from '../../result.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RegistryPort } from '../../ports/registry.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RegistryPort } from '../../ports/storage/registry.js';
 
 export interface ManagedRepo {
   path: string;

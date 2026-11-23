@@ -5,8 +5,8 @@
 // command costs at most one store update per TERMINAL_FLUSH_MS. Closing discards the session.
 // The command history is in-memory only, shared by every terminal for the app run.
 import type { StateCreator } from 'zustand';
-import type { Manifest } from '../../../../../../core/ports/manifest.js';
-import type { ShellLine, ShellTarget } from '../../../../../../core/ports/shell-session.js';
+import type { Manifest } from '../../../../../../core/ports/vcs/manifest.js';
+import type { ShellLine, ShellTarget } from '../../../../../../core/ports/runtime/shell-session.js';
 import { err, type Result } from '../../../../../../core/result.js';
 import { createShellSession, type ShellRunResult, type ShellSession } from '../../../../../../core/shell/index.js';
 import { DEFAULT_MAX_LINES } from '../../../../../../core/shell/line-buffer.js';

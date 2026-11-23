@@ -9,7 +9,7 @@ import type { ServiceBranchDivergence } from '../../../../../../core/edt/lifecyc
 import { LOGS_CLEAR_ROWS, LOGS_CLEAR_ROW_LABELS, LOGS_RULES_ROWS, LOGS_RULES_ROW_LABELS, LOGS_SETTINGS_GROUPS, LOG_BUFFER_SIZE_STEP, type LogsRulesConfirm, type LogsSettingsGroupId } from './logs.logic.js';
 import { FILTER_HISTORY_SIZE_STEP } from '../palette/palette.logic.js';
 import { SETTINGS_LIST_CHROME_ROWS } from '../settings-tabs.logic.js';
-import type { Settings } from '../../../../../../core/ports/settings.js';
+import type { Settings } from '../../../../../../core/ports/storage/settings.js';
 
 export type LogsTabProps = {
   settings: Settings;

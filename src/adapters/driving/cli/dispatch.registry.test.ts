@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../core/result.js';
-import type { ManifestPort } from '../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../core/ports/registry.js';
+import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../core/ports/storage/registry.js';
 import { fakeGitPort, buildTestSubcommands } from './dispatch.test-support.js';
 
 // `registry clean`'s interactive TTY branch drives a real `node:readline/promises` prompt —

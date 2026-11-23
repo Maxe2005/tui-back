@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { ok } from '../../../core/result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/edt-registry.js';
-import type { ManifestPort } from '../../../core/ports/manifest.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../../core/ports/storage/edt-registry.js';
+import type { ManifestPort } from '../../../core/ports/vcs/manifest.js';
 import { loadManifest } from '../manifest/index.js';
 
 export const tmpDirs: string[] = [];

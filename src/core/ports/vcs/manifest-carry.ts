@@ -1,6 +1,6 @@
 // core/ports/manifest-carry: captures a repo's .tui-back.yaml exactly as it is on disk and
 // writes it back later, so an EDT switch can leave it untouched whatever the target branch holds.
-import type { Result } from '../result.js';
+import type { Result } from '../../result.js';
 
 export type ManifestSnapshot = { kind: 'present'; content: Uint8Array } | { kind: 'absent' };
 

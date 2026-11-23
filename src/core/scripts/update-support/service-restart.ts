@@ -1,9 +1,9 @@
 import { basename, resolve } from 'node:path';
 import { withActionLock } from '../../locking.js';
-import type { ContainerPort } from '../../ports/container.js';
-import type { LockPort } from '../../ports/lock.js';
-import type { ManifestPort } from '../../ports/manifest.js';
-import type { RestartPort } from '../../ports/restart.js';
+import type { ContainerPort } from '../../ports/runtime/container.js';
+import type { LockPort } from '../../ports/runtime/lock.js';
+import type { ManifestPort } from '../../ports/vcs/manifest.js';
+import type { RestartPort } from '../../ports/runtime/restart.js';
 import { err, ok, type Result } from '../../result.js';
 import { runRestartStep, type GroupUpdateRepoResult, type OnUpdatePhase } from '../group-update/group-update.js';
 

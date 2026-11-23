@@ -2,7 +2,7 @@
 // and the params factory.
 import { vi } from 'vitest';
 import { ok } from '../../result.js';
-import type { GitPort } from '../../ports/git.js';
+import type { GitPort } from '../../ports/vcs/git.js';
 import {
   edtEntry,
   fakeContainer,

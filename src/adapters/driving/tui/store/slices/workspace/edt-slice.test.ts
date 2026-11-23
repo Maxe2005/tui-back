@@ -1,5 +1,5 @@
 // tui/store/slices/edt-slice: unit tests for the switch dirty-repo seam — the slice calls the
-// real core/edt/switch.ts use-case against fake ports, so these verify the wiring (preview
+// real core/edt/switch/switch.ts use-case against fake ports, so these verify the wiring (preview
 // raised/cleared, resolveSwitchDirtyRepos resuming the paused core call) rather than
 // re-testing switchActiveEdt itself. Mirrors update-slice.test.ts's onUpdateBlocker tests.
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -7,15 +7,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../../../../core/result.js';
-import type { DockerPort } from '../../../../../../core/ports/docker.js';
-import type { EdtRegistryPort } from '../../../../../../core/ports/edt-registry.js';
-import type { GitPort } from '../../../../../../core/ports/git.js';
-import type { LockPort } from '../../../../../../core/ports/lock.js';
-import type { ManifestPort } from '../../../../../../core/ports/manifest.js';
-import type { RegistryPort } from '../../../../../../core/ports/registry.js';
-import type { SettingsPort } from '../../../../../../core/ports/settings.js';
-import type { StatePort } from '../../../../../../core/ports/state.js';
-import { DEFAULT_SETTINGS } from '../../../../../../core/ports/settings.js';
+import type { DockerPort } from '../../../../../../core/ports/runtime/docker.js';
+import type { EdtRegistryPort } from '../../../../../../core/ports/storage/edt-registry.js';
+import type { GitPort } from '../../../../../../core/ports/vcs/git.js';
+import type { LockPort } from '../../../../../../core/ports/runtime/lock.js';
+import type { ManifestPort } from '../../../../../../core/ports/vcs/manifest.js';
+import type { RegistryPort } from '../../../../../../core/ports/storage/registry.js';
+import type { SettingsPort } from '../../../../../../core/ports/storage/settings.js';
+import type { StatePort } from '../../../../../../core/ports/storage/state.js';
+import { DEFAULT_SETTINGS } from '../../../../../../core/ports/storage/settings.js';
 import { createAppStore, type AppStoreDeps } from '../../app-store.js';
 
 const TARGET_MEMBER = { service: 'svc-a', repoPath: '/repo/a', branch: 'feat/a' };
