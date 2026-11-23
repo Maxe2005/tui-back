@@ -1,6 +1,6 @@
 // cli/commands/heal: the `heal` subcommand (usage, flag parsing and runner).
 import { err, ok, type Result } from '../../../../core/result.js';
-import { createServiceActions, type RestartMode } from '../../../../core/service-actions/index.js';
+import { createServiceActions, type RestartMode } from '../../../../core/runtime/service-actions/index.js';
 import { ContainerPort } from '../../../../core/ports/runtime/container.js';
 import { planHeal, runHeal } from '../../../../core/workspace/heal/index.js';
 import { restartNeedsAttention } from '../../../../core/workspace/edt/switch/restart/switch-restart.js';

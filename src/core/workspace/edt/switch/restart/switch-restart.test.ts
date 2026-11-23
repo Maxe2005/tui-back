@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../../../../result.js';
-import type { ServiceFinalState } from '../../../../service-actions/index.js';
-import { NO_CLEAN_RECIPE_NOTICE } from '../../../../service-actions/index.js';
+import type { ServiceFinalState } from '../../../../runtime/service-actions/index.js';
+import { NO_CLEAN_RECIPE_NOTICE } from '../../../../runtime/service-actions/index.js';
 import {
   listSwitchRestartRepos,
   orderRestartRows,

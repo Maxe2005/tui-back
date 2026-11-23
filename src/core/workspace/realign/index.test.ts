@@ -8,7 +8,7 @@ import type { ManifestCarryPort } from '../../ports/vcs/manifest-carry.js';
 import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
 import type { RegistryPort } from '../../ports/storage/registry.js';
 import type { StatePort } from '../../ports/storage/state.js';
-import type { ServiceFinalState } from '../../service-actions/index.js';
+import type { ServiceFinalState } from '../../runtime/service-actions/index.js';
 import type { DriftCandidate } from '../../dashboard/drift.js';
 import { realignServices, resolveRealignSelection, type RealignServicesParams } from './index.js';
 

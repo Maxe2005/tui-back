@@ -9,7 +9,7 @@
 // Every symbol it used to export is re-exported from here.
 import type { StateCreator } from 'zustand';
 import { createLogsManager, type LogsManager } from '../../../../../../core/logs/index.js';
-import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
+import { createServiceActions, type ServiceActions } from '../../../../../../core/runtime/service-actions/index.js';
 import {
   readRuleLists,
   readRuleSets,

@@ -18,7 +18,7 @@ import {
   type UpdatePhase,
 } from '../../../../../../../core/workspace/scripts/group-update/group-update.js';
 import { serviceRestart as serviceRestartUseCase } from '../../../../../../../core/workspace/scripts/update-support/service-restart.js';
-import { openInIde } from '../../../../../../../core/service-actions/index.js';
+import { openInIde } from '../../../../../../../core/runtime/service-actions/index.js';
 import { err, ok, type Result } from '../../../../../../../core/result.js';
 import { advanceServiceSteps, mergeLastServiceOutcomes } from '../../../../zones/update/logic/update-zone.logic.js';
 import { autoResolveSharedTypesConflict } from '../../../../../../../core/workspace/shared-types/consumers/resolve-conflict.js';

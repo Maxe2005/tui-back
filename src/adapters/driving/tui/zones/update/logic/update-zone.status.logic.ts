@@ -4,7 +4,7 @@ import type { ServiceBranchDivergence } from '../../../../../../core/workspace/e
 import type { EdtRegistryEntry } from '../../../../../../core/ports/storage/edt-registry.js';
 import type { GroupUpdateRepoResult, GroupUpdateScope, GroupUpdateSelectionItem, UpdateBlockerKind, UpdatePhase } from '../../../../../../core/workspace/scripts/group-update/group-update.js';
 import type { SharedTypesStage } from '../../../../../../core/workspace/shared-types/consumers/smart-update.js';
-import type { ServiceStatusState } from '../../../../../../core/service-status/index.js';
+import type { ServiceStatusState } from '../../../../../../core/runtime/service-status/index.js';
 import { partitionServicesByEdtMembership } from '../../edts/logic/edts-zone.logic.js';
 
 // The Update zone's own closed per-service status set: the health-first ServiceStatusState

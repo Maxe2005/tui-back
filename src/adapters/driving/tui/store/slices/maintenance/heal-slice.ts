@@ -9,7 +9,7 @@ import { restartNeedsAttention, type RestartRow } from '../../../../../../core/w
 import { HEAL_NOTHING_TO_DO_MESSAGE, planHeal, runHeal, type HealPlan, type HealReport } from '../../../../../../core/workspace/heal/index.js';
 import { healthCheckEnabledFrom } from '../../../../../../core/ports/storage/settings.js';
 import type { Result } from '../../../../../../core/result.js';
-import { createServiceActions, type RestartMode, type ServiceActions } from '../../../../../../core/service-actions/index.js';
+import { createServiceActions, type RestartMode, type ServiceActions } from '../../../../../../core/runtime/service-actions/index.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 import { describeRestartSummary } from '../../../zones/edts/dialogs/switch/switch-restart-report.js';
 

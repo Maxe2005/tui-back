@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
-import type { ServiceAction } from '../../../../../../core/service-actions/index.js';
+import type { ServiceAction } from '../../../../../../core/runtime/service-actions/index.js';
 import { resolveMenuKey } from '../../../shared/components/lists/menu-list.js';
 import { renderToString } from '../../../shared/components/render-to-string.js';
 import {

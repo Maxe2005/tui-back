@@ -3,7 +3,7 @@
 // columns, and the top bar and footer must stay on screen.
 import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
-import type { ServiceStatusState } from '../../../../../core/service-status/index.js';
+import type { ServiceStatusState } from '../../../../../core/runtime/service-status/index.js';
 import { AppShell } from '../../app-shell.js';
 import { createAppStore, type AppStore } from '../../store/app-store.js';
 import { ZONES } from '../../zones/zones.js';

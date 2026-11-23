@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { err, ok, type Result } from '../result.js';
-import type { HealthState } from '../ports/runtime/docker.js';
-import type { ShellLine, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../ports/runtime/shell-session.js';
+import { err, ok, type Result } from '../../result.js';
+import type { HealthState } from '../../ports/runtime/docker.js';
+import type { ShellLine, ShellRunOutcome, ShellSessionPort, ShellTarget } from '../../ports/runtime/shell-session.js';
 import { createShellSession, type ShellSession } from './index.js';
 
 // A controllable fake ShellSessionPort: each `run` is recorded with its onLine callback, and

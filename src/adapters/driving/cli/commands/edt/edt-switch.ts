@@ -2,7 +2,7 @@
 import { err, ok, type Result } from '../../../../../core/result.js';
 import { type DirtyPolicy, switchActiveEdt } from '../../../../../core/workspace/edt/switch/switch.js';
 import { listSwitchRestartRepos, restartAfterSwitch, restartNeedsAttention } from '../../../../../core/workspace/edt/switch/restart/switch-restart.js';
-import { createServiceActions } from '../../../../../core/service-actions/index.js';
+import { createServiceActions } from '../../../../../core/runtime/service-actions/index.js';
 import { ContainerPort } from '../../../../../core/ports/runtime/container.js';
 import { DockerPort } from '../../../../../core/ports/runtime/docker.js';
 import { EditorPort } from '../../../../../core/ports/runtime/editor.js';

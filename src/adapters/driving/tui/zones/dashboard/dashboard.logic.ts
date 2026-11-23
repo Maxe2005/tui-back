@@ -1,7 +1,7 @@
 // tui/zones/dashboard: pure helpers for the Dashboard shell — which body the zone shows, the
 // "updated Ns ago" line and the short labels a service row prints for each probed field.
 import type { DashboardOtherService, DashboardRegistrySummary, DashboardService } from '../../../../../core/dashboard/snapshot.js';
-import type { ServiceAction } from '../../../../../core/service-actions/index.js';
+import type { ServiceAction } from '../../../../../core/runtime/service-actions/index.js';
 import { formatHint } from '../../shared/components/dialogs/hints.js';
 import type { StatusBadgeState } from '../../shared/components/feedback/status-badge.js';
 

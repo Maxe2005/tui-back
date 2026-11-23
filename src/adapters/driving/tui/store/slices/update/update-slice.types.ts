@@ -11,7 +11,7 @@ import type {
   UpdatePhase,
 } from '../../../../../../core/workspace/scripts/group-update/group-update.js';
 import type { Result } from '../../../../../../core/result.js';
-import type { ServiceStatusState } from '../../../../../../core/service-status/index.js';
+import type { ServiceStatusState } from '../../../../../../core/runtime/service-status/index.js';
 import type { InFlightGuard } from '../../../shared/hooks/in-flight-guard.js';
 import { finalizeServiceSteps, type ServiceIssue, type ServiceStepStates } from '../../../zones/update/logic/update-zone.logic.js';
 import type { SHARED_TYPES_PHASE_FAILED, SharedTypesMode, SharedTypesStage } from '../../../../../../core/workspace/shared-types/consumers/smart-update.js';

@@ -7,7 +7,7 @@
 // Not a ModalDialog: its body must be a measured, flex-grown box for ScrollableOutput.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
-import { markerText } from '../../../../../../core/shell/line-buffer.js';
+import { markerText } from '../../../../../../core/runtime/shell/line-buffer.js';
 import { useAppStore, type AppStore, type TerminalLine } from '../../../store/app-store.js';
 import { useBounds } from '../../bounds/bounds-context.js';
 import { FullscreenFrame } from '../../components/layout/fullscreen-frame.js';

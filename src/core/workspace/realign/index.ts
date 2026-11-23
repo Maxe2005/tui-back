@@ -18,7 +18,7 @@ import { REALIGN_SCOPES, type RealignScope } from '../../ports/storage/settings.
 import type { StatePort } from '../../ports/storage/state.js';
 import { err, ok, type Result } from '../../result.js';
 import { edtUpdateLockKey, GROUP_UPDATE_LOCK_KEY } from '../scripts/group-update/group-update.js';
-import type { RestartMode, ServiceActions } from '../../service-actions/index.js';
+import type { RestartMode, ServiceActions } from '../../runtime/service-actions/index.js';
 
 export { REALIGN_SCOPES, type RealignScope };
 

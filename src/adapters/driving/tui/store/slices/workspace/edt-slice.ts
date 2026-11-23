@@ -19,7 +19,7 @@ import {
   type RestartRow,
   type SwitchRestartRunMode,
 } from '../../../../../../core/workspace/edt/switch/restart/switch-restart.js';
-import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
+import { createServiceActions, type ServiceActions } from '../../../../../../core/runtime/service-actions/index.js';
 import { activateEdt as activateEdtUseCase, type ActivateEdtData } from '../../../../../../core/workspace/edt/lifecycle/activate.js';
 import {
   switchActiveEdt as switchActiveEdtUseCase,

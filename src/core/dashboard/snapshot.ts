@@ -11,7 +11,7 @@ import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
 import type { RegistryPort } from '../ports/storage/registry.js';
 import type { StatePort } from '../ports/storage/state.js';
 import { ok, type Result } from '../result.js';
-import { resolveManifestStatus, type ServiceStatus } from '../service-status/index.js';
+import { resolveManifestStatus, type ServiceStatus } from '../runtime/service-status/index.js';
 import { isProtectedBranch } from '../workspace/edt/branches/shared-branches.js';
 import { isSystemEdt } from '../workspace/edt/shared-edt/shared-edt.js';
 import { readServiceDivergence, type BranchDivergenceStatus } from '../workspace/edt/lifecycle/list.js';

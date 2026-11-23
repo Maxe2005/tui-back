@@ -1,7 +1,7 @@
 // tui/store/slices: how the service-action registry's ids map onto behaviour — which restart
 // mode an id runs and which terminal it opens. Every consumer reads these maps, so an id is
 // never interpreted two ways.
-import type { RestartMode } from '../../../../../../core/service-actions/index.js';
+import type { RestartMode } from '../../../../../../core/runtime/service-actions/index.js';
 import type { TerminalKind } from '../terminal/terminal-slice.js';
 
 export const RESTART_MODES: Readonly<Record<string, RestartMode>> = {

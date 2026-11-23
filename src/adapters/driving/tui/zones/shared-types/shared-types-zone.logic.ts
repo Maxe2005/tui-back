@@ -3,7 +3,7 @@
 // `useInput` stays a thin dispatcher over these.
 import type { PropagateOptions, PropagateServiceResult, PropagateStep } from '../../../../../core/workspace/shared-types/versioning/propagate-version.js';
 import { isValidVersion } from '../../../../../core/workspace/shared-types/versioning/propagate-version.js';
-import type { ServiceAction } from '../../../../../core/service-actions/index.js';
+import type { ServiceAction } from '../../../../../core/runtime/service-actions/index.js';
 import { nextTextInputValue, type TextEditKey, type TextInputState } from '../../shared/components/inputs/text-edit.js';
 import { resolveMenuKey, type MenuItem, type MenuKey, type MenuStep } from '../../shared/components/lists/menu-list.js';
 import { SHARED_TYPES_ACTIONS, type SharedTypesActionId } from '../../keybindings/keybindings.js';

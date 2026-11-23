@@ -6,7 +6,7 @@ import type { Manifest } from '../../ports/vcs/manifest.js';
 import { err, ok, type Result } from '../../result.js';
 import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey } from '../scripts/group-update/group-update.js';
 import { serviceRestartLockKey } from '../scripts/update-support/service-restart.js';
-import type { ServiceFinalState } from '../../service-actions/index.js';
+import type { ServiceFinalState } from '../../runtime/service-actions/index.js';
 import { HEAL_NOTHING_TO_DO_MESSAGE, planHeal, runHeal, type HealPlan } from './index.js';
 
 // One fake service: its manifest (or a load error), its container state (or a Docker error) and

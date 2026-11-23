@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { HealthState } from '../ports/runtime/docker.js';
-import type { Manifest } from '../ports/vcs/manifest.js';
-import { err, ok } from '../result.js';
+import type { HealthState } from '../../ports/runtime/docker.js';
+import type { Manifest } from '../../ports/vcs/manifest.js';
+import { err, ok } from '../../result.js';
 import { createServiceActions, NO_CLEAN_RECIPE_NOTICE, restartBlockingLocks, TERMINAL_HEALTH_TIMEOUT_MS } from './index.js';
 
 // `health` wires a docker fake whose container health is that state (`unavailable` = probe error);

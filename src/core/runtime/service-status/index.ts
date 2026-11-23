@@ -3,11 +3,11 @@
 // first, then its outcome is combined with the container state. The combination table lives only
 // in `combineStatus`; a new probe kind is added here, never in a consumer. Ports are injected and
 // nothing here rejects: every failure comes back as a `Result`.
-import { getServiceHealth } from '../logs/use-cases.js';
-import type { DockerPort, HealthState } from '../ports/runtime/docker.js';
-import type { HealthProbePort } from '../ports/runtime/health-probe.js';
-import type { Manifest, ManifestPort } from '../ports/vcs/manifest.js';
-import { err, ok, type Result } from '../result.js';
+import { getServiceHealth } from '../../logs/use-cases.js';
+import type { DockerPort, HealthState } from '../../ports/runtime/docker.js';
+import type { HealthProbePort } from '../../ports/runtime/health-probe.js';
+import type { Manifest, ManifestPort } from '../../ports/vcs/manifest.js';
+import { err, ok, type Result } from '../../result.js';
 
 // A steady-state status probe never waits longer than this: the polls must stay responsive.
 export const STATUS_PROBE_TIMEOUT_MS = 2000;

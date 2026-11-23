@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { HealthState } from '../ports/runtime/docker.js';
-import type { HealthProbeOutcome } from '../ports/runtime/health-probe.js';
-import type { Manifest } from '../ports/vcs/manifest.js';
-import { err, ok, type Result } from '../result.js';
+import type { HealthState } from '../../ports/runtime/docker.js';
+import type { HealthProbeOutcome } from '../../ports/runtime/health-probe.js';
+import type { Manifest } from '../../ports/vcs/manifest.js';
+import { err, ok, type Result } from '../../result.js';
 import { DEFAULT_PROBE_REASON, STATUS_PROBE_TIMEOUT_MS, combineStatus, isProbeEnabled, resolveServiceStatus, type ServiceStatusDeps } from './index.js';
 
 function deps(

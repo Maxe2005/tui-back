@@ -12,7 +12,7 @@ import {
   type RestartMode,
   type ServiceAction,
   type ServiceActions,
-} from '../../../../../../core/service-actions/index.js';
+} from '../../../../../../core/runtime/service-actions/index.js';
 import {
   buildDashboardRegistrySummary,
   buildDashboardServices,

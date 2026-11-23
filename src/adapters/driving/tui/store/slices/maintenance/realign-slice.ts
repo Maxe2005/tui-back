@@ -7,7 +7,7 @@ import type { RestartRow } from '../../../../../../core/workspace/edt/switch/res
 import { REALIGN_SCOPES, cycleSwitchRestartMode, healthCheckEnabledFrom, type RealignScope, type SwitchRestartMode } from '../../../../../../core/ports/storage/settings.js';
 import { realignServices, type RealignOutcome, type RealignRow } from '../../../../../../core/workspace/realign/index.js';
 import type { Result } from '../../../../../../core/result.js';
-import { createServiceActions, type ServiceActions } from '../../../../../../core/service-actions/index.js';
+import { createServiceActions, type ServiceActions } from '../../../../../../core/runtime/service-actions/index.js';
 import type { AppState, AppStoreDeps } from '../../app-store.js';
 
 const NO_DEPS_ERROR = 'No ports wired into the TUI store';
