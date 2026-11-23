@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 import type { ManifestPort } from '../../../ports/manifest.js';
 import type { RegistryPort } from '../../../ports/registry.js';
 import { err, ok, type Result } from '../../../result.js';
-import { runPool } from '../../../scripts/run-pool.js';
+import { runPool } from '../../../scripts/update-support/run-pool.js';
 import type { RestartMode, ServiceActions, ServiceFinalState } from '../../../service-actions/index.js';
 import type { SwitchEdtRepoResult } from '../switch.js';
 

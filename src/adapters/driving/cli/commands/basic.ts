@@ -5,7 +5,7 @@ import { listEdtBranchesDivergence } from '../../../../core/edt/lifecycle/list.j
 import { buildDashboardSnapshot } from '../../../../core/dashboard/snapshot.js';
 import { healthCheckEnabledFrom } from '../../../../core/ports/settings.js';
 import { registerRepo } from '../../../../core/scripts/registry/register.js';
-import { resetRepo } from '../../../../core/scripts/reset.js';
+import { resetRepo } from '../../../../core/scripts/reset/reset.js';
 import { listRepos } from '../../../../core/scripts/registry/list-repos.js';
 import { scanRepos } from '../../../../core/scripts/registry/scan.js';
 import { Subcommand } from '../dispatch.js';

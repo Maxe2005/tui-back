@@ -13,7 +13,7 @@ import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { RestartPort } from '../ports/restart.js';
 import { err, ok, type Result } from '../result.js';
 import { GROUP_UPDATE_LOCK_KEY, edtUpdateLockKey, runRestartStep } from '../scripts/group-update.js';
-import { serviceRestartLockKey } from '../scripts/service-restart.js';
+import { serviceRestartLockKey } from '../scripts/update-support/service-restart.js';
 import { DEFAULT_PROBE_REASON, combineStatus, hasContainer, isProbeEnabled, readContainer, readProbe, type ProbeReading, type ServiceStatus } from '../service-status/index.js';
 
 export type RestartMode = 'simple' | 'clean';

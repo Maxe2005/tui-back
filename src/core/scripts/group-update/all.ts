@@ -3,7 +3,7 @@ import { basename, resolve } from "node:path";
 import { withActionLock } from "../../locking.js";
 import type { ManifestPort } from "../../ports/manifest.js";
 import { err, ok, type Result } from "../../result.js";
-import { runPool, type StageControl } from "../run-pool.js";
+import { runPool, type StageControl } from "../update-support/run-pool.js";
 import type {
   GroupUpdateRepoResult,
   GroupUpdateData,

@@ -17,7 +17,7 @@ import {
   type OnUpdatePhase,
   type UpdatePhase,
 } from '../../../../../../../core/scripts/group-update.js';
-import { serviceRestart as serviceRestartUseCase } from '../../../../../../../core/scripts/service-restart.js';
+import { serviceRestart as serviceRestartUseCase } from '../../../../../../../core/scripts/update-support/service-restart.js';
 import { openInIde } from '../../../../../../../core/service-actions/index.js';
 import { err, ok, type Result } from '../../../../../../../core/result.js';
 import { advanceServiceSteps, mergeLastServiceOutcomes } from '../../../../zones/update/logic/update-zone.logic.js';

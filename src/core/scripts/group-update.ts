@@ -11,7 +11,7 @@ import type {
   GroupUpdateData,
   GroupUpdateParams,
 } from "./group-update/types.js";
-import type { StageControl } from "./run-pool.js";
+import type { StageControl } from "./update-support/run-pool.js";
 export type { StageControl };
 export {
   edtUpdateLockKey,

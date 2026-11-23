@@ -15,7 +15,7 @@ import type { LockPort } from '../ports/lock.js';
 import type { Manifest, ManifestPort } from '../ports/manifest.js';
 import type { StatePort } from '../ports/state.js';
 import { err, ok, type Result } from '../result.js';
-import { serviceRestartLockKey } from '../scripts/service-restart.js';
+import { serviceRestartLockKey } from '../scripts/update-support/service-restart.js';
 import { heldLockName, restartBlockingLocks, type NamedLock, type RestartMode, type ServiceActions } from '../service-actions/index.js';
 import { resolveServiceStatus, type ServiceStatus } from '../service-status/index.js';
 

@@ -3,10 +3,10 @@
 // registry with the given path; a healthy registry is never touched (registry-not-corrupt).
 // Validations mirror register so the recovery path is unambiguous and idempotent (FR-1).
 import { isAbsolute, resolve } from 'node:path';
-import { err, ok, type Result } from '../result.js';
-import type { RegistryPort, ResetResult } from '../ports/registry.js';
-import type { LockPort } from '../ports/lock.js';
-import { withActionLock } from '../locking.js';
+import { err, ok, type Result } from '../../result.js';
+import type { RegistryPort, ResetResult } from '../../ports/registry.js';
+import type { LockPort } from '../../ports/lock.js';
+import { withActionLock } from '../../locking.js';
 
 export async function resetRepo(
   registry: RegistryPort,

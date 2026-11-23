@@ -8,7 +8,7 @@ import type { MigrationPort } from "../../ports/migration.js";
 import type { RegistryPort } from "../../ports/registry.js";
 import type { RestartPort } from "../../ports/restart.js";
 import type { StatePort } from "../../ports/state.js";
-import { type StageControl } from "../run-pool.js";
+import { type StageControl } from "../update-support/run-pool.js";
 import { failed, skipped } from "./outcome.js";
 import { outputExcerpt } from "./member.js";
 

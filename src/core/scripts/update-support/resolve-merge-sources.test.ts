@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ok } from '../result.js';
-import type { EdtRegistryPort } from '../ports/edt-registry.js';
-import type { StatePort } from '../ports/state.js';
+import { ok } from '../../result.js';
+import type { EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { StatePort } from '../../ports/state.js';
 import { resolveMergeSourcesFromEdt, selectionFromEdt } from './resolve-merge-sources.js';
 
 const sourceEdt = {

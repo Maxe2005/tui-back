@@ -5,11 +5,11 @@ import { existsSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { err, ok, type Result } from '../result.js';
-import type { EdtRegistryEntry, EdtRegistryPort } from '../ports/edt-registry.js';
-import type { LockHandle, LockPort } from '../ports/lock.js';
-import type { RegistryPort } from '../ports/registry.js';
-import type { StatePort } from '../ports/state.js';
+import { err, ok, type Result } from '../../result.js';
+import type { EdtRegistryEntry, EdtRegistryPort } from '../../ports/edt-registry.js';
+import type { LockHandle, LockPort } from '../../ports/lock.js';
+import type { RegistryPort } from '../../ports/registry.js';
+import type { StatePort } from '../../ports/state.js';
 import { resetTool, resolveResetCategories } from './reset-tool.js';
 
 const KEYS = { edtRegistry: '/cfg/edts.yaml', registry: '/cfg/registry.yaml' };
