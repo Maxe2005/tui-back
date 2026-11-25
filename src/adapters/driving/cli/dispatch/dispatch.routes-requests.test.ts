@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../../../../core/result.js';
 import type { SavedRequest } from '../../../../core/ports/storage/saved-request.js';
-import { fakeSavedRequests, buildTestSubcommands } from './dispatch.test-support.js';
+import { runCli } from './dispatch.js';
+import { fakeSavedRequests, buildTestSubcommands, fakeEdtRegistry, fakeState } from './dispatch.test-support.js';
 
 describe('subcommand registry guards — routes and requests', () => {
   it('list-routes rejects missing/excess arguments and otherwise delegates to the use-case', async () => {
@@ -328,4 +329,45 @@ describe('subcommand registry guards — routes and requests', () => {
     expect(removed).toEqual(['list-users']);
   });
 
+  it('routes smoke: envelope, exit code 1 on a non-ok fired row, 0 otherwise, and completion', async () => {
+    const entry = {
+      ulid: 'A',
+      topic: 't',
+      createdAt: 'x',
+      status: 'active' as const,
+      members: [],
+      favoriteRoutes: [
+        { repoPath: '/repos/gateway', method: 'GET', path: '/users' },
+        { repoPath: '/repos/gateway', method: 'POST', path: '/users' },
+      ],
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (_url, init) => (init?.method === 'POST' ? new Response('', { status: 500 }) : new Response('[]', { status: 200 })));
+    try {
+      const subcommands = buildTestSubcommands({
+        edtRegistry: { ...fakeEdtRegistry(), list: async () => ok([entry]) },
+        state: { ...fakeState(), readActiveEdt: async () => ok('A') },
+        manifest: { load: async () => ok({ modules: { 'route-explorer': { baseUrl: 'http://x' } } }) } as never,
+        scanner: { scan: async () => ok([{ method: 'GET', path: '/users' }, { method: 'POST', path: '/users' }]) },
+      });
+      const healthy = await runCli(['routes', 'smoke'], subcommands, false);
+      const parsed = JSON.parse(healthy.output);
+      expect(healthy.exitCode).toBe(0);
+      expect(parsed.data.summary).toMatchObject({ ok: 1, skipped: 1 });
+      expect(parsed.data.rows[1]).toMatchObject({ outcome: 'skipped', reason: 'skipped (mutating)' });
+
+      const failing = await runCli(['routes', 'smoke', '--include-mutating'], subcommands, false);
+      const failedEnvelope = JSON.parse(failing.output);
+      expect(failing.exitCode).toBe(1);
+      expect(failedEnvelope.error.code).toBe('smoke-run-failed');
+      expect(failedEnvelope.error.details.summary['server-error']).toBe(1);
+      expect(failedEnvelope.error.details.rows).toHaveLength(2);
+
+      const completion = JSON.parse((await runCli(['completion', 'bash'], subcommands, false)).output).data.script as string;
+      expect(completion).toContain('"routes smoke") words="--edt --repo --include-mutating"');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });
