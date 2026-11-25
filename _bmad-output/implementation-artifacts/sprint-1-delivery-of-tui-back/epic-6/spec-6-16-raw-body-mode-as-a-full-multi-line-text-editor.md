@@ -83,6 +83,8 @@ context:
 
 Model shape: `{ lines: string[]; cursor: {line,col}; anchor: {line,col}|null; wantCol: number; undo: Snapshot[]; redo: Snapshot[] }`; every op is `(state, …) => state`. Paste/typing bursts are coalesced via a functional updater because several keypresses can arrive before a re-render. `Ctrl+A` is select-all, so there is no readline line-start alias (`Home` covers it). `Ctrl+F` was chosen as format: unused in Routes, not an XOFF key.
 
+Terminal key report (verified against Ink 7.1.1 `parse-keypress`): `Ctrl+Home/End` (`CSI 1;5H/F`), `Shift+arrows` (`CSI 1;2x`), `Ctrl+arrows`, `PgUp/PgDn` (`CSI 5~/6~`) all decode into Ink's `Key` flags, and bracketed paste is exposed by `usePaste` (enabled only while the raw editor is open; a multi-char `input` is still treated as one paste when a terminal ignores bracketed mode). Some terminals/multiplexers (macOS Terminal, default tmux) send no modifier on Home/End: **fallback** `Ctrl+↑`/`Ctrl+↓` jump to document start/end, and `Ctrl+A` remains the select-all path when `Shift+arrows` are unreported. When the parse error position is reported, the caret lands ON the offending character (so `Delete` removes it, not `Backspace`).
+
 ## Verification
 
 **Commands:**
