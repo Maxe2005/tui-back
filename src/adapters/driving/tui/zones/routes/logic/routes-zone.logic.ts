@@ -30,8 +30,13 @@ export function moveRoutesSelection(current: number, direction: RoutesSelectionD
 // The list row is `METHOD path` only: the summary is deliberately NOT rendered in the list (a
 // long summary wraps and makes rows taller than the one-row budget BoundedList assumes) — it
 // only appears in the detail pane (formatRouteDetail) for the focused route.
-export function formatRouteRow(route: Route): { label: string } {
-  return { label: `${route.method} ${route.path}` };
+export function formatRouteRow(route: Route): { method: string; label: string } {
+  return { method: route.method, label: route.path };
+}
+
+// Drops the leading `METHOD ` the detail text starts with (the pane prints it as a colored lead).
+export function stripMethodPrefix(text: string, method: string): string {
+  return text.startsWith(`${method} `) ? text.slice(method.length + 1) : text;
 }
 
 // The route filter: case-insensitive, whitespace-separated terms that must ALL appear in the
@@ -44,7 +49,7 @@ export function filterRoutes(routes: readonly Route[], query: string): Route[] {
     return [...routes];
   }
   return routes.filter((route) => {
-    const label = formatRouteRow(route).label.toLowerCase();
+    const label = `${route.method} ${route.path}`.toLowerCase();
     return terms.every((term) => label.includes(term));
   });
 }

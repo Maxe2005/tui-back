@@ -30,10 +30,10 @@ export function upsertRecentRoute(recents: readonly RecentRoute[], entry: Recent
 }
 
 // `METHOD path` + dim meta `200 · 42ms`, or the error code when no response came back.
-export function formatRecentRow(recent: RecentRoute): { label: string; meta: string } {
+export function formatRecentRow(recent: RecentRoute): { method: string; label: string; meta: string } {
   const meta =
     recent.outcome.kind === 'status' ? `${recent.outcome.status} · ${recent.outcome.durationMs}ms` : recent.outcome.code;
-  return { label: `${recent.method} ${recent.path}`, meta };
+  return { method: recent.method, label: recent.path, meta };
 }
 
 export const clampRecentCursor = clampFavoriteCursor;

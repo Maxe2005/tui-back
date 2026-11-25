@@ -44,9 +44,10 @@ describe('visibleRecents / formatRecentRow / hasBeenFired', () => {
     expect(visibleRecents(list, null)).toEqual([]);
   });
   it('labels a status outcome and an error outcome', () => {
-    expect(formatRecentRow(recent('GET', '/a'))).toEqual({ label: 'GET /a', meta: '200 · 42ms' });
+    expect(formatRecentRow(recent('GET', '/a'))).toEqual({ method: 'GET', label: '/a', meta: '200 · 42ms' });
     expect(formatRecentRow({ ...recent('GET', '/a'), outcome: { kind: 'error', code: 'auth-error' } })).toEqual({
-      label: 'GET /a',
+      method: 'GET',
+      label: '/a',
       meta: 'auth-error',
     });
   });

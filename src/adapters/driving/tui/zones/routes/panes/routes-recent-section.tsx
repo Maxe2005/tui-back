@@ -39,6 +39,7 @@ export function RoutesRecentSection({
             return (
               <ListRow
                 key={`${recent.repoPath} ${recent.method} ${recent.path}`}
+                method={row.method}
                 label={row.label}
                 meta={row.meta}
                 selected={focused && index === cursor}

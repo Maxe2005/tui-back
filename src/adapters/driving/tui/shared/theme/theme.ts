@@ -33,6 +33,33 @@ export const jsonTreeColors = Object.freeze({
   null: colors['text-dim'],
 } as const);
 
+// HTTP method colors — a closed mapping over the existing palette (no new hues), one token per
+// method plus a neutral fallback (HEAD/OPTIONS/TRACE/unknown). Always paired with the method
+// printed as text, so the row still reads under NO_COLOR. Accent stays out (selection only).
+export const methodColors = Object.freeze({
+  GET: colors.success,
+  POST: colors.info,
+  PUT: colors.warning,
+  PATCH: colors.text,
+  DELETE: colors.error,
+  fallback: colors['text-dim'],
+} as const);
+
+// Case-insensitive, total: any non-matching input (including '') yields the fallback.
+export function methodColor(method: string): string {
+  const key = typeof method === 'string' ? method.trim().toUpperCase() : '';
+  switch (key) {
+    case 'GET':
+    case 'POST':
+    case 'PUT':
+    case 'PATCH':
+    case 'DELETE':
+      return methodColors[key];
+    default:
+      return methodColors.fallback;
+  }
+}
+
 export const spacing = Object.freeze({
   '0': 0,
   '1': 1,

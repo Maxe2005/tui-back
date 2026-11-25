@@ -69,22 +69,23 @@ function skippedMeta(reason: string | undefined): string {
 
 // `METHOD path` plus a short meta: the phase while it runs, then `status · duration`, the skip
 // reason or the failure message.
-export function formatSmokeRow(entry: SmokeTableRow): { label: string; meta: string } {
-  const label = `${entry.method} ${entry.path}`;
+export function formatSmokeRow(entry: SmokeTableRow): { method: string; label: string; meta: string } {
+  const method = entry.method;
+  const label = entry.path;
   if (entry.phase === 'pending') {
-    return { label, meta: 'pending' };
+    return { method, label, meta: 'pending' };
   }
   const row = entry.row;
   if (entry.phase === 'firing' || row === undefined) {
-    return { label, meta: 'firing…' };
+    return { method, label, meta: 'firing…' };
   }
   if (row.outcome === 'skipped') {
-    return { label, meta: skippedMeta(row.reason) };
+    return { method, label, meta: skippedMeta(row.reason) };
   }
   if (row.status !== undefined) {
-    return { label, meta: `${row.status}${row.durationMs === undefined ? '' : ` · ${row.durationMs}ms`}` };
+    return { method, label, meta: `${row.status}${row.durationMs === undefined ? '' : ` · ${row.durationMs}ms`}` };
   }
-  return { label, meta: `${row.outcome}${row.reason === undefined ? '' : `: ${row.reason}`}` };
+  return { method, label, meta: `${row.outcome}${row.reason === undefined ? '' : `: ${row.reason}`}` };
 }
 
 export function summarizeSmokeRows(rows: readonly SmokeTableRow[]): SmokeSummary {

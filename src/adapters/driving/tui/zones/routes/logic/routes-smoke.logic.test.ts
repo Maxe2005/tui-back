@@ -37,7 +37,7 @@ describe('routes-smoke.logic', () => {
   });
 
   it('formats labels and metas', () => {
-    expect(formatSmokeRow({ ...base, phase: 'pending' })).toEqual({ label: 'GET /a', meta: 'pending' });
+    expect(formatSmokeRow({ ...base, phase: 'pending' })).toEqual({ method: 'GET', label: '/a', meta: 'pending' });
     expect(formatSmokeRow({ ...base, phase: 'firing' }).meta).toBe('firing…');
     expect(formatSmokeRow(done({ ...base, outcome: 'ok', status: 200, durationMs: 12 })).meta).toBe('200 · 12ms');
     expect(formatSmokeRow(done({ ...base, outcome: 'skipped', reason: 'cancelled' })).meta).toBe('skipped (cancelled)');
