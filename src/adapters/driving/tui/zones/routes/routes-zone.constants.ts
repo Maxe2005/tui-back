@@ -15,3 +15,6 @@ export const RESPONSE_AREA_CHROME_ROWS = 13;
 // nothing) before the list does.
 export const ROUTES_FAVORITES_MAX_BODY_ROWS = 5;
 export const ROUTES_MIN_LIST_ROWS = 4;
+
+// The smoke table takes the Favorites pane's slot with a taller cap (summary lines + one row per favorite).
+export const ROUTES_SMOKE_MAX_BODY_ROWS = 9;

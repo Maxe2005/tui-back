@@ -84,6 +84,7 @@ const EXPECTED = [
   ['Enter (Update config)', 'Update config: Enter on the [ Start run ] line starts the run; on a table row it opens the per-service box'],
   ['R (load error)', 'EDTs, Update and Logs: retry a failed list load'],
   ['* (Routes)', 'Routes: toggle the cursor route (or the open pane route) as a favorite of the active EDT; Tab focuses the Favorites pane above the list'],
+  ['t (Routes Favorites)', "Routes: smoke-run the displayed repo's favorites into a live table (mutating routes ask first; Esc cancels a run in flight; Enter on a row opens its response)"],
   ['Ctrl+R (Routes)', 'Routes: fire the request of the open pane; from the list, Favorites or Recent, re-fire the selected route (never fired or incomplete: opens Request)'],
   ['Ctrl+T (branch picker)', 'Branch picker: rename the highlighted branch'],
   ['PgUp / PgDn', 'Scroll a dialog taller than the window; page the Update last-run recap and full report'],

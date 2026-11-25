@@ -74,13 +74,14 @@ export function resolveFavoritesPaneRows(
   windowRows: number,
   favoriteCount: number,
   recentCount = 0,
+  maxBodyRows = ROUTES_FAVORITES_MAX_BODY_ROWS,
 ): { total: number; body: number; recent: { total: number; body: number } } {
   const none = { total: 0, body: 0 };
   const spare = Math.floor(windowRows) - ROUTES_LIST_CHROME_ROWS - ROUTES_MIN_LIST_ROWS;
   if (!(spare >= 1)) {
     return { ...none, recent: none };
   }
-  const body = Math.min(ROUTES_FAVORITES_MAX_BODY_ROWS, Math.max(favoriteCount, 1), spare - 1);
+  const body = Math.min(maxBodyRows, Math.max(favoriteCount, 1), spare - 1);
   const total = body + 1;
   const remaining = spare - total;
   if (recentCount <= 0 || remaining < 2) {

@@ -45,7 +45,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     status, carryingServices, routes, routesStatus, routesError, routesRepoPath, paneTab, selected, filter,
     filterEditing, filterPanelOpen, section, rowEdit, rowAddPrompt, savePrompt, savedTabDeleteConfirm,
     scalarEdit, addPrompt, rawEditor, windowSize, listAreaRef, listAreaSize, paneFocused, visibleRoutes,
-    favoritesFocused, recentFocused,
+    favoritesFocused, recentFocused, smoke, smokeVisible, smokeConfirm,
     paneDraft, classification, editorDraft, editorRows, clampedEditorSelected, editorOpen, treeActive,
   } = ctx;
 
@@ -106,6 +106,9 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     paneFocused,
     favoritesFocused,
     recentFocused,
+    smokeVisible,
+    smokeRunning: smoke?.running === true,
+    smokeConfirm: smokeConfirm !== null,
     paneTab,
     saveState: savePrompt === null ? 'none' : savePrompt.duplicate ? 'duplicate' : 'naming',
     savedDeleteConfirm: savedTabDeleteConfirm !== null,

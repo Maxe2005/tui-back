@@ -186,3 +186,13 @@ describe('routesFooterContext favorites', () => {
     expect(routesFooterContext({ ...UNAVAILABLE_FOOTER_INPUT, recentFocused: true })).toBe('busy');
   });
 });
+
+describe('routesFooterContext smoke run', () => {
+  it('uses the smoke contexts for the table and the mutating confirm', () => {
+    const base: RoutesFooterInput = { ...UNAVAILABLE_FOOTER_INPUT, unavailable: false, favoritesFocused: true, smokeVisible: true };
+    expect(routesFooterContext(base)).toBe('routes-smoke');
+    expect(routesFooterContext({ ...base, smokeRunning: true })).toBe('routes-smoke-running');
+    expect(routesFooterContext({ ...base, smokeConfirm: true })).toBe('routes-smoke-confirm');
+    expect(routesFooterContext({ ...base, smokeVisible: false })).toBe('routes-favorites');
+  });
+});

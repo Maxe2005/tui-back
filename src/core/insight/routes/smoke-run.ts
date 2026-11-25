@@ -8,7 +8,7 @@ import { ok, type Result } from '../../result.js';
 import type { Route } from '../../ports/modules/route-scanner.js';
 import { ROUTES_MODULE_ID } from '../../workspace/edt/shared-edt/resolve-tab-visibility.js';
 import { runPool } from '../../workspace/scripts/update-support/run-pool.js';
-import { fireRequest, type FireRequestDeps } from './fire-request.js';
+import { fireRequest, type FireRequestDeps, type FireResult } from './fire-request.js';
 import { listFavoriteRoutes, type FavoriteRoutesListDeps, type FavoriteWithStale } from './favorites.js';
 
 export type SmokeOutcome = 'ok' | 'client-error' | 'server-error' | 'auth-error' | 'network-error' | 'skipped';
@@ -38,7 +38,9 @@ export interface SmokeRunResult {
 
 export type SmokeRowUpdate =
   | { phase: 'pending' | 'firing'; route: { repoPath: string; method: string; path: string } }
-  | { phase: 'done'; row: SmokeRow };
+  // `response` is the full fire result of a fired row (body included) so a TUI can keep it; the
+  // result's `rows` stay body-free.
+  | { phase: 'done'; row: SmokeRow; response?: FireResult };
 
 // A caller-supplied request for one favorite. `path` is the concrete path (params already filled).
 export interface SmokeDraft {
@@ -141,9 +143,9 @@ export async function smokeRunFavorites(deps: SmokeRunDeps, options: SmokeRunOpt
   }
 
   const rows: (SmokeRow | undefined)[] = new Array<SmokeRow | undefined>(favorites.length).fill(undefined);
-  const finish = (index: number, row: SmokeRow): SmokeRow => {
+  const finish = (index: number, row: SmokeRow, response?: FireResult): SmokeRow => {
     rows[index] = row;
-    emit(index, { phase: 'done', row });
+    emit(index, response === undefined ? { phase: 'done', row } : { phase: 'done', row, response });
     return row;
   };
   const skipped = (favorite: FavoriteWithStale, reason: string): SmokeRow => ({
@@ -231,7 +233,7 @@ export async function smokeRunFavorites(deps: SmokeRunDeps, options: SmokeRunOpt
           status: fired.data.status,
           durationMs: fired.data.durationMs,
           size: Buffer.byteLength(fired.data.body, 'utf8'),
-        });
+        }, fired.data);
       }
       const auth = fired.error.code === 'auth-unauthorized' || fired.error.code === 'auth-forbidden';
       return finish(job.index, {
