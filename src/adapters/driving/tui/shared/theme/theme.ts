@@ -37,8 +37,8 @@ export const jsonTreeColors = Object.freeze({
 // method plus a neutral fallback (HEAD/OPTIONS/TRACE/unknown). Always paired with the method
 // printed as text, so the row still reads under NO_COLOR. Accent stays out (selection only).
 export const methodColors = Object.freeze({
-  GET: colors.success,
-  POST: colors.info,
+  GET: colors.info,
+  POST: colors.success,
   PUT: colors.warning,
   PATCH: colors.text,
   DELETE: colors.error,
