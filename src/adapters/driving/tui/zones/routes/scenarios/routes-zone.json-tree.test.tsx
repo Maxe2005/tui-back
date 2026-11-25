@@ -457,7 +457,7 @@ describe('RoutesZone body editor', () => {
       expect(frame).toContain('line ');
       expect(frame).toContain('column');
       expect(draftOf(store)).toEqual({ name: 'ada', age: 36, tags: ['x'] });
-      await press(instance, stdin, KEYS.backspace);
+      await press(instance, stdin, '\x1b[3~');
       await pressEscape(instance, stdin);
       expect(lastFrame(stdout)).not.toContain('Raw JSON');
       expect(lastFrame(stdout)).toContain('▸ BODY');
