@@ -158,6 +158,22 @@ describe('smokeRunFavorites', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('attaches the full fire result to the done update of a fired row only', async () => {
+    const { deps } = setup({
+      favorites: [fav('GET', '/a'), fav('POST', '/b')],
+      routes: [{ method: 'GET', path: '/a' }, { method: 'POST', path: '/b' }],
+    });
+    const done: Record<number, unknown> = {};
+    const result = await smokeRunFavorites(deps, {
+      onRow: (index: number, update: SmokeRowUpdate) => {
+        if (update.phase === 'done') done[index] = update.response;
+      },
+    });
+    expect(done[0]).toMatchObject({ status: 200 });
+    expect(done[1]).toBeUndefined();
+    expect(result.ok && JSON.stringify(result.data.rows)).not.toContain('"body"');
+  });
+
   it('uses a caller-supplied draft', async () => {
     const { deps, calls } = setup({
       favorites: [fav('GET', '/o/{id}')],
