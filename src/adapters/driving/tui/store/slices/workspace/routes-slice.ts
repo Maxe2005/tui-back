@@ -15,6 +15,7 @@ import {
   toggleFavoriteRoute as toggleFavoriteRouteUseCase,
   type FavoriteWithStale,
 } from '../../../../../../core/insight/routes/favorites.js';
+import { smokeRunFavorites, type SmokeRowUpdate } from '../../../../../../core/insight/routes/smoke-run.js';
 import { listRoutes } from '../../../../../../core/insight/routes/list-routes.js';
 import {
   deleteSavedRequest as deleteSavedRequestUseCase,
@@ -33,6 +34,7 @@ import {
   pruneBodyDrafts,
   pruneJsonTreeStates,
   routeKeyFor,
+  seedBodyDraft,
   type BodyEditError,
   type JsonTreeState,
 } from '../../../shared/components/json-tree/model.js';
@@ -41,9 +43,12 @@ import {
   MAX_REQUEST_DRAFTS,
   MAX_ROUTE_RESPONSES,
   bodyTreeKey,
+  buildFireRequest,
   seedRequestDraft,
   type RequestDraft,
 } from '../../../zones/routes/logic/routes-request.logic.js';
+import { smokeRowRouteKey, type SmokeTableRow } from '../../../zones/routes/logic/routes-smoke.logic.js';
+import { visibleFavorites } from '../../../zones/routes/logic/routes-favorites.logic.js';
 
 export const MAX_DRAFT_ORIGINS = 50;
 
@@ -76,6 +81,15 @@ export type RecentRoute = {
 // The right pane's sub-tabs, in display order.
 export type RoutesPaneTab = 'saved' | 'request' | 'response';
 export const ROUTES_PANE_TABS: readonly RoutesPaneTab[] = ['saved', 'request', 'response'];
+
+// The smoke run's table, kept in the store so it survives leaving the zone. Session-only.
+// `visible` = the table replaces the Favorites list in the pane.
+export type SmokeState = {
+  running: boolean;
+  rows: SmokeTableRow[];
+  error: string | null;
+  visible: boolean;
+};
 
 export type { JsonTreeState, RequestDraft };
 
@@ -160,6 +174,19 @@ export type RoutesSlice = {
   // Toggles (repoPath, METHOD, path) on the active EDT and updates the cached list at once
   // (stale flags carried over, no rescan). A failure leaves the cached list untouched.
   toggleFavoriteRoute: (method: string, path: string, repoPath?: string) => Promise<Result<{ favorite: boolean }>>;
+  // The smoke run over the displayed repo's favorites (through `smokeRunFavorites`, no second HTTP
+  // path): rows go pending -> firing -> outcome live, each fired response is also written as the
+  // route's last response. A second start while one is in flight is `smoke-run-in-progress`.
+  // Resolves when the run has ended. Drafts: the route's request draft when one exists, else the
+  // use-case default.
+  smoke: SmokeState | null;
+  startSmokeRun: (includeMutating: boolean) => Promise<Result<void>>;
+  // Aborts the run in flight: rows not yet started become `skipped (cancelled)`.
+  cancelSmokeRun: () => void;
+  // Hides the table (a run in flight keeps going and keeps its table).
+  closeSmoke: () => void;
+  // Writes the row's kept response back as its route's last response; false when it has none.
+  keepSmokeResponse: (index: number) => boolean;
 };
 
 function hasDraft(drafts: Record<string, unknown>, routeKey: string): boolean {
@@ -212,6 +239,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
   const inFlight = new Set<string>();
   let repoGeneration = 0;
   let favoritesSeq = 0;
+  let smokeController: AbortController | null = null;
   let favoritesToggleChain: Promise<void> = Promise.resolve();
   const favoriteKey = (item: { repoPath: string; method: string; path: string }) =>
     `${resolve(item.repoPath)}\u0000${item.method}\u0000${item.path}`;
@@ -273,6 +301,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
     savedRequestsError: null,
     favoriteRoutes: null,
     favoriteRoutesError: null,
+    smoke: null,
     routesPaneFocus: 'list',
     routesPaneTab: 'request',
     setRoutesPaneFocus: (focus) => set({ routesPaneFocus: focus }),
@@ -390,6 +419,9 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
         const repoChanged = previousRepoPath !== null && resolve(previousRepoPath) !== resolve(target.path);
         if (repoChanged) {
           repoGeneration += 1;
+          // The table belongs to the old repo's favorites: abort and drop it.
+          smokeController?.abort();
+          smokeController = null;
         }
         set({
           routesRepoPath: target.path,
@@ -402,6 +434,7 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
                 responses: {},
                 recentRoutes: [],
                 draftOrigins: {},
+                smoke: null,
                 bodyDrafts: {},
                 bodyEditErrors: {},
                 routesPaneFocus: 'list' as const,
@@ -703,6 +736,110 @@ export function createRoutesSlice(deps?: AppStoreDeps): StateCreator<AppState, [
       if (token === favoritesSeq) {
         set(patch);
       }
+    },
+    startSmokeRun: async (includeMutating) => {
+      if (smokeController !== null) {
+        return err('smoke-run-in-progress', 'smoke run already in progress');
+      }
+      if (!deps) {
+        return err('store-not-wired', NO_DEPS_ERROR);
+      }
+      if (!deps.scanner) {
+        return err('store-not-wired', NO_SCANNER_ERROR);
+      }
+      if (!deps.auth) {
+        return err('store-not-wired', NO_AUTH_ERROR);
+      }
+      const displayed = visibleFavorites(get().favoriteRoutes, get().routesRepoPath);
+      const first = displayed[0];
+      if (first === undefined) {
+        return err('no-favorites', 'no favorites');
+      }
+      const controller = new AbortController();
+      smokeController = controller;
+      const generation = repoGeneration;
+      set({ smoke: { running: true, rows: [], error: null, visible: true } });
+      const drafts = (favorite: { method: string; path: string }) => {
+        const routeKey = routeKeyFor(favorite.method, favorite.path);
+        const live = get();
+        const draft = live.requestDrafts[routeKey];
+        const route = (live.routes ?? []).find((candidate) => routeKeyFor(candidate.method, candidate.path) === routeKey);
+        if (draft === undefined || route === undefined) {
+          return undefined;
+        }
+        const bodyDraft = hasDraft(live.bodyDrafts, routeKey) ? live.bodyDrafts[routeKey] : seedBodyDraft(route);
+        const request = buildFireRequest(route, draft, bodyDraft);
+        return { path: request.path, ...request.options };
+      };
+      const onRow = (index: number, update: SmokeRowUpdate) => {
+        if (repoGeneration !== generation) {
+          return;
+        }
+        set((state) => {
+          if (state.smoke === null) {
+            return {};
+          }
+          const rows = [...state.smoke.rows];
+          if (update.phase === 'done') {
+            const identity = rows[index] ?? update.row;
+            rows[index] = {
+              repoPath: identity.repoPath,
+              method: identity.method,
+              path: identity.path,
+              phase: 'done',
+              row: update.row,
+              ...(update.response === undefined ? {} : { response: update.response }),
+            };
+          } else {
+            rows[index] = { ...update.route, phase: update.phase };
+          }
+          const patch: Partial<AppState> = { smoke: { ...state.smoke, rows } };
+          if (update.phase === 'done' && update.response !== undefined) {
+            patch.responses = touchEntry(
+              state.responses,
+              smokeRowRouteKey(update.row),
+              { status: 'fired', result: update.response },
+              MAX_ROUTE_RESPONSES,
+            );
+          }
+          return patch;
+        });
+      };
+      let error: string | null = null;
+      try {
+        const result = await smokeRunFavorites(
+          { edtRegistry: deps.edtRegistry, state: deps.state, manifest: deps.manifest, scanner: deps.scanner, auth: deps.auth },
+          { repo: first.repoPath, includeMutating, signal: controller.signal, drafts, onRow },
+        );
+        if (!result.ok) {
+          error = result.error.message;
+        }
+      } catch (caught) {
+        error = reasonOf(caught);
+      } finally {
+        if (smokeController === controller) {
+          smokeController = null;
+        }
+      }
+      if (repoGeneration === generation) {
+        set((state) => (state.smoke === null ? {} : { smoke: { ...state.smoke, running: false, error } }));
+      }
+      return ok(undefined);
+    },
+    cancelSmokeRun: () => {
+      smokeController?.abort();
+    },
+    closeSmoke: () => set((state) => (state.smoke === null ? {} : { smoke: { ...state.smoke, visible: false } })),
+    keepSmokeResponse: (index) => {
+      const entry = get().smoke?.rows[index];
+      if (entry?.response === undefined) {
+        return false;
+      }
+      const response = entry.response;
+      set((state) => ({
+        responses: touchEntry(state.responses, smokeRowRouteKey(entry), { status: 'fired', result: response }, MAX_ROUTE_RESPONSES),
+      }));
+      return true;
     },
     // Toggles are serialized so rapid presses cannot overwrite each other's cache.
     toggleFavoriteRoute: (method, path, repoPathArg) => {
