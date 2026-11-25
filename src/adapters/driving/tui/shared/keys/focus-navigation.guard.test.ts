@@ -15,6 +15,7 @@ const ALLOWED = new Set([
   'adapters/driving/tui/zones/edts/dialogs/create-wizard/steps/step-branches.tsx',
   'adapters/driving/tui/zones/routes/keys/routes-zone.overlay-keys.ts',
   'adapters/driving/tui/zones/routes/keys/routes-zone.pane-keys.ts',
+  'adapters/driving/tui/zones/routes/keys/routes-zone.raw-keys.ts',
   // History view: Tab toggles the by-branch / by-version search mode, not a focus move.
   'adapters/driving/tui/zones/shared-types/shared-types-history.logic.ts',
 ]);

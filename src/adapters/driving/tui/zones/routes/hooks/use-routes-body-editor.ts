@@ -26,12 +26,13 @@ import {
   unfoldNextDepthLevel,
   validateScalarText,
 } from '../../../shared/components/json-tree/model.js';
+import { createMultiline, moveToOffset, multilineText } from '../../../shared/components/inputs/multiline-edit.js';
 import { bodyTreeKey } from '../logic/routes-request.logic.js';
 
 export function useRoutesBodyEditor(c: RoutesBaseCtx) {
   const {
     useStore, updateJsonTreeState, updateBodyDraft, setBodyEditError, setBodyEditErrors, setFilterPanelOpen,
-    setPanelCursor, scalarEdit, setScalarEdit, addPrompt, setAddPrompt, rawEditor, setRawEditor,
+    setPanelCursor, scalarEdit, setScalarEdit, addPrompt, setAddPrompt, rawEditorRef, setRawEditor,
     editorRouteKey, editorTreeState, editorRows, editorViewport,
   } = c;
   // Editor plumbing. Drafts and error maps are read live from the store at apply time (never the
@@ -133,23 +134,24 @@ export function useRoutesBodyEditor(c: RoutesBaseCtx) {
   };
 
   const leaveRawEditor = () => {
+    const rawEditor = rawEditorRef.current;
     if (editorRouteKey === null || rawEditor === null) {
       return;
     }
     // An untouched/emptied buffer is a cancel, not a body: parsing `''` would fail and
     // trap the developer (Esc is the only exit), so it closes with nothing written.
-    if (rawEditor.input.value.trim() === '') {
+    if (multilineText(rawEditor.editor).trim() === '') {
       setRawEditor(null);
       return;
     }
     const routeKey = editorRouteKey;
-    const parsed = parseRawJsonBuffer(rawEditor.input.value);
+    const parsed = parseRawJsonBuffer(multilineText(rawEditor.editor));
     if (!parsed.ok) {
       // Invalid JSON keeps the developer in raw mode with the error + line/column;
       // the previous valid body is preserved (nothing is written). The location leads
       // the message so narrow terminals truncate the JSON error text, never the line.
       setRawEditor({
-        input: rawEditor.input,
+        editor: moveToOffset(rawEditor.editor, parsed.position),
         error: `(line ${parsed.line}, column ${parsed.column}) ${parsed.reason}`,
       });
       return;
@@ -184,7 +186,7 @@ export function useRoutesBodyEditor(c: RoutesBaseCtx) {
     if (action === 'open-raw') {
       const draft = readEditorDraft();
       const pretty = draft === undefined ? '' : JSON.stringify(draft, null, 2);
-      setRawEditor({ input: { value: pretty, cursor: pretty.length }, error: null });
+      setRawEditor({ editor: createMultiline(pretty), error: null });
       return;
     }
     const draft = readEditorDraft();

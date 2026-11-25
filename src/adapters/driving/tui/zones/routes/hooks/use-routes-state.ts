@@ -4,6 +4,7 @@ import { useWindowSize } from 'ink';
 import type { AppStore } from '../../../store/app-store.js';
 import type { JsonScalarKind } from '../../../shared/components/json-tree/model.js';
 import type { RequestRowSection, RequestSection } from '../logic/routes-request.logic.js';
+import type { RawEditorState } from '../keys/routes-zone.raw-keys.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../../shared/components/pickers/filterable-pick-list.js';
 import { useElementSize } from '../../../shared/hooks/use-element-size.js';
@@ -95,7 +96,15 @@ export function useRoutesState(useStore: AppStore) {
   // buffers are zone-local.
   const [scalarEdit, setScalarEdit] = useState<{ path: string; kind: JsonScalarKind; input: TextInputState } | null>(null);
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
-  const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
+  const [rawEditor, setRawEditorState] = useState<RawEditorState | null>(null);
+  // The latest buffer, updated synchronously by every write: several keypresses can arrive before a
+  // re-render, so key handlers and the leave/validate step must read this, never a render-time closure.
+  const rawEditorRef = useRef<RawEditorState | null>(null);
+  const setRawEditor = (next: RawEditorState | null | ((previous: RawEditorState | null) => RawEditorState | null)) => {
+    const value = typeof next === 'function' ? next(rawEditorRef.current) : next;
+    rawEditorRef.current = value;
+    setRawEditorState(value);
+  };
   // The Favorites pane's cursor (clamped on read) and its one-line failure notice.
   const [favCursor, setFavCursor] = useState(0);
   const [favNotice, setFavNoticeRaw] = useState<string | null>(null);
@@ -148,7 +157,7 @@ export function useRoutesState(useStore: AppStore) {
     setPickerOpen, pickerState, setPickerState, pickerError, setPickerError, pickerDeleteConfirm,
     setPickerDeleteConfirm, savedTabState, setSavedTabState, savedTabError, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, scalarEdit, setScalarEdit, addPrompt, setAddPrompt,
-    rawEditor, setRawEditor, windowSize, listAreaRef, listAreaSize, responseAreaRef, responseAreaSize,
+    rawEditor, rawEditorRef, setRawEditor, windowSize, listAreaRef, listAreaSize, responseAreaRef, responseAreaSize,
     bodyAreaRef, bodyAreaSize, paneFocused, favoritesFocused, recentFocused, recentRoutes, recentCursor, setRecentCursor, favoriteRoutes, refreshFavoriteRoutes,
     toggleFavoriteRoute, favCursor, setFavCursor, favNotice, setFavNotice, favoriteRoutesError,
     smoke, startSmokeRun, cancelSmokeRun, closeSmoke, keepSmokeResponse, smokeCursor, setSmokeCursor,

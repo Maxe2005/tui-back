@@ -296,6 +296,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'Routes: fire the request of the open pane; from the list, Favorites or Recent, re-fire the selected route (never fired or incomplete: opens Request)',
   },
   {
+    keys: 'Ctrl+F (Routes raw body)',
+    description:
+      'Routes raw body editor: pretty-print the buffer as JSON (invalid JSON is refused with its line/column); Ctrl+Home/End jump to the document ends, PgUp/PgDn page, Ctrl+K kills to the end of the line, Enter keeps the indentation (+1 level after { or [)',
+  },
+  {
     keys: 'Ctrl+T (branch picker)',
     description: 'Branch picker: rename the highlighted branch',
   },

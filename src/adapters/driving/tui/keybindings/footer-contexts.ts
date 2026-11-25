@@ -298,7 +298,16 @@ export const FOOTER_CONTEXTS = {
     hints: [['Enter', 'retry'], ['Ctrl+O', 'overwrite'], CANCEL],
   },
   'routes-rules-panel': { label: 'Routes filter rules', hints: ROUTES_RULES_PANEL },
-  'routes-body-raw': { label: 'Routes raw body editor', hints: [['Esc', 'done'], ['Enter', 'newline']] },
+  'routes-body-raw': { label: 'Routes raw body editor', hints: [
+      ['Esc', 'done'],
+      ['Ctrl+F', 'format'],
+      ['Ctrl+Z/Y', 'undo/redo'],
+      ['Shift+←→↑↓', 'select'],
+      ['Ctrl+A', 'all'],
+      ['Ctrl+←/→', 'word'],
+      ['Tab', 'indent'],
+    ],
+  },
   'routes-body-tree': {
     label: 'Routes body editor',
     hints: [
