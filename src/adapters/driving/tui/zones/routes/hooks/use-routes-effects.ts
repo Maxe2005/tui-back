@@ -13,8 +13,16 @@ export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
     setOverwriteConfirm, setSaveNotice, pickerOpen, pickerDeleteConfirm, setSavedTabState, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, setScalarEdit, setAddPrompt, setRawEditor, paneFocused,
     paneRoute, paneRouteKey, firedRouteKey, closePane, favoritesFocused, recentFocused, refreshFavoriteRoutes,
-    favorites, recents, windowSize, setPaneFocus,
+    favorites, recents, windowSize, setPaneFocus, smokeConfirm, smoke, setFavNotice,
   } = c;
+  // A finished run (or a closed/dropped table) leaves no stale notice behind.
+  const smokeRunning = smoke?.running === true;
+  const smokeShown = smoke?.visible === true;
+  useEffect(() => {
+    if (!smokeRunning) {
+      setFavNotice(null);
+    }
+  }, [smokeRunning, smokeShown]);
   useEffect(() => {
     setZoneInputCaptured(
       filterEditing ||
@@ -25,9 +33,10 @@ export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
         pickerOpen ||
         overwriteConfirm !== null ||
         pickerDeleteConfirm !== null ||
-        savedTabDeleteConfirm !== null,
+        savedTabDeleteConfirm !== null ||
+        smokeConfirm !== null,
     );
-  }, [filterEditing, paneFocused, favoritesFocused, recentFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
+  }, [filterEditing, paneFocused, favoritesFocused, recentFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, smokeConfirm, setZoneInputCaptured]);
   // Leaving the zone must not leave the keyboard parked on the Favorites pane (AppShell treats a
   // non-list Routes focus as captured, so zone keys would stay dead).
   useEffect(

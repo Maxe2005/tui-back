@@ -250,7 +250,19 @@ export const FOOTER_CONTEXTS = {
   },
   'routes-favorites': {
     label: 'Routes favorites',
-    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], [KEY_UP_DOWN, 'move'], ['*/d', 'remove'], ['Esc', 'list'], ['Tab', 'next']],
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], [KEY_UP_DOWN, 'move'], ['*/d', 'remove'], ['t', 'smoke run'], ['Esc', 'list'], ['Tab', 'next']],
+  },
+  'routes-smoke': {
+    label: 'Routes smoke run',
+    hints: [['Enter', 'open'], ['t', 'run again'], [KEY_UP_DOWN, 'move'], ['Esc', 'close'], ['Tab', 'next']],
+  },
+  'routes-smoke-running': {
+    label: 'Routes smoke run (in flight)',
+    hints: [['Enter', 'open'], [KEY_UP_DOWN, 'move'], ['Esc', 'cancel'], ['Tab', 'next']],
+  },
+  'routes-smoke-confirm': {
+    label: 'Routes smoke run (mutating routes)',
+    hints: [['Enter', 'include mutating'], ['Esc', 'safe ones only']],
   },
   'routes-recent': {
     label: 'Routes recent',

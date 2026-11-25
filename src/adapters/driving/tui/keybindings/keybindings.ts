@@ -288,6 +288,10 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'Routes: toggle the cursor route (or the open pane route) as a favorite of the active EDT; Tab focuses the Favorites pane above the list',
   },
   {
+    keys: 't (Routes Favorites)',
+    description: 'Routes: smoke-run the displayed repo\'s favorites into a live table (mutating routes ask first; Esc cancels a run in flight; Enter on a row opens its response)',
+  },
+  {
     keys: 'Ctrl+R (Routes)',
     description: 'Routes: fire the request of the open pane; from the list, Favorites or Recent, re-fire the selected route (never fired or incomplete: opens Request)',
   },

@@ -9,17 +9,22 @@ import {
 } from '../keys/routes-zone.overlay-keys.js';
 import { handleFilterEditingKey, handleListKey } from '../keys/routes-zone.list-keys.js';
 import { handleFavoritesKey } from '../keys/routes-zone.favorites-keys.js';
+import { handleSmokeConfirmKey, handleSmokeKey } from '../keys/routes-zone.smoke-keys.js';
 import { handleRecentKey } from '../keys/routes-zone.recent-keys.js';
 import { handlePaneKey } from '../keys/routes-zone.pane-keys.js';
 import { useInput } from '../../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
 
 export function useRoutesInput(c: RoutesZoneCtx): void {
-  const { useStore, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, savePrompt, pickerOpen, filterEditing, paneFocused, favoritesFocused, recentFocused } = c;
+  const { useStore, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, savePrompt, pickerOpen, filterEditing, paneFocused, favoritesFocused, recentFocused, smokeConfirm, smokeVisible } = c;
   const zoneInputActive = useZoneInputActive(useStore);
   useInput(
     (input, key) => {
       // Priority order (Ink input): overlays first, then the filter input, then the focused pane, then the list.
+      if (smokeConfirm !== null) {
+        handleSmokeConfirmKey(c, input, key);
+        return;
+      }
       if (overwriteConfirm !== null) {
         handleOverwriteConfirmKey(c, input, key);
         return;
@@ -45,6 +50,10 @@ export function useRoutesInput(c: RoutesZoneCtx): void {
         return;
       }
       if (favoritesFocused) {
+        if (smokeVisible) {
+          handleSmokeKey(c, input, key);
+          return;
+        }
         handleFavoritesKey(c, input, key);
         return;
       }

@@ -29,7 +29,7 @@ export function useRoutesDerived(c: RoutesState) {
   const {
     routes, responses, requestDrafts, paneTab, jsonTreeStates, bodyDrafts, bodyEditErrors, savedRequests,
     selected, filter, filterPanelOpen, panelCursor, section, windowSize, responseAreaSize, bodyAreaSize,
-    paneFocused, favoriteRoutes, routesRepoPath, favCursor, recentRoutes, recentCursor,
+    paneFocused, favoriteRoutes, routesRepoPath, favCursor, recentRoutes, recentCursor, smoke, smokeCursor,
   } = c;
   const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
 
@@ -39,6 +39,10 @@ export function useRoutesDerived(c: RoutesState) {
   // The Recent section rows: this session's fires of the displayed repo.
   const recents = useMemo(() => visibleRecents(recentRoutes, routesRepoPath), [recentRoutes, routesRepoPath]);
   const clampedRecentCursor = clampRecentCursor(recentCursor, recents.length);
+  // The smoke table replaces the Favorites list while it is visible.
+  const smokeVisible = smoke !== null && smoke.visible;
+  const smokeRows = smoke === null ? [] : smoke.rows;
+  const clampedSmokeCursor = clampFavoriteCursor(smokeCursor, smokeRows.length);
 
   // The pane always reflects the list cursor's route (the cursor cannot move while the pane
   // holds focus), with its own draft and last response.
@@ -170,6 +174,7 @@ export function useRoutesDerived(c: RoutesState) {
     editorHasDraft, editorDraft, editorTreeState, editorRules, editorRows, editorHiddenCount, editorRuleList,
     editorErrors, editorFirstError, clampedEditorSelected, clampedEditorPanelCursor, bodyTotalBudget,
     editorViewport, editorOpen, treeActive, favorites, clampedFavCursor, recents, clampedRecentCursor,
+    smokeVisible, smokeRows, clampedSmokeCursor,
   };
 }
 

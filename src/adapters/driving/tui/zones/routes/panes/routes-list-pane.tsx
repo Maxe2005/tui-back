@@ -8,8 +8,10 @@ import { StateLine } from '../../../shared/components/feedback/state-line.js';
 import { TextInputLine } from '../../../shared/components/inputs/text-input-line.js';
 import { colors, spacing } from '../../../shared/theme/theme.js';
 import { RoutesFavoritesPane } from './routes-favorites-pane.js';
+import { RoutesSmokePane } from './routes-smoke-pane.js';
 import { RoutesRecentSection } from './routes-recent-section.js';
 import { resolveFavoritesPaneRows } from '../logic/routes-favorites.logic.js';
+import { resolveTopPaneRows } from '../logic/routes-smoke.logic.js';
 import { formatRouteRow } from '../logic/routes-zone.logic.js';
 
 export function RoutesListPane({
@@ -33,11 +35,24 @@ export function RoutesListPane({
   listAreaRef: RoutesZoneCtx['listAreaRef'];
   maxVisibleRows: number;
   clamped: number;
-  favorites: Pick<RoutesZoneCtx, 'favorites' | 'clampedFavCursor' | 'favoritesFocused' | 'favNotice' | 'favoriteRoutesError' | 'routes' | 'windowSize' | 'recents' | 'clampedRecentCursor' | 'recentFocused'>;
+  favorites: Pick<RoutesZoneCtx, 'favorites' | 'clampedFavCursor' | 'favoritesFocused' | 'favNotice' | 'favoriteRoutesError' | 'routes' | 'windowSize' | 'recents' | 'clampedRecentCursor' | 'recentFocused' | 'smokeVisible' | 'smoke' | 'smokeRows' | 'clampedSmokeCursor'>;
 }) {
-  const favoriteRows = resolveFavoritesPaneRows(favorites.windowSize.rows, favorites.favorites.length, favorites.recents.length);
+  const smokeShown = favorites.smokeVisible && favorites.smoke !== null;
+  const favoriteRows = resolveTopPaneRows(favorites.windowSize.rows, favorites.favorites.length, favorites.recents.length, smokeShown ? favorites.smokeRows.length : null);
   return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
+        {smokeShown && favorites.smoke !== null ? (
+          <RoutesSmokePane
+            rows={favorites.smokeRows}
+            running={favorites.smoke.running}
+            error={favorites.smoke.error}
+            cursor={favorites.clampedSmokeCursor}
+            focused={favorites.favoritesFocused}
+            notice={favorites.favNotice}
+            totalRows={favoriteRows.total}
+            bodyRows={favoriteRows.body}
+          />
+        ) : (
         <RoutesFavoritesPane
           favorites={favorites.favorites}
           routes={favorites.routes}
@@ -48,6 +63,7 @@ export function RoutesListPane({
           totalRows={favoriteRows.total}
           bodyRows={favoriteRows.body}
         />
+        )}
         <RoutesRecentSection
           recents={favorites.recents}
           cursor={favorites.clampedRecentCursor}

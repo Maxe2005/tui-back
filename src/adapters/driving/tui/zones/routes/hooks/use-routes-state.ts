@@ -115,6 +115,14 @@ export function useRoutesState(useStore: AppStore) {
   const recentRoutes = useStore((state) => state.recentRoutes);
   const [recentCursor, setRecentCursor] = useState(0);
   const favoriteRoutesError = useStore((state) => state.favoriteRoutesError);
+  // The smoke run's table lives in the store; the cursor and the mutating confirm are zone-local.
+  const smoke = useStore((state) => state.smoke);
+  const startSmokeRun = useStore((state) => state.startSmokeRun);
+  const cancelSmokeRun = useStore((state) => state.cancelSmokeRun);
+  const closeSmoke = useStore((state) => state.closeSmoke);
+  const keepSmokeResponse = useStore((state) => state.keepSmokeResponse);
+  const [smokeCursor, setSmokeCursor] = useState(0);
+  const [smokeConfirm, setSmokeConfirm] = useState<{ routes: string[] } | null>(null);
   const windowSize = useWindowSize();
   // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout, but the panes' content reflows
   // (the repo path wraps or unwraps, changing the list's height). Subscribing here makes this
@@ -143,6 +151,8 @@ export function useRoutesState(useStore: AppStore) {
     rawEditor, setRawEditor, windowSize, listAreaRef, listAreaSize, responseAreaRef, responseAreaSize,
     bodyAreaRef, bodyAreaSize, paneFocused, favoritesFocused, recentFocused, recentRoutes, recentCursor, setRecentCursor, favoriteRoutes, refreshFavoriteRoutes,
     toggleFavoriteRoute, favCursor, setFavCursor, favNotice, setFavNotice, favoriteRoutesError,
+    smoke, startSmokeRun, cancelSmokeRun, closeSmoke, keepSmokeResponse, smokeCursor, setSmokeCursor,
+    smokeConfirm, setSmokeConfirm,
   };
 }
 

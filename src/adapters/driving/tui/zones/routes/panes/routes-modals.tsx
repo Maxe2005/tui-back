@@ -11,11 +11,23 @@ import { formatHints } from '../../../shared/components/dialogs/hints.js';
 export function RoutesModals({ c }: { c: RoutesZoneCtx }) {
   const {
     savedRequests, overwriteConfirm, pickerOpen, pickerState, pickerError, pickerDeleteConfirm,
-    savedTabDeleteConfirm, savedItems,
+    savedTabDeleteConfirm, savedItems, smokeConfirm,
   } = c;
   return (
     <>
-      {overwriteConfirm !== null ? (
+      {smokeConfirm !== null ? (
+          <ModalDialog title="Smoke run: include mutating routes?">
+            <Box flexDirection="column">
+              <ClampedParagraph color={colors.text} maxLines={4}>{'These favorites change data and would be fired:'}</ClampedParagraph>
+              {smokeConfirm.routes.slice(0, 8).map((route) => (
+                <Text key={route} color={colors.warning} wrap="truncate-end">{route}</Text>
+              ))}
+              {smokeConfirm.routes.length > 8 ? <DimAnnotation text={`… and ${smokeConfirm.routes.length - 8} more`} /> : null}
+              <Text color={colors.text} wrap="truncate-end">{formatHints([['Enter', 'fire them too'], ['Esc', 'safe ones only']])}</Text>
+            </Box>
+          </ModalDialog>
+        ) : null}
+        {overwriteConfirm !== null ? (
           <ModalDialog title={`Overwrite "${overwriteConfirm.name}"?`}>
             <Box flexDirection="column">
               <ClampedParagraph color={colors.text} maxLines={4}>{`A saved request named "${overwriteConfirm.name}" already exists. Overwriting replaces it.`}</ClampedParagraph>

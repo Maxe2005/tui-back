@@ -1,10 +1,11 @@
 // tui/zones/routes: routes-zone.favorites-keys — the Favorites pane's keys while it holds focus (arrows/`j`/`k` move, `Enter` opens the route's Request step,
-// `*`/`d` remove, `Esc`/Tab back to the list) and the shared `*` toggle used by the list and the right pane.
+// `*`/`d` remove, `t` smoke run, `Esc`/Tab back to the list) and the shared `*` toggle used by the list and the right pane.
 import type { Key } from 'ink';
 import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import { resolveFocusStep } from '../../../shared/keys/focus-navigation.js';
 import { moveFavoriteCursor, resolveFavoriteSelection, resolveFavoritesPaneRows } from '../logic/routes-favorites.logic.js';
 import { nextListFocus } from '../logic/routes-recent.logic.js';
+import { requestSmokeRun } from './routes-zone.smoke-keys.js';
 import { resolveRoutesDirection } from '../logic/routes-zone.logic.js';
 
 // Toggles one route's favorite flag; the pane updates at once (the store refreshes its cache),
@@ -68,6 +69,10 @@ export function handleFavoritesKey(c: RoutesZoneCtx, input: string, key: Key): v
   if (direction !== null) {
     setFavNotice(null);
     setFavCursor(moveFavoriteCursor(clampedFavCursor, direction, favorites.length));
+    return;
+  }
+  if (input === 't' || input === 'T') {
+    requestSmokeRun(c);
     return;
   }
   const focused = favorites[clampedFavCursor];

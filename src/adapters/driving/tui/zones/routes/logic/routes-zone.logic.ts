@@ -122,6 +122,10 @@ export type RoutesFooterInput = {
   favoritesFocused?: boolean;
   // The Recent section under it owns the keyboard.
   recentFocused?: boolean;
+  // The smoke table replaces the Favorites list (and whether its run is in flight), or the mutating confirm is open.
+  smokeVisible?: boolean;
+  smokeRunning?: boolean;
+  smokeConfirm?: boolean;
   paneTab: 'request' | 'response' | 'saved';
   // Request tab: the inline save-name prompt, and whether the typed name is already taken.
   saveState: 'none' | 'naming' | 'duplicate';
@@ -146,7 +150,13 @@ export function routesFooterContext(input: RoutesFooterInput): FooterContextId |
   if (input.unavailable) {
     return captured ? 'busy' : null;
   }
+  if (input.smokeConfirm === true) {
+    return 'routes-smoke-confirm';
+  }
   if (!input.paneFocused) {
+    if (input.favoritesFocused === true && input.smokeVisible === true && !input.filterEditing) {
+      return input.smokeRunning === true ? 'routes-smoke-running' : 'routes-smoke';
+    }
     if (input.recentFocused === true && !input.filterEditing) {
       return 'routes-recent';
     }
