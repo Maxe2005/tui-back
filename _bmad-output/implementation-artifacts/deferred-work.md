@@ -1027,3 +1027,10 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-13-recent-routes-and-quick-re-fire.md`
   summary: Ctrl+R re-fires a mutating route (POST/PUT/PATCH/DELETE) from the list, Favorites or Recent with no confirmation.
   evidence: Same behaviour as Ctrl+R in the right pane since 6.9, but from the list one keystroke now re-sends a mutating request; 6.14/6.15 introduce a confirm for mutating favorites, so a consistent rule is worth deciding.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-15-smoke-run-in-the-routes-zone.md`
+  summary: Abort and drop the smoke table when the active EDT changes while the displayed repo path stays the same.
+  evidence: `loadRoutes` only resets `smoke` on a repo-path change, so the previous EDT's favorites table can stay shown.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-15-smoke-run-in-the-routes-zone.md`
+  summary: Bound the memory held by smoke table rows (full response bodies are retained for the session).
+  evidence: each `SmokeTableRow` keeps the full `FireResult` body, duplicated in `responses`, and is only freed on repo change.
