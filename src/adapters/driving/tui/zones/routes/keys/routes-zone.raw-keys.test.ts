@@ -108,3 +108,27 @@ describe('applyRawKey fallbacks', () => {
     expect(at(press(press(s, '', { ctrl: true, downArrow: true }), '', { ctrl: true, upArrow: true }))).toEqual([0, 0]);
   });
 });
+
+describe('applyRawKey format and error handling', () => {
+  it('a refused Ctrl+F keeps the caret and the selection', () => {
+    let s = start('{"a":', 'start');
+    s = press(press(s, '', { rightArrow: true, shift: true }), '', { rightArrow: true, shift: true });
+    const refused = press(s, 'f', { ctrl: true });
+    expect(refused.error).not.toBeNull();
+    expect(refused.editor.anchor).toEqual(s.editor.anchor);
+    expect(refused.editor.cursor).toEqual(s.editor.cursor);
+  });
+
+  it('a successful Ctrl+F clears a displayed error, even on already-pretty input', () => {
+    const pretty: RawEditorState = { ...start('{\n  "a": 1\n}'), error: '(line 1, column 1) stale' };
+    expect(press(pretty, 'f', { ctrl: true }).error).toBeNull();
+    const compact: RawEditorState = { ...start('{"a":1}'), error: '(line 1, column 1) stale' };
+    expect(press(compact, 'f', { ctrl: true }).error).toBeNull();
+  });
+
+  it('undo and redo clear the error by text value', () => {
+    let s = press(start('ab'), 'c');
+    s = { ...s, error: '(line 1, column 1) x' };
+    expect(press(s, 'z', { ctrl: true }).error).toBeNull();
+  });
+});

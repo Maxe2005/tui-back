@@ -7,10 +7,10 @@ import type { Key } from 'ink';
 import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import {
   backspace, deleteForward, formatJson, insertNewline, insertTab, insertText, killToEnd, moveDocEnd, moveDocStart,
-  moveEnd, moveHome, moveLeft, movePage, moveRight, moveToOffset, moveVertical, moveWordLeft, moveWordRight,
-  pasteText, redoEdit, selectAll, undoEdit, type MultilineState,
+  moveEnd, moveHome, moveLeft, movePage, moveRight, moveVertical, moveWordLeft, moveWordRight,
+  multilineText, pasteText, redoEdit, selectAll, undoEdit, type MultilineState,
 } from '../../../shared/components/inputs/multiline-edit.js';
-import { RAW_EDITOR_CHROME_ROWS } from '../../../shared/components/json-tree/json-tree.js';
+import { rawEditorLineBudget } from '../../../shared/components/json-tree/json-tree.js';
 
 export type RawEditorState = { editor: MultilineState; error: string | null };
 
@@ -22,17 +22,19 @@ function withEditor(state: RawEditorState, editor: MultilineState): RawEditorSta
   if (editor === state.editor) {
     return state;
   }
-  // A text change makes a shown parse error stale; plain movement keeps it.
-  return { editor, error: editor.lines === state.editor.lines ? state.error : null };
+  // A text change (compared by value, so undo/redo count) makes a shown parse error stale; plain movement keeps it.
+  const changed = editor.lines !== state.editor.lines && multilineText(editor) !== multilineText(state.editor);
+  return { editor, error: changed ? null : state.error };
 }
 
 function formatKey(state: RawEditorState): RawEditorState {
   const result = formatJson(state.editor);
   if (result.ok) {
-    return withEditor(state, result.state);
+    return { editor: result.state, error: null };
   }
+  // Refused: the buffer, caret and selection stay exactly as they were.
   return {
-    editor: moveToOffset(state.editor, result.position),
+    editor: state.editor,
     error: `(line ${result.line}, column ${result.column}) ${result.reason}`,
   };
 }
@@ -125,17 +127,19 @@ export function applyRawKey(state: RawEditorState, input: string, key: Key, page
   return HAS_CONTROL.test(input) ? state : withEditor(state, insertText(editor, input));
 }
 
-export function rawPageSize(c: Pick<RoutesZoneCtx, 'bodyTotalBudget'>): number {
-  return Math.max(1, c.bodyTotalBudget - RAW_EDITOR_CHROME_ROWS);
+export function rawPageSize(c: Pick<RoutesZoneCtx, 'bodyTotalBudget'>, error: string | null): number {
+  return rawEditorLineBudget(c.bodyTotalBudget, error !== null && error !== '');
 }
 
 export function handleRawKey(c: RoutesZoneCtx, input: string, key: Key): void {
+  if (c.rawEditorRef.current === null) {
+    return;
+  }
   if (key.escape === true) {
     c.leaveRawEditor();
     return;
   }
-  const pageSize = rawPageSize(c);
-  c.setRawEditor((previous) => (previous === null ? previous : applyRawKey(previous, input, key, pageSize)));
+  c.setRawEditor((previous) => (previous === null ? previous : applyRawKey(previous, input, key, rawPageSize(c, previous.error))));
 }
 
 export function handleRawPaste(c: RoutesZoneCtx, text: string): void {

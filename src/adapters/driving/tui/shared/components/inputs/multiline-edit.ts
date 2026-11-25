@@ -35,10 +35,10 @@ export function multilineText(state: MultilineState): string {
   return state.lines.join('\n');
 }
 
-// `\r\n` / `\r` become `\n`; every other control character (tabs included) is stripped.
+// `\r\n` / `\r` become `\n`, a tab becomes one indent level; every other control character is stripped.
 export function sanitizePaste(text: string): string {
   // eslint-disable-next-line no-control-regex
-  return normalizeNewlines(text).replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '');
+  return normalizeNewlines(text).replace(/\t/g, INDENT).replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '');
 }
 
 function normalizeNewlines(text: string): string {

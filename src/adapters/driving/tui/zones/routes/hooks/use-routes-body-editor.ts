@@ -32,7 +32,7 @@ import { bodyTreeKey } from '../logic/routes-request.logic.js';
 export function useRoutesBodyEditor(c: RoutesBaseCtx) {
   const {
     useStore, updateJsonTreeState, updateBodyDraft, setBodyEditError, setBodyEditErrors, setFilterPanelOpen,
-    setPanelCursor, scalarEdit, setScalarEdit, addPrompt, setAddPrompt, rawEditor, setRawEditor,
+    setPanelCursor, scalarEdit, setScalarEdit, addPrompt, setAddPrompt, rawEditorRef, setRawEditor,
     editorRouteKey, editorTreeState, editorRows, editorViewport,
   } = c;
   // Editor plumbing. Drafts and error maps are read live from the store at apply time (never the
@@ -134,6 +134,7 @@ export function useRoutesBodyEditor(c: RoutesBaseCtx) {
   };
 
   const leaveRawEditor = () => {
+    const rawEditor = rawEditorRef.current;
     if (editorRouteKey === null || rawEditor === null) {
       return;
     }

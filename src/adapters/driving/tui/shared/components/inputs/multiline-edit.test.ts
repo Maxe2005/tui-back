@@ -110,7 +110,7 @@ describe('multiline-edit', () => {
   });
 
   it('pastes sanitised text as one undoable edit', () => {
-    expect(sanitizePaste('a\r\nb\rc\x01\x1bd\te')).toBe('a\nb\ncde');
+    expect(sanitizePaste('a\r\nb\rc\x01\x1bd\te')).toBe('a\nb\ncd  e');
     const payload = Array.from({ length: 200 }, (_, i) => `{"n":${i}}`).join('\r\n');
     const base = createMultiline('xy', 'start');
     const s = pasteText(moveRight(base), payload);

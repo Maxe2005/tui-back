@@ -209,4 +209,56 @@ describe('RoutesZone raw body editor', () => {
       instance.unmount();
     }
   });
+
+  it('Backspace deletes the character before the caret', async () => {
+    const { instance, stdout, stdin } = await openRaw(seedEditor());
+    try {
+      await clearBuffer(instance, stdin);
+      await typeText(instance, stdin, 'abc');
+      await press(instance, stdin, KEYS.backspace);
+      expect(lastFrame(stdout)).toContain('Col 3');
+      expect(lastFrame(stdout)).toMatch(/1 ab[^c]/);
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('PgDn/PgUp page by the rendered line window', async () => {
+    const { instance, stdout, stdin } = await openRaw(seedEditor());
+    try {
+      await clearBuffer(instance, stdin);
+      const payload = Array.from({ length: 60 }, (_, i) => `L${i + 1}`).join('\n');
+      await press(instance, stdin, `\x1b[200~${payload}\x1b[201~`);
+      expect(lastFrame(stdout)).toContain('Ln 60');
+      await press(instance, stdin, CTRL_HOME);
+      await press(instance, stdin, KEYS.pageDown);
+      const down = /Ln (\d+),/.exec(lastFrame(stdout));
+      const line = Number(down?.[1]);
+      expect(line).toBeGreaterThan(5);
+      expect(line).toBeLessThan(40);
+      expect(lastFrame(stdout)).toContain(`L${line}`);
+      await press(instance, stdin, KEYS.pageUp);
+      expect(lastFrame(stdout)).toContain('Ln 1,');
+    } finally {
+      instance.unmount();
+    }
+  });
+
+  it('validates the latest buffer when keys arrive before a re-render', async () => {
+    const store = seedEditor();
+    const { instance, stdout, stdin } = await openRaw(store);
+    try {
+      await clearBuffer(instance, stdin);
+      const raw = stdin as unknown as { write: (chunk: string) => void };
+      raw.write('{');
+      raw.write('}');
+      raw.write(KEYS.escape);
+      await instance.waitUntilRenderFlush();
+      await settle(instance);
+      expect(lastFrame(stdout)).not.toContain('Raw JSON');
+      expect(draftOf(store)).toEqual({});
+    } finally {
+      instance.unmount();
+    }
+  });
 });

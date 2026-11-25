@@ -21,7 +21,11 @@ export function useRoutesInput(c: RoutesZoneCtx): void {
   const { useStore, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, savePrompt, pickerOpen, filterEditing, paneFocused, favoritesFocused, recentFocused, smokeConfirm, smokeVisible } = c;
   const zoneInputActive = useZoneInputActive(useStore);
   // Bracketed paste (Ink 7): a pasted payload arrives as ONE string, never as key presses, and is one undo step.
-  usePaste((text) => handleRawPaste(c, text), { isActive: zoneInputActive && c.editorOpen && c.rawEditor !== null && paneFocused });
+  usePaste((text) => handleRawPaste(c, text), { isActive:
+      zoneInputActive && c.editorOpen && c.rawEditor !== null && paneFocused && !favoritesFocused && !recentFocused &&
+      smokeConfirm === null && overwriteConfirm === null && pickerDeleteConfirm === null && savedTabDeleteConfirm === null &&
+      savePrompt === null && !pickerOpen && !filterEditing,
+  });
   useInput(
     (input, key) => {
       // Priority order (Ink input): overlays first, then the filter input, then the focused pane, then the list.

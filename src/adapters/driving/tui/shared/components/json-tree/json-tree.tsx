@@ -133,9 +133,12 @@ export function JsonTree({ rows, selected, hiddenCount, activeRuleCount, rules, 
   );
 }
 
-// Rows the raw editor spends on chrome around its line window: the title/status row, plus the
-// error row while one is shown. The key handler pages by `budget - RAW_EDITOR_CHROME_ROWS`.
-export const RAW_EDITOR_CHROME_ROWS = 2;
+// The raw editor spends one chrome row on its title/status line, plus one while an error is shown.
+// Rows the raw editor's line window gets out of its total budget (never below one, so the caret
+// line survives a tiny terminal). The renderer and the PgUp/PgDn step both use it.
+export function rawEditorLineBudget(maxVisibleRows: number, hasError: boolean): number {
+  return Math.max(1, maxVisibleRows - (hasError ? 2 : 1));
+}
 
 export type RawLineSegment = { text: string; kind: 'plain' | 'selected' | 'caret' };
 
@@ -172,7 +175,7 @@ export function JsonRawEditor({ editor, error, maxVisibleRows }: { editor: Multi
   const [ref, size] = useElementSize();
   const { lines, cursor } = editor;
   const hasError = error !== null && error !== '';
-  const lineBudget = Math.max(0, maxVisibleRows - (hasError ? RAW_EDITOR_CHROME_ROWS : 1));
+  const lineBudget = rawEditorLineBudget(maxVisibleRows, hasError);
   const gutter = String(lines.length).length + 1;
   const room = size === null ? Number.MAX_SAFE_INTEGER : Math.max(1, size.width - gutter - 1);
   const caretLine = lines[cursor.line] ?? '';

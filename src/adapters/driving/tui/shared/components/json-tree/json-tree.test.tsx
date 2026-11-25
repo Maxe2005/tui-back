@@ -307,6 +307,13 @@ describe('JsonRawEditor', () => {
   });
 });
 
+describe('JsonRawEditor on a tiny budget', () => {
+  it('still shows the caret line', async () => {
+    const output = await renderToString(<JsonRawEditor editor={createMultiline('one\ntwo\nthree')} error={null} maxVisibleRows={1} />);
+    expect(output).toContain('three');
+  });
+});
+
 describe('rawLineSegments', () => {
   it('splits a line into plain, selected and caret cells', () => {
     expect(rawLineSegments('abcdef', 0, 99, 4, { from: 1, to: 3, newline: false })).toEqual([
