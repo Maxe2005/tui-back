@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { err, ok } from '../../../../core/result.js';
 import { routesSubcommand } from './routes.js';
+import { DEFAULT_SETTINGS } from '../../../../core/ports/storage/settings.js';
 import type { SubcommandDeps } from './deps.js';
 
 function setup() {
@@ -22,6 +23,8 @@ function setup() {
     state: { readActiveEdt: async () => ok('A') },
     manifest: { load: async () => err('manifest-not-found', 'x') },
     scanner: { scan: async () => ok([]) },
+    auth: { getSession: async () => ok({ cookie: 'sid=1' }) },
+    settings: { load: async () => ok({ settings: DEFAULT_SETTINGS, warning: null }) },
   } as unknown as SubcommandDeps;
   return { cmd: routesSubcommand(deps), updates };
 }
@@ -64,5 +67,34 @@ describe('routes favorites CLI', () => {
     const { cmd, updates } = setup();
     expect(await cmd.run(args as string[])).toMatchObject({ ok: false, error: { code } });
     expect(updates).toHaveLength(0);
+  });
+});
+
+describe('routes smoke CLI', () => {
+  it('returns the table and summary for an EDT without favorites', async () => {
+    const { cmd } = setup();
+    expect(await cmd.run(['smoke'])).toMatchObject({ ok: true, data: { rows: [], summary: { ok: 0 } } });
+  });
+
+  it('exposes smoke in the usage and rejects bad flags and an unknown EDT up front', async () => {
+    const { cmd } = setup();
+    expect(cmd.usage).toContain('tui-back routes smoke [--edt <topic>] [--repo <path>] [--include-mutating]');
+    expect(await cmd.run(['smoke', '--edt', 'nope'])).toMatchObject({ ok: false, error: { code: 'edt-not-found' } });
+    for (const args of [['--bogus'], ['--edt'], ['--repo', '/r', '--repo', '/s'], ['--include-mutating', '--include-mutating'], ['--include-mutating', 'x']]) {
+      expect(await cmd.run(['smoke', ...args])).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
+    }
+  });
+
+  it('fails with smoke-run-failed when a fired row is not ok, and an unmatched --repo filter yields no rows', async () => {
+    const { cmd } = setup();
+    await cmd.run(add);
+    // The manifest fake cannot load, so the GET favorite fires into a failure row.
+    const failed = await cmd.run(['smoke']);
+    expect(failed).toMatchObject({
+      ok: false,
+      error: { code: 'smoke-run-failed', details: { rows: [{ outcome: 'network-error' }], summary: { 'network-error': 1 } } },
+    });
+    const filtered = await cmd.run(['smoke', '--repo', '/other']);
+    expect(filtered).toMatchObject({ ok: true, data: { rows: [] } });
   });
 });
