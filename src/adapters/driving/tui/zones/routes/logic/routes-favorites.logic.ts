@@ -49,12 +49,14 @@ export function isFavorite(
 export function formatFavoriteRow(
   favorite: FavoriteWithStale,
   routes: readonly Route[] | null | undefined,
-): { label: string; meta?: string; stale: boolean } {
+): { method: string; label: string; meta?: string; stale: boolean } {
   const route = (routes ?? []).find((candidate) => candidate.method === favorite.method && samePath(candidate.path, favorite.path));
   const summary = route?.summary?.replace(/\s+/g, ' ').trim();
-  const base = `${favorite.method} ${favorite.path}`;
+  const base = favorite.path;
   const label = summary !== undefined && summary !== '' ? `${base}  ${summary}` : base;
-  return favorite.stale ? { label: base, meta: 'stale', stale: true } : { label, stale: false };
+  return favorite.stale
+    ? { method: favorite.method, label: base, meta: 'stale', stale: true }
+    : { method: favorite.method, label, stale: false };
 }
 
 export function clampFavoriteCursor(cursor: number, length: number): number {

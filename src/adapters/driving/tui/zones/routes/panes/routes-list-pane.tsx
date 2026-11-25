@@ -94,7 +94,7 @@ export function RoutesListPane({
               cursorIndex={clamped}
               renderItem={(route, index) => {
                 const row = formatRouteRow(route);
-                return <ListRow key={`${route.method} ${route.path}`} label={row.label} selected={index === clamped} />;
+                return <ListRow key={`${route.method} ${route.path}`} method={row.method} label={row.label} selected={index === clamped} />;
               }}
             />
           )}

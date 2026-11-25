@@ -56,6 +56,7 @@ export function RoutesFavoritesPane({
               return (
                 <ListRow
                   key={`${favorite.repoPath} ${favorite.method} ${favorite.path}`}
+                  method={row.method}
                   label={row.label}
                   {...(row.meta === undefined ? {} : { meta: row.meta })}
                   dim={row.stale}

@@ -66,6 +66,7 @@ export function useRoutesDerived(c: RoutesState) {
         key: request.id,
         label: request.name,
         meta: `${request.method} ${request.path}${request.stale ? ' · stale' : ''}`,
+        method: request.method,
         value: request,
       })),
     [savedRequests],
@@ -84,6 +85,7 @@ export function useRoutesDerived(c: RoutesState) {
         key: request.id,
         label: request.name,
         meta: `${request.method} ${request.path}`,
+        method: request.method,
         value: request,
       }));
   }, [savedRequests, paneRouteKey]);

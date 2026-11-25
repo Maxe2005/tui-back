@@ -9,6 +9,7 @@ import {
   formatFireResult,
   formatFireStatus,
   formatRouteDetail,
+  stripMethodPrefix,
   formatRouteRow,
   moveRoutesSelection,
   resolveEnterFireTarget,
@@ -39,8 +40,8 @@ describe('moveRoutesSelection', () => {
 
 describe('formatRouteRow', () => {
   it('renders only METHOD + path — the summary never rides in the list row', () => {
-    expect(formatRouteRow({ method: 'GET', path: '/users', summary: 'List users' })).toEqual({ label: 'GET /users' });
-    expect(formatRouteRow({ method: 'DELETE', path: '/users/:id' })).toEqual({ label: 'DELETE /users/:id' });
+    expect(formatRouteRow({ method: 'GET', path: '/users', summary: 'List users' })).toEqual({ method: 'GET', label: '/users' });
+    expect(formatRouteRow({ method: 'DELETE', path: '/users/:id' })).toEqual({ method: 'DELETE', label: '/users/:id' });
   });
 });
 
@@ -194,5 +195,12 @@ describe('routesFooterContext smoke run', () => {
     expect(routesFooterContext({ ...base, smokeRunning: true })).toBe('routes-smoke-running');
     expect(routesFooterContext({ ...base, smokeConfirm: true })).toBe('routes-smoke-confirm');
     expect(routesFooterContext({ ...base, smokeVisible: false })).toBe('routes-favorites');
+  });
+});
+
+describe('stripMethodPrefix', () => {
+  it('drops the leading METHOD only when it matches', () => {
+    expect(stripMethodPrefix('GET /users\n\nList', 'GET')).toBe('/users\n\nList');
+    expect(stripMethodPrefix('Returns data', 'GET')).toBe('Returns data');
   });
 });

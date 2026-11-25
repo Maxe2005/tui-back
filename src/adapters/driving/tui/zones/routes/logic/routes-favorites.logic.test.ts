@@ -36,11 +36,11 @@ describe('visibleFavorites / isFavorite', () => {
 
 describe('formatFavoriteRow', () => {
   it('shows METHOD path and the route summary', () => {
-    expect(formatFavoriteRow(fav('/repos/a', 'GET', '/users'), routes)).toEqual({ label: 'GET /users  List users', stale: false });
-    expect(formatFavoriteRow(fav('/repos/a', 'POST', '/users'), routes)).toEqual({ label: 'POST /users', stale: false });
+    expect(formatFavoriteRow(fav('/repos/a', 'GET', '/users'), routes)).toEqual({ method: 'GET', label: '/users  List users', stale: false });
+    expect(formatFavoriteRow(fav('/repos/a', 'POST', '/users'), routes)).toEqual({ method: 'POST', label: '/users', stale: false });
   });
   it('marks a stale favorite with a dim suffix', () => {
-    expect(formatFavoriteRow(fav('/repos/a', 'GET', '/gone', true), routes)).toEqual({ label: 'GET /gone', meta: 'stale', stale: true });
+    expect(formatFavoriteRow(fav('/repos/a', 'GET', '/gone', true), routes)).toEqual({ method: 'GET', label: '/gone', meta: 'stale', stale: true });
   });
 });
 

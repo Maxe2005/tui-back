@@ -1,8 +1,8 @@
 // tui/zones/routes: routes-smoke-pane — the smoke run's bounded live table in the Favorites pane's slot: a header
-// (progress + state), the all-outcomes summary line, then one windowed row per favorite (glyph + colour, then the status/reason so a narrow pane clips the path, not the outcome).
+// (progress + state), the all-outcomes summary line, then one windowed row per favorite (glyph + colour, then the status/reason, then the colored method and path, so a narrow pane clips the path, not the outcome).
 import { Box, Text } from 'ink';
 import { BoundedList } from '../../../shared/components/lists/bounded-list.js';
-import { colors } from '../../../shared/theme/theme.js';
+import { colors, methodColor } from '../../../shared/theme/theme.js';
 import {
   formatSmokeRow,
   formatSmokeSummaryLines,
@@ -66,7 +66,7 @@ export function RoutesSmokePane({
           cursorIndex={cursor}
           renderItem={(entry, index) => {
             const badge = smokeBadge(entry);
-            const { label, meta } = formatSmokeRow(entry);
+            const { method, label, meta } = formatSmokeRow(entry);
             const selected = focused && index === cursor;
             return (
               <Box key={`${entry.repoPath} ${entry.method} ${entry.path}`} flexShrink={0}>
@@ -74,6 +74,7 @@ export function RoutesSmokePane({
                   <Text wrap="truncate-end" color={colors.accent}>{selected ? '› ' : '  '}</Text>
                   <Text wrap="truncate-end" color={badge.color}>{badge.glyph}</Text>
                   <Text wrap="truncate-end" color={colors['text-dim']}>{` ${meta}  `}</Text>
+                  <Text wrap="truncate-end" color={methodColor(method)}>{`${method} `}</Text>
                   <Text wrap="truncate-end" color={selected ? colors.accent : colors.text}>{label}</Text>
                 </Text>
               </Box>
