@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { colors, jsonTreeColors } from '../../theme/theme.js';
 import { renderToString } from '../render-to-string.js';
 import { flattenJson, type TreeFilterRules } from './model.js';
-import { JsonEmptyState, JsonRawFallback, JsonRawEditor, JsonTree, JsonTreeEditor } from './json-tree.js';
+import { JsonEmptyState, JsonRawFallback, JsonRawEditor, JsonTree, JsonTreeEditor, rawLineSegments } from './json-tree.js';
+import { createMultiline } from '../inputs/multiline-edit.js';
 
 const NO_RULES: TreeFilterRules = { hiddenKeys: [], onlyKeys: [], hideNulls: false };
 
@@ -275,25 +276,57 @@ describe('JsonTreeEditor', () => {
 });
 
 describe('JsonRawEditor', () => {
-  it('renders the buffer under its Raw JSON title', async () => {
-    const output = await renderToString(<JsonRawEditor input={{ value: '{"a":1}', cursor: 7 }} error={null} maxVisibleRows={10} />);
-    expect(output).toContain('{"a":1}');
+  it('renders the numbered buffer under its Raw JSON title with Ln/Col', async () => {
+    const output = await renderToString(<JsonRawEditor editor={createMultiline('{\n  "a":1\n}')} error={null} maxVisibleRows={10} />);
+    expect(output).toContain('{"a":1}'.slice(0, 1));
+    expect(output).toContain('"a":1');
     expect(output).toContain('Raw JSON');
+    expect(output).toContain('Ln 3, Col 2');
+    expect(output).toContain('3 lines');
+    expect(output).toMatch(/1 \{/);
+    expect(output).toMatch(/3 \}/);
   });
 
   it('keeps parse errors visible with the buffer preserved', async () => {
     const output = await renderToString(
-      <JsonRawEditor input={{ value: '{"a":}', cursor: 6 }} error={'Unexpected token (line 1, column 7)'} maxVisibleRows={10} />,
+      <JsonRawEditor editor={createMultiline('{"a":}')} error={'(line 1, column 6) Unexpected token'} maxVisibleRows={10} />,
     );
     expect(output).toContain('{"a":}');
     expect(output).toContain('✖');
     expect(output).toContain('line 1');
   });
 
-  it('windows long buffers instead of growing', async () => {
+  it('windows long buffers around the caret instead of growing', async () => {
     const value = Array.from({ length: 20 }, (_, i) => `line-${i}`).join('\n');
-    const output = await renderToString(<JsonRawEditor input={{ value, cursor: 0 }} error={null} maxVisibleRows={5} />);
+    const output = await renderToString(<JsonRawEditor editor={createMultiline(value, 'start')} error={null} maxVisibleRows={5} />);
     expect(output).toContain('more below');
     expect(output).not.toContain('line-19');
+    const tail = await renderToString(<JsonRawEditor editor={createMultiline(value)} error={null} maxVisibleRows={5} />);
+    expect(tail).toContain('line-19');
+    expect(tail).toContain('more above');
+  });
+});
+
+describe('rawLineSegments', () => {
+  it('splits a line into plain, selected and caret cells', () => {
+    expect(rawLineSegments('abcdef', 0, 99, 4, { from: 1, to: 3, newline: false })).toEqual([
+      { text: 'a', kind: 'plain' },
+      { text: 'bc', kind: 'selected' },
+      { text: 'd', kind: 'plain' },
+      { text: 'e', kind: 'caret' },
+      { text: 'f', kind: 'plain' },
+    ]);
+  });
+
+  it('paints the caret past the end and a trailing cell for a selected line break', () => {
+    expect(rawLineSegments('ab', 0, 99, 2, null)).toEqual([{ text: 'ab', kind: 'plain' }, { text: ' ', kind: 'caret' }]);
+    expect(rawLineSegments('ab', 0, 99, null, { from: 0, to: 2, newline: true })).toEqual([{ text: 'ab ', kind: 'selected' }]);
+  });
+
+  it('slices to the horizontal window so the caret column stays visible', () => {
+    const line = 'x'.repeat(300);
+    const segments = rawLineSegments(line, 281, 20, 300, null);
+    expect(segments.map((segment) => segment.text).join('')).toHaveLength(20);
+    expect(segments[segments.length - 1]).toEqual({ text: ' ', kind: 'caret' });
   });
 });

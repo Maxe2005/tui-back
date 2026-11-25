@@ -6,7 +6,9 @@ import { Box, Text } from 'ink';
 import { BoundedList } from '../lists/bounded-list.js';
 import { colors, jsonTreeColors, spacing } from '../../theme/theme.js';
 import { formatHint } from '../dialogs/hints.js';
-import { TextInputLine } from '../inputs/text-input-line.js';
+import { TextInputLine, windowAroundCaret } from '../inputs/text-input-line.js';
+import { useElementSize } from '../../hooks/use-element-size.js';
+import { selectionOnLine, type MultilineState } from '../inputs/multiline-edit.js';
 import type { TextInputState } from '../inputs/text-edit.js';
 import {
   formatBodyEditStatus,
@@ -131,46 +133,82 @@ export function JsonTree({ rows, selected, hiddenCount, activeRuleCount, rules, 
   );
 }
 
-// The multi-line raw buffer. Caller-owned `TextInputState` (like FilterPanel): `Return`
-// inserts `\n` (handled by the zone's dispatcher, never here), `Esc` leaves and validates.
-// Invalid JSON keeps the buffer open with the parse error plus its line/column; the previous
-// valid body is preserved (the zone never writes it).
-export function JsonRawEditor({ input, error, maxVisibleRows }: { input: TextInputState; error: string | null; maxVisibleRows: number }) {
-  const lines = input.value.split('\n');
-  const before = input.value.slice(0, Math.min(Math.max(input.cursor, 0), input.value.length));
-  const cursorLine = before.split('\n').length - 1;
-  const cursorCol = (before.split('\n').pop() ?? '').length;
-  const chrome = error !== null && error !== '' ? 2 : 1;
-  const lineBudget = Math.max(0, maxVisibleRows - chrome);
+// Rows the raw editor spends on chrome around its line window: the title/status row, plus the
+// error row while one is shown. The key handler pages by `budget - RAW_EDITOR_CHROME_ROWS`.
+export const RAW_EDITOR_CHROME_ROWS = 2;
+
+export type RawLineSegment = { text: string; kind: 'plain' | 'selected' | 'caret' };
+
+// One visible slice of a buffer line as plain / selected / caret segments. `from` is the slice's
+// first column and `room` its width; the caret cell is an inverse space past the line's end, and
+// a selection running through the line break marks one trailing cell.
+export function rawLineSegments(
+  line: string,
+  from: number,
+  room: number,
+  caretCol: number | null,
+  selection: { from: number; to: number; newline: boolean } | null,
+): RawLineSegment[] {
+  const cells: RawLineSegment[] = [];
+  const end = Math.min(line.length + (caretCol === line.length || selection?.newline === true ? 1 : 0), from + room);
+  for (let col = from; col < end; col += 1) {
+    const char = line[col] ?? ' ';
+    const selected = selection !== null && ((col >= selection.from && col < selection.to) || (selection.newline && col === line.length));
+    const kind: RawLineSegment['kind'] = col === caretCol ? 'caret' : selected ? 'selected' : 'plain';
+    const last = cells[cells.length - 1];
+    if (last !== undefined && last.kind === kind && kind !== 'caret') {
+      last.text += char;
+    } else {
+      cells.push({ text: char, kind });
+    }
+  }
+  return cells;
+}
+
+// The multi-line raw buffer: numbered lines windowed through BoundedList, the caret
+// and selection painted in place, the whole view scrolling horizontally around the caret, and an
+// `Ln/Col` status beside the title. Keys live in the zone (routes-zone.raw-keys); this is a view.
+export function JsonRawEditor({ editor, error, maxVisibleRows }: { editor: MultilineState; error: string | null; maxVisibleRows: number }) {
+  const [ref, size] = useElementSize();
+  const { lines, cursor } = editor;
+  const hasError = error !== null && error !== '';
+  const lineBudget = Math.max(0, maxVisibleRows - (hasError ? RAW_EDITOR_CHROME_ROWS : 1));
+  const gutter = String(lines.length).length + 1;
+  const room = size === null ? Number.MAX_SAFE_INTEGER : Math.max(1, size.width - gutter - 1);
+  const caretLine = lines[cursor.line] ?? '';
+  // One shared horizontal offset keeps every line aligned while the caret line scrolls into view.
+  const hOffset = size === null || caretLine.length < room ? 0 : windowAroundCaret(caretLine, cursor.col, 0, room + 1).start;
   return (
     <Box flexDirection="column">
-      <Text color={colors['text-dim']}>Raw JSON</Text>
-      {error !== null && error !== '' ? <Text color={colors.error} wrap="truncate-end">{`✖ ${error}`}</Text> : null}
-      <BoundedList
-        items={lines}
-        maxVisibleRows={lineBudget}
-        cursorIndex={Math.min(Math.max(cursorLine, 0), Math.max(lines.length - 1, 0))}
-        renderItem={(line, index) => {
-          if (index !== cursorLine) {
+      <Text color={colors['text-dim']} wrap="truncate-end">{`Raw JSON · Ln ${cursor.line + 1}, Col ${cursor.col + 1} · ${lines.length} ${lines.length === 1 ? 'line' : 'lines'}`}</Text>
+      {hasError ? <Text color={colors.error} wrap="truncate-end">{`✖ ${error}`}</Text> : null}
+      <Box ref={ref} flexDirection="column">
+        <BoundedList
+          items={lines}
+          maxVisibleRows={lineBudget}
+          cursorIndex={Math.min(Math.max(cursor.line, 0), Math.max(lines.length - 1, 0))}
+          renderItem={(line, index) => {
+            const onCaretLine = index === cursor.line;
+            const segments = rawLineSegments(line, hOffset, room, onCaretLine ? cursor.col : null, selectionOnLine(editor, index));
             return (
-              <Text key={index} color={colors.text} wrap="truncate-end">
-                {line === '' ? ' ' : line}
-              </Text>
+              <Box key={index} backgroundColor={onCaretLine ? colors['surface-selected'] : undefined}>
+                <Text wrap="truncate-end">
+                  <Text color={onCaretLine ? colors.accent : colors['text-dim']}>{String(index + 1).padStart(gutter - 1)} </Text>
+                  {segments.map((segment, at) =>
+                    segment.kind === 'caret' ? (
+                      <Text key={at} inverse>{segment.text}</Text>
+                    ) : segment.kind === 'selected' ? (
+                      <Text key={at} color={colors.background} backgroundColor={colors.accent}>{segment.text}</Text>
+                    ) : (
+                      <Text key={at} color={colors.text}>{segment.text}</Text>
+                    ),
+                  )}
+                </Text>
+              </Box>
             );
-          }
-          const clampedCol = Math.min(Math.max(cursorCol, 0), line.length);
-          const cursorBefore = line.slice(0, clampedCol);
-          const atCursor = line.slice(clampedCol, clampedCol + 1) || ' ';
-          const after = line.slice(clampedCol + 1);
-          return (
-            <Box key={index} backgroundColor={colors['surface-selected']}>
-              <Text color={colors.text} wrap="truncate-end">{cursorBefore}</Text>
-              <Text inverse>{atCursor}</Text>
-              <Text color={colors.text} wrap="truncate-end">{after}</Text>
-            </Box>
-          );
-        }}
-      />
+          }}
+        />
+      </Box>
     </Box>
   );
 }

@@ -4,6 +4,7 @@ import { useWindowSize } from 'ink';
 import type { AppStore } from '../../../store/app-store.js';
 import type { JsonScalarKind } from '../../../shared/components/json-tree/model.js';
 import type { RequestRowSection, RequestSection } from '../logic/routes-request.logic.js';
+import type { RawEditorState } from '../keys/routes-zone.raw-keys.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../../shared/components/pickers/filterable-pick-list.js';
 import { useElementSize } from '../../../shared/hooks/use-element-size.js';
@@ -95,7 +96,7 @@ export function useRoutesState(useStore: AppStore) {
   // buffers are zone-local.
   const [scalarEdit, setScalarEdit] = useState<{ path: string; kind: JsonScalarKind; input: TextInputState } | null>(null);
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
-  const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
+  const [rawEditor, setRawEditor] = useState<RawEditorState | null>(null);
   // The Favorites pane's cursor (clamped on read) and its one-line failure notice.
   const [favCursor, setFavCursor] = useState(0);
   const [favNotice, setFavNoticeRaw] = useState<string | null>(null);

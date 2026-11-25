@@ -12,12 +12,16 @@ import { handleFavoritesKey } from '../keys/routes-zone.favorites-keys.js';
 import { handleSmokeConfirmKey, handleSmokeKey } from '../keys/routes-zone.smoke-keys.js';
 import { handleRecentKey } from '../keys/routes-zone.recent-keys.js';
 import { handlePaneKey } from '../keys/routes-zone.pane-keys.js';
+import { handleRawPaste } from '../keys/routes-zone.raw-keys.js';
+import { usePaste } from 'ink';
 import { useInput } from '../../../shared/hooks/use-input.js';
 import { useZoneInputActive } from '../../../shared/hooks/use-zone-input-active.js';
 
 export function useRoutesInput(c: RoutesZoneCtx): void {
   const { useStore, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, savePrompt, pickerOpen, filterEditing, paneFocused, favoritesFocused, recentFocused, smokeConfirm, smokeVisible } = c;
   const zoneInputActive = useZoneInputActive(useStore);
+  // Bracketed paste (Ink 7): a pasted payload arrives as ONE string, never as key presses, and is one undo step.
+  usePaste((text) => handleRawPaste(c, text), { isActive: zoneInputActive && c.editorOpen && c.rawEditor !== null && paneFocused });
   useInput(
     (input, key) => {
       // Priority order (Ink input): overlays first, then the filter input, then the focused pane, then the list.
