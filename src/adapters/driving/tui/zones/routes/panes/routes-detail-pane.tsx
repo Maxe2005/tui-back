@@ -10,8 +10,8 @@ import { RoutesPaneTabStrip, RoutesRequestTab } from './routes-request-tab.js';
 import { RoutesResponseTab } from './routes-response-tab.js';
 import { RoutesSavedTab } from './routes-saved-tab.js';
 import { TextInputLine } from '../../../shared/components/inputs/text-input-line.js';
-import { colors, spacing } from '../../../shared/theme/theme.js';
-import { formatRouteDetail } from '../logic/routes-zone.logic.js';
+import { colors, methodColor, spacing } from '../../../shared/theme/theme.js';
+import { formatRouteDetail, stripMethodPrefix } from '../logic/routes-zone.logic.js';
 
 export function RoutesDetailPane({
   c,
@@ -31,7 +31,14 @@ export function RoutesDetailPane({
   } = c;
   return (
       <Box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden" paddingX={spacing['pane-padding-x']}>
-        {focused ? <DetailPane title="Route">{formatRouteDetail(focused)}</DetailPane> : null}
+        {focused ? (
+          <DetailPane
+            title="Route"
+            lead={{ text: focused.method, color: methodColor(focused.method) }}
+          >
+            {stripMethodPrefix(formatRouteDetail(focused), focused.method)}
+          </DetailPane>
+        ) : null}
         {focused ? <RoutesPaneTabStrip tabs={ROUTES_PANE_TABS} active={paneTab} focused={paneFocused} /> : null}
         {focused && paneTab === 'request' ? (
           <RoutesRequestTab

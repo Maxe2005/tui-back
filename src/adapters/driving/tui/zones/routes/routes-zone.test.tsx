@@ -128,7 +128,9 @@ describe('RoutesZone fire and request pane', () => {
     seedReadyRoutes(store);
     expect(await footerContextOf(store, <RoutesZone useStore={store} />)).toBe('routes-list');
     expect(FOOTER_CONTEXTS['routes-list'].hints).toContainEqual(['Enter', 'request']);
-    expect(JSON.stringify(FOOTER_CONTEXTS['routes-list'].hints)).not.toContain('fire');
+    // Enter never fires; Ctrl+R is the (re-)fire key of the list.
+    expect(FOOTER_CONTEXTS['routes-list'].hints).not.toContainEqual(['Enter', 'fire']);
+    expect(FOOTER_CONTEXTS['routes-list'].hints).toContainEqual(['Ctrl+R', 'fire']);
   });
 
   it('previews the cursor route on the Request tab with its empty sections', async () => {

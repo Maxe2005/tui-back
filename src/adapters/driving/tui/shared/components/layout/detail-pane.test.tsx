@@ -52,3 +52,13 @@ describe('DetailPane', () => {
     expect(output).not.toContain('─');
   });
 });
+
+describe('DetailPane lead token', () => {
+  it('prints the lead token as text before the body', async () => {
+    const output = await renderToString(
+      <DetailPane title="Route" lead={{ text: 'GET', color: colors.success }}>{'/users\n\nList users'}</DetailPane>,
+    );
+    expect(output).toContain('GET /users');
+    expect(output).toContain('List users');
+  });
+});

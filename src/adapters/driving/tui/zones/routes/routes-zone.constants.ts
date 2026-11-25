@@ -9,3 +9,12 @@ export const ROUTES_LIST_CHROME_ROWS = 9;
 // detail + the Response header + the right pane's own hint line around the tree's own
 // box); the measured box height takes over after mount, like the list above.
 export const RESPONSE_AREA_CHROME_ROWS = 13;
+
+// The Favorites pane above the route list: at most this many body rows (BoundedList budget,
+// indicators included), and the rows the route list always keeps — the pane shrinks (down to
+// nothing) before the list does.
+export const ROUTES_FAVORITES_MAX_BODY_ROWS = 5;
+export const ROUTES_MIN_LIST_ROWS = 4;
+
+// The smoke table takes the Favorites pane's slot with a taller cap (summary lines + one row per favorite).
+export const ROUTES_SMOKE_MAX_BODY_ROWS = 9;

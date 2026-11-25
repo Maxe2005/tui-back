@@ -3,6 +3,8 @@
 import type { Key } from 'ink';
 import type { RoutesZoneCtx } from '../routes-zone.ctx.js';
 import { ROUTES_PANE_TABS } from '../../../store/slices/workspace/routes-slice.js';
+import { toggleRouteFavorite } from './routes-zone.favorites-keys.js';
+import { handleRawKey } from './routes-zone.raw-keys.js';
 import { handleRequestTabKey } from './routes-zone.request-keys.js';
 import { handleResponseTabKey } from './routes-zone.response-keys.js';
 import { handleSavedTabKey } from './routes-zone.saved-tab-keys.js';
@@ -12,28 +14,13 @@ import { resolveTabNavKey, stepTab } from '../../../shared/keys/tab-navigation.j
 export function handlePaneKey(c: RoutesZoneCtx, input: string, key: Key): void {
   const {
     paneTab, setPaneTab, setFilterPanelOpen, setPanelCursor, rowEdit, setRowEdit, rowAddPrompt,
-    setRowAddPrompt, scalarEdit, setScalarEdit, addPrompt, setAddPrompt, rawEditor, setRawEditor, editorOpen,
+    setRowAddPrompt, scalarEdit, setScalarEdit, addPrompt, setAddPrompt, rawEditor, editorOpen,
     confirmScalarEdit, confirmAddPrompt, leaveRawEditor, openSavePrompt, firePaneRoute, confirmRowEdit,
     confirmRowAdd,
   } = c;
   if (editorOpen) {
     if (rawEditor !== null) {
-      if (key.escape === true) {
-        leaveRawEditor();
-        return;
-      }
-      if (key.return === true) {
-        const cursor = Math.min(Math.max(rawEditor.input.cursor, 0), rawEditor.input.value.length);
-        const value = `${rawEditor.input.value.slice(0, cursor)}\n${rawEditor.input.value.slice(cursor)}`;
-        setRawEditor({ input: { value, cursor: cursor + 1 }, error: rawEditor.error });
-        return;
-      }
-      if (key.upArrow === true || key.downArrow === true) {
-        return;
-      }
-      setRawEditor((previous) =>
-        previous === null ? previous : { input: nextTextInputValue(previous.input, input, key), error: previous.error },
-      );
+      handleRawKey(c, input, key);
       return;
     }
     if (scalarEdit !== null) {
@@ -101,6 +88,14 @@ export function handlePaneKey(c: RoutesZoneCtx, input: string, key: Key): void {
     setRowAddPrompt((previous) =>
       previous === null ? previous : { ...previous, input: nextTextInputValue(previous.input, input, key) },
     );
+    return;
+  }
+  // `*` toggles the open route's favorite (every inline editor above already owns its keys; the
+  // Saved tab's filter takes `*` as text).
+  if (input === '*' && key.ctrl !== true && key.meta !== true && paneTab !== 'saved') {
+    if (c.paneRoute !== null) {
+      toggleRouteFavorite(c, c.paneRoute.method, c.paneRoute.path);
+    }
     return;
   }
   if (key.ctrl === true && (input === 'r' || input === 'R')) {

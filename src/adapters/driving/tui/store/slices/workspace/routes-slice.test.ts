@@ -280,6 +280,74 @@ describe('routes slice fireRoute', () => {
     expect(store.getState().responses['GET /users']).toMatchObject({ status: 'error', error: { code: 'missing-argument' } });
   });
 
+  it('records each fired route as a recent (status + duration), MRU and deduplicated', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    const store = await loadedStore();
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+    await store.getState().fireRoute('PATCH /users/{id}', 'PATCH', '/users/7');
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    const recents = store.getState().recentRoutes;
+    expect(recents.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /users', 'PATCH /users/{id}']);
+    expect(recents[0]).toMatchObject({ outcome: { kind: 'status', status: 200 } });
+  });
+
+  it('caps the recents at 10 and records the error code of a fire that failed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status: 403 })));
+    const store = await loadedStore();
+
+    for (let i = 0; i < 12; i += 1) {
+      await store.getState().fireRoute(`GET /r${i}`, 'GET', `/r${i}`);
+    }
+
+    expect(store.getState().recentRoutes).toHaveLength(10);
+    expect(store.getState().recentRoutes[0]).toMatchObject({ path: '/r11', outcome: { kind: 'error', code: 'unknown-route' } });
+  });
+
+  it('records an HTTP 4xx/5xx response as a status outcome, not an error code', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })));
+    const scanner: RouteScannerPort = { scan: vi.fn(async () => ok([{ method: 'GET', path: '/users' }] as Route[])) };
+    const store = await loadedStore({ scanner });
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    expect(store.getState().recentRoutes[0]).toMatchObject({ path: '/users', outcome: { kind: 'status', status: 500 } });
+  });
+
+  it('keeps the recents across a same-repo reload and empties them on another repo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    const scanner: RouteScannerPort = { scan: vi.fn(async () => ok([{ method: 'GET', path: '/users' }] as Route[])) };
+    const repos = ['/repos/gateway'];
+    const registry: RegistryPort = {
+      list: vi.fn(async () => ok([...repos])),
+      add: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+      exists: vi.fn(async () => ok(true)),
+      scan: vi.fn(async () => ok({ candidates: [], skipped: [] })),
+      reset: vi.fn(async () => ok({ path: '/x', backupPath: null })),
+    };
+    const store = await loadedStore({ scanner, registry });
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+    expect(store.getState().recentRoutes).toHaveLength(1);
+
+    await store.getState().loadRoutes();
+    expect(store.getState().recentRoutes).toHaveLength(1);
+
+    repos.splice(0, 1, '/repos/other');
+    await store.getState().loadRoutes();
+    expect(store.getState().routesRepoPath).toBe('/repos/other');
+    expect(store.getState().recentRoutes).toEqual([]);
+  });
+
+  it('does not record a recent for a pre-flight wiring failure', async () => {
+    const store = createAppStore();
+
+    await store.getState().fireRoute('GET /users', 'GET', '/users');
+
+    expect(store.getState().recentRoutes).toEqual([]);
+  });
+
   it('surfaces an auth-endpoint failure as the route error', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
     const auth: DevAuthPort = {
@@ -1080,5 +1148,311 @@ describe('routes slice saved-request cache and guards', () => {
     expect(await store.getState().deleteSavedRequest('')).toMatchObject({ ok: false, error: { code: 'invalid-argument' } });
     expect((await store.getState().loadSavedRequest('  padded  ')).ok).toBe(true);
     expect((await store.getState().deleteSavedRequest('  padded  ')).ok).toBe(true);
+  });
+});
+
+describe('routes slice favorites', () => {
+  function favoriteDeps(initial: EdtRegistryEntry['favoriteRoutes'] = [], overrides: Partial<AppStoreDeps> = {}) {
+    const base = fakeDeps();
+    let entry: EdtRegistryEntry = {
+      ulid: 'U1',
+      topic: 'feat',
+      status: 'active',
+      createdAt: '2026-11-23T00:00:00.000Z',
+      members: [],
+      ...(initial === undefined ? {} : { favoriteRoutes: initial }),
+    } as unknown as EdtRegistryEntry;
+    const edtRegistry: EdtRegistryPort = {
+      ...base.edtRegistry,
+      list: vi.fn(async () => ok([entry])),
+      update: vi.fn(async (_ulid, patch) => {
+        entry = { ...entry, ...patch } as EdtRegistryEntry;
+        return ok(undefined);
+      }),
+    };
+    const state: StatePort = { ...base.state, readActiveEdt: vi.fn(async () => ok('U1')) };
+    return fakeDeps({ edtRegistry, state, ...overrides });
+  }
+
+  it('lists the active EDT favorites with stale flags from a fresh scan', async () => {
+    const store = createAppStore(
+      favoriteDeps([
+        { repoPath: '/repos/gateway', method: 'GET', path: '/users' },
+        { repoPath: '/repos/gateway', method: 'GET', path: '/gone' },
+      ]),
+    );
+    await store.getState().refreshFavoriteRoutes();
+    expect(store.getState().favoriteRoutes).toEqual([
+      { repoPath: '/repos/gateway', method: 'GET', path: '/users', stale: false },
+      { repoPath: '/repos/gateway', method: 'GET', path: '/gone', stale: true },
+    ]);
+  });
+
+  it('toggles a favorite on and off, updating the cached list at once', async () => {
+    const store = createAppStore(favoriteDeps([]));
+    await store.getState().loadRoutes();
+    expect(await store.getState().toggleFavoriteRoute('GET', '/users')).toMatchObject({ ok: true, data: { favorite: true } });
+    expect(store.getState().favoriteRoutes).toEqual([{ repoPath: '/repos/gateway', method: 'GET', path: '/users', stale: false }]);
+    expect(await store.getState().toggleFavoriteRoute('GET', '/users')).toMatchObject({ ok: true, data: { favorite: false } });
+    expect(store.getState().favoriteRoutes).toEqual([]);
+  });
+
+  it('leaves the cached list untouched when the toggle fails', async () => {
+    const deps = favoriteDeps([{ repoPath: '/repos/gateway', method: 'GET', path: '/users' }]);
+    const store = createAppStore(deps);
+    await store.getState().refreshFavoriteRoutes();
+    const before = store.getState().favoriteRoutes;
+    (deps.edtRegistry.update as ReturnType<typeof vi.fn>).mockResolvedValueOnce(err('io-error', 'disk full'));
+    const result = await store.getState().toggleFavoriteRoute('GET', '/users', '/repos/gateway');
+    expect(result).toMatchObject({ ok: false, error: { code: 'io-error' } });
+    expect(store.getState().favoriteRoutes).toBe(before);
+  });
+
+  it('degrades to store-not-wired without deps, never throwing', async () => {
+    const store = createAppStore();
+    await store.getState().refreshFavoriteRoutes();
+    expect(store.getState().favoriteRoutesError).toMatchObject({ code: 'store-not-wired' });
+    expect(await store.getState().toggleFavoriteRoute('GET', '/users', '/repos/gateway')).toMatchObject({
+      ok: false,
+      error: { code: 'store-not-wired' },
+    });
+  });
+
+  it('follows the active EDT on the next refresh', async () => {
+    const deps = favoriteDeps([{ repoPath: '/repos/gateway', method: 'GET', path: '/users' }]);
+    const store = createAppStore(deps);
+    await store.getState().refreshFavoriteRoutes();
+    expect(store.getState().favoriteRoutes).toHaveLength(1);
+    (deps.state.readActiveEdt as ReturnType<typeof vi.fn>).mockResolvedValue(ok('OTHER'));
+    await store.getState().refreshFavoriteRoutes();
+    expect(store.getState().favoriteRoutes).toBeNull();
+    expect(store.getState().favoriteRoutesError).toMatchObject({ code: 'edt-not-found' });
+  });
+
+  it('keeps a stale favorite stale after toggling a different route', async () => {
+    const store = createAppStore(
+      favoriteDeps([
+        { repoPath: '/repos/gateway', method: 'GET', path: '/users' },
+        { repoPath: '/repos/gateway', method: 'GET', path: '/gone' },
+      ]),
+    );
+    await store.getState().loadRoutes();
+    await store.getState().refreshFavoriteRoutes();
+    await store.getState().toggleFavoriteRoute('POST', '/users');
+    const gone = store.getState().favoriteRoutes?.find((item) => item.path === '/gone');
+    expect(gone?.stale).toBe(true);
+    expect(store.getState().favoriteRoutes?.find((item) => item.method === 'POST')?.stale).toBe(false);
+  });
+
+  it('runs a full refresh (right stale flags) when the cache was never loaded', async () => {
+    const store = createAppStore(favoriteDeps([{ repoPath: '/repos/gateway', method: 'GET', path: '/gone' }]));
+    await store.getState().loadRoutes();
+    await store.getState().toggleFavoriteRoute('GET', '/users');
+    expect(store.getState().favoriteRoutes?.find((item) => item.path === '/gone')?.stale).toBe(true);
+  });
+
+  it('surfaces a failed follow-up listing as favoriteRoutesError', async () => {
+    const deps = favoriteDeps([]);
+    const store = createAppStore(deps);
+    await store.getState().refreshFavoriteRoutes();
+    // First list call after the toggle (inside the toggle use-case) succeeds; the follow-up listing fails.
+    const list = deps.edtRegistry.list as ReturnType<typeof vi.fn>;
+    const original = list.getMockImplementation() as () => Promise<unknown>;
+    let calls = 0;
+    list.mockImplementation(async () => (++calls <= 1 ? original() : err('io-error', 'cannot read')));
+    const result = await store.getState().toggleFavoriteRoute('GET', '/users', '/repos/gateway');
+    expect(result.ok).toBe(true);
+    expect(store.getState().favoriteRoutesError).toMatchObject({ code: 'io-error' });
+  });
+
+  it('serializes rapid toggles so each sees the previous one', async () => {
+    const store = createAppStore(favoriteDeps([]));
+    await store.getState().refreshFavoriteRoutes();
+    const results = await Promise.all([
+      store.getState().toggleFavoriteRoute('GET', '/a', '/repos/gateway'),
+      store.getState().toggleFavoriteRoute('GET', '/b', '/repos/gateway'),
+      store.getState().toggleFavoriteRoute('GET', '/a', '/repos/gateway'),
+    ]);
+    expect(results.map((result) => result.ok && result.data.favorite)).toEqual([true, true, false]);
+    expect(store.getState().favoriteRoutes?.map((item) => item.path)).toEqual(['/b']);
+  });
+
+  it('ignores the result of a superseded refresh', async () => {
+    const deps = favoriteDeps([{ repoPath: '/repos/gateway', method: 'GET', path: '/users' }]);
+    const store = createAppStore(deps);
+    const list = deps.edtRegistry.list as ReturnType<typeof vi.fn>;
+    const original = list.getMockImplementation() as () => Promise<unknown>;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolveGate) => { release = resolveGate; });
+    list.mockImplementationOnce(async () => {
+      await gate;
+      return ok([]);
+    });
+    const slow = store.getState().refreshFavoriteRoutes();
+    list.mockImplementation(original);
+    await store.getState().refreshFavoriteRoutes();
+    release();
+    await slow;
+    expect(store.getState().favoriteRoutes).toHaveLength(1);
+  });
+});
+
+// Smoke run: the store action over `smokeRunFavorites` (live rows, response write, guards).
+describe('routes slice smoke run', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const favs = (...items: Array<[string, string]>) => items.map(([method, path]) => ({ repoPath: '/repos/gateway', method, path }));
+
+  async function smokeStore(favorites: ReturnType<typeof favs>, routes: Route[], repos: string[] = ['/repos/gateway']) {
+    const edtRegistry: EdtRegistryPort = {
+      add: vi.fn(async () => ok(undefined)),
+      list: vi.fn(async () => ok([{ ulid: 'A', topic: 't', createdAt: 'x', status: 'active', members: [], favoriteRoutes: favorites }] as unknown as EdtRegistryEntry[])),
+      setStatus: vi.fn(async () => ok(undefined)),
+      update: vi.fn(async () => ok(undefined)),
+      remove: vi.fn(async () => ok(undefined)),
+    };
+    const base = fakeDeps();
+    const registry = { ...base.registry, list: vi.fn(async () => ok(repos)) } as AppStoreDeps['registry'];
+    const state = base.state;
+    (state as { readActiveEdt: unknown }).readActiveEdt = async () => ok('A');
+    const store = createAppStore(
+      fakeDeps({
+        registry,
+        edtRegistry,
+        state,
+        scanner: { scan: vi.fn(async () => ok(routes)) },
+        manifest: { load: vi.fn(async () => ok(manifestFor('gateway', { 'route-explorer': { baseUrl: 'http://localhost:3000' } }))) },
+      }),
+    );
+    await store.getState().loadRoutes();
+    await store.getState().refreshFavoriteRoutes();
+    return store;
+  }
+
+  it('fills the table, writes each fired response and rejects a concurrent run', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      await gate;
+      return new Response('{"a":1}', { status: 200 });
+    }));
+    const store = await smokeStore(favs(['GET', '/a'], ['POST', '/b']), [
+      { method: 'GET', path: '/a' },
+      { method: 'POST', path: '/b' },
+    ]);
+    const run = store.getState().startSmokeRun(false);
+    await vi.waitFor(() => expect(store.getState().smoke?.rows[0]?.phase).toBe('firing'));
+    expect(store.getState().smoke?.running).toBe(true);
+    const second = await store.getState().startSmokeRun(false);
+    expect(second).toMatchObject({ ok: false, error: { code: 'smoke-run-in-progress', message: 'smoke run already in progress' } });
+    release();
+    await run;
+    const smoke = store.getState().smoke;
+    expect(smoke?.running).toBe(false);
+    expect(smoke?.rows.map((r) => r.row?.outcome)).toEqual(['ok', 'skipped']);
+    expect(smoke?.rows[0]?.response).toMatchObject({ status: 200 });
+    expect(store.getState().responses['GET /a']).toMatchObject({ status: 'fired', result: { status: 200 } });
+  });
+
+  it('includes mutating favorites only when asked and uses the route draft', async () => {
+    const fetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    const store = await smokeStore(favs(['POST', '/b']), [{ method: 'POST', path: '/b' }]);
+    store.getState().ensureRequestDraft('POST /b', { params: [], query: [{ name: 'q', value: 'z', required: false }], headers: [] });
+    await store.getState().startSmokeRun(true);
+    expect(store.getState().smoke?.rows[0]?.row?.outcome).toBe('ok');
+    expect(String(fetch.mock.calls[0]?.[0])).toBe('http://localhost:3000/b?q=z');
+  });
+
+  it('aborts: unstarted rows become skipped (cancelled)', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      await gate;
+      return new Response('{}', { status: 200 });
+    }));
+    const store = await smokeStore(favs(['GET', '/a'], ['GET', '/b'], ['GET', '/c']), [
+      { method: 'GET', path: '/a' },
+      { method: 'GET', path: '/b' },
+      { method: 'GET', path: '/c' },
+    ]);
+    const run = store.getState().startSmokeRun(false);
+    await vi.waitFor(() => expect(store.getState().smoke?.rows.some((r) => r.phase === 'firing')).toBe(true));
+    store.getState().cancelSmokeRun();
+    release();
+    await run;
+    const reasons = store.getState().smoke?.rows.map((r) => r.row?.reason ?? r.row?.outcome);
+    expect(reasons?.filter((r) => r === 'cancelled').length).toBeGreaterThan(0);
+    expect(store.getState().smoke?.running).toBe(false);
+  });
+
+  it('reports no favorites without starting a run', async () => {
+    const store = await smokeStore([], []);
+    expect(await store.getState().startSmokeRun(false)).toMatchObject({ ok: false, error: { code: 'no-favorites' } });
+    expect(store.getState().smoke).toBeNull();
+  });
+
+  it('keeps a row response as the route last response on demand', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"k":2}', { status: 200 })));
+    const store = await smokeStore(favs(['GET', '/a']), [{ method: 'GET', path: '/a' }]);
+    await store.getState().startSmokeRun(false);
+    store.setState({ responses: {} });
+    expect(store.getState().keepSmokeResponse(0)).toBe(true);
+    expect(store.getState().responses['GET /a']).toMatchObject({ status: 'fired', result: { body: '{"k":2}' } });
+    expect(store.getState().keepSmokeResponse(5)).toBe(false);
+  });
+
+  it('a repo switch mid-run aborts it, drops the table and writes nothing from the old repo', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => {
+      await gate;
+      return new Response('{}', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetch);
+    const repos = ['/repos/gateway'];
+    const store = await smokeStore(favs(['GET', '/a'], ['GET', '/b']), [
+      { method: 'GET', path: '/a' },
+      { method: 'GET', path: '/b' },
+    ], repos);
+    const run = store.getState().startSmokeRun(false);
+    await vi.waitFor(() => expect(store.getState().smoke?.rows.some((r) => r.phase === 'firing')).toBe(true));
+    repos[0] = '/repos/other';
+    await store.getState().loadRoutes();
+    expect(store.getState().routesRepoPath).toBe('/repos/other');
+    expect(store.getState().smoke).toBeNull();
+    release();
+    await run;
+    expect(store.getState().smoke).toBeNull();
+    expect(store.getState().responses).toEqual({});
+    // The abort stopped the pool: the second favorite was never fired.
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends an edited body draft, and falls back to the default draft without one', async () => {
+    const fetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetch);
+    const store = await smokeStore(favs(['POST', '/b'], ['GET', '/o/{id}'], ['GET', '/missing']), [
+      { method: 'POST', path: '/b', bodyExample: { a: 1 } },
+      { method: 'GET', path: '/o/{id}', parameters: [{ name: 'id', in: 'path', required: true, example: '5' }] },
+    ]);
+    store.getState().ensureRequestDraft('POST /b', { params: [], query: [], headers: [] });
+    store.getState().ensureBodyDraft('POST /b', { a: 1 });
+    store.getState().updateBodyDraft('POST /b', () => ({ a: 2 }));
+    await store.getState().startSmokeRun(true);
+    const sent = fetch.mock.calls.map(([url, init]) => [String(url), init?.body]);
+    expect(sent).toContainEqual(['http://localhost:3000/b', '{"a":2}']);
+    expect(sent).toContainEqual(['http://localhost:3000/o/5', undefined]);
+    // A favorite the scan no longer finds is stale: skipped, never fired.
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(store.getState().smoke?.rows[2]?.row).toMatchObject({ outcome: 'skipped', reason: 'stale' });
   });
 });

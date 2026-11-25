@@ -30,8 +30,13 @@ export function moveRoutesSelection(current: number, direction: RoutesSelectionD
 // The list row is `METHOD path` only: the summary is deliberately NOT rendered in the list (a
 // long summary wraps and makes rows taller than the one-row budget BoundedList assumes) — it
 // only appears in the detail pane (formatRouteDetail) for the focused route.
-export function formatRouteRow(route: Route): { label: string } {
-  return { label: `${route.method} ${route.path}` };
+export function formatRouteRow(route: Route): { method: string; label: string } {
+  return { method: route.method, label: route.path };
+}
+
+// Drops the leading `METHOD ` the detail text starts with (the pane prints it as a colored lead).
+export function stripMethodPrefix(text: string, method: string): string {
+  return text.startsWith(`${method} `) ? text.slice(method.length + 1) : text;
 }
 
 // The route filter: case-insensitive, whitespace-separated terms that must ALL appear in the
@@ -44,7 +49,7 @@ export function filterRoutes(routes: readonly Route[], query: string): Route[] {
     return [...routes];
   }
   return routes.filter((route) => {
-    const label = formatRouteRow(route).label.toLowerCase();
+    const label = `${route.method} ${route.path}`.toLowerCase();
     return terms.every((term) => label.includes(term));
   });
 }
@@ -118,6 +123,14 @@ export type RoutesFooterInput = {
   unavailable: boolean;
   filterEditing: boolean;
   paneFocused: boolean;
+  // The Favorites pane above the list owns the keyboard.
+  favoritesFocused?: boolean;
+  // The Recent section under it owns the keyboard.
+  recentFocused?: boolean;
+  // The smoke table replaces the Favorites list (and whether its run is in flight), or the mutating confirm is open.
+  smokeVisible?: boolean;
+  smokeRunning?: boolean;
+  smokeConfirm?: boolean;
   paneTab: 'request' | 'response' | 'saved';
   // Request tab: the inline save-name prompt, and whether the typed name is already taken.
   saveState: 'none' | 'naming' | 'duplicate';
@@ -138,11 +151,23 @@ export type RoutesFooterInput = {
 // focused right pane owns the keyboard. An unavailable list only claims the footer while input is
 // captured, so the zone and global keys stay advertised when they work.
 export function routesFooterContext(input: RoutesFooterInput): FooterContextId | null {
-  const captured = input.filterEditing || input.paneFocused;
+  const captured = input.filterEditing || input.paneFocused || input.favoritesFocused === true || input.recentFocused === true;
   if (input.unavailable) {
     return captured ? 'busy' : null;
   }
+  if (input.smokeConfirm === true) {
+    return 'routes-smoke-confirm';
+  }
   if (!input.paneFocused) {
+    if (input.favoritesFocused === true && input.smokeVisible === true && !input.filterEditing) {
+      return input.smokeRunning === true ? 'routes-smoke-running' : 'routes-smoke';
+    }
+    if (input.recentFocused === true && !input.filterEditing) {
+      return 'routes-recent';
+    }
+    if (input.favoritesFocused === true && !input.filterEditing) {
+      return 'routes-favorites';
+    }
     if (input.filterEditing) {
       return 'routes-filter';
     }

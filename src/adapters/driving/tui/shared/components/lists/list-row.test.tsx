@@ -1,6 +1,6 @@
 import { Box } from 'ink';
 import { describe, it, expect } from 'vitest';
-import { colors, spacing } from '../../theme/theme.js';
+import { colors, methodColors, spacing } from '../../theme/theme.js';
 import { ListRow, resolveRowLayout } from './list-row.js';
 import { renderToString } from '../render-to-string.js';
 
@@ -15,6 +15,7 @@ describe('resolveRowLayout', () => {
       paddingLeft: 0,
       bold: false,
       activeSuffix: '',
+      methodColor: colors['text-dim'],
     });
   });
 
@@ -28,6 +29,7 @@ describe('resolveRowLayout', () => {
       paddingLeft: 0,
       bold: false,
       activeSuffix: '',
+      methodColor: colors['text-dim'],
     });
   });
 
@@ -41,8 +43,15 @@ describe('resolveRowLayout', () => {
       paddingLeft: spacing.indent,
       bold: false,
       activeSuffix: '',
+      methodColor: colors['text-dim'],
     });
     expect(spacing.indent).toBe(2);
+  });
+
+  it('dims the label of an unavailable row, but emphasized keeps precedence', () => {
+    expect(resolveRowLayout({ label: 'GET /gone', dim: true }).labelColor).toBe(colors['text-dim']);
+    expect(resolveRowLayout({ label: 'GET /ok' }).labelColor).toBe(colors.text);
+    expect(resolveRowLayout({ label: 'x', dim: true, emphasized: true }).labelColor).toBe(colors.accent);
   });
 
   // `emphasized` (whichever row drives a categorized split) is accent+bold, independent of
@@ -57,6 +66,7 @@ describe('resolveRowLayout', () => {
       paddingLeft: 0,
       bold: true,
       activeSuffix: '',
+      methodColor: colors['text-dim'],
     });
   });
 
@@ -70,6 +80,7 @@ describe('resolveRowLayout', () => {
       paddingLeft: 0,
       bold: true,
       activeSuffix: '',
+      methodColor: colors['text-dim'],
     });
   });
 
@@ -85,6 +96,7 @@ describe('resolveRowLayout', () => {
       paddingLeft: 0,
       bold: false,
       activeSuffix: ' • active',
+      methodColor: colors['text-dim'],
     });
   });
 
@@ -98,6 +110,7 @@ describe('resolveRowLayout', () => {
       paddingLeft: 0,
       bold: true,
       activeSuffix: ' • active',
+      methodColor: colors['text-dim'],
     });
   });
 });
@@ -171,6 +184,26 @@ describe('ListRow', () => {
   });
 });
 
+describe('ListRow method token', () => {
+  it('resolves the method color, kept when selected, dimmed when dim, fallback when unknown', () => {
+    expect(resolveRowLayout({ label: '/a', method: 'GET' }).methodColor).toBe(methodColors.GET);
+    expect(resolveRowLayout({ label: '/a', method: 'delete', selected: true }).methodColor).toBe(methodColors.DELETE);
+    expect(resolveRowLayout({ label: '/a', method: 'GET', dim: true }).methodColor).toBe(colors['text-dim']);
+    expect(resolveRowLayout({ label: '/a', method: 'TRACE' }).methodColor).toBe(methodColors.fallback);
+  });
+
+  it('prints the method as text before the label, selected or not', async () => {
+    expect(await renderToString(<ListRow method="GET" label="/users" />)).toContain('GET /users');
+    expect(await renderToString(<ListRow method="POST" label="/users" selected />)).toContain('POST /users');
+    expect(await renderToString(<ListRow method="HEAD" label="/users" dim meta="stale" />)).toContain('HEAD /users stale');
+  });
+
+  it('prints a method-prefixed meta intact', async () => {
+    const output = await renderToString(<ListRow label="my request" meta="PATCH /users · stale" metaMethod="PATCH" />);
+    expect(output).toContain('my request PATCH /users · stale');
+  });
+});
+
 describe('ListRow truncation', () => {
   it('keeps the selection bar and marker visible when a long label is truncated', async () => {
     const output = await renderToString(
@@ -180,5 +213,10 @@ describe('ListRow truncation', () => {
     );
     expect(output).toContain('▌›');
     expect(output).toContain('…');
+  });
+
+  it('does not split a meta whose first word merely starts with the method', async () => {
+    const output = await renderToString(<ListRow label="x" meta="GETAWAY /users" metaMethod="GET" />);
+    expect(output).toContain('x GETAWAY /users');
   });
 });

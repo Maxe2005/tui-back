@@ -55,6 +55,26 @@ describe('AppShell real-keypress interactions', () => {
     }
   });
 
+  it('the Favorites pane focus captures the keyboard: a zone mnemonic never switches zones, and leaving resets it', async () => {
+    const store = createAppStore();
+    store.setState({ activeZone: 'routes', routesPaneFocus: 'favorites', loadRoutes: async () => {}, refreshFavoriteRoutes: async () => {} });
+
+    const { instance, stdin } = mount(store);
+    try {
+      await instance.waitUntilRenderFlush();
+      await press(instance, stdin, 'l');
+      await press(instance, stdin, 'q');
+      expect(store.getState().activeZone).toBe('routes');
+
+      store.getState().setActiveZone('dashboard');
+      await instance.waitUntilRenderFlush();
+      expect(store.getState().routesPaneFocus).toBe('list');
+    } finally {
+      instance.unmount();
+      await instance.waitUntilExit();
+    }
+  });
+
   it('"?" opens the global help modal normally once zoneInputCaptured clears', async () => {
     const store = createAppStore();
     store.setState({ zoneInputCaptured: false });

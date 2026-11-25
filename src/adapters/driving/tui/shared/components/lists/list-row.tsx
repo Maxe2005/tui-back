@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { colors, spacing } from '../../theme/theme.js';
+import { colors, methodColor, spacing } from '../../theme/theme.js';
 
 export type ListRowProps = {
   label: string;
@@ -16,7 +16,14 @@ export type ListRowProps = {
   // status). A row can be active, emphasized, both, or neither.
   active?: boolean;
   nested?: boolean;
+  // Dimmed label for an unavailable row (e.g. a stale favorite).
+  dim?: boolean;
   meta?: string;
+  // HTTP method printed (as text) in its method color before the label. A dim row dims it too.
+  method?: string;
+  // The method already prefixing `meta` (picker rows: `METHOD path`): that token is colored,
+  // the remainder stays dim. Ignored when `meta` does not start with it.
+  metaMethod?: string;
 };
 
 export type ResolvedRow = {
@@ -28,26 +35,29 @@ export type ResolvedRow = {
   paddingLeft: number;
   bold: boolean;
   activeSuffix: string;
+  methodColor: string;
 };
 
 export function resolveRowLayout(
   props: ListRowProps,
 ): ResolvedRow {
-  const { selected = false, nested = false, emphasized = false, active = false } = props;
+  const { selected = false, nested = false, emphasized = false, active = false, dim = false } = props;
   return {
     barGlyph: selected ? '▌' : ' ',
     marker: selected ? '›' : ' ',
     background: selected ? colors['surface-selected'] : colors.surface,
-    labelColor: emphasized ? colors.accent : colors.text,
+    labelColor: emphasized ? colors.accent : dim ? colors['text-dim'] : colors.text,
     metaColor: colors['text-dim'],
     paddingLeft: nested ? spacing.indent : 0,
     bold: emphasized,
     activeSuffix: active ? ' • active' : '',
+    methodColor: dim || props.method === undefined ? colors['text-dim'] : methodColor(props.method),
   };
 }
 
 export function ListRow(props: ListRowProps) {
-  const { label, meta } = props;
+  const { label, meta, method, metaMethod } = props;
+  const splitMeta = meta !== undefined && metaMethod !== undefined && metaMethod !== '' && meta.startsWith(`${metaMethod} `);
   const layout = resolveRowLayout(props);
   return (
     <Box paddingLeft={layout.paddingLeft} backgroundColor={layout.background} minWidth={0} overflow="hidden">
@@ -63,12 +73,25 @@ export function ListRow(props: ListRowProps) {
           wrapping `Box` carries it: the label's `flexShrink={1}` + `minWidth={0}` absorbs the
           squeeze and `wrap="truncate-end"` turns it into a clean ellipsis; `meta`'s
           `flexShrink={0}` keeps the trailing status text intact and the last thing to give. */}
+      {method !== undefined && method !== '' ? (
+        <Box flexShrink={0}>
+          <Text color={layout.methodColor}>{method} </Text>
+        </Box>
+      ) : null}
       <Box flexShrink={1} minWidth={0}>
         <Text color={layout.labelColor} bold={layout.bold} wrap="truncate-end">{label}</Text>
       </Box>
       {meta ? (
         <Box flexShrink={0}>
-          <Text color={layout.metaColor}> {meta}</Text>
+          {splitMeta ? (
+            <Text color={layout.metaColor}>
+              {' '}
+              <Text color={props.dim === true ? colors['text-dim'] : methodColor(metaMethod)}>{metaMethod}</Text>
+              {meta.slice(metaMethod.length)}
+            </Text>
+          ) : (
+            <Text color={layout.metaColor}> {meta}</Text>
+          )}
         </Box>
       ) : null}
       {layout.activeSuffix ? (

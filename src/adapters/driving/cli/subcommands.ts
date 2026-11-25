@@ -14,6 +14,7 @@ import { realignSubcommand } from './commands/realign.js';
 import { healSubcommand } from './commands/heal.js';
 import { registrySubcommand } from './commands/registry.js';
 import { fireRequestSubcommand, listRoutesSubcommand, requestDeleteSubcommand, requestFireSubcommand, requestListSubcommand } from './commands/request.js';
+import { routesSubcommand } from './commands/routes.js';
 
 const COMPLETION_USAGE = 'tui-back completion bash';
 
@@ -35,6 +36,7 @@ export function buildSubcommands(deps: SubcommandDeps): Subcommand[] {
     requestListSubcommand(deps),
     requestFireSubcommand(deps),
     requestDeleteSubcommand(deps),
+    routesSubcommand(deps),
   ];
   subcommands.push(createInstallSubcommand({ ...deps.install, commands: () => subcommands }));
   // Registered last and closing over the final list, so the generated script includes itself.

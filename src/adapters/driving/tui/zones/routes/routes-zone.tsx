@@ -45,6 +45,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     status, carryingServices, routes, routesStatus, routesError, routesRepoPath, paneTab, selected, filter,
     filterEditing, filterPanelOpen, section, rowEdit, rowAddPrompt, savePrompt, savedTabDeleteConfirm,
     scalarEdit, addPrompt, rawEditor, windowSize, listAreaRef, listAreaSize, paneFocused, visibleRoutes,
+    favoritesFocused, recentFocused, smoke, smokeVisible, smokeConfirm,
     paneDraft, classification, editorDraft, editorRows, clampedEditorSelected, editorOpen, treeActive,
   } = ctx;
 
@@ -103,6 +104,11 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
     unavailable: false,
     filterEditing,
     paneFocused,
+    favoritesFocused,
+    recentFocused,
+    smokeVisible,
+    smokeRunning: smoke?.running === true,
+    smokeConfirm: smokeConfirm !== null,
     paneTab,
     saveState: savePrompt === null ? 'none' : savePrompt.duplicate ? 'duplicate' : 'naming',
     savedDeleteConfirm: savedTabDeleteConfirm !== null,
@@ -135,6 +141,7 @@ export function RoutesZone({ useStore = useAppStore }: { useStore?: AppStore }) 
             listAreaRef={listAreaRef}
             maxVisibleRows={maxVisibleRows}
             clamped={clamped}
+            favorites={ctx}
           />
         }
         second={<RoutesDetailPane c={ctx} focused={focused} bodyNode={bodyNode} responseNode={responseNode} />}

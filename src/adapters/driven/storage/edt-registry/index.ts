@@ -7,7 +7,7 @@
  import { parse, stringify } from 'yaml';
  import Database from 'better-sqlite3';
  import { err, ok, type Result } from '../../../../core/result.js';
- import type { EdtRegistryEntry, EdtRegistryPort, EdtMember, EdtStatus, EdtActionLogEntry } from '../../../../core/ports/storage/edt-registry.js';
+ import type { EdtRegistryEntry, EdtRegistryPort, EdtMember, EdtStatus, EdtActionLogEntry, FavoriteRoute } from '../../../../core/ports/storage/edt-registry.js';
  import type { RegistryPort } from '../../../../core/ports/storage/registry.js';
  import type { ManifestPort } from '../../../../core/ports/vcs/manifest.js';
  import type { SettingsPort } from '../../../../core/ports/storage/settings.js';
@@ -155,7 +155,7 @@
  // Read/find/replace/write one entry in place, mirroring setEdtStatus's shape. Used by
  // modifyEdt under the per-resource advisory lock (AD-9). Fails with edt-not-found if ulid
  // isn't registered.
- async function updateEdtEntry(edtRegistryFile: string, ulid: string, patch: { topic?: string; members?: EdtMember[] }): Promise<Result<void>> {
+ async function updateEdtEntry(edtRegistryFile: string, ulid: string, patch: { topic?: string; members?: EdtMember[]; favoriteRoutes?: FavoriteRoute[] }): Promise<Result<void>> {
    const ensured = await ensureEdtRegistryDir(edtRegistryFile);
    if (!ensured.ok) {
      return ensured;
@@ -178,6 +178,14 @@
    }
    if (patch.members !== undefined) {
      entry.members = patch.members;
+   }
+   if (patch.favoriteRoutes !== undefined) {
+     // An empty list drops the key so an emptied EDT serializes like a never-favorited one.
+     if (patch.favoriteRoutes.length === 0) {
+       delete entry.favoriteRoutes;
+     } else {
+       entry.favoriteRoutes = patch.favoriteRoutes;
+     }
    }
  
    try {

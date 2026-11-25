@@ -1,9 +1,10 @@
 // tui/zones/routes: use-routes-state — the Routes zone's store selectors, zone-local `useState`s and measured element sizes, in their original call order.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWindowSize } from 'ink';
 import type { AppStore } from '../../../store/app-store.js';
 import type { JsonScalarKind } from '../../../shared/components/json-tree/model.js';
 import type { RequestRowSection, RequestSection } from '../logic/routes-request.logic.js';
+import type { RawEditorState } from '../keys/routes-zone.raw-keys.js';
 import type { TextInputState } from '../../../shared/components/inputs/text-edit.js';
 import { createFilterablePickListState, type FilterablePickListState } from '../../../shared/components/pickers/filterable-pick-list.js';
 import { useElementSize } from '../../../shared/hooks/use-element-size.js';
@@ -40,6 +41,10 @@ export function useRoutesState(useStore: AppStore) {
   const saveRequestDraft = useStore((state) => state.saveRequestDraft);
   const loadSavedRequest = useStore((state) => state.loadSavedRequest);
   const deleteSavedRequest = useStore((state) => state.deleteSavedRequest);
+
+  const favoriteRoutes = useStore((state) => state.favoriteRoutes);
+  const refreshFavoriteRoutes = useStore((state) => state.refreshFavoriteRoutes);
+  const toggleFavoriteRoute = useStore((state) => state.toggleFavoriteRoute);
 
   const setZoneInputCaptured = useStore((state) => state.setZoneInputCaptured);
 
@@ -91,7 +96,42 @@ export function useRoutesState(useStore: AppStore) {
   // buffers are zone-local.
   const [scalarEdit, setScalarEdit] = useState<{ path: string; kind: JsonScalarKind; input: TextInputState } | null>(null);
   const [addPrompt, setAddPrompt] = useState<{ parentPath: string; input: TextInputState; error: string | null } | null>(null);
-  const [rawEditor, setRawEditor] = useState<{ input: TextInputState; error: string | null } | null>(null);
+  const [rawEditor, setRawEditorState] = useState<RawEditorState | null>(null);
+  // The latest buffer, updated synchronously by every write: several keypresses can arrive before a
+  // re-render, so key handlers and the leave/validate step must read this, never a render-time closure.
+  const rawEditorRef = useRef<RawEditorState | null>(null);
+  const setRawEditor = (next: RawEditorState | null | ((previous: RawEditorState | null) => RawEditorState | null)) => {
+    const value = typeof next === 'function' ? next(rawEditorRef.current) : next;
+    rawEditorRef.current = value;
+    setRawEditorState(value);
+  };
+  // The Favorites pane's cursor (clamped on read) and its one-line failure notice.
+  const [favCursor, setFavCursor] = useState(0);
+  const [favNotice, setFavNoticeRaw] = useState<string | null>(null);
+  // A toggle outcome can land after the zone unmounted: never set state then.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const setFavNotice = (next: string | null) => {
+    if (mountedRef.current) {
+      setFavNoticeRaw(next);
+    }
+  };
+  const recentRoutes = useStore((state) => state.recentRoutes);
+  const [recentCursor, setRecentCursor] = useState(0);
+  const favoriteRoutesError = useStore((state) => state.favoriteRoutesError);
+  // The smoke run's table lives in the store; the cursor and the mutating confirm are zone-local.
+  const smoke = useStore((state) => state.smoke);
+  const startSmokeRun = useStore((state) => state.startSmokeRun);
+  const cancelSmokeRun = useStore((state) => state.cancelSmokeRun);
+  const closeSmoke = useStore((state) => state.closeSmoke);
+  const keepSmokeResponse = useStore((state) => state.keepSmokeResponse);
+  const [smokeCursor, setSmokeCursor] = useState(0);
+  const [smokeConfirm, setSmokeConfirm] = useState<{ routes: string[] } | null>(null);
   const windowSize = useWindowSize();
   // Dragging the splitter (Ctrl+W) re-renders only ZoneLayout, but the panes' content reflows
   // (the repo path wraps or unwraps, changing the list's height). Subscribing here makes this
@@ -102,6 +142,8 @@ export function useRoutesState(useStore: AppStore) {
   const [bodyAreaRef, bodyAreaSize] = useElementSize();
 
   const paneFocused = paneFocus === 'detail';
+  const favoritesFocused = paneFocus === 'favorites';
+  const recentFocused = paneFocus === 'recent';
   return {
     useStore, status, carryingServices, routes, routesStatus, routesError, routesRepoPath, loadRoutes,
     fireRoute, responses, requestDrafts, ensureRequestDraft, updateRequestDraft, paneFocus, setPaneFocus,
@@ -115,8 +157,11 @@ export function useRoutesState(useStore: AppStore) {
     setPickerOpen, pickerState, setPickerState, pickerError, setPickerError, pickerDeleteConfirm,
     setPickerDeleteConfirm, savedTabState, setSavedTabState, savedTabError, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, scalarEdit, setScalarEdit, addPrompt, setAddPrompt,
-    rawEditor, setRawEditor, windowSize, listAreaRef, listAreaSize, responseAreaRef, responseAreaSize,
-    bodyAreaRef, bodyAreaSize, paneFocused,
+    rawEditor, rawEditorRef, setRawEditor, windowSize, listAreaRef, listAreaSize, responseAreaRef, responseAreaSize,
+    bodyAreaRef, bodyAreaSize, paneFocused, favoritesFocused, recentFocused, recentRoutes, recentCursor, setRecentCursor, favoriteRoutes, refreshFavoriteRoutes,
+    toggleFavoriteRoute, favCursor, setFavCursor, favNotice, setFavNotice, favoriteRoutesError,
+    smoke, startSmokeRun, cancelSmokeRun, closeSmoke, keepSmokeResponse, smokeCursor, setSmokeCursor,
+    smokeConfirm, setSmokeConfirm,
   };
 }
 

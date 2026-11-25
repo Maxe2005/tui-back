@@ -22,14 +22,27 @@ import {
 import { RESPONSE_AREA_CHROME_ROWS } from '../routes-zone.constants.js';
 import { bodyTreeKey, type RequestDraft, seedRequestDraft } from '../logic/routes-request.logic.js';
 import { filterRoutes, resolveEnterFireTarget } from '../logic/routes-zone.logic.js';
+import { clampFavoriteCursor, visibleFavorites } from '../logic/routes-favorites.logic.js';
+import { clampRecentCursor, visibleRecents } from '../logic/routes-recent.logic.js';
 
 export function useRoutesDerived(c: RoutesState) {
   const {
     routes, responses, requestDrafts, paneTab, jsonTreeStates, bodyDrafts, bodyEditErrors, savedRequests,
     selected, filter, filterPanelOpen, panelCursor, section, windowSize, responseAreaSize, bodyAreaSize,
-    paneFocused,
+    paneFocused, favoriteRoutes, routesRepoPath, favCursor, recentRoutes, recentCursor, smoke, smokeCursor,
   } = c;
   const visibleRoutes = useMemo(() => filterRoutes(routes ?? [], filter.value), [routes, filter.value]);
+
+  // The Favorites pane rows: the displayed repo's favorites of the active EDT.
+  const favorites = useMemo(() => visibleFavorites(favoriteRoutes, routesRepoPath), [favoriteRoutes, routesRepoPath]);
+  const clampedFavCursor = clampFavoriteCursor(favCursor, favorites.length);
+  // The Recent section rows: this session's fires of the displayed repo.
+  const recents = useMemo(() => visibleRecents(recentRoutes, routesRepoPath), [recentRoutes, routesRepoPath]);
+  const clampedRecentCursor = clampRecentCursor(recentCursor, recents.length);
+  // The smoke table replaces the Favorites list while it is visible.
+  const smokeVisible = smoke !== null && smoke.visible;
+  const smokeRows = smoke === null ? [] : smoke.rows;
+  const clampedSmokeCursor = clampFavoriteCursor(smokeCursor, smokeRows.length);
 
   // The pane always reflects the list cursor's route (the cursor cannot move while the pane
   // holds focus), with its own draft and last response.
@@ -53,6 +66,7 @@ export function useRoutesDerived(c: RoutesState) {
         key: request.id,
         label: request.name,
         meta: `${request.method} ${request.path}${request.stale ? ' · stale' : ''}`,
+        method: request.method,
         value: request,
       })),
     [savedRequests],
@@ -71,6 +85,7 @@ export function useRoutesDerived(c: RoutesState) {
         key: request.id,
         label: request.name,
         meta: `${request.method} ${request.path}`,
+        method: request.method,
         value: request,
       }));
   }, [savedRequests, paneRouteKey]);
@@ -160,7 +175,8 @@ export function useRoutesDerived(c: RoutesState) {
     clampedRawSelected, treeTotalBudget, treeViewport, rawViewport, editorRouteKey, editorRoute,
     editorHasDraft, editorDraft, editorTreeState, editorRules, editorRows, editorHiddenCount, editorRuleList,
     editorErrors, editorFirstError, clampedEditorSelected, clampedEditorPanelCursor, bodyTotalBudget,
-    editorViewport, editorOpen, treeActive,
+    editorViewport, editorOpen, treeActive, favorites, clampedFavCursor, recents, clampedRecentCursor,
+    smokeVisible, smokeRows, clampedSmokeCursor,
   };
 }
 

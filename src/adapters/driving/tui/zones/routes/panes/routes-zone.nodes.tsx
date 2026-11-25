@@ -11,7 +11,7 @@ export function renderBodyNode(c: RoutesZoneCtx): ReactElement {
   } = c;
   return (
   rawEditor !== null && editorOpen ? (
-    <JsonRawEditor input={rawEditor.input} error={rawEditor.error} maxVisibleRows={bodyTotalBudget} />
+    <JsonRawEditor editor={rawEditor.editor} error={rawEditor.error} maxVisibleRows={bodyTotalBudget} />
   ) : (
     <JsonTreeEditor
       rows={editorRows}

@@ -17,6 +17,7 @@ const WIZARD_PREVIOUS: Hint = ['Ctrl+←/Ctrl+P', 'previous step'];
 // Keys shared by both Routes right-pane tabs.
 const ROUTES_PANE_KEYS: readonly Hint[] = [
   ['Ctrl+R', 'fire'],
+  ['*', 'favorite'],
   ['Ctrl+←/→', 'tab'],
 ];
 const ROUTES_RULES_PANEL: readonly Hint[] = [
@@ -241,11 +242,31 @@ export const FOOTER_CONTEXTS = {
   'routes-filter': { label: 'Routes filter', hints: [['Enter', 'apply'], ['Esc', 'clear']] },
   'routes-list': {
     label: 'Routes list',
-    hints: [['Enter', 'request'], ['/ f', 'filter'], ['p', 'picker'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], ['*', 'favorite'], ['Tab', 'favorites'], ['/ f', 'filter'], ['p', 'picker'], ['Home/End', 'jump']],
   },
   'routes-list-editable': {
     label: 'Routes list (body editable)',
-    hints: [['Enter', 'request'], ['/ f', 'filter'], ['p', 'picker'], ['e', 'edit body'], ['Home/End', 'jump']],
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], ['*', 'favorite'], ['Tab', 'favorites'], ['/ f', 'filter'], ['p', 'picker'], ['e', 'edit body'], ['Home/End', 'jump']],
+  },
+  'routes-favorites': {
+    label: 'Routes favorites',
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], [KEY_UP_DOWN, 'move'], ['*/d', 'remove'], ['t', 'smoke run'], ['Esc', 'list'], ['Tab', 'next']],
+  },
+  'routes-smoke': {
+    label: 'Routes smoke run',
+    hints: [['Enter', 'open'], ['t', 'run again'], [KEY_UP_DOWN, 'move'], ['Esc', 'close'], ['Tab', 'next']],
+  },
+  'routes-smoke-running': {
+    label: 'Routes smoke run (in flight)',
+    hints: [['Enter', 'open'], [KEY_UP_DOWN, 'move'], ['Esc', 'cancel'], ['Tab', 'next']],
+  },
+  'routes-smoke-confirm': {
+    label: 'Routes smoke run (mutating routes)',
+    hints: [['Enter', 'include mutating'], ['Esc', 'safe ones only']],
+  },
+  'routes-recent': {
+    label: 'Routes recent',
+    hints: [['Enter', 'request'], ['Ctrl+R', 'fire'], [KEY_UP_DOWN, 'move'], ['Esc', 'list'], ['Tab', 'next']],
   },
   'routes-response-raw': {
     label: 'Routes response (raw)',
@@ -277,7 +298,16 @@ export const FOOTER_CONTEXTS = {
     hints: [['Enter', 'retry'], ['Ctrl+O', 'overwrite'], CANCEL],
   },
   'routes-rules-panel': { label: 'Routes filter rules', hints: ROUTES_RULES_PANEL },
-  'routes-body-raw': { label: 'Routes raw body editor', hints: [['Esc', 'done'], ['Enter', 'newline']] },
+  'routes-body-raw': { label: 'Routes raw body editor', hints: [
+      ['Esc', 'done'],
+      ['Ctrl+F', 'format'],
+      ['Ctrl+Z/Y', 'undo/redo'],
+      ['Shift+←→↑↓', 'select'],
+      ['Ctrl+A', 'all'],
+      ['Ctrl+←/→', 'word'],
+      ['Tab', 'indent'],
+    ],
+  },
   'routes-body-tree': {
     label: 'Routes body editor',
     hints: [

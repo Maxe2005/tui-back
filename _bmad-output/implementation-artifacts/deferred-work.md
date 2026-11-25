@@ -1019,3 +1019,28 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/epic-13/spec-13-4-split-app-shell-and-store-tests.md`
   summary: Three near-identical `fakeDeps` (app shell, store, update slice) could share a base with per-suite overrides, and `app-store.*` files repeat the `describe("app store")` wrapper.
   evidence: Defaults differ (repo lists, ahead/behind, extra ports), so unifying would alter test bodies; deferred per the spec's Ask First rule.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-11-favorite-routes-per-edt-persistence-use-cases-and-cli.md`
+  summary: Expose `routes favorites list|add|remove` as MCP tools (currently in EXCLUDED_SUBCOMMANDS).
+  evidence: Agents cannot manage favorites; the CLI/MCP parity guard only passes because `routes` is on the exclusion list.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-13-recent-routes-and-quick-re-fire.md`
+  summary: Ctrl+R re-fires a mutating route (POST/PUT/PATCH/DELETE) from the list, Favorites or Recent with no confirmation.
+  evidence: Same behaviour as Ctrl+R in the right pane since 6.9, but from the list one keystroke now re-sends a mutating request; 6.14/6.15 introduce a confirm for mutating favorites, so a consistent rule is worth deciding.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-15-smoke-run-in-the-routes-zone.md`
+  summary: Abort and drop the smoke table when the active EDT changes while the displayed repo path stays the same.
+  evidence: `loadRoutes` only resets `smoke` on a repo-path change, so the previous EDT's favorites table can stay shown.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-15-smoke-run-in-the-routes-zone.md`
+  summary: Bound the memory held by smoke table rows (full response bodies are retained for the session).
+  evidence: each `SmokeTableRow` keeps the full `FireResult` body, duplicated in `responses`, and is only freed on repo change.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-16-raw-body-mode-as-a-full-multi-line-text-editor.md`
+  summary: Raw editor caret and edits step by UTF-16 unit, so astral characters (emoji) can be split or leave a lone surrogate; column math ignores wide characters.
+  evidence: Edge-case review of story 6.16; `multiline-edit.ts` moves/deletes by one code unit and `rawLineSegments` uses string length.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-16-raw-body-mode-as-a-full-multi-line-text-editor.md`
+  summary: Raw editor `Ctrl+F` format goes through JSON.parse/stringify, which loses integers beyond 2^53 and duplicate keys; a text-preserving formatter would avoid it.
+  evidence: Blind and edge-case reviews of story 6.16 on `formatJson`.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-16-raw-body-mode-as-a-full-multi-line-text-editor.md`
+  summary: Raw editor editing niceties not in the story: Tab/Shift+Tab on a multi-line selection, closer on its own line when Enter is pressed between `{}`, readline keys (Ctrl+W/U/D/E, Ctrl+Backspace), copy/cut.
+  evidence: Reviews of story 6.16 noted these as missing; the spec's key table does not require them.

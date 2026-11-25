@@ -16,10 +16,13 @@ export function DetailPane({
   title,
   children,
   summary,
+  lead,
 }: {
   title: string;
   children: ReactNode;
   summary?: { tone: SummaryTone; text: string };
+  // A colored token printed (as text) before a string body, e.g. an HTTP method.
+  lead?: { text: string; color: string };
 }) {
   const bounds = useBounds();
   // Title + the summary rule and line leave the rest of the pane to the body.
@@ -27,7 +30,18 @@ export function DetailPane({
   return (
     <Box flexDirection="column">
       <Text color={colors['text-dim']} wrap="truncate-end">{title.toUpperCase()}</Text>
-      {typeof children === 'string' ? (
+      {typeof children === 'string' && lead !== undefined ? (
+        <Box>
+          <Box flexShrink={0}>
+            <Text color={lead.color}>{lead.text} </Text>
+          </Box>
+          <Box flexShrink={1} minWidth={0}>
+            <ClampedParagraph color={colors.text} maxLines={bodyRows}>
+              {children}
+            </ClampedParagraph>
+          </Box>
+        </Box>
+      ) : typeof children === 'string' ? (
         <ClampedParagraph color={colors.text} maxLines={bodyRows}>
           {children}
         </ClampedParagraph>

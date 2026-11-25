@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react';
 import type { RoutesBaseCtx } from './use-routes-derived.js';
 import type { RoutesPaneActions } from './use-routes-pane-actions.js';
+import { resolveFavoritesPaneRows } from '../logic/routes-favorites.logic.js';
 import { createFilterablePickListState } from '../../../shared/components/pickers/filterable-pick-list.js';
 
 export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
@@ -11,23 +12,60 @@ export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
     setRowEdit, setRowAddPrompt, setFireBlock, savePrompt, setSavePrompt, overwriteConfirm,
     setOverwriteConfirm, setSaveNotice, pickerOpen, pickerDeleteConfirm, setSavedTabState, setSavedTabError,
     savedTabDeleteConfirm, setSavedTabDeleteConfirm, setScalarEdit, setAddPrompt, setRawEditor, paneFocused,
-    paneRoute, paneRouteKey, firedRouteKey, closePane,
+    paneRoute, paneRouteKey, firedRouteKey, closePane, favoritesFocused, recentFocused, refreshFavoriteRoutes,
+    favorites, recents, windowSize, setPaneFocus, smokeConfirm, smoke, setFavNotice,
   } = c;
+  // A finished run (or a closed/dropped table) leaves no stale notice behind.
+  const smokeRunning = smoke?.running === true;
+  const smokeShown = smoke?.visible === true;
+  useEffect(() => {
+    if (!smokeRunning) {
+      setFavNotice(null);
+    }
+  }, [smokeRunning, smokeShown]);
   useEffect(() => {
     setZoneInputCaptured(
       filterEditing ||
         paneFocused ||
+        favoritesFocused ||
+        recentFocused ||
         savePrompt !== null ||
         pickerOpen ||
         overwriteConfirm !== null ||
         pickerDeleteConfirm !== null ||
-        savedTabDeleteConfirm !== null,
+        savedTabDeleteConfirm !== null ||
+        smokeConfirm !== null,
     );
-  }, [filterEditing, paneFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, setZoneInputCaptured]);
-  useEffect(() => () => setZoneInputCaptured(false), [setZoneInputCaptured]);
+  }, [filterEditing, paneFocused, favoritesFocused, recentFocused, savePrompt, pickerOpen, overwriteConfirm, pickerDeleteConfirm, savedTabDeleteConfirm, smokeConfirm, setZoneInputCaptured]);
+  // Leaving the zone must not leave the keyboard parked on the Favorites pane (AppShell treats a
+  // non-list Routes focus as captured, so zone keys would stay dead).
+  useEffect(
+    () => () => {
+      setZoneInputCaptured(false);
+      const focus = c.useStore.getState().routesPaneFocus;
+      if (focus === 'favorites' || focus === 'recent') {
+        c.useStore.getState().setRoutesPaneFocus('list');
+      }
+    },
+    [setZoneInputCaptured],
+  );
+
+  // Focus must never sit on a pane that is not rendered (recents emptied by a repo switch,
+  // terminal shrunk): hand it back to the list.
+  const paneRows = resolveFavoritesPaneRows(windowSize.rows, favorites.length, recents.length);
+  useEffect(() => {
+    if ((recentFocused && paneRows.recent.total === 0) || (favoritesFocused && paneRows.total === 0)) {
+      setPaneFocus('list');
+    }
+  }, [recentFocused, favoritesFocused, paneRows.recent.total, paneRows.total, setPaneFocus]);
 
   useEffect(() => {
-    void loadRoutes();
+    // The favorites follow the active EDT: reloaded on every mount, after the routes (the stale
+    // flags scan the same repo).
+    void (async () => {
+      await loadRoutes();
+      await refreshFavoriteRoutes();
+    })();
     // Deliberately fires once on mount only — a re-render never re-triggers a fetch of its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -57,7 +95,11 @@ export function useRoutesEffects(c: RoutesBaseCtx & RoutesPaneActions) {
       setSavedTabState(createFilterablePickListState());
       setSavedTabError(null);
       setSavedTabDeleteConfirm(null);
+      if (c.pendingFireBlockRef.current !== null) {
+        setFireBlock(c.pendingFireBlockRef.current);
+      }
     }
+    c.pendingFireBlockRef.current = null;
     previousPaneRouteKey.current = paneRouteKey;
   }, [paneRouteKey]);
 

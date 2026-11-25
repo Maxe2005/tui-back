@@ -11,6 +11,14 @@ export const edtMemberSchema = z
   })
   .strict();
 
+export const favoriteRouteSchema = z
+  .object({
+    repoPath: z.string().min(1),
+    method: z.string().min(1),
+    path: z.string().min(1),
+  })
+  .strict();
+
 export const edtRegistryEntrySchema = z
   .object({
     ulid: z.string().min(1),
@@ -18,6 +26,7 @@ export const edtRegistryEntrySchema = z
     createdAt: z.string().min(1),
     status: z.enum(['active', 'inactive', 'interrupted']),
     members: z.array(edtMemberSchema),
+    favoriteRoutes: z.array(favoriteRouteSchema).optional(),
   })
   .strict();
 

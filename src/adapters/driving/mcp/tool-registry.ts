@@ -59,6 +59,7 @@ export const EXCLUDED_SUBCOMMANDS: Record<string, string> = {
   mcp: 'the MCP server itself',
   completion: 'shell completion script, meaningless to an agent',
   install: 'installer; handled outside MCP (registration commands are printed, not served)',
+  routes: 'per-EDT favorite-route CLI; no MCP tool equivalent yet',
   // `edt` is wrapped by edt-create / edt-modify / edt-switch / edt-switch-discard / edt-delete / edt-fast-forward-shared.
 };
 

@@ -284,8 +284,21 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description: 'EDTs, Update and Logs: retry a failed list load',
   },
   {
+    keys: '* (Routes)',
+    description: 'Routes: toggle the cursor route (or the open pane route) as a favorite of the active EDT; Tab focuses the Favorites pane above the list',
+  },
+  {
+    keys: 't (Routes Favorites)',
+    description: 'Routes: smoke-run the displayed repo\'s favorites into a live table (mutating routes ask first; Esc cancels a run in flight; Enter on a row opens its response)',
+  },
+  {
     keys: 'Ctrl+R (Routes)',
-    description: 'Routes: fire the request of the open pane',
+    description: 'Routes: fire the request of the open pane; from the list, Favorites or Recent, re-fire the selected route (never fired or incomplete: opens Request)',
+  },
+  {
+    keys: 'Ctrl+F (Routes raw body)',
+    description:
+      'Routes raw body editor: pretty-print the buffer as JSON (invalid JSON is refused with its line/column); Ctrl+Home/End jump to the document ends, PgUp/PgDn page, Ctrl+K kills to the end of the line, Enter keeps the indentation (+1 level after { or [)',
   },
   {
     keys: 'Ctrl+T (branch picker)',
