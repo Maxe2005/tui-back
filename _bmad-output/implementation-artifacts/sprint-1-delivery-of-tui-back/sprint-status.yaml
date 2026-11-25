@@ -67,7 +67,7 @@ development_status:
   6-11-favorite-routes-per-edt-persistence-use-cases-and-cli: done
   6-12-favorites-pane-above-the-routes-list-and-add-to-favorites-key: done
   6-13-recent-routes-and-quick-re-fire: done
-  6-14-smoke-run-of-the-edts-favorite-routes-core-and-cli: review
+  6-14-smoke-run-of-the-edts-favorite-routes-core-and-cli: done
   6-15-smoke-run-in-the-routes-zone: backlog
   6-16-raw-body-mode-as-a-full-multi-line-text-editor: backlog
   6-17-http-method-colors: backlog
