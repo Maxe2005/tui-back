@@ -23,6 +23,9 @@ export type FilterablePickItem<T> = {
   // Secondary text rendered dim after the label and searched alongside it, so candidates
   // sharing a label stay narrowable (a service's repo path).
   meta?: string;
+  // The HTTP method already prefixing `meta` (`METHOD path`): colored when rendered, while
+  // filtering still matches the full `meta` text.
+  method?: string;
   value: T;
 };
 
@@ -147,7 +150,12 @@ export function FilterablePickList<T>(props: FilterablePickListProps<T>) {
           cursorIndex={highlight}
           renderItem={(item, index) => (
             <Box key={item.key} flexDirection="row">
-              <ListRow label={item.label} meta={item.meta} selected={index === highlight} />
+              <ListRow
+                label={item.label}
+                meta={item.meta}
+                {...(item.method === undefined ? {} : { metaMethod: item.method })}
+                selected={index === highlight}
+              />
             </Box>
           )}
         />

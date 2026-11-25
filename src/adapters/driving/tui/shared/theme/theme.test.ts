@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { colors, spacing, typography, rounded, theme } from './theme.js';
+import { colors, spacing, typography, rounded, theme, methodColor, methodColors } from './theme.js';
 
 describe('theme colors', () => {
   it('exposes every color token at the exact hex value from DESIGN.md', () => {
@@ -98,5 +98,33 @@ describe('theme aggregate', () => {
     expect(Object.isFrozen(typography['dim-wink'])).toBe(true);
     expect(Object.isFrozen(typography['active-tab'])).toBe(true);
     expect(Object.isFrozen(typography['disabled-tab'])).toBe(true);
+  });
+});
+
+describe('methodColor', () => {
+  it('maps each known method to its token, case-insensitively', () => {
+    expect(methodColor('GET')).toBe(methodColors.GET);
+    expect(methodColor('get')).toBe(methodColors.GET);
+    expect(methodColor('Post')).toBe(methodColors.POST);
+    expect(methodColor('put')).toBe(methodColors.PUT);
+    expect(methodColor('PATCH')).toBe(methodColors.PATCH);
+    expect(methodColor('delete')).toBe(methodColors.DELETE);
+  });
+
+  it('falls back for HEAD, OPTIONS, unknown and empty methods without throwing', () => {
+    for (const m of ['HEAD', 'OPTIONS', 'TRACE', '']) {
+      expect(methodColor(m)).toBe(methodColors.fallback);
+    }
+    expect(() => methodColor(undefined as unknown as string)).not.toThrow();
+  });
+
+  it('only uses hexes of the existing palette and keeps the five methods distinguishable', () => {
+    const palette: ReadonlySet<string> = new Set(Object.values(colors));
+    for (const value of Object.values(methodColors)) {
+      expect(palette.has(value)).toBe(true);
+    }
+    const five = [methodColors.GET, methodColors.POST, methodColors.PUT, methodColors.PATCH, methodColors.DELETE];
+    expect(new Set(five).size).toBe(5);
+    expect(methodColors.fallback).not.toBe(colors.accent);
   });
 });
