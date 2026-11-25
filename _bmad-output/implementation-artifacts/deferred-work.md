@@ -1034,3 +1034,13 @@ Track: verify sprint-status.yaml story 1-10 transition pattern on future reviews
 - source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-15-smoke-run-in-the-routes-zone.md`
   summary: Bound the memory held by smoke table rows (full response bodies are retained for the session).
   evidence: each `SmokeTableRow` keeps the full `FireResult` body, duplicated in `responses`, and is only freed on repo change.
+
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-16-raw-body-mode-as-a-full-multi-line-text-editor.md`
+  summary: Raw editor caret and edits step by UTF-16 unit, so astral characters (emoji) can be split or leave a lone surrogate; column math ignores wide characters.
+  evidence: Edge-case review of story 6.16; `multiline-edit.ts` moves/deletes by one code unit and `rawLineSegments` uses string length.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-16-raw-body-mode-as-a-full-multi-line-text-editor.md`
+  summary: Raw editor `Ctrl+F` format goes through JSON.parse/stringify, which loses integers beyond 2^53 and duplicate keys; a text-preserving formatter would avoid it.
+  evidence: Blind and edge-case reviews of story 6.16 on `formatJson`.
+- source_spec: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-6/spec-6-16-raw-body-mode-as-a-full-multi-line-text-editor.md`
+  summary: Raw editor editing niceties not in the story: Tab/Shift+Tab on a multi-line selection, closer on its own line when Enter is pressed between `{}`, readline keys (Ctrl+W/U/D/E, Ctrl+Backspace), copy/cut.
+  evidence: Reviews of story 6.16 noted these as missing; the spec's key table does not require them.

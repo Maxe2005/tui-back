@@ -2,7 +2,7 @@
 title: 'Raw Body Mode as a Full Multi-Line Text Editor'
 type: 'feature'
 created: '2026-11-25'
-status: 'in-progress'
+status: 'done'
 baseline_commit: '5be19d4c0a17acfc56c1e410df10a09aebf8ae25'
 review_loop_iteration: 0
 context:
@@ -63,12 +63,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `shared/components/inputs/multiline-edit.ts` + `.test.ts` -- pure model: movement (char/line/word/page/doc, desired column), selection, edits, indent rules, paste normalisation, undo/redo (bounded), format helper
-- [ ] `json-tree/json-tree.tsx` + test -- new `JsonRawEditor`: numbered lines, selection, caret, horizontal scroll, `Ln/Col` status, error line
-- [ ] `zones/routes/keys/routes-zone.raw-keys.ts` + test -- key table → model ops, Ctrl+F format, Esc leave
-- [ ] `use-routes-state.ts`, `use-routes-body-editor.ts`, `routes-zone.pane-keys.ts`, `routes-zone.nodes.tsx` -- minimal wiring; error → cursor jump
-- [ ] `footer-contexts.ts`, `keybindings.ts` (+ tests) -- raw-mode hints and help
-- [ ] `scenarios/routes-zone.raw-editor.test.tsx` -- scenario covering the I/O matrix through the zone
+- [x] `shared/components/inputs/multiline-edit.ts` + `.test.ts` -- pure model: movement (char/line/word/page/doc, desired column), selection, edits, indent rules, paste normalisation, undo/redo (bounded), format helper
+- [x] `json-tree/json-tree.tsx` + test -- new `JsonRawEditor`: numbered lines, selection, caret, horizontal scroll, `Ln/Col` status, error line
+- [x] `zones/routes/keys/routes-zone.raw-keys.ts` + test -- key table → model ops, Ctrl+F format, Esc leave
+- [x] `use-routes-state.ts`, `use-routes-body-editor.ts`, `routes-zone.pane-keys.ts`, `routes-zone.nodes.tsx` -- minimal wiring; error → cursor jump
+- [x] `footer-contexts.ts`, `keybindings.ts` (+ tests) -- raw-mode hints and help
+- [x] `scenarios/routes-zone.raw-editor.test.tsx` -- scenario covering the I/O matrix through the zone
 
 **Acceptance Criteria:**
 - Given raw mode, when rendered, then lines are numbered, windowed, with a visible caret and `Ln/Col`.
@@ -91,3 +91,49 @@ Terminal key report (verified against Ink 7.1.1 `parse-keypress`): `Ctrl+Home/En
 - `npx tsc --noEmit` -- expected: no errors
 - `npx vitest run` -- expected: all green
 - `npm run lint` -- expected: clean
+
+## Suggested Review Order
+
+**Pure buffer model**
+
+- Entry point: immutable multi-line model, every edit is state to state.
+  [`multiline-edit.ts:28`](../../../../../src/adapters/driving/tui/shared/components/inputs/multiline-edit.ts#L28)
+
+- Indent-aware Enter (+1 level after an opener).
+  [`multiline-edit.ts:147`](../../../../../src/adapters/driving/tui/shared/components/inputs/multiline-edit.ts#L147)
+
+- Paste normalisation: newlines unified, tabs become indent, controls dropped.
+  [`multiline-edit.ts:39`](../../../../../src/adapters/driving/tui/shared/components/inputs/multiline-edit.ts#L39)
+
+- Bounded undo/redo with typing coalesced.
+  [`multiline-edit.ts:207`](../../../../../src/adapters/driving/tui/shared/components/inputs/multiline-edit.ts#L207)
+
+- Format and error-offset jump reuse the JSON parser.
+  [`multiline-edit.ts:363`](../../../../../src/adapters/driving/tui/shared/components/inputs/multiline-edit.ts#L363)
+
+**Key table and zone wiring**
+
+- One key table maps Ink keys to model ops; owns Ctrl+arrows while open.
+  [`routes-zone.raw-keys.ts:78`](../../../../../src/adapters/driving/tui/zones/routes/keys/routes-zone.raw-keys.ts#L78)
+
+- Page size shares the rendered line budget.
+  [`routes-zone.raw-keys.ts:130`](../../../../../src/adapters/driving/tui/zones/routes/keys/routes-zone.raw-keys.ts#L130)
+
+- Ref keeps the latest buffer so Esc never validates a stale one.
+  [`use-routes-state.ts:102`](../../../../../src/adapters/driving/tui/zones/routes/hooks/use-routes-state.ts#L102)
+
+- Bracketed paste, gated against overlays.
+  [`use-routes-input.ts:24`](../../../../../src/adapters/driving/tui/zones/routes/hooks/use-routes-input.ts#L24)
+
+**Rendering and hints**
+
+- Numbered, windowed lines with horizontal scroll and Ln/Col.
+  [`json-tree.tsx:174`](../../../../../src/adapters/driving/tui/shared/components/json-tree/json-tree.tsx#L174)
+
+- Footer hints for the raw context.
+  [`footer-contexts.ts:301`](../../../../../src/adapters/driving/tui/keybindings/footer-contexts.ts#L301)
+
+**Tests**
+
+- Scenario covering the I/O matrix through the zone.
+  [`routes-zone.raw-editor.test.tsx`](../../../../../src/adapters/driving/tui/zones/routes/scenarios/routes-zone.raw-editor.test.tsx)
