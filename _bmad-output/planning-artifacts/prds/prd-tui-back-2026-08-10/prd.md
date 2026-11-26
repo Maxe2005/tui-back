@@ -2,7 +2,7 @@
 title: TUI Admin Tool for NestJS Microservices Backend
 status: final
 created: 2026-08-10
-updated: 2026-08-10
+updated: 2026-11-26
 ---
 
 # PRD: TUI Admin Tool for a Microservices Backend
@@ -125,6 +125,26 @@ A managed repo's manifest may omit its container: the service is still fully man
 #### FR-33: Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal)
 
 Wherever Tab advances focus, Shift+Tab moves it back. Every zone declares its focus movement through one shared navigation primitive (configurable per zone: H/V arrows, Tab/Shift+Tab, Ctrl+N/P) instead of hand-rolled handlers; the footer and `?` help reflect the active bindings.
+
+#### FR-54: Self-describing, consistently named CLI (added 2026-11-26, Sprint Change Proposal — Stories 15.3, 15.15)
+
+`tui-back --help`, `help`, `<command> --help` and `--version` succeed with usage, flag descriptions and examples; an unknown command or action suggests the closest valid one. Commands are grouped by noun (`repo …`, `edt …`, `route …`, `request …`); the former flat names stay as deprecated aliases, in the CLI and in the MCP tool list.
+
+#### FR-55: Stash inventory and prune (added 2026-11-26, Sprint Change Proposal — Story 15.16)
+
+A developer lists every stash tui-back created (`tui-back:<ulid>`) across registered repos, with its EDT, age and orphan status, and prunes selected ones after confirmation. Stashes tui-back did not create are never touched.
+
+#### FR-56: Setup diagnosis (added 2026-11-26, Sprint Change Proposal — Story 15.19)
+
+`tui-back doctor` (CLI, MCP, TUI command) checks tools, directories, state files, registered repos and manifests, stale locks, leftover temp files, interrupted switches and orphan stashes, each with a fix hint; `--fix` repairs only the safe items.
+
+#### FR-57: Operation history (added 2026-11-26, Sprint Change Proposal — Story 15.20)
+
+Every mutating action (from the TUI, the CLI or MCP) appends a bounded history entry (time, origin, command, EDT, per-service outcomes, duration, error code; never secrets). `tui-back history` and a TUI overlay list it.
+
+#### FR-58: Self-refreshing views (added 2026-11-26, Sprint Change Proposal — Stories 15.6, 15.7, 15.9)
+
+The TUI picks up changes made by the CLI or MCP while it is open (AD-10), the dashboard refreshes on a configurable interval while visible, and a log pane reconnects with backoff after its container stream ends, without duplicating or losing lines.
 
 ---
 
@@ -585,6 +605,7 @@ A developer's saved requests (FR-21) form one global library, not siloed per EDT
 - **Local state layout.** Config, per-EDT SQLite data, transient state (e.g. last-used EDT, log-view scroll position), and cache follow XDG Base Directory conventions (`XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_STATE_HOME`/`XDG_CACHE_HOME`) rather than a bespoke directory layout — cheap to do from day one, awkward to retrofit (research report).
 - **Single-instance enforcement.** A second running instance of the tool on the same machine is detected and blocked, since concurrent writers to the same EDT's SQLite file or the same repo's git working tree are unsafe and unhandled otherwise.
 - **NFR-7 — Rendering correctness** *(added 2026-09-20, Sprint Change Proposal, Story 5.5)*. No panel or list may render content taller than the terminal's actual available rows — Ink has no true scroll/overlay mechanism, so overflow desyncs its diff-render from the real terminal cursor and corrupts already-painted lines. Any zone with a data-dependent or user-configurable list length must bound/scroll it rather than assume it fits.
+- **NFR-8 — Crash safety and bounded external calls** *(added 2026-11-26, Sprint Change Proposal — Stories 15.2, 15.5, 15.10)*. A crash, kill or Ctrl+C at any point never leaves a persisted state file truncated (writes are atomic: temp file, fsync, rename), and a multi-file operation interrupted mid-way is detected at the next start and offered a repair. Every git, docker and manifest-command call is non-interactive and time-bounded, so no prompt or stalled remote can freeze the TUI or a run.
 
 ## Constraints and Guardrails
 

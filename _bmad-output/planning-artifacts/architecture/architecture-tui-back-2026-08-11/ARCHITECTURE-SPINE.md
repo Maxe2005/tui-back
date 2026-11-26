@@ -81,6 +81,8 @@ graph LR
   Ports -.implemented by.-> Modules["driven/modules/*"]
 ```
 
+> Amended 2026-11-26 (Sprint Change Proposal, Story 15.13): `src/core/` never imports `node:fs` (type-only imports excepted); file-system effects go through a driven port. dependency-cruiser enforces it.
+
 ### AD-2 — Script/CLI parity via one umbrella binary, shared core code — not TUI self-spawning
 
 - **Binds:** FR-1
@@ -92,6 +94,8 @@ graph LR
 - **Binds:** FR-1, every subcommand, and every core use-case's return shape (AD-2 — the TUI receives the same `data`/`error` shape as a return value that the CLI serializes to stdout)
 - **Prevents:** hand-invocation and any future automation needing separate code paths, or a `--json` flag a developer has to remember.
 - **Rule:** for the `cli` driving adapter: stdout is human-readable text when the process is attached to a TTY, and a single final JSON line otherwise — `{"ok":true,"data":{...}}` or `{"ok":false,"error":{"code":"...","message":"...","details":{...}}}`; exit code is `0` (success) or `1` (failure) only, finer-grained detail lives in `error.code`, never in exit-code taxonomy. Every core use-case returns exactly this `{ok,data}`/`{ok,error}` shape as its TypeScript return type — the CLI adapter serializes it to the envelope above, the TUI adapter consumes the same object directly (per AD-2), so the shape is identical everywhere even though only the CLI path renders it as text/JSON on stdout.
+
+> Amended 2026-11-26 (Sprint Change Proposal, Stories 15.3/15.15): `--help`, `help`, `<command> --help` and `--version` are successful commands in this envelope (`data.usage` / `data.version`, exit 0); an unknown command or action carries `details.suggestion`. A deprecated alias runs the canonical command with an identical envelope; its deprecation notice goes to stderr on a TTY only, so piped stdout stays one JSON line.
 
 ### AD-4 — Manifest is the only per-repo activation surface
 
@@ -117,6 +121,8 @@ graph LR
 - **Prevents:** a future EDT-rename feature forcing a file rename/migration; durable and transient state colliding on the same XDG tier; a crash or bug in one EDT corrupting another EDT's state or reaching into the narrowly-scoped global store (blast-radius isolation, PRD Cross-Cutting NFRs).
 - **Rule:** one SQLite file per EDT at `XDG_DATA_HOME/tui-back/edts/<ulid>.db` — filename is a generated ULID, never the topic (the topic is a field inside the file; FR-3's uniqueness check reads across existing files). One global store at `XDG_DATA_HOME/tui-back/global.db` (saved-request library, per-EDT hide/favorite flags, global favorites) — deliberately narrow, so a bug in it can't touch EDT-specific state and vice versa. Active-EDT pointer and transient UI state (last-used EDT, log-view scroll position, per-zone splitter pane sizes — `EXPERIENCE.md`'s splitter component pattern requires these to persist across sessions, independently per zone) live at `XDG_STATE_HOME/tui-back/state.json`, never inside a `.db`. Each `.db`'s own schema evolves through hand-rolled, numbered `.sql` files tracked by a `schema_version` table — no external migration framework.
 
+> Amended 2026-11-26 (Sprint Change Proposal, Stories 15.5/15.10/15.20, NFR-8): every write of a state/config file (`state.json`, `registry.yaml`, `edts.yaml`, `settings.yaml`) goes through one atomic-write helper (temp file in the same directory, fsync, rename). A multi-file operation (EDT switch) writes an intent journal in `XDG_STATE_HOME/tui-back/` before its first write and removes it after its last; a journal found at startup means an interrupted operation to report and repair. The operation history is `XDG_STATE_HOME/tui-back/history.jsonl`, bounded and append-only.
+
 ### AD-8 — Git-adapter enforces branch-scope safety centrally
 
 - **Binds:** FR-6, FR-7, FR-8, FR-10, FR-11, FR-15
@@ -141,6 +147,8 @@ graph LR
 - **Prevents:** per-zone state fragmentation losing track of which of several concurrent things changed; the store silently going stale when something outside the TUI changes shared state.
 - **Rule:** cross-zone state (active EDT, per-service status, log buffers, in-flight run status) lives in one Zustand store, written to by core use-case results. Zone-local UI state (list cursor, scroll position) stays component-local `useState`. `state.json` (AD-7) is the durable, authoritative record of the active EDT and other persisted transient state — the store's `activeEdt` field is a hydrated cache of it, loaded at TUI startup and re-synced (via `fs.watch` on `state.json`, or an equivalent poll) so a change made by a CLI invocation while the TUI is open is picked up, never silently stale. The store's `logBuffers` field holds only the current rendered/debounced window sourced from `core/logs` (AD-11) — it is a view onto that buffer, not a second independent copy of it.
 
+> Conformance note 2026-11-26 (Sprint Change Proposal, Story 15.6): the `fs.watch`/poll re-sync above was never wired (the store only refreshes after its own switch); Story 15.6 implements it for `state.json` and `edts.yaml`.
+
 ### AD-11 — Logs are ephemeral; Docker remains the log-truth source
 
 - **Binds:** FR-16, FR-17, FR-22
@@ -152,6 +160,8 @@ graph LR
 - **Binds:** FR-16, Cross-Cutting NFR (performance)
 - **Prevents:** Ink's ~30 FPS render ceiling being hit by a naive full-redraw-per-line implementation; a CPU-heavy step run in-process stalling every other concurrent log stream and the UI itself, since Node's single-threaded event loop serves them all.
 - **Rule:** UI interaction response stays under ~150ms; a log line is visible within ~1s of container emission. Log-stream re-renders are debounced/batched, never a full redraw per emitted line. CPU-heavy work is never run synchronously in-process on the TUI's event loop — long-running work goes through the CLI's subprocess boundary (AD-2's other invocation path) instead, which is also what keeps this an I/O-bound workload the event-loop model handles well (research finding). Ink's commonly cited "~30 FPS / >50MB" ceiling traces to secondary sources (via the 2026-08-07 research doc), not an independently re-verified primary source this run — treat it as a directional risk estimate, not a precise number to build against. OpenTUI is the pre-identified fallback if the ceiling is observed as a real problem in practice (SM-8) — not built pre-emptively; note it trades the same-ecosystem React/TS API for a second runtime dependency (Bun), not a drop-in library swap.
+
+> Conformance note 2026-11-26 (Sprint Change Proposal, Story 15.8): log updates reached the store once per line, copying the whole buffer each time; Story 15.8 batches them (one store update per pane per ~50-100 ms) and makes the `core/logs` buffer a real ring buffer.
 
 ### AD-13 — Testing strategy by layer
 

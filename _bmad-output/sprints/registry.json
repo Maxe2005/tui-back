@@ -17,7 +17,7 @@
       "epics_file": "_bmad-output/sprints/sprint-2-refonte-fichiers-volumineux/epics.md",
       "artifacts_dir": "_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux",
       "status_file": "_bmad-output/implementation-artifacts/sprint-2-refonte-fichiers-volumineux/sprint-status.yaml",
-      "epics": "12-14"
+      "epics": "12-15"
     }
   ]
 }

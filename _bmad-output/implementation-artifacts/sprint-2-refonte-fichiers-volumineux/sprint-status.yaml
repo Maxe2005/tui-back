@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-12-2026 15:07
-last_updated: 2026-11-23
+last_updated: 2026-11-26
 project: tui-back
 project_key: NOKEY
 tracking_system: file-system
@@ -66,3 +66,28 @@ development_status:
   14-4-reorganize-core-folders: done
   14-5-reorganize-wizard-dialogs-and-top-level-layout: done
   epic-14-retrospective: optional
+
+  # Epic 15 added 2026-11-26 (sprint-change-proposal-2026-11-26.md). 15-17 and 15-18 moved from sprint 1 (were 4-8, 4-9).
+  epic-15: backlog
+  15-1-restore-the-test-gate: backlog
+  15-2-non-interactive-time-bounded-git: backlog
+  15-3-cli-help-version-and-typo-suggestions: backlog
+  15-4-triage-the-deferred-work-ledger: backlog
+  15-5-atomic-persistence-writes: backlog
+  15-6-re-sync-the-tui-with-external-changes: backlog
+  15-7-dashboard-auto-refresh: backlog
+  15-8-batched-log-rendering-and-ring-buffer: backlog
+  15-9-log-stream-auto-reconnect: backlog
+  15-10-crash-safe-edt-switch: backlog
+  15-11-lock-before-checkout-in-edt-modify: backlog
+  15-12-bounded-concurrency-repo-reads-and-switch: backlog
+  15-13-file-system-port-for-the-edt-lifecycle: backlog
+  15-14-tui-input-guards: backlog
+  15-15-consistent-cli-command-names: backlog
+  15-16-stash-inventory-and-prune: backlog
+  15-17-manifest-declared-generated-files-regenerated-on-update-conflict: backlog
+  15-18-update-conflict-auto-resolution-in-the-cli-and-mcp: backlog
+  15-19-tui-back-doctor: backlog
+  15-20-operation-history: backlog
+  15-21-close-the-audit: backlog
+  epic-15-retrospective: optional

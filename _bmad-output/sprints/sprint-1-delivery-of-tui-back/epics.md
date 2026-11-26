@@ -190,7 +190,7 @@ FR-48: Epic 11 - MCP server exposing every subcommand, with human authorization 
 FR-49: Epic 5 - Log filter action (show/hide) and target (line/match), stored in filter history (added 2026-11-05 — Story 5.8; stackable rules: Story 5.9; persisted rules and named sets: Story 5.10)
 FR-50: Epic 6 - Favorite routes per EDT, recents, quick re-fire (added 2026-11-16 — Stories 6.11, 6.12, 6.13; UX of Stories 6.10, 6.16, 6.17)
 FR-51: Epic 6 - Smoke run of the EDT's favorite routes (added 2026-11-16 — Stories 6.14, 6.15)
-FR-52: Epic 4 - Manifest-declared generated files regenerated on update conflict (added 2026-11-16 — Stories 4.8, 4.9)
+FR-52: Epic 4 - Manifest-declared generated files regenerated on update conflict (added 2026-11-16 — Stories 4.8, 4.9; moved 2026-11-26 to sprint 2 Stories 15.17, 15.18)
 FR-53: Epic 2 - Shared-branches EDT: preconfigured, settings-enabled, switch + update on every shared branch (added 2026-11-16 — Stories 2.46, 2.47, 2.48)
 FR-34: Epic 3 - Full-screen service update report (added 2026-10-08, Sprint Change Proposal — Story 3.19; parallel run and incident queue: Story 3.18)
 FR-33: Epic 7 - Reversible, unified focus navigation (added 2026-10-05, Sprint Change Proposal — Story 7.7)
@@ -2799,6 +2799,8 @@ As a developer, I want the st zone's option checkboxes to start the way I like, 
 
 ### Story 4.8: Manifest-Declared Generated Files, Regenerated on Update Conflict
 
+> **Moved 2026-11-26** to sprint 2 as Story 15.17 (Epic 15, `sprint-2-refonte-fichiers-volumineux/sprint-change-proposal-2026-11-26.md`). The sprint 2 copy is the one to implement; this text is kept for history.
+
 > Added 2026-11-16 (Sprint Change Proposal 2). Adds FR-52; amends AD-4; adds AD-26. Builds on Stories 3.4 (assisted resolution), 4.5 (the resolver seam) and 3.8 (`restartCommands`).
 
 As a developer, I want conflicts on files that a command regenerates to be settled by running that command, so that a barrel (`index.ts`) conflict never interrupts an update.
@@ -2817,6 +2819,8 @@ As a developer, I want conflicts on files that a command regenerates to be settl
 **Implementation notes:** `core/scripts/auto-resolve-generated.ts` returns the existing `AutoResolveResult`; `compose-auto-resolvers.ts` folds N resolvers into one `AutoResolveConflict` (results merged: `touched` OR-ed, issues joined) so `groupUpdate`'s signature is unchanged. No git write beyond `stagePaths` (the generator overwrites the conflicted files itself). Tests: pure resolver with a fake git and command port (all-generated, mixed, command failure, marker left, extra files touched, duplicate commands, idempotent rerun); schema tests; composition tests; manifest docs and skill updated in the same commits as the schema (one commit each: schema → resolver → composition + TUI wiring → docs + skill).
 
 ### Story 4.9: Update Conflict Auto-Resolution in the CLI and MCP
+
+> **Moved 2026-11-26** to sprint 2 as Story 15.18 (Epic 15, `sprint-2-refonte-fichiers-volumineux/sprint-change-proposal-2026-11-26.md`). The sprint 2 copy is the one to implement; this text is kept for history.
 
 > Added 2026-11-16 (Sprint Change Proposal 2). Closes the FR-31 parity gap found in §1 (finding 4).
 
