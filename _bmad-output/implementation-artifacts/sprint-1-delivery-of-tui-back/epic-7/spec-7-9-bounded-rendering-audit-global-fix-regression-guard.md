@@ -19,7 +19,7 @@ context:
 
 ## Boundaries & Constraints
 
-**Always:** Inventory (`epic-7/bounded-rendering-inventory-7-9.md`) committed before any code change, each surface recording height source, width source, text treatment, appendable-content cap, verdict; every unbounded/partial surface gets a failing test (or documented manual repro) before its patch; clipping (`overflow="hidden"`) is the safety net, never the plan; reuse `zone-layout.tsx`, `bounded-list.tsx`, `use-element-size.ts`, `keybinding-help.tsx` windowing — no third scrolling mechanism; minimum size is a named constant justified in the inventory; AD-17 comment rule; imports first; Conventional Commits with `(story 7.9)` on this story branch; existing tests change only where a rendering deliberately changed (listed in the story file's Spec Change Log).
+**Always:** Inventory (`epic-7/spec-7-9-bounded-rendering-inventory.md`) committed before any code change, each surface recording height source, width source, text treatment, appendable-content cap, verdict; every unbounded/partial surface gets a failing test (or documented manual repro) before its patch; clipping (`overflow="hidden"`) is the safety net, never the plan; reuse `zone-layout.tsx`, `bounded-list.tsx`, `use-element-size.ts`, `keybinding-help.tsx` windowing — no third scrolling mechanism; minimum size is a named constant justified in the inventory; AD-17 comment rule; imports first; Conventional Commits with `(story 7.9)` on this story branch; existing tests change only where a rendering deliberately changed (listed in the story file's Spec Change Log).
 
 **Ask First:** HALT after the inventory commit for developer validation of the inventory and chosen mechanisms before the patch phase. If the patch list exceeds one story, propose follow-ups 7.9b… from the validated inventory (foundation and guard always ship in 7.9).
 
@@ -47,12 +47,12 @@ context:
 - Ad-hoc `useWindowSize` budgets: `edts-zone:294`, `update-zone:372,667`, `routes-zone:211`, `command-bar:7`, logs via `logs-zone.logic` (`wrap-ansi` helpers ~:721 are the closest clamp primitive). Dashboard and shared-types: unbounded.
 - Error normalizer: none exists (only a local ANSI strip in `core/scripts/group-update.ts:93`); put the TUI one in `shared/`.
 - Guard precedents: `src/comment-hygiene.test.ts` (recursive scan, empty allow-list), `shared/components/hints.guard.test.ts` (`ALLOWED` Set, `fileURLToPath(new URL(...))` roots). Render helpers: `shared/components/render-to-string.ts`, `shared/test-support/{mount-for-test,fake-tty}.ts` (`FakeTtyStdout.columns/rows` mutable; resize precedent `app-shell.alternate-screen.test.tsx:46-74`).
-- Docs: `ARCHITECTURE-SPINE.md` AD-19 (:241, already written), `EXPERIENCE.md` › Interaction Primitives (:188), `AGENTS.md` › Code conventions (:20, two-line rule). Inventory format precedent: `epic-7/interaction-inventory-7-4.md`.
+- Docs: `ARCHITECTURE-SPINE.md` AD-19 (:241, already written), `EXPERIENCE.md` › Interaction Primitives (:188), `AGENTS.md` › Code conventions (:20, two-line rule). Inventory format precedent: `epic-7/spec-7-4-interaction-inventory.md`.
 
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `epic-7/bounded-rendering-inventory-7-9.md` -- audit table of every surface (zones, panes, dialogs, DetailPane, Update boxes/log, errors, Dashboard, shared-types, command bar, `?` help, footer, top bar) -- commit first, then HALT for validation.
+- [x] `epic-7/spec-7-9-bounded-rendering-inventory.md` -- audit table of every surface (zones, panes, dialogs, DetailPane, Update boxes/log, errors, Dashboard, shared-types, command bar, `?` help, footer, top bar) -- commit first, then HALT for validation.
 - [x] `shared/` bounds context/hook + `app-shell.tsx` + `zone-layout.tsx` -- zone bounds from `useWindowSize()` minus rendered chrome; pane bounds from ratios; absolute minimums; too-small screen with named constant -- foundation.
 - [x] `shared/` truncating text, clamped paragraph (`maxLines`, "… +N lines"), message normalizer (+ unit tests) -- bounded text by default.
 - [x] `bounded-list.tsx` generalized to heterogeneous blocks; stream/retry collections capped with "N older hidden" -- single scroll mechanism.

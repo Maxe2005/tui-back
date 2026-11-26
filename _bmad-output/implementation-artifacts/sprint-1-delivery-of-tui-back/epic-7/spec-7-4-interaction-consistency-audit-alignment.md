@@ -7,7 +7,7 @@ baseline_commit: '94d7ee8b9969e883059b51793119b5115dbce3d5'
 review_loop_iteration: 0
 context:
   - '{project-root}/AGENTS.md'
-  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/interaction-inventory-7-4.md'
+  - '{project-root}/_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-7/spec-7-4-interaction-inventory.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -20,7 +20,7 @@ context:
 
 ## Boundaries & Constraints
 
-**Always:** Inventory lives in `epic-7/interaction-inventory-7-4.md`. Canonical table = single source for alignment; every intentional deviation listed with its reason. Tests change only where a binding/wording deliberately changed, each listed in the story file. Core never imports TUI; AD-17 comment rule; conventional commits with `(story 7.4)`, atomic, on this story branch; verify with `npm test && npm run typecheck && npm run depcheck`.
+**Always:** Inventory lives in `epic-7/spec-7-4-interaction-inventory.md`. Canonical table = single source for alignment; every intentional deviation listed with its reason. Tests change only where a binding/wording deliberately changed, each listed in the story file. Core never imports TUI; AD-17 comment rule; conventional commits with `(story 7.4)`, atomic, on this story branch; verify with `npm test && npm run typecheck && npm run depcheck`.
 
 **Ask First:** Validation of the canonical table (hard gate before any alignment code). Any state-port or persisted-shape change.
 
@@ -41,7 +41,7 @@ context:
 
 ## Code Map
 
-- `epic-7/interaction-inventory-7-4.md` -- audit output (15 sections, divergences, proposed canonical table, work list); first commit.
+- `epic-7/spec-7-4-interaction-inventory.md` -- audit output (15 sections, divergences, proposed canonical table, work list); first commit.
 - `_bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md` -- add the UX-DR36 table under Interaction Primitives.
 - `src/adapters/driving/tui/shared/components/{modal-dialog,footer,keybinding-help,bounded-list,filterable-pick-list,checkbox-list-item,spinner}.tsx` -- shared components to align / add `StateLine`, hint-format helper, list-cursor module.
 - `src/adapters/driving/tui/keybindings/keybindings.ts` -- help rows; hint style `Ctrl+W`, `↑/↓`.
@@ -50,7 +50,7 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [x] `epic-7/interaction-inventory-7-4.md` -- commit the audit -- AC1.
+- [x] `epic-7/spec-7-4-interaction-inventory.md` -- commit the audit -- AC1.
 - [x] `EXPERIENCE.md` -- UX-DR36 canonical table + deviations -- **HALT: developer validates** -- AC2.
 - [x] shared helpers (hint format, `StateLine`, list-cursor with Home/End) + tests -- replace ad-hoc versions.
 - [~] zones/dialogs (partial, rest in 7.4b below) -- Enter-only confirm, Space toggle, `g` collision, Logs filter cancel, raw Tab sites, modal titles, ModalDialog callbacks, destructive-confirm guideline -- conform to table.
@@ -132,7 +132,7 @@ Removed: `UpdateConfigDialog`, `resolveUpdateConfigKey`, the single-row cursor/e
   [`EXPERIENCE.md`](../../../planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md)
 
 - Evidence behind it: per-intent inventory and divergences.
-  [`interaction-inventory-7-4.md`](interaction-inventory-7-4.md)
+  [`spec-7-4-interaction-inventory.md`](spec-7-4-interaction-inventory.md)
 
 **Shared helpers**
 

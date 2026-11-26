@@ -125,7 +125,7 @@ The lock mechanism ships reusable and correct now so that (a) the only genuinely
 - [Source: same spine §AD-1 (lines 63-81), §AD-2 (83-87), §AD-3 (89-93), §AD-7 (113-117)] — AD-1 boundary (core no fs/adapters), AD-2 parity (TUI in-process, no self-spawn), AD-3 envelope, AD-7 state tier (`XDG_STATE_HOME` for transient state).
 - [Source: `_bmad-output/planning-artifacts/prds/prd-tui-back-2026-08-10/prd.md` line 360] — single-instance enforcement NFR (concurrent writers unsafe).
 - [Source: `_bmad-output/implementation-artifacts/deferred-work.md`] — "addRegistry TOCTOU read-modify-write, no atomic write/locking ... Track: Story 1.7 owns locking/atomicity"; "no whole-binary/global lock" & acorn/imports-first landmines (story-1-3 section).
-- [Source: `_bmad-output/implementation-artifacts/1-6-static-module-registry.md`, `1-5-explicit-repo-registry.md`] — prior-story patterns: driven-adapter-owns-filesystem, error-matrix conventions, AD-1 round-trip, Review Triage Log format.
+- [Source: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1/spec-1-6-static-module-registry.md`, `spec-1-5-explicit-repo-registry.md`] — prior-story patterns: driven-adapter-owns-filesystem, error-matrix conventions, AD-1 round-trip, Review Triage Log format.
 - [Source (tech, web 2026): kamiazya/whiteboard `mkdir-lock.ts` (github.com/kamiazya/whiteboard/blob/main/packages/mcp-server/src/shared/mkdir-lock.ts)] — mkdir-atomic cross-process exclusion + dead-pid reclaim + `.break` serialization precedent; the exact pattern to adapt (drop the `.break` layer only if reclaim correctness is preserved — prefer keeping it). Node docs confirm promise-fs ops are "not synchronized or threadsafe", i.e. the R-M-W needs an external lock.
 
 ## Task / Acceptance Traceability
@@ -173,7 +173,7 @@ The lock mechanism ships reusable and correct now so that (a) the only genuinely
 - `src/bin/main.ts` (updated)
 - `src/bin/tui-back.e2e.test.ts` (updated)
 - `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` (updated)
-- `_bmad-output/implementation-artifacts/1-7-single-instance-enforcement-per-resource-action-lock.md` (updated)
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1/spec-1-7-single-instance-enforcement-per-resource-action-lock.md` (updated)
 
 ### Change Log
 

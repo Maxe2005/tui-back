@@ -140,7 +140,7 @@ The accent-convention and 0px-corners ACs are captured as documentation + a code
 - [Source: `_bmad-output/planning-artifacts/architecture/architecture-tui-back-2026-08-11/ARCHITECTURE-SPINE.md`] — §AD-1 (lines 63-81, core fs/Ink/React-free, driving never touches driven), §AD-3 (89-93, envelope applies to use-cases/CLI not token modules), §AD-13 (151-157, testing by layer; ink-testing-library unmaintained), §AD-15 (161-165, `tui/shared/` for cross-zone Atelier UI), tree (49-58), stack table (181-182: Ink 7.1.1 / React 19.2.8).
 - [Source: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1-context.md` (lines 46-54, 60)] — distilled token list; "1.8 (theme module) is the prerequisite for 1.9–1.12".
 - [Source: `_bmad-output/implementation-artifacts/deferred-work.md`] — acorn/imports-first landmine (line 50); AD-1 rule `to: {path: 'adapters(/|$)'}` (line 55); Story 1.3 note that Atelier is TUI-only, not CLI text (line 149 of 1-3 story file).
-- [Source: `_bmad-output/implementation-artifacts/1-7-single-instance-enforcement-per-resource-action-lock.md`] — prior-story format/patterns; the pure-data-vs-use-case distinction; review triage log format.
+- [Source: `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1/spec-1-7-single-instance-enforcement-per-resource-action-lock.md`] — prior-story format/patterns; the pure-data-vs-use-case distinction; review triage log format.
 - [Source (tech, web 2026): vadimdemedes/ink (github.com/vadimdemedes/ink)] — Ink 7.1.1 stable; `<Text color="#hex">` / `backgroundColor` accept hex strings directly; `ink-testing-library` unmaintained.
 
 ## Task / Acceptance Traceability
@@ -174,7 +174,7 @@ opencode / deepseek-v4-flash-free (story implementation session, 2026-08-14).
 
 ### File List
 
-- `_bmad-output/implementation-artifacts/1-8-atelier-design-tokens-theme-module.md` (this file)
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1/spec-1-8-atelier-design-tokens-theme-module.md` (this file)
 - `src/adapters/driving/tui/shared/theme/theme.ts` (new)
 - `src/adapters/driving/tui/shared/theme/theme.test.ts` (new)
 - `src/adapters/driving/tui/shared/theme/index.ts` (new)

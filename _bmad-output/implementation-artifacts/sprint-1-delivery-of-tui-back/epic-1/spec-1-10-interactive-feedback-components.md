@@ -58,8 +58,8 @@ So that every zone needing confirmation, multi-select, resizing, progress, or op
 - [Source: _bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/DESIGN.md]
 - [Source: _bmad-output/planning-artifacts/ux-designs/ux-tui-back-2026-08-10/EXPERIENCE.md]
 - [Source: _bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1-context.md]
-- [Source: _bmad-output/implementation-artifacts/1-8-atelier-design-tokens-theme-module.md]
-- [Source: _bmad-output/implementation-artifacts/1-9-read-focused-display-components.md]
+- [Source: _bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1/spec-1-8-atelier-design-tokens-theme-module.md]
+- [Source: _bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1/spec-1-9-read-focused-display-components.md]
 - Stack (fixed versions): TypeScript 7.0.2, Node.js 24, Ink 7.1.1, React 19.2.8, Zustand 5.0.14, better-sqlite3 13.0.3, dockerode 5.0.1, openapi-typescript 7.13.0, jose 6.2.8, zod 4.4.3, yaml (eemeli) 2.9.0, ulid 3.0.2, vitest 4.1.10, tsx 4.23.12
 
 ## Dev Agent Record
@@ -98,5 +98,5 @@ opencode/nemotron-3.5-lightning-free (story implementation, 2026-08-17)
 - `src/adapters/driving/tui/shared/components/dim-annotation.test.tsx` (new)
 - `src/adapters/driving/tui/shared/components/index.ts` (modified — added exports)
 - `src/adapters/driving/tui/shared/README.md` (modified — added story 1.10 rules)
-- `_bmad-output/implementation-artifacts/1-10-interactive-feedback-components.md` (modified — frontmatter, change log, status)
+- `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/epic-1/spec-1-10-interactive-feedback-components.md` (modified — frontmatter, change log, status)
 - `_bmad-output/implementation-artifacts/sprint-1-delivery-of-tui-back/sprint-status.yaml` (modified — story status)
